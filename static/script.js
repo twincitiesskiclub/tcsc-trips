@@ -200,13 +200,6 @@ class PaymentForm {
       .forEach(view => view.classList.add('hidden'));
     document.querySelectorAll('.completed-view')
       .forEach(view => view.classList.remove('hidden'));
-    
-    const status = result.paymentIntent.status === 'requires_capture' 
-      ? 'successfully placed' 
-      : 'did not place';
-    document.querySelector('.hold-status').textContent = status;
-    document.querySelector('pre').textContent = 
-      JSON.stringify(result.paymentIntent, null, 2);
   }
 }
 
