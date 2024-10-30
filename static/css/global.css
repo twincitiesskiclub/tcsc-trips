@@ -58,7 +58,7 @@ h4 {
   flex-direction: column;
   width: 100%;
   max-width: 480px;
-  padding: 48px;
+  padding: 32px;
   align-items: center;
   justify-content: center;
   height: auto;
@@ -122,12 +122,13 @@ h4 {
   background-size: contain;
   background-repeat: no-repeat;
   width: 100%;
+  margin-bottom: 24px;
 }
 
 /* Price Selection */
 .price-selection {
   margin-bottom: 24px;
-  padding: 16px; /* Reduced from 20px */
+  padding: 16px;
   border: 2px solid var(--gray-border);
   border-radius: var(--radius);
   background: white;
@@ -135,13 +136,13 @@ h4 {
 }
 
 .price-option {
-  padding: 10px 12px; /* Adjusted from 12px to 10px vertical padding */
+  padding: 10px 12px;
   border-radius: var(--radius);
   transition: all 0.2s ease;
   cursor: pointer;
-  display: flex; /* Added to improve alignment */
-  align-items: center; /* Added to vertically center content */
-  margin: 4px 0; /* Added small vertical margin between options */
+  display: flex;
+  align-items: center;
+  margin: 4px 0;
 }
 
 .price-option:hover {
@@ -151,9 +152,9 @@ h4 {
 }
 
 .price-option input[type="radio"] {
-  margin: 0 12px 0 0; /* Adjusted margins */
+  margin: 0 12px 0 0;
   transform: scale(1.2);
-  flex-shrink: 0; /* Prevents radio button from shrinking */
+  flex-shrink: 0;
 }
 
 .price-option label {
@@ -161,9 +162,9 @@ h4 {
   font-weight: 500;
   color: var(--primary-color);
   cursor: pointer;
-  margin: 0; /* Remove any default margins */
-  display: block; /* Makes the label take full width */
-  line-height: 1.4; /* Improved line height for better readability */
+  margin: 0;
+  display: block;
+  line-height: 1.4;
 }
 
 /* Form Elements */
@@ -436,7 +437,6 @@ button:disabled {
 
 .sr-header__logo {
   text-align: center;
-  margin-bottom: 40px;
 }
 
 .sr-header__logo img {
@@ -444,12 +444,6 @@ button:disabled {
   height: auto;
   display: block;
   margin: 0 auto;
-}
-
-.sr-header__title {
-  margin-top: 40px;
-  margin-bottom: 30px;
-  text-align: center;
 }
 
 /* Center the trip details */
