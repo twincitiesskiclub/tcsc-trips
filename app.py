@@ -1,10 +1,9 @@
 #! /usr/bin/env python3.6
-# server.py
+# app.py
 
 import stripe
 import json
 import os
-
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from dotenv import load_dotenv, find_dotenv
 
@@ -13,9 +12,10 @@ load_dotenv(find_dotenv())
 stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 stripe.api_version = os.getenv('STRIPE_API_VERSION')
 
-static_dir = str(os.path.abspath(os.path.join(__file__ , "..", os.getenv("STATIC_DIR"))))
-app = Flask(__name__, static_folder=static_dir,
-            static_url_path="", template_folder=static_dir)
+# Initialize Flask app with standard directory structure
+app = Flask(__name__,
+           static_folder='static',
+           static_url_path='/static')
 
 
 @app.route('/', methods=['GET'])
@@ -130,4 +130,4 @@ def webhook_received():
 
 
 if __name__ == '__main__':
-    app.run()
+    app.run(port=os.getenv('PORT', 5000))
