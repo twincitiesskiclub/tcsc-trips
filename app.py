@@ -14,7 +14,7 @@ stripe.api_version = os.getenv('STRIPE_API_VERSION')
 
 # Initialize Flask app with standard directory structure
 app = Flask(__name__,
-           static_folder='static',g
+           static_folder='static',
            static_url_path='/static')
 
 
