@@ -1,10 +1,5 @@
 #! /usr/bin/env python3.6
-
-"""
-server.py
-Stripe Sample.
-Python 3.6 or newer required.
-"""
+# server.py
 
 import stripe
 import json
@@ -25,38 +20,86 @@ app = Flask(__name__, static_folder=static_dir,
 
 @app.route('/', methods=['GET'])
 def get_checkout_page():
-    # Display checkout page
     return render_template('index.html')
 
 
-def calculate_order_amount(items):
-    # Replace this constant with a calculation of the order's amount
-    # Calculate the order total on the server to prevent
-    # people from directly manipulating the amount on the client
-    return 1400
+@app.route('/get-stripe-key', methods=['GET'])
+def get_stripe_key():
+    return jsonify({
+        'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
+    })
+
+
+def calculate_order_amount(amount):
+    # Convert decimal amount to cents (e.g., 135.00 -> 13500)
+    amount_in_cents = int(amount * 100)
+    
+    # Validate the amount is one of our accepted prices
+    accepted_amounts = [13500, 16000]  # $135.00 or $160.00 in cents
+    
+    if amount_in_cents not in accepted_amounts:
+        # If amount is not valid, default to lower price
+        return 13500
+    
+    return amount_in_cents
 
 
 @app.route('/create-payment-intent', methods=['POST'])
 def create_payment():
-    data = json.loads(request.data)
-    # Create a PaymentIntent with the order amount and currency
-    intent = stripe.PaymentIntent.create(
-        amount=calculate_order_amount(data['items']),
-        currency=data['currency'],
-        capture_method="manual"
-    )
-
     try:
-        # Send publishable key and PaymentIntent details to client
-        return jsonify({'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY'), 'clientSecret': intent.client_secret, 'id': intent.id})
+        data = json.loads(request.data)
+        
+        # Get amount from the request data
+        amount = float(data.get('amount', 135.00))
+        
+        # Create a PaymentIntent with the order amount and currency
+        intent = stripe.PaymentIntent.create(
+            amount=calculate_order_amount(amount),
+            currency=data['currency'],
+            capture_method="manual"
+        )
+
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'paymentIntent': {
+                'id': intent.id,
+                'amount': intent.amount,
+                'status': intent.status
+            }
+        })
+    except Exception as e:
+        return jsonify(error=str(e)), 403
+
+
+@app.route('/update-payment-intent', methods=['POST'])
+def update_payment():
+    try:
+        data = json.loads(request.data)
+        
+        # Get payment intent ID and new amount from the request data
+        payment_intent_id = data.get('paymentIntentId')
+        amount = float(data.get('amount', 135.00))
+        
+        # Update the existing PaymentIntent
+        intent = stripe.PaymentIntent.modify(
+            payment_intent_id,
+            amount=calculate_order_amount(amount)
+        )
+
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'paymentIntent': {
+                'id': intent.id,
+                'amount': intent.amount,
+                'status': intent.status
+            }
+        })
     except Exception as e:
         return jsonify(error=str(e)), 403
 
 
 @app.route('/webhook', methods=['POST'])
 def webhook_received():
-    # You can use webhooks to receive information about asynchronous payment events.
-    # For more about our webhook events check out https://stripe.com/docs/webhooks.
     webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
     request_data = json.loads(request.data)
 
@@ -77,16 +120,10 @@ def webhook_received():
     data_object = data['object']
 
     if event_type == 'payment_intent.amount_capturable_updated':
-        print(
-            '❗ Charging the card for: ' + str(data_object['amount_capturable']))
-        # You can capture an amount less than or equal to the amount_capturable
-        # By default capture() will capture the full amount_capturable
-        # To cancel a payment before capturing use .cancel() (https://stripe.com/docs/api/payment_intents/cancel)
+        print('❗ Charging the card for: ' + str(data_object['amount_capturable']))
         intent = stripe.PaymentIntent.capture(data_object['id'])
     elif event_type == 'payment_intent.succeeded':
         print('💰 Payment received!')
-        # Fulfill any orders, e-mail receipts, etc
-        # To cancel the payment after capture you will need to issue a Refund (https://stripe.com/docs/api/refunds)
     elif event_type == 'payment_intent.payment_failed':
         print('❌ Payment failed.')
     return jsonify({'status': 'success'})
