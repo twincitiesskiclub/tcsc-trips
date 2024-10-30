@@ -49,14 +49,20 @@ def create_payment():
     try:
         data = json.loads(request.data)
         
-        # Get amount from the request data
+        # Get amount and email from the request data
         amount = float(data.get('amount', 135.00))
+        email = data.get('email', '')
         
-        # Create a PaymentIntent with the order amount and currency
+        # Create a PaymentIntent with the order amount, currency, and email
         intent = stripe.PaymentIntent.create(
             amount=calculate_order_amount(amount),
             currency=data['currency'],
-            capture_method="manual"
+            capture_method="manual",
+            metadata={
+                'email': email,  # Store email in metadata
+                'amount': str(amount)
+            },
+            receipt_email=email  # Send receipt to this email when payment is captured
         )
 
         return jsonify({
@@ -64,7 +70,8 @@ def create_payment():
             'paymentIntent': {
                 'id': intent.id,
                 'amount': intent.amount,
-                'status': intent.status
+                'status': intent.status,
+                'email': email
             }
         })
     except Exception as e:
@@ -76,14 +83,20 @@ def update_payment():
     try:
         data = json.loads(request.data)
         
-        # Get payment intent ID and new amount from the request data
+        # Get payment intent ID, new amount, and email from the request data
         payment_intent_id = data.get('paymentIntentId')
         amount = float(data.get('amount', 135.00))
+        email = data.get('email', '')
         
         # Update the existing PaymentIntent
         intent = stripe.PaymentIntent.modify(
             payment_intent_id,
-            amount=calculate_order_amount(amount)
+            amount=calculate_order_amount(amount),
+            metadata={
+                'email': email,
+                'amount': str(amount)
+            },
+            receipt_email=email
         )
 
         return jsonify({
@@ -91,7 +104,8 @@ def update_payment():
             'paymentIntent': {
                 'id': intent.id,
                 'amount': intent.amount,
-                'status': intent.status
+                'status': intent.status,
+                'email': email
             }
         })
     except Exception as e:
@@ -120,12 +134,21 @@ def webhook_received():
     data_object = data['object']
 
     if event_type == 'payment_intent.amount_capturable_updated':
-        print('❗ Charging the card for: ' + str(data_object['amount_capturable']))
+        print('💳 Charging the card for: ' + str(data_object['amount_capturable']))
+        # Get the email from metadata
+        email = data_object.get('metadata', {}).get('email', '')
+        print('📧 Customer email: ' + email)
         intent = stripe.PaymentIntent.capture(data_object['id'])
     elif event_type == 'payment_intent.succeeded':
-        print('💰 Payment received!')
+        print('✅ Payment received!')
+        # Get the email from metadata
+        email = data_object.get('metadata', {}).get('email', '')
+        print('📧 Payment confirmation sent to: ' + email)
     elif event_type == 'payment_intent.payment_failed':
         print('❌ Payment failed.')
+        # Get the email from metadata for failure notification
+        email = data_object.get('metadata', {}).get('email', '')
+        print('📧 Payment failure notification for: ' + email)
     return jsonify({'status': 'success'})
 
 
