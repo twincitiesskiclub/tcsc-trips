@@ -9,12 +9,12 @@ from dotenv import load_dotenv, find_dotenv
 
 # Setup Stripe python client library
 load_dotenv(find_dotenv())
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+stripe.api_key = os.getenv('STRIPE_PROD_SECRET_KEY')
 stripe.api_version = os.getenv('STRIPE_API_VERSION')
 
 # Initialize Flask app with standard directory structure
 app = Flask(__name__,
-           static_folder='static',
+           static_folder='static',g
            static_url_path='/static')
 
 
@@ -26,7 +26,7 @@ def get_checkout_page():
 @app.route('/get-stripe-key', methods=['GET'])
 def get_stripe_key():
     return jsonify({
-        'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
+        'publicKey': os.getenv('STRIPE_PROD_PUBLISHABLE_KEY')
     })
 
 
@@ -114,7 +114,7 @@ def update_payment():
 
 @app.route('/webhook', methods=['POST'])
 def webhook_received():
-    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
+    webhook_secret = os.getenv('STRIPE_PROD_WEBHOOK_SECRET')
     request_data = json.loads(request.data)
 
     if webhook_secret:
