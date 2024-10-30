@@ -1,15 +1,16 @@
 /* Variables */
 :root {
-  --gray-offset: rgba(0, 0, 0, 0.03);
-  --gray-border: rgba(0, 0, 0, 0.15);
-  --gray-light: rgba(0, 0, 0, 0.4);
-  --gray-mid: rgba(0, 0, 0, 0.7);
-  --gray-dark: rgba(0, 0, 0, 0.9);
-  --body-color: var(--gray-mid);
-  --headline-color: var(--gray-dark);
-  --accent-color: #2C5282;  /* Deep blue */
-  --secondary-color: #4299E1;  /* Lighter blue */
-  --snow-white: #F7FAFC;
+  --primary-color: #1c2c44;
+  --secondary-color: #acf3c4;
+  --gray-offset: rgba(28, 44, 68, 0.03);
+  --gray-border: rgba(28, 44, 68, 0.15);
+  --gray-light: rgba(28, 44, 68, 0.4);
+  --gray-mid: rgba(28, 44, 68, 0.7);
+  --gray-dark: rgba(28, 44, 68, 0.9);
+  --body-color: var(--primary-color);
+  --headline-color: var(--primary-color);
+  --accent-color: var(--primary-color);
+  --snow-white: #fcfefd;
   --body-font-family: -apple-system, BlinkMacSystemFont, sans-serif;
   --radius: 6px;
   --form-width: 343px;
@@ -64,7 +65,7 @@ h4 {
   min-height: 100vh;
   margin: 0 auto;
   background-color: white;
-  box-shadow: 0 0 20px rgba(0, 0, 0, 0.05);
+  box-shadow: 0 0 20px rgba(28, 44, 68, 0.08);
   border-radius: 12px;
 }
 
@@ -75,7 +76,7 @@ h4 {
 
 .sr-header__title {
   text-align: center;
-  color: var(--accent-color);
+  color: var(--primary-color);
   margin: 20px 0;
   font-size: 24px;
   font-weight: 600;
@@ -98,7 +99,7 @@ h4 {
 }
 
 .trip-detail-item i {
-  color: var(--accent-color);
+  color: var(--primary-color);
 }
 
 .sr-payment-summary {
@@ -126,34 +127,43 @@ h4 {
 /* Price Selection */
 .price-selection {
   margin-bottom: 24px;
-  padding: 20px;
-  border: 2px solid var(--snow-white);
+  padding: 16px; /* Reduced from 20px */
+  border: 2px solid var(--gray-border);
   border-radius: var(--radius);
   background: white;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+  box-shadow: 0 2px 4px rgba(28, 44, 68, 0.05);
 }
 
 .price-option {
-  padding: 12px;
+  padding: 10px 12px; /* Adjusted from 12px to 10px vertical padding */
   border-radius: var(--radius);
-  transition: background-color 0.2s ease;
+  transition: all 0.2s ease;
   cursor: pointer;
+  display: flex; /* Added to improve alignment */
+  align-items: center; /* Added to vertically center content */
+  margin: 4px 0; /* Added small vertical margin between options */
 }
 
 .price-option:hover {
-  background-color: var(--snow-white);
+  background-color: rgba(172, 243, 196, 0.15);
+  transform: translateY(-1px);
+  transition: all 0.2s ease;
 }
 
 .price-option input[type="radio"] {
-  margin-right: 12px;
+  margin: 0 12px 0 0; /* Adjusted margins */
   transform: scale(1.2);
+  flex-shrink: 0; /* Prevents radio button from shrinking */
 }
 
 .price-option label {
   font-size: 16px;
   font-weight: 500;
-  color: var(--gray-dark);
+  color: var(--primary-color);
   cursor: pointer;
+  margin: 0; /* Remove any default margins */
+  display: block; /* Makes the label take full width */
+  line-height: 1.4; /* Improved line height for better readability */
 }
 
 /* Form Elements */
@@ -166,7 +176,7 @@ label {
   font-weight: 500;
   margin-bottom: 8px;
   display: inline-block;
-  color: var(--gray-dark);
+  color: var(--primary-color);
 }
 
 .sr-combo-inputs {
@@ -201,16 +211,18 @@ input[type="text"] {
   -moz-appearance: none;
   -webkit-appearance: none;
   appearance: none;
+  color: var(--primary-color);
 }
 
 .sr-input:focus,
 input[type="text"]:focus,
 button:focus,
 .focused {
-  box-shadow: 0 0 0 1px rgba(44, 82, 130, 0.2), 0 1px 1px 0 rgba(0, 0, 0, 0.07),
-    0 0 0 4px rgba(44, 82, 130, 0.1);
+  box-shadow: 0 0 0 1px rgba(28, 44, 68, 0.2),
+              0 1px 1px 0 rgba(0, 0, 0, 0.07),
+              0 0 0 4px rgba(172, 243, 196, 0.2);
   outline: none;
-  border-color: var(--accent-color);
+  border-color: var(--primary-color);
 }
 
 .sr-input::placeholder,
@@ -224,15 +236,15 @@ input[type="text"]::placeholder {
 
 /* Legal Text and Notices */
 .sr-legal-text {
-  background: #FFF5F5;
+  background: #ffe8e8;
   padding: 16px;
   border-radius: var(--radius);
   margin-top: 24px;
-  border-left: 4px solid var(--accent-color);
+  border-left: 4px solid #ff9090;
 }
 
 .sr-legal-text p {
-  color: var(--gray-dark);
+  color: #d14343;
   margin: 0;
   font-size: 14px;
   line-height: 1.5;
@@ -240,7 +252,7 @@ input[type="text"]::placeholder {
 
 /* Button Styles */
 button {
-  background: var(--accent-color);
+  background: var(--primary-color);
   border-radius: var(--radius);
   color: white;
   border: 0;
@@ -255,13 +267,13 @@ button {
 }
 
 button:hover {
-  filter: brightness(110%);
+  opacity: 0.9;
   transform: translateY(-1px);
 }
 
 button:active {
   transform: translateY(1px);
-  filter: brightness(90%);
+  opacity: 0.8;
 }
 
 button:disabled {
@@ -271,7 +283,7 @@ button:disabled {
 
 /* Error States */
 .sr-field-error {
-  color: #EF4444;
+  color: #ef4444;
   text-align: left;
   font-size: 13px;
   line-height: 17px;
@@ -318,7 +330,7 @@ button:disabled {
 
 /* Spinner Animation */
 .spinner {
-  color: #ffffff;
+  color: white;
   font-size: 22px;
   text-indent: -99999px;
   margin: 0px auto;
@@ -342,7 +354,7 @@ button:disabled {
 .spinner:before {
   width: 10.4px;
   height: 20.4px;
-  background: var(--accent-color);
+  background: white;
   border-radius: 20.4px 0 0 20.4px;
   top: -0.2px;
   left: -0.2px;
@@ -355,7 +367,7 @@ button:disabled {
 .spinner:after {
   width: 10.4px;
   height: 10.2px;
-  background: var(--accent-color);
+  background: white;
   border-radius: 0 10.2px 10.2px 0;
   top: -0.1px;
   left: 10.2px;
@@ -416,4 +428,39 @@ button:disabled {
     opacity: 1;
     transform: scale(1);
   }
+}
+
+.sr-header {
+  text-align: center;
+}
+
+.sr-header__logo {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.sr-header__logo img {
+  max-width: 200px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.sr-header__title {
+  margin-top: 40px;
+  margin-bottom: 30px;
+  text-align: center;
+}
+
+/* Center the trip details */
+.trip-details {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+}
+
+.trip-detail-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

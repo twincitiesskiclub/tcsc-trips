@@ -34,8 +34,8 @@ pip install -r requirements.txt
 **MacOS / Unix**
 
 ```
-export FLASK_APP=server.py
-python3 -m flask run --port=4242
+export FLASK_APP=app.py
+python3 -m flask run
 ```
 
 **Windows (PowerShell)**
