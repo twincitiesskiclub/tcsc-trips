@@ -11,6 +11,7 @@ class PaymentForm {
       form: document.querySelector('.sr-payment-form'),
       submit: document.querySelector('#submit'),
       nameInput: document.querySelector('#name'),
+      emailInput: document.querySelector('#email'),
       errorDisplay: document.querySelector('.sr-field-error'),
       amountDisplay: document.querySelector('.order-amount'),
       packageType: document.querySelector('.package-type'),
@@ -92,7 +93,8 @@ class PaymentForm {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             paymentIntentId: this.paymentIntent.id,
-            amount: this.selectedAmount
+            amount: this.selectedAmount,
+            email: this.elements.emailInput.value
           })
         });
         const data = await response.json();
@@ -113,7 +115,8 @@ class PaymentForm {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           currency: 'usd',
-          amount: this.selectedAmount
+          amount: this.selectedAmount,
+          email: this.elements.emailInput.value
         })
       });
       const data = await response.json();
@@ -123,11 +126,28 @@ class PaymentForm {
     return this.paymentIntent;
   }
 
+  validateEmail(email) {
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailPattern.test(email);
+  }
+
   async handleSubmit(e) {
     e.preventDefault();
     
+    // Validate name
     if (!this.elements.nameInput.value) {
       this.showError('Please enter your name.');
+      return;
+    }
+
+    // Validate email
+    if (!this.elements.emailInput.value) {
+      this.showError('Please enter your email address.');
+      return;
+    }
+
+    if (!this.validateEmail(this.elements.emailInput.value)) {
+      this.showError('Please enter a valid email address.');
       return;
     }
 
@@ -141,7 +161,8 @@ class PaymentForm {
         payment_method: {
           card: this.card,
           billing_details: {
-            name: this.elements.nameInput.value
+            name: this.elements.nameInput.value,
+            email: this.elements.emailInput.value
           }
         }
       });
