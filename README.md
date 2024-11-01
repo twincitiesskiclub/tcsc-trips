@@ -41,8 +41,8 @@ python3 -m flask run
 **Windows (PowerShell)**
 
 ```
-$env:FLASK_APP=“server.py"
-python3 -m flask run --port=4242
+$env:FLASK_APP=“app.py"
+python3 -m flask run
 ```
 
-4. Go to `localhost:4242` in your browser to see the demo
+4. Go to `localhost:5000` in your browser to see the demo
