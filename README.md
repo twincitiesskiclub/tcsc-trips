@@ -1,4 +1,4 @@
-# Getting website up and running
+# Setup local environment
 
 ## Requirements
 
