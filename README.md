@@ -1,4 +1,4 @@
-# Placing a hold
+# Getting website up and running
 
 ## Requirements
 
