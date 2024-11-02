@@ -19,8 +19,13 @@ app = Flask(__name__,
 
 
 @app.route('/', methods=['GET'])
-def get_checkout_page():
+def get_home_page():
     return render_template('index.html')
+
+
+@app.route('/training-trip', methods=['GET'])
+def get_checkout_page():
+    return render_template('training-trip.html')
 
 
 @app.route('/get-stripe-key', methods=['GET'])
