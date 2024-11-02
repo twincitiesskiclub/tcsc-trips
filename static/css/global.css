@@ -1,22 +1,37 @@
-/* Variables */
+/*=============================================
+=            Design Tokens                    =
+=============================================*/
+
 :root {
+  /* Colors */
   --primary-color: #1c2c44;
   --secondary-color: #acf3c4;
+  
+  /* Grays */
   --gray-offset: rgba(28, 44, 68, 0.03);
   --gray-border: rgba(28, 44, 68, 0.15);
   --gray-light: rgba(28, 44, 68, 0.4);
   --gray-mid: rgba(28, 44, 68, 0.7);
   --gray-dark: rgba(28, 44, 68, 0.9);
+  
+  /* Semantic Colors */
   --body-color: var(--primary-color);
   --headline-color: var(--primary-color);
   --accent-color: var(--primary-color);
   --snow-white: #fcfefd;
+  
+  /* Typography */
   --body-font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  
+  /* Layout */
   --radius: 6px;
   --form-width: 343px;
 }
 
-/* Base */
+/*=============================================
+=            Base Styles                      =
+=============================================*/
+
 * {
   box-sizing: border-box;
 }
@@ -29,6 +44,7 @@ body {
   background-color: var(--snow-white);
 }
 
+/* Typography */
 h1, h2, h3, h4, h5, h6 {
   color: var(--body-color);
   margin-top: 2px;
@@ -52,7 +68,10 @@ h4 {
   color: var(--gray-light);
 }
 
-/* Layout */
+/*=============================================
+=            Layout                           =
+=============================================*/
+
 .sr-root {
   display: flex;
   flex-direction: column;
@@ -69,6 +88,21 @@ h4 {
   border-radius: 12px;
 }
 
+.sr-main {
+  width: 100%;
+  max-width: var(--form-width);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  height: 100%;
+  align-self: center;
+}
+
+/*=============================================
+=            Components                       =
+=============================================*/
+
+/*----------  Header  ----------*/
 .sr-header {
   margin-bottom: 32px;
   text-align: center;
@@ -82,6 +116,23 @@ h4 {
   font-weight: 600;
 }
 
+.sr-header__logo {
+  height: 24px;
+  background-size: contain;
+  background-repeat: no-repeat;
+  width: 100%;
+  margin-bottom: 24px;
+  text-align: center;
+}
+
+.sr-header__logo img {
+  max-width: 200px;
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+/*----------  Trip Details  ----------*/
 .trip-details {
   display: flex;
   justify-content: center;
@@ -102,72 +153,52 @@ h4 {
   color: var(--primary-color);
 }
 
-.sr-payment-summary {
-  margin-bottom: 20px;
-  text-align: center;
+/*----------  Trip Cards  ----------*/
+.trips-container {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 24px;
+  width: 100%;
+  max-width: 800px;
+  margin: 0 auto;
 }
 
-.sr-main {
-  width: 100%;
-  max-width: var(--form-width);
+.trip-card {
+  background: white;
+  border: 1px solid var(--gray-border);
+  border-radius: var(--radius);
+  padding: 24px;
+  transition: all 0.2s ease;
   display: flex;
   flex-direction: column;
-  justify-content: center;
-  height: 100%;
-  align-self: center;
+  gap: 16px;
 }
 
-.sr-header__logo {
-  height: 24px;
-  background-size: contain;
-  background-repeat: no-repeat;
-  width: 100%;
-  margin-bottom: 24px;
+.trip-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(28, 44, 68, 0.1);
 }
 
-/* Price Selection */
-.price-selection {
-  margin-bottom: 24px;
-  padding: 16px;
-  border: 2px solid var(--gray-border);
-  border-radius: var(--radius);
-  background: white;
-  box-shadow: 0 2px 4px rgba(28, 44, 68, 0.05);
-}
-
-.price-option {
-  padding: 10px 12px;
-  border-radius: var(--radius);
-  transition: all 0.2s ease;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  margin: 4px 0;
-}
-
-.price-option:hover {
-  background-color: rgba(172, 243, 196, 0.15);
-  transform: translateY(-1px);
-  transition: all 0.2s ease;
-}
-
-.price-option input[type="radio"] {
-  margin: 0 12px 0 0;
-  transform: scale(1.2);
-  flex-shrink: 0;
-}
-
-.price-option label {
-  font-size: 16px;
-  font-weight: 500;
-  color: var(--primary-color);
-  cursor: pointer;
+.trip-card h2 {
   margin: 0;
-  display: block;
-  line-height: 1.4;
+  color: var(--primary-color);
+  font-size: 20px;
 }
 
-/* Form Elements */
+.trip-description {
+  color: var(--gray-mid);
+  font-size: 14px;
+  line-height: 1.5;
+  margin: 0;
+}
+
+.trip-price {
+  font-weight: 600;
+  color: var(--primary-color);
+  font-size: 18px;
+}
+
+/*----------  Forms  ----------*/
 .sr-form-row {
   margin: 16px 0;
 }
@@ -216,6 +247,82 @@ input[type="email"] {
   color: var(--primary-color);
 }
 
+.sr-card-element {
+  padding: 12px;
+}
+
+/*----------  Price Selection  ----------*/
+.price-selection {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 2px solid var(--gray-border);
+  border-radius: var(--radius);
+  background: white;
+  box-shadow: 0 2px 4px rgba(28, 44, 68, 0.05);
+}
+
+.price-option {
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  transition: all 0.2s ease;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  margin: 4px 0;
+}
+
+.price-option:hover {
+  background-color: rgba(172, 243, 196, 0.15);
+  transform: translateY(-1px);
+}
+
+.price-option input[type="radio"] {
+  margin: 0 12px 0 0;
+  transform: scale(1.2);
+  flex-shrink: 0;
+}
+
+.price-option label {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--primary-color);
+  cursor: pointer;
+  margin: 0;
+  display: block;
+  line-height: 1.4;
+}
+
+/*----------  Buttons  ----------*/
+button, .trip-button {
+  background: var(--primary-color);
+  border-radius: var(--radius);
+  color: white;
+  border: 0;
+  padding: 12px 16px;
+  margin-top: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: block;
+  font-size: 16px;
+  width: 100%;
+}
+
+button:hover, .trip-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+button:active {
+  transform: translateY(1px);
+  opacity: 0.8;
+}
+
+/*=============================================
+=            States                           =
+=============================================*/
+
+/* Focus States */
 .sr-input:focus,
 input[type="text"]:focus,
 input[type="email"]:focus,
@@ -228,17 +335,28 @@ button:focus,
   border-color: var(--primary-color);
 }
 
+/* Placeholder States */
 .sr-input::placeholder,
 input[type="text"]::placeholder,
 input[type="email"]::placeholder {
   color: var(--gray-light);
 }
 
-.sr-card-element {
-  padding: 12px;
+/* Disabled States */
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 
-/* Legal Text and Notices */
+/* Error States */
+.sr-field-error {
+  color: #ef4444;
+  text-align: left;
+  font-size: 13px;
+  line-height: 17px;
+  margin-top: 12px;
+}
+
 .sr-legal-text {
   background: #ffe8e8;
   padding: 16px;
@@ -254,83 +372,19 @@ input[type="email"]::placeholder {
   line-height: 1.5;
 }
 
-/* Button Styles */
-button {
-  background: var(--primary-color);
-  border-radius: var(--radius);
-  color: white;
-  border: 0;
-  padding: 12px 16px;
-  margin-top: 16px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  display: block;
-  font-size: 16px;
-  width: 100%;
-}
-
-button:hover {
-  opacity: 0.9;
-  transform: translateY(-1px);
-}
-
-button:active {
-  transform: translateY(1px);
-  opacity: 0.8;
-}
-
-button:disabled {
-  opacity: 0.5;
-  cursor: not-allowed;
-}
-
-/* Error States */
-.sr-field-error {
-  color: #ef4444;
-  text-align: left;
-  font-size: 13px;
-  line-height: 17px;
-  margin-top: 12px;
-}
-
-/* Completed View */
-.completed-view {
-  text-align: center;
-}
-
-/* Responsive Design */
-@media (max-width: 720px) {
-  .sr-root {
-    flex-direction: column;
-    justify-content: flex-start;
-    padding: 24px;
-    min-width: 320px;
-  }
-
-  .sr-header__logo {
-    background-position: center;
-  }
-
-  .sr-payment-summary {
-    text-align: center;
-  }
-
-  .sr-main {
-    width: 100%;
-  }
-  
-  .trip-details {
-    flex-direction: column;
-    gap: 12px;
-    align-items: center;
-  }
-}
-
-/* Animation States */
+/* Visibility States */
 .hidden {
   display: none;
 }
+
+.coming-soon {
+  background: var(--gray-offset);
+  border-style: dashed;
+}
+
+/*=============================================
+=            Animations                       =
+=============================================*/
 
 /* Spinner Animation */
 .spinner {
@@ -381,16 +435,7 @@ button:disabled {
   animation: loading 2s infinite ease;
 }
 
-@keyframes loading {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-/* Form Animation */
+/* Form Animations */
 .sr-root {
   animation: 0.4s form-in;
   animation-fill-mode: both;
@@ -411,6 +456,16 @@ button:disabled {
 .sr-payment-form .sr-form-row:nth-child(4) { animation-delay: 180ms; }
 .sr-payment-form .sr-form-row:nth-child(5) { animation-delay: 240ms; }
 .sr-payment-form .sr-form-row:nth-child(6) { animation-delay: 300ms; }
+
+/* Keyframes */
+@keyframes loading {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
 
 @keyframes field-in {
   0% {
@@ -434,30 +489,37 @@ button:disabled {
   }
 }
 
-.sr-header {
-  text-align: center;
-}
+/*=============================================
+=            Media Queries                    =
+=============================================*/
 
-.sr-header__logo {
-  text-align: center;
-}
+@media (max-width: 720px) {
+  .sr-root {
+    flex-direction: column;
+    justify-content: flex-start;
+    padding: 24px;
+    min-width: 320px;
+  }
 
-.sr-header__logo img {
-  max-width: 200px;
-  height: auto;
-  display: block;
-  margin: 0 auto;
-}
+  .sr-header__logo {
+    background-position: center;
+  }
 
-/* Center the trip details */
-.trip-details {
-  display: flex;
-  justify-content: center;
-  gap: 20px;
-}
+  .sr-payment-summary {
+    text-align: center;
+  }
 
-.trip-detail-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  .sr-main {
+    width: 100%;
+  }
+  
+  .trip-details {
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+  }
+
+  .trips-container {
+    grid-template-columns: 1fr;
+  }
 }
