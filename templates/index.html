@@ -2,16 +2,14 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>TCSC Training Trip Registration</title>
-    <meta name="description" content="TCSC Training Trip Registration and Payment" />
+    <title>TCSC Trip Registration</title>
+    <meta name="description" content="Twin Cities Ski Club Trip Registration and Payment Portal" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/global.css') }}" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
-    <script src="https://js.stripe.com/v3/"></script>
-    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
   </head>
 
   <body>
@@ -21,77 +19,39 @@
           <div class="sr-header__logo">
             <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
           </div>
-          <h1 class="sr-header__title">TCSC Training Trip Registration</h1>
-          <div class="trip-details">
-            <div class="trip-detail-item">
-              <i class="fas fa-map-marker-alt"></i>
-              <span>Hayward, WI</span>
-            </div>
-            <div class="trip-detail-item">
-              <i class="fas fa-calendar"></i>
-              <span>December 6-8, 2024</span>
-            </div>
-          </div>
+          <h1 class="sr-header__title">TCSC Trip Registration</h1>
         </header>
 
-        <div class="price-selection">
-          <div class="price-option">
-            <input type="radio" id="basic" name="price-choice" value="135.00" checked>
-            <label for="basic">Lower Price - $135.00</label>
-          </div>
-          <div class="price-option">
-            <input type="radio" id="premium" name="price-choice" value="160.00">
-            <label for="premium">Higher Price - $160.00</label>
-          </div>
-        </div>
-
-        <div class="sr-payment-summary payment-view">
-          <h1 class="order-amount">$135.00</h1>
-          <h4>Selected: <span class="package-type">Lower</span> Price</h4>
-        </div>        
-
-        <div class="sr-payment-form payment-view">
-          <div class="sr-form-row">
-            <label for="card-element">
-              Payment Details
-            </label>
-            <div class="sr-combo-inputs">
-              <div class="sr-combo-inputs-row">
-                <input
-                  type="text"
-                  id="name"
-                  placeholder="Full Name"
-                  autocomplete="cardholder"
-                  class="sr-input"
-                />
+        <div class="trips-container">
+          <div class="trip-card">
+            <h2>Training Trip</h2>
+            <div class="trip-details">
+              <div class="trip-detail-item">
+                <i class="fas fa-map-marker-alt"></i>
+                <span>Hayward, WI</span>
               </div>
-              <div class="sr-combo-inputs-row">
-                <input
-                  type="email"
-                  id="email"
-                  placeholder="Email Address"
-                  autocomplete="email"
-                  class="sr-input"
-                />
-              </div>
-              <div class="sr-combo-inputs-row">
-                <div class="sr-input sr-card-element" id="card-element"></div>
+              <div class="trip-detail-item">
+                <i class="fas fa-calendar"></i>
+                <span>December 6-8, 2024</span>
               </div>
             </div>
-            <div class="sr-field-error" id="card-errors" role="alert"></div>
+            <p class="trip-description">
+              Join us for our annual training trip to kick off the ski season! Perfect for both new and experienced skiers.
+            </p>
+            <div class="trip-price">
+              <span>$135.00 - $160.00</span>
+            </div>
+            <a href="/training-trip" class="trip-button">Register Now</a>
           </div>
-          <div class="sr-legal-text">
-            <p>⚠️ Important: A hold will be placed on your card. If selected in the lottery, your card will be charged.</p>
-          </div>
-          <button id="submit">
-            <div class="spinner hidden" id="spinner"></div>
-            <span id="button-text">Register for Trip</span>
-          </button>
-        </div>
 
-        <div class="sr-payment-summary hidden completed-view">
-          <h1>Thank you! Your payment has been received and you're now entered in the trip lottery.</h1>
-        </div> 
+          <!-- Template for future trips -->
+          <div class="trip-card coming-soon">
+            <h2>More Trips Coming Soon</h2>
+            <p class="trip-description">
+              Stay tuned for additional winter trips and activities!
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   </body>
