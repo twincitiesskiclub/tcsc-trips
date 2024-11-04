@@ -6,6 +6,8 @@ import json
 import os
 from flask import Flask, render_template, jsonify, request, send_from_directory
 from dotenv import load_dotenv, find_dotenv
+from flask_sqlalchemy import SQLAlchemy
+from models import db, Payment
 
 # Setup Stripe python client library
 load_dotenv(find_dotenv())
@@ -16,6 +18,17 @@ stripe.api_version = os.getenv('STRIPE_API_VERSION')
 app = Flask(__name__,
            static_folder='static',
            static_url_path='/static')
+
+# Add these configurations after creating the Flask app
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///payments.db'
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Initialize the database
+db.init_app(app)
+
+# Create tables (add this after db initialization)
+with app.app_context():
+    db.create_all()
 
 @app.route('/', methods=['GET'])
 def get_home_page():
@@ -53,12 +66,14 @@ def create_payment():
     try:
         data = json.loads(request.data)
         
-        # Get amount and email from the request data
         amount = float(data.get('amount', 135.00))
         email = data.get('email', '')
         name = data.get('name', '')
         
-        # Create a PaymentIntent with the order amount and currency
+        # Get trip_id from referrer or default to 'generic-trip'
+        trip_id = request.referrer.split('/')[-1] if request.referrer else 'generic-trip'
+        
+        # Create Stripe PaymentIntent
         intent = stripe.PaymentIntent.create(
             amount=calculate_order_amount(amount),
             currency=data['currency'],
@@ -66,10 +81,23 @@ def create_payment():
             metadata={
                 'email': email,
                 'name': name,
-                'amount': str(amount)
+                'amount': str(amount),
+                'trip_id': trip_id
             },
             receipt_email=email
         )
+        
+        # Create payment record in database
+        payment = Payment(
+            payment_intent_id=intent.id,
+            email=email,
+            name=name,
+            amount=intent.amount,
+            status=intent.status,
+            trip_id=trip_id
+        )
+        db.session.add(payment)
+        db.session.commit()
 
         return jsonify({
             'clientSecret': intent.client_secret,
@@ -105,6 +133,14 @@ def update_payment():
             receipt_email=email
         )
 
+        # Update payment record in database
+        payment = Payment.query.filter_by(payment_intent_id=payment_intent_id).first()
+        if payment:
+            payment.amount = intent.amount
+            payment.email = email
+            payment.status = intent.status
+            db.session.commit()
+
         return jsonify({
             'clientSecret': intent.client_secret,
             'paymentIntent': {
@@ -124,7 +160,6 @@ def webhook_received():
     request_data = json.loads(request.data)
 
     if webhook_secret:
-        # Retrieve the event by verifying the signature using the raw body and secret if webhook signing is configured.
         signature = request.headers.get('stripe-signature')
         try:
             event = stripe.Webhook.construct_event(
@@ -132,29 +167,30 @@ def webhook_received():
             data = event['data']
         except Exception as e:
             return e
-        # Get the type of webhook event sent - used to check the status of PaymentIntents.
         event_type = event['type']
     else:
         data = request_data['data']
         event_type = request_data['type']
     data_object = data['object']
 
-    if event_type == 'payment_intent.amount_capturable_updated':
-        print('💳 Charging the card for: ' + str(data_object['amount_capturable']))
-        # Get the email from metadata
-        email = data_object.get('metadata', {}).get('email', '')
-        print('📧 Customer email: ' + email)
-        intent = stripe.PaymentIntent.capture(data_object['id'])
-    elif event_type == 'payment_intent.succeeded':
-        print('✅ Payment received!')
-        # Get the email from metadata
-        email = data_object.get('metadata', {}).get('email', '')
-        print('📧 Payment confirmation sent to: ' + email)
-    elif event_type == 'payment_intent.payment_failed':
-        print('❌ Payment failed.')
-        # Get the email from metadata for failure notification
-        email = data_object.get('metadata', {}).get('email', '')
-        print('📧 Payment failure notification for: ' + email)
+    # Update payment status in database
+    payment = Payment.query.filter_by(payment_intent_id=data_object['id']).first()
+    if payment:
+        if event_type == 'payment_intent.amount_capturable_updated':
+            payment.status = data_object['status']
+            print('💳 Charging the card for: ' + str(data_object['amount_capturable']))
+            intent = stripe.PaymentIntent.capture(data_object['id'])
+            
+        elif event_type == 'payment_intent.succeeded':
+            payment.status = 'succeeded'
+            print('✅ Payment received!')
+            
+        elif event_type == 'payment_intent.payment_failed':
+            payment.status = 'failed'
+            print('❌ Payment failed.')
+        
+        db.session.commit()
+
     return jsonify({'status': 'success'})
 
 
