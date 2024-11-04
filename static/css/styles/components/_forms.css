@@ -1,0 +1,75 @@
+/*----------  Forms  ----------*/
+.sr-form-row { margin: 16px 0 }
+
+label {
+  font: 500 14px var(--f);
+  margin-bottom: 8px;
+  display: inline-block;
+  color: var(--p)
+}
+
+.sr-combo-inputs {
+  background: #fff;
+  border: 1px solid var(--g-b);
+  border-radius: var(--r)
+}
+
+.sr-combo-inputs-row {
+  border-bottom: 1px solid var(--g-b)
+}
+
+.sr-combo-inputs-row:last-child { border: 0 }
+.sr-combo-inputs-row .sr-input { border: 0; border-radius: 0 }
+
+.sr-input,.sr-select,input[type="text"],input[type="email"] {
+  border: 1px solid var(--g-b);
+  border-radius: var(--r);
+  padding: 5px 12px;
+  height: 44px;
+  width: 100%;
+  transition: .2s;
+  background: #fff;
+  appearance: none;
+  color: var(--p)
+}
+
+.sr-card-element { padding: 12px }
+
+/*----------  Price Selection  ----------*/
+.price-selection {
+  margin-bottom: 24px;
+  padding: 16px;
+  border: 2px solid var(--g-b);
+  border-radius: var(--r);
+  background: #fff;
+  box-shadow: 0 2px 4px rgba(28,44,68,.05)
+}
+
+.price-option {
+  padding: 10px 12px;
+  border-radius: var(--r);
+  transition: .2s;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  margin: 4px 0
+}
+
+.price-option:hover {
+  background: rgba(172,243,196,.15);
+  transform: translateY(-1px)
+}
+
+.price-option input[type="radio"] {
+  margin: 0 12px 0 0;
+  transform: scale(1.2);
+  flex-shrink: 0
+}
+
+.price-option label {
+  font: 500 16px/1.4 var(--f);
+  color: var(--p);
+  cursor: pointer;
+  margin: 0;
+  display: block
+}
