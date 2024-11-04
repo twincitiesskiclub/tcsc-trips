@@ -202,5 +202,5 @@ class PaymentForm {
       .forEach(view => view.classList.remove('hidden'));
   }
 }
-
 document.addEventListener('DOMContentLoaded', () => new PaymentForm());
+
