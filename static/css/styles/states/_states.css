@@ -1,0 +1,40 @@
+/*=============================================
+=            States                           =
+=============================================*/
+
+/* Focus States */
+.sr-input:focus,input[type="text"]:focus,input[type="email"]:focus,button:focus,.focused {
+    box-shadow: 0 0 0 1px rgba(28,44,68,.2),0 1px 1px rgba(0,0,0,.07),0 0 0 4px rgba(172,243,196,.2);
+    outline: 0;
+    border-color: var(--p)
+  }
+  
+  /* Placeholder States */
+  .sr-input::placeholder,input::placeholder { color: var(--g-l) }
+  button:disabled { opacity: .5; cursor: not-allowed }
+  
+  /* Error States */
+  .sr-field-error {
+    color: #e44;
+    text-align: left;
+    font: 13px/17px var(--f);
+    margin-top: 12px
+  }
+  
+  .sr-legal-text {
+    background: #ffe8e8;
+    padding: 16px;
+    border-radius: var(--r);
+    margin-top: 24px;
+    border-left: 4px solid #f90
+  }
+  
+  .sr-legal-text p {
+    color: #d14343;
+    margin: 0;
+    font: 14px/1.5 var(--f)
+  }
+  
+  /* Visibility States */
+  .hidden { display: none }
+  .coming-soon { background: var(--g-o); border-style: dashed }
