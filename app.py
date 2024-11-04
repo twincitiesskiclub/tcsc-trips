@@ -9,7 +9,7 @@ from dotenv import load_dotenv, find_dotenv
 
 # Setup Stripe python client library
 load_dotenv(find_dotenv())
-stripe.api_key = os.getenv('STRIPE_PROD_SECRET_KEY')
+stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
 stripe.api_version = os.getenv('STRIPE_API_VERSION')
 
 # Initialize Flask app with standard directory structure
@@ -17,21 +17,20 @@ app = Flask(__name__,
            static_folder='static',
            static_url_path='/static')
 
-
 @app.route('/', methods=['GET'])
 def get_home_page():
     return render_template('index.html')
 
 
 @app.route('/training-trip', methods=['GET'])
-def get_checkout_page():
+def get_training_trip_page():
     return render_template('training-trip.html')
 
 
 @app.route('/get-stripe-key', methods=['GET'])
 def get_stripe_key():
     return jsonify({
-        'publicKey': os.getenv('STRIPE_PROD_PUBLISHABLE_KEY')
+        'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
     })
 
 
@@ -57,17 +56,19 @@ def create_payment():
         # Get amount and email from the request data
         amount = float(data.get('amount', 135.00))
         email = data.get('email', '')
+        name = data.get('name', '')
         
-        # Create a PaymentIntent with the order amount, currency, and email
+        # Create a PaymentIntent with the order amount and currency
         intent = stripe.PaymentIntent.create(
             amount=calculate_order_amount(amount),
             currency=data['currency'],
             capture_method="manual",
             metadata={
-                'email': email,  # Store email in metadata
+                'email': email,
+                'name': name,
                 'amount': str(amount)
             },
-            receipt_email=email  # Send receipt to this email when payment is captured
+            receipt_email=email
         )
 
         return jsonify({
@@ -119,7 +120,7 @@ def update_payment():
 
 @app.route('/webhook', methods=['POST'])
 def webhook_received():
-    webhook_secret = os.getenv('STRIPE_PROD_WEBHOOK_SECRET')
+    webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
     request_data = json.loads(request.data)
 
     if webhook_secret:
