@@ -53,7 +53,7 @@ python3 -m flask run
 - Implement PostgreSQL/SQLite database for user and trip management
   - Schema:
     ```sql
-    users (
+    payments (
       id,
       payment_intent_id,
       email,
@@ -62,8 +62,7 @@ python3 -m flask run
       status,
       trip_id,
       created_at,
-      updated_at,
-      is_trip_manager,
+      updated_at
     )
 
     trips (
