@@ -1,0 +1,61 @@
+/*----------  Trip Details  ----------*/
+.trip-details {
+    display: flex;
+    justify-content: center;
+    gap: 24px;
+    margin-bottom: 24px;
+    flex-wrap: wrap
+  }
+  
+  .trip-detail-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--g-m);
+    font-size: 16px
+  }
+  
+  .trip-detail-item i { color: var(--p) }
+  
+  /*----------  Trip Cards  ----------*/
+  .trips-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
+    gap: 24px;
+    width: 100%;
+    max-width: 800px;
+    margin: 0 auto
+  }
+  
+  .trip-card {
+    background: #fff;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 24px;
+    transition: .2s;
+    display: flex;
+    flex-direction: column;
+    gap: 16px
+  }
+  
+  .trip-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(28,44,68,.1)
+  }
+  
+  .trip-card h2 {
+    margin: 0;
+    color: var(--p);
+    font-size: 20px
+  }
+  
+  .trip-description {
+    color: var(--g-m);
+    font: 14px/1.5 var(--f);
+    margin: 0
+  }
+  
+  .trip-price {
+    font: 600 18px var(--f);
+    color: var(--p)
+  }

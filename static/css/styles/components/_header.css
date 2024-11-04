@@ -1,0 +1,27 @@
+/*----------  Header  ----------*/
+.sr-header {
+    margin-bottom: 32px;
+    text-align: center
+  }
+  
+  .sr-header__title {
+    color: var(--p);
+    margin: 20px 0;
+    font: 600 24px var(--f)
+  }
+  
+  .sr-header__logo {
+    height: 24px;
+    background-size: contain;
+    background-repeat: no-repeat;
+    width: 100%;
+    margin-bottom: 24px;
+    text-align: center
+  }
+  
+  .sr-header__logo img {
+    max-width: 200px;
+    height: auto;
+    display: block;
+    margin: 0 auto
+  }
