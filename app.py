@@ -188,8 +188,11 @@ def webhook_received():
             event = stripe.Webhook.construct_event(
                 payload=request.data, sig_header=signature, secret=webhook_secret)
             data = event['data']
+        except stripe.error.SignatureVerificationError as e:
+            return jsonify({'error': 'Invalid signature'}), 400
         except Exception as e:
-            return e
+            return jsonify({'error': str(e)}), 400
+        
         event_type = event['type']
     else:
         data = request_data['data']
@@ -202,7 +205,7 @@ def webhook_received():
         if event_type == 'payment_intent.amount_capturable_updated':
             payment.status = data_object['status']
             print('💳 Charging the card for: ' + str(data_object['amount_capturable']))
-            intent = stripe.PaymentIntent.capture(data_object['id'])
+            #intent = stripe.PaymentIntent.capture(data_object['id'])
             
         elif event_type == 'payment_intent.succeeded':
             payment.status = 'succeeded'
