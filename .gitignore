@@ -3,6 +3,11 @@
 .vscode/*
 !.vscode/extensions.json
 instance/payments.db
+.env.production
+.env.development
+.env.testing
+instance/
+*.db
 
 # Node files
 node_modules/
