@@ -65,7 +65,6 @@ def calculate_order_amount(amount):
 def create_payment():
     try:
         data = json.loads(request.data)
-        
         amount = float(data.get('amount', 135.00))
         email = data.get('email', '')
         name = data.get('name', '')
@@ -121,6 +120,7 @@ def update_payment():
         payment_intent_id = data.get('paymentIntentId')
         amount = float(data.get('amount', 135.00))
         email = data.get('email', '')
+        name = data.get('name', '')
         
         # Update the existing PaymentIntent
         intent = stripe.PaymentIntent.modify(
@@ -128,6 +128,7 @@ def update_payment():
             amount=calculate_order_amount(amount),
             metadata={
                 'email': email,
+                'name': name,
                 'amount': str(amount)
             },
             receipt_email=email
@@ -138,6 +139,7 @@ def update_payment():
         if payment:
             payment.amount = intent.amount
             payment.email = email
+            payment.name = name
             payment.status = intent.status
             db.session.commit()
 
