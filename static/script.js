@@ -1,47 +1,65 @@
 // script.js
 class PaymentForm {
   constructor() {
+    this.initializeProperties();
+    this.initializeElements();
+    this.init();
+  }
+
+  initializeProperties() {
     this.stripe = null;
     this.card = null;
     this.selectedAmount = 135.00;
     this.clientSecret = null;
     this.paymentIntent = null;
-    
-    this.elements = {
-      form: document.querySelector('.sr-payment-form'),
-      submit: document.querySelector('#submit'),
-      nameInput: document.querySelector('#name'),
-      emailInput: document.querySelector('#email'),
-      errorDisplay: document.querySelector('.sr-field-error'),
-      amountDisplay: document.querySelector('.order-amount'),
-      packageType: document.querySelector('.package-type'),
-      spinner: document.querySelector('#spinner'),
-      buttonText: document.querySelector('#button-text')
+  }
+
+  initializeElements() {
+    const selectors = {
+      form: '.sr-payment-form',
+      submit: '#submit',
+      nameInput: '#name',
+      emailInput: '#email',
+      errorDisplay: '.sr-field-error',
+      amountDisplay: '.order-amount',
+      packageType: '.package-type',
+      spinner: '#spinner',
+      buttonText: '#button-text'
     };
-    
-    this.init();
+
+    this.elements = Object.fromEntries(
+      Object.entries(selectors).map(([key, selector]) => [
+        key, 
+        document.querySelector(selector)
+      ])
+    );
   }
 
   async init() {
     try {
-      // Initialize Stripe with just the public key first
-      const response = await fetch('/get-stripe-key');
-      const data = await response.json();
-      this.stripe = Stripe(data.publicKey);
-      
-      // Set up the card element
+      const { publicKey } = await this.fetchStripeKey();
+      this.stripe = Stripe(publicKey);
       this.setupStripeElements();
       this.attachEventListeners();
     } catch (error) {
-      console.error('Initialization error:', error);
-      this.showError('Failed to initialize payment form. Please refresh the page.');
+      this.handleInitializationError(error);
     }
+  }
+
+  async fetchStripeKey() {
+    const response = await fetch('/get-stripe-key');
+    return response.json();
   }
 
   setupStripeElements() {
     const elements = this.stripe.elements();
-    
-    this.card = elements.create('card', {
+    this.card = elements.create('card', this.getCardElementStyles());
+    this.card.mount('#card-element');
+    this.card.on('change', ({error}) => this.showError(error?.message || ''));
+  }
+
+  getCardElementStyles() {
+    return {
       style: {
         base: {
           color: '#32325d',
@@ -55,18 +73,7 @@ class PaymentForm {
           iconColor: '#fa755a'
         }
       }
-    });
-    
-    this.card.mount('#card-element');
-    
-    // Add card element event listeners
-    this.card.on('change', ({error}) => {
-      if (error) {
-        this.showError(error.message);
-      } else {
-        this.showError('');
-      }
-    });
+    };
   }
 
   attachEventListeners() {
@@ -75,9 +82,7 @@ class PaymentForm {
         (e) => this.updatePrice(parseFloat(e.target.value))
       ));
 
-    this.elements.submit.addEventListener('click', 
-      (e) => this.handleSubmit(e)
-    );
+    this.elements.submit.addEventListener('click', this.handleSubmit.bind(this));
   }
 
   async updatePrice(amount) {
@@ -86,8 +91,68 @@ class PaymentForm {
     this.elements.packageType.textContent = amount === 135.00 ? 'Lower' : 'Higher';
   }
 
+  validateForm() {
+    const { nameInput, emailInput } = this.elements;
+    
+    if (!nameInput.value) {
+      this.showError('Please enter your name.');
+      return false;
+    }
+    if (!emailInput.value) {
+      this.showError('Please enter your email address.');
+      return false;
+    }
+    if (!this.validateEmail(emailInput.value)) {
+      this.showError('Please enter a valid email address.');
+      return false;
+    }
+    return true;
+  }
+
+  validateEmail(email) {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+  }
+
+  async handleSubmit(e) {
+    e.preventDefault();
+    
+    if (!this.validateForm()) return;
+
+    this.toggleLoadingState(true);
+    try {
+      await this.processPayment();
+    } catch (error) {
+      console.error('Payment error:', error);
+      this.showError('Payment failed. Please try again.');
+    } finally {
+      this.toggleLoadingState(false);
+    }
+  }
+
+  async processPayment() {
+    await this.createOrUpdatePaymentIntent();
+    const result = await this.confirmPayment();
+    
+    if (result.error) {
+      this.showError(result.error.message);
+    } else {
+      await this.handlePaymentSuccess(result);
+    }
+  }
+
+  async confirmPayment() {
+    return this.stripe.confirmCardPayment(this.clientSecret, {
+      payment_method: {
+        card: this.card,
+        billing_details: {
+          name: this.elements.nameInput.value,
+          email: this.elements.emailInput.value
+        }
+      }
+    });
+  }
+
   async createOrUpdatePaymentIntent() {
-    // Always create a new payment intent when submitting
     const response = await fetch('/create-payment-intent', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -104,73 +169,17 @@ class PaymentForm {
     return this.paymentIntent;
   }
 
-  validateEmail(email) {
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailPattern.test(email);
-  }
-
-  async handleSubmit(e) {
-    e.preventDefault();
-    
-    // Validate name
-    if (!this.elements.nameInput.value) {
-      this.showError('Please enter your name.');
-      return;
-    }
-
-    // Validate email
-    if (!this.elements.emailInput.value) {
-      this.showError('Please enter your email address.');
-      return;
-    }
-
-    if (!this.validateEmail(this.elements.emailInput.value)) {
-      this.showError('Please enter a valid email address.');
-      return;
-    }
-
-    this.toggleLoadingState(true);
-
-    try {
-      // Ensure we have a payment intent before confirming
-      await this.createOrUpdatePaymentIntent();
-
-      const result = await this.stripe.confirmCardPayment(this.clientSecret, {
-        payment_method: {
-          card: this.card,
-          billing_details: {
-            name: this.elements.nameInput.value,
-            email: this.elements.emailInput.value
-          }
-        }
-      });
-
-      if (result.error) {
-        this.showError(result.error.message);
-      } else {
-        await this.handlePaymentSuccess(result);
-      }
-    } catch (error) {
-      console.error('Payment error:', error);
-      this.showError('Payment failed. Please try again.');
-    } finally {
-      this.toggleLoadingState(false);
-    }
-  }
-
   showError(message) {
-    this.elements.errorDisplay.textContent = message;
-    if (message) {
-      this.elements.errorDisplay.style.display = 'block';
-    } else {
-      this.elements.errorDisplay.style.display = 'none';
-    }
+    const { errorDisplay } = this.elements;
+    errorDisplay.textContent = message;
+    errorDisplay.style.display = message ? 'block' : 'none';
   }
 
   toggleLoadingState(isLoading) {
-    this.elements.submit.disabled = isLoading;
-    this.elements.spinner.classList.toggle('hidden', !isLoading);
-    this.elements.buttonText.classList.toggle('hidden', isLoading);
+    const { submit, spinner, buttonText } = this.elements;
+    submit.disabled = isLoading;
+    spinner.classList.toggle('hidden', !isLoading);
+    buttonText.classList.toggle('hidden', isLoading);
   }
 
   async handlePaymentSuccess(result) {
@@ -179,6 +188,12 @@ class PaymentForm {
     document.querySelectorAll('.completed-view')
       .forEach(view => view.classList.remove('hidden'));
   }
+
+  handleInitializationError(error) {
+    console.error('Initialization error:', error);
+    this.showError('Failed to initialize payment form. Please refresh the page.');
+  }
 }
+
 document.addEventListener('DOMContentLoaded', () => new PaymentForm());
 

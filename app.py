@@ -1,124 +1,103 @@
 #! /usr/bin/env python3.6
-# app.py
 
-import stripe
-import json
 import os
-from flask import Flask, render_template, jsonify, request, send_from_directory
+import json
+import stripe
+from flask import Flask, render_template, jsonify, request
 from dotenv import load_dotenv, find_dotenv
-from flask_sqlalchemy import SQLAlchemy
 from models import db, Payment
 
-# Setup Stripe python client library
-load_dotenv(find_dotenv())
-stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
-stripe.api_version = os.getenv('STRIPE_API_VERSION')
+# Configuration Functions
+def load_stripe_config():
+    load_dotenv(find_dotenv())
+    stripe.api_key = os.getenv('STRIPE_SECRET_KEY')
+    stripe.api_version = os.getenv('STRIPE_API_VERSION')
 
-# Initialize Flask app with standard directory structure
-app = Flask(__name__,
-           static_folder='static',
-           static_url_path='/static')
+def configure_database(app, environment):
+    base_dir = os.path.abspath(os.path.dirname(__file__))
+    
+    db_paths = {
+        'production': '/var/lib/app.db',
+        'development': '/var/lib/app.db',
+        'testing': os.path.join(base_dir, 'instance', 'test.db')
+    }
+    
+    if environment not in db_paths:
+        raise ValueError(f"Invalid FLASK_ENV value: {environment}")
+        
+    if environment == 'testing':
+        os.makedirs(os.path.join(base_dir, 'instance'), exist_ok=True)
+        
+    db_path = db_paths[environment]
+    app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
+    app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+    
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
 
-# Add these configurations after creating the Flask app
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# Payment Processing Functions
+def calculate_order_amount(amount):
+    amount_in_cents = int(amount * 100)
+    return amount_in_cents if amount_in_cents in [13500, 16000] else 13500
 
-# Load environment variables from .env file
-load_dotenv()
+def create_stripe_payment_intent(amount, email, name, trip_id):
+    return stripe.PaymentIntent.create(
+        amount=calculate_order_amount(amount),
+        currency='usd',
+        capture_method="manual",
+        metadata={
+            'email': email,
+            'name': name,
+            'amount': str(amount),
+            'trip_id': trip_id
+        },
+        receipt_email=email
+    )
 
-basedir = os.path.abspath(os.path.dirname(__file__))
+def save_payment_to_db(intent, email, name, trip_id):
+    payment = Payment(
+        payment_intent_id=intent.id,
+        email=email,
+        name=name,
+        amount=intent.amount,
+        status=intent.status,
+        trip_id=trip_id
+    )
+    db.session.add(payment)
+    db.session.commit()
+    return payment
 
-# Get environment setting
-ENVIRONMENT = os.getenv('FLASK_ENV', 'development')
+# Initialize Flask App
+app = Flask(__name__, static_folder='static', static_url_path='/static')
+load_stripe_config()
+configure_database(app, os.getenv('FLASK_ENV', 'development'))
 
-# Database configuration
-if ENVIRONMENT == 'production':
-    db_path = '/var/lib/app.db'
-elif ENVIRONMENT == 'development':
-    db_path = '/var/lib/app.db'
-elif ENVIRONMENT == 'testing':
-    db_path = os.path.join(basedir, 'instance', 'test.db')
-    os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
-else:
-    raise ValueError(f"Invalid FLASK_ENV value: {ENVIRONMENT}")
-
-app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-
-# Initialize the database
-db.init_app(app)
-
-# Create tables (add this after db initialization)
-with app.app_context():
-    db.create_all()
-
-@app.route('/', methods=['GET'])
+# Route Handlers
+@app.route('/')
 def get_home_page():
     return render_template('index.html')
 
-
-@app.route('/training-trip', methods=['GET'])
+@app.route('/training-trip')
 def get_training_trip_page():
     return render_template('training-trip.html')
 
-
-@app.route('/get-stripe-key', methods=['GET'])
+@app.route('/get-stripe-key')
 def get_stripe_key():
-    return jsonify({
-        'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')
-    })
-
-
-def calculate_order_amount(amount):
-    # Convert decimal amount to cents (e.g., 135.00 -> 13500)
-    amount_in_cents = int(amount * 100)
-    
-    # Validate the amount is one of our accepted prices
-    accepted_amounts = [13500, 16000]  # $135.00 or $160.00 in cents
-    
-    if amount_in_cents not in accepted_amounts:
-        # If amount is not valid, default to lower price
-        return 13500
-    
-    return amount_in_cents
-
+    return jsonify({'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')})
 
 @app.route('/create-payment-intent', methods=['POST'])
 def create_payment():
     try:
         data = json.loads(request.data)
-        amount = float(data.get('amount', 135.00))
         email = data.get('email', '')
         name = data.get('name', '')
-        
-        # Get trip_id from referrer or default to 'generic-trip'
+        amount = float(data.get('amount', 135.00))
         trip_id = request.referrer.split('/')[-1] if request.referrer else 'generic-trip'
         
-        # Create Stripe PaymentIntent
-        intent = stripe.PaymentIntent.create(
-            amount=calculate_order_amount(amount),
-            currency=data['currency'],
-            capture_method="manual",
-            metadata={
-                'email': email,
-                'name': name,
-                'amount': str(amount),
-                'trip_id': trip_id
-            },
-            receipt_email=email
-        )
+        intent = create_stripe_payment_intent(amount, email, name, trip_id)
+        save_payment_to_db(intent, email, name, trip_id)
         
-        # Create payment record in database
-        payment = Payment(
-            payment_intent_id=intent.id,
-            email=email,
-            name=name,
-            amount=intent.amount,
-            status=intent.status,
-            trip_id=trip_id
-        )
-        db.session.add(payment)
-        db.session.commit()
-
         return jsonify({
             'clientSecret': intent.client_secret,
             'paymentIntent': {
@@ -131,31 +110,22 @@ def create_payment():
     except Exception as e:
         return jsonify(error=str(e)), 403
 
-
 @app.route('/update-payment-intent', methods=['POST'])
 def update_payment():
     try:
         data = json.loads(request.data)
-        
-        # Get payment intent ID, new amount, and email from the request data
         payment_intent_id = data.get('paymentIntentId')
         amount = float(data.get('amount', 135.00))
         email = data.get('email', '')
         name = data.get('name', '')
         
-        # Update the existing PaymentIntent
         intent = stripe.PaymentIntent.modify(
             payment_intent_id,
             amount=calculate_order_amount(amount),
-            metadata={
-                'email': email,
-                'name': name,
-                'amount': str(amount)
-            },
+            metadata={'email': email, 'name': name, 'amount': str(amount)},
             receipt_email=email
         )
-
-        # Update payment record in database
+        
         payment = Payment.query.filter_by(payment_intent_id=payment_intent_id).first()
         if payment:
             payment.amount = intent.amount
@@ -163,7 +133,7 @@ def update_payment():
             payment.name = name
             payment.status = intent.status
             db.session.commit()
-
+            
         return jsonify({
             'clientSecret': intent.client_secret,
             'paymentIntent': {
@@ -176,49 +146,44 @@ def update_payment():
     except Exception as e:
         return jsonify(error=str(e)), 403
 
-
 @app.route('/webhook', methods=['POST'])
 def webhook_received():
     webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
     request_data = json.loads(request.data)
-
-    if webhook_secret:
-        signature = request.headers.get('stripe-signature')
-        try:
+    
+    try:
+        if webhook_secret:
+            signature = request.headers.get('stripe-signature')
             event = stripe.Webhook.construct_event(
-                payload=request.data, sig_header=signature, secret=webhook_secret)
+                payload=request.data, 
+                sig_header=signature, 
+                secret=webhook_secret
+            )
             data = event['data']
-        except stripe.error.SignatureVerificationError as e:
-            return jsonify({'error': 'Invalid signature'}), 400
-        except Exception as e:
-            return jsonify({'error': str(e)}), 400
+        else:
+            data = request_data['data']
+            event = request_data
+            
+        handle_webhook_event(data['object'], event['type'])
+        return jsonify({'status': 'success'})
         
-        event_type = event['type']
-    else:
-        data = request_data['data']
-        event_type = request_data['type']
-    data_object = data['object']
+    except Exception as e:
+        return jsonify({'error': str(e)}), 400
 
-    # Update payment status in database
+def handle_webhook_event(data_object, event_type):
     payment = Payment.query.filter_by(payment_intent_id=data_object['id']).first()
-    if payment:
-        if event_type == 'payment_intent.amount_capturable_updated':
-            payment.status = data_object['status']
-            print('💳 Charging the card for: ' + str(data_object['amount_capturable']))
-            #intent = stripe.PaymentIntent.capture(data_object['id'])
-            
-        elif event_type == 'payment_intent.succeeded':
-            payment.status = 'succeeded'
-            print('✅ Payment received!')
-            
-        elif event_type == 'payment_intent.payment_failed':
-            payment.status = 'failed'
-            print('❌ Payment failed.')
+    if not payment:
+        return
         
+    status_updates = {
+        'payment_intent.amount_capturable_updated': data_object['status'],
+        'payment_intent.succeeded': 'succeeded',
+        'payment_intent.payment_failed': 'failed'
+    }
+    
+    if event_type in status_updates:
+        payment.status = status_updates[event_type]
         db.session.commit()
-
-    return jsonify({'status': 'success'})
-
 
 if __name__ == '__main__':
     app.run(port=os.getenv('PORT', 5000))
