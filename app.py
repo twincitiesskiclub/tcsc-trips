@@ -35,8 +35,7 @@ ENVIRONMENT = os.getenv('FLASK_ENV', 'development')
 if ENVIRONMENT == 'production':
     db_path = '/var/lib/payments.db'
 elif ENVIRONMENT == 'development':
-    db_path = os.path.join(basedir, 'instance', 'payments.db')
-    os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
+    db_path = '/var/lib/payments.db'
 elif ENVIRONMENT == 'testing':
     db_path = os.path.join(basedir, 'instance', 'test.db')
     os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
