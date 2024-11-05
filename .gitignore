@@ -2,7 +2,7 @@
 .DS_Store
 .vscode/*
 !.vscode/extensions.json
-instance/*
+instance/payments.db
 
 # Node files
 node_modules/
