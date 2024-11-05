@@ -20,8 +20,29 @@ app = Flask(__name__,
            static_url_path='/static')
 
 # Add these configurations after creating the Flask app
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///payments.db'
+app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///app.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+# Load environment variables from .env file
+load_dotenv()
+
+basedir = os.path.abspath(os.path.dirname(__file__))
+
+# Get environment setting
+ENVIRONMENT = os.getenv('FLASK_ENV', 'development')
+
+# Database configuration
+if ENVIRONMENT == 'production':
+    db_path = '/var/lib/app.db'
+elif ENVIRONMENT == 'development':
+    db_path = '/var/lib/app.db'
+elif ENVIRONMENT == 'testing':
+    db_path = os.path.join(basedir, 'instance', 'test.db')
+    os.makedirs(os.path.join(basedir, 'instance'), exist_ok=True)
+else:
+    raise ValueError(f"Invalid FLASK_ENV value: {ENVIRONMENT}")
+
+app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
 
 # Initialize the database
 db.init_app(app)
