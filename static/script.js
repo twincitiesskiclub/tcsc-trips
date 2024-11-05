@@ -84,45 +84,23 @@ class PaymentForm {
     this.selectedAmount = amount;
     this.elements.amountDisplay.textContent = `$${amount.toFixed(2)}`;
     this.elements.packageType.textContent = amount === 135.00 ? 'Lower' : 'Higher';
-    
-    // If we already have a payment intent, update it
-    if (this.paymentIntent) {
-      try {
-        const response = await fetch('/update-payment-intent', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            paymentIntentId: this.paymentIntent.id,
-            amount: this.selectedAmount,
-            email: this.elements.emailInput.value
-          })
-        });
-        const data = await response.json();
-        this.clientSecret = data.clientSecret;
-        this.paymentIntent = data.paymentIntent;
-      } catch (error) {
-        console.error('Error updating payment intent:', error);
-        this.showError('Failed to update price. Please try again.');
-      }
-    }
   }
 
   async createOrUpdatePaymentIntent() {
-    if (!this.paymentIntent) {
-      // Create new payment intent
-      const response = await fetch('/create-payment-intent', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          currency: 'usd',
-          amount: this.selectedAmount,
-          email: this.elements.emailInput.value
-        })
-      });
-      const data = await response.json();
-      this.clientSecret = data.clientSecret;
-      this.paymentIntent = data.paymentIntent;
-    }
+    // Always create a new payment intent when submitting
+    const response = await fetch('/create-payment-intent', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        currency: 'usd',
+        amount: this.selectedAmount,
+        email: this.elements.emailInput.value,
+        name: this.elements.nameInput.value
+      })
+    });
+    const data = await response.json();
+    this.clientSecret = data.clientSecret;
+    this.paymentIntent = data.paymentIntent;
     return this.paymentIntent;
   }
 
