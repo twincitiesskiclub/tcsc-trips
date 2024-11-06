@@ -19,7 +19,7 @@ def configure_database(app, environment):
     
     db_paths = {
         'production': '/var/lib/app.db',
-        'development': '/var/lib/app.db',
+        'development': '/var/lib/app_dev.db',
         'testing': os.path.join(base_dir, 'instance', 'test.db')
     }
     
