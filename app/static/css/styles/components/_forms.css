@@ -73,3 +73,39 @@ label {
   margin: 0;
   display: block
 }
+
+.price-selection:empty {
+  display: none;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.sr-payment-summary {
+  margin-bottom: 24px;
+}
+
+.single-price-display {
+  background: var(--w);
+  border: 1px solid var(--g-b);
+  border-radius: var(--r);
+  padding: 16px;
+  margin-top: 12px;
+  margin-bottom: -8px;
+}
+
+.price-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.price-label {
+  font: 500 16px/1.4 var(--f);
+  color: var(--g-m);
+}
+
+.price-amount {
+  font: 600 20px/1.4 var(--f);
+  color: var(--p);
+}
