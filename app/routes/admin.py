@@ -33,8 +33,8 @@ def new_trip():
                 destination=request.form['destination'],
                 max_participants_standard=int(request.form['max_participants_standard']),
                 max_participants_extra=int(request.form['max_participants_extra']),
-                start_date=datetime.strptime(request.form['start_date'], '%Y-%m-%dT%H:%M'),
-                end_date=datetime.strptime(request.form['end_date'], '%Y-%m-%dT%H:%M'),
+                start_date=datetime.strptime(request.form['start_date'], '%Y-%m-%d'),
+                end_date=datetime.strptime(request.form['end_date'], '%Y-%m-%d'),
                 signup_start=datetime.strptime(request.form['signup_start'], '%Y-%m-%dT%H:%M'),
                 signup_end=datetime.strptime(request.form['signup_end'], '%Y-%m-%dT%H:%M'),
                 price_low=int(float(request.form['price_low']) * 100),  # Convert to cents
@@ -63,8 +63,8 @@ def edit_trip(trip_id):
             trip.destination = request.form['destination']
             trip.max_participants_standard = int(request.form['max_participants_standard'])
             trip.max_participants_extra = int(request.form['max_participants_extra'])
-            trip.start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%dT%H:%M')
-            trip.end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%dT%H:%M')
+            trip.start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
+            trip.end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
             trip.signup_start = datetime.strptime(request.form['signup_start'], '%Y-%m-%dT%H:%M')
             trip.signup_end = datetime.strptime(request.form['signup_end'], '%Y-%m-%dT%H:%M')
             trip.price_low = int(float(request.form['price_low']) * 100)

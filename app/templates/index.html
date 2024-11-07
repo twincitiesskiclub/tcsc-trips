@@ -40,7 +40,11 @@
               {{ trip.description }}
             </p>
             <div class="trip-price">
-              <span>${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}</span>
+              {% if trip.price_low == trip.price_high %}
+                <span>${{ "%.2f"|format(trip.price_low/100) }}</span>
+              {% else %}
+                <span>${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}</span>
+              {% endif %}
             </div>
             <a href="/{{ trip.slug }}" class="trip-button">Sign Up</a>
           </div>

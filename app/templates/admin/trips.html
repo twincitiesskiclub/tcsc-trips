@@ -47,7 +47,13 @@
               Standard: {{ trip.max_participants_standard }}<br>
               Extra: {{ trip.max_participants_extra }}
             </td>
-            <td>${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}</td>
+            <td>
+              {% if trip.price_low == trip.price_high %}
+                ${{ "%.2f"|format(trip.price_low/100) }}
+              {% else %}
+                ${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}
+              {% endif %}
+            </td>
             <td>
               <span class="status-badge status-{{ trip.status }}">
                 {{ trip.status }}
