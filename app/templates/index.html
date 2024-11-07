@@ -23,34 +23,37 @@
         </header>
 
         <div class="trips-container">
+          {% for trip in trips %}
           <div class="trip-card">
-            <h2>Training Trip</h2>
+            <h2>{{ trip.name }}</h2>
             <div class="trip-details">
               <div class="trip-detail-item">
                 <i class="fas fa-map-marker-alt"></i>
-                <span>Hayward, WI</span>
+                <span>{{ trip.destination }}</span>
               </div>
               <div class="trip-detail-item">
                 <i class="fas fa-calendar"></i>
-                <span>December 6-8, 2024</span>
+                <span>{{ trip.formatted_date_range }}</span>
               </div>
             </div>
             <p class="trip-description">
-              Join us for our annual training trip to kick off the ski season!
+              {{ trip.description }}
             </p>
             <div class="trip-price">
-              <span>$135.00 - $160.00</span>
+              <span>${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}</span>
             </div>
-            <a href="/training-trip" class="trip-button">Sign Up</a>
+            <a href="/{{ trip.slug }}" class="trip-button">Sign Up</a>
           </div>
+          {% endfor %}
 
-          <!-- Template for future trips -->
+          {% if not trips %}
           <div class="trip-card coming-soon">
             <h2>More Trips Coming Soon</h2>
             <p class="trip-description">
               Stay tuned for additional winter trips and activities!
             </p>
           </div>
+          {% endif %}
         </div>
       </div>
     </div>

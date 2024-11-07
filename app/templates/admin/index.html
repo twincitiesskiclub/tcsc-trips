@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TCSC Admin</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
+  </head>
+  <body>
+    <div class="admin-container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash-message {{ category }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% if session.user %}
+        <div class="user-info">
+          Logged in as: {{ session.user.email }}
+          <a href="{{ url_for('auth.logout') }}">Logout</a>
+        </div>
+      {% endif %}
+
+      <h1>TCSC Admin Dashboard</h1>
+      
+      <div class="admin-menu">
+        <a href="{{ url_for('admin.get_admin_payments') }}" class="admin-menu-item">
+          <h2>Payments Management</h2>
+          <p>View and manage payment transactions</p>
+        </a>
+        
+        <a href="{{ url_for('admin.get_admin_trips') }}" class="admin-menu-item">
+          <h2>Trips Management</h2>
+          <p>Create and manage ski trips</p>
+        </a>
+      </div>
+    </div>
+  </body>
+</html> 
