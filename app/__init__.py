@@ -3,6 +3,7 @@ from .config import load_stripe_config, configure_database
 from .routes.main import main
 from .routes.trips import trips
 from .routes.payments import payments
+from .routes.admin import admin
 from .models import db
 import os
 
@@ -20,6 +21,7 @@ def create_app(environment=None):
     app.register_blueprint(main)
     app.register_blueprint(trips)
     app.register_blueprint(payments)
+    app.register_blueprint(admin)
     
     with app.app_context():
         db.create_all()
