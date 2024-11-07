@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>TCSC Admin - {% block title %}{{ title }}{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
+    <!-- Include admin-specific styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/admin.css') }}">
+</head>
+<body>
+    <div class="admin-container">
+        {% include 'admin/partials/header.html' %}
+        <div class="admin-content">
+            {% block content %}{% endblock %}
+        </div>
+    </div>
+</body>
+</html> 
