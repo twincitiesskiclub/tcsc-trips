@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Admin - Trips</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
+  </head>
+  <body>
+    <div class="admin-container">
+      {% include 'admin/partials/header.html' %}
+
+      <div class="admin-header">
+        <h1>Trips Management</h1>
+        <div class="admin-actions">
+          <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+          <a href="{{ url_for('admin.new_trip') }}" class="button">Create New Trip</a>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Destination</th>
+            <th>Dates</th>
+            <th>Signup Period</th>
+            <th>Capacity</th>
+            <th>Price Range</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for trip in trips %}
+          <tr>
+            <td>{{ trip.name }}</td>
+            <td>{{ trip.destination }}</td>
+            <td>{{ trip.formatted_date_range }}</td>
+            <td>
+              {{ trip.signup_start.strftime('%Y-%m-%d') }} to
+              {{ trip.signup_end.strftime('%Y-%m-%d') }}
+            </td>
+            <td>
+              Standard: {{ trip.max_participants_standard }}<br>
+              Extra: {{ trip.max_participants_extra }}
+            </td>
+            <td>${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}</td>
+            <td>
+              <span class="status-badge status-{{ trip.status }}">
+                {{ trip.status }}
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <a href="{{ url_for('admin.edit_trip', trip_id=trip.id) }}" class="button button-small">Edit</a>
+                <button 
+                  class="button button-small button-danger"
+                  onclick="confirmDelete('{{ trip.id }}', '{{ trip.name }}')"
+                >
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <script>
+      function confirmDelete(tripId, tripName) {
+        if (confirm(`Are you sure you want to delete the trip "${tripName}"?`)) {
+          window.location.href = `/admin/trips/${tripId}/delete`;
+        }
+      }
+    </script>
+  </body>
+</html> 

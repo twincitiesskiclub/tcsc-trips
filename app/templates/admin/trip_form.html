@@ -1,0 +1,102 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}{{ 'Edit Trip' if trip else 'New Trip' }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>{{ 'Edit Trip' if trip else 'New Trip' }}</h1>
+    <a href="{{ url_for('admin.get_admin_trips') }}" class="button button-secondary">Back to Trips</a>
+</div>
+
+<form class="admin-form" method="POST">
+    <div class="form-row">
+        <div class="form-group">
+            <label for="name">Trip Name</label>
+            <input type="text" id="name" name="name" value="{{ trip.name if trip else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="slug">Trip Slug</label>
+            <input type="text" id="slug" name="slug" value="{{ trip.slug if trip else '' }}" required 
+                   pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens allowed"
+                   {% if trip %}readonly{% endif %}>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="destination">Destination</label>
+        <input type="text" id="destination" name="destination" value="{{ trip.destination if trip else '' }}" required>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="max_participants_standard">Standard Capacity</label>
+            <input type="number" id="max_participants_standard" name="max_participants_standard" 
+                   value="{{ trip.max_participants_standard if trip else '' }}" required min="0">
+        </div>
+        <div class="form-group">
+            <label for="max_participants_extra">Extra Capacity</label>
+            <input type="number" id="max_participants_extra" name="max_participants_extra" 
+                   value="{{ trip.max_participants_extra if trip else '' }}" required min="0">
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="start_date">Start Date</label>
+            <input type="datetime-local" id="start_date" name="start_date" 
+                   value="{{ trip.start_date.strftime('%Y-%m-%dT%H:%M') if trip else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="end_date">End Date</label>
+            <input type="datetime-local" id="end_date" name="end_date" 
+                   value="{{ trip.end_date.strftime('%Y-%m-%dT%H:%M') if trip else '' }}" required>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="signup_start">Signup Start</label>
+            <input type="datetime-local" id="signup_start" name="signup_start" 
+                   value="{{ trip.signup_start.strftime('%Y-%m-%dT%H:%M') if trip else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="signup_end">Signup End</label>
+            <input type="datetime-local" id="signup_end" name="signup_end" 
+                   value="{{ trip.signup_end.strftime('%Y-%m-%dT%H:%M') if trip else '' }}" required>
+        </div>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="price_low">Lower Price ($)</label>
+            <input type="number" id="price_low" name="price_low" step="0.01" 
+                   value="{{ "%.2f"|format(trip.price_low/100) if trip else '' }}" required min="0">
+        </div>
+        <div class="form-group">
+            <label for="price_high">Higher Price ($)</label>
+            <input type="number" id="price_high" name="price_high" step="0.01" 
+                   value="{{ "%.2f"|format(trip.price_high/100) if trip else '' }}" required min="0">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="4" required>{{ trip.description if trip else '' }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status" required>
+            <option value="draft" {% if trip and trip.status == 'draft' %}selected{% endif %}>Draft</option>
+            <option value="active" {% if trip and trip.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="completed" {% if trip and trip.status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="cancelled" {% if trip and trip.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+        </select>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="button">Save Trip</button>
+        <a href="{{ url_for('admin.get_admin_trips') }}" class="button button-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %} 
