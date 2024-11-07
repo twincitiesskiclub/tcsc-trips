@@ -11,6 +11,23 @@
   </head>
   <body>
     <div class="admin-container">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="flash-message {{ category }}">
+              {{ message }}
+            </div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+
+      {% if session.user %}
+        <div class="user-info">
+          Logged in as: {{ session.user.email }}
+          <a href="{{ url_for('auth.logout') }}">Logout</a>
+        </div>
+      {% endif %}
+
       <h1>Payments Overview</h1>
       <table>
         <thead>
@@ -34,7 +51,6 @@
             <td>{{ payment.payment_intent_id }}</td>
             <td>{{ payment.email }}</td>
             <td>{{ payment.name }}</td>
-            <td>{{ payment.amount }}</td>
             <td>{{ payment.status }}</td>
             <td>{{ payment.trip_id }}</td>
             <td>{{ payment.created_at }}</td>
