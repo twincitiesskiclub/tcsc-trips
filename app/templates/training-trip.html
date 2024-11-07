@@ -21,27 +21,27 @@
           <div class="sr-header__logo">
             <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
           </div>
-          <h1 class="sr-header__title">TCSC Training Trip Registration</h1>
+          <h1 class="sr-header__title">{{ trip.name }} Registration</h1>
           <div class="trip-details">
             <div class="trip-detail-item">
               <i class="fas fa-map-marker-alt"></i>
-              <span>Hayward, WI</span>
+              <span>{{ trip.destination }}</span>
             </div>
             <div class="trip-detail-item">
               <i class="fas fa-calendar"></i>
-              <span>December 6-8, 2024</span>
+              <span>{{ trip.formatted_date_range }}</span>
             </div>
           </div>
         </header>
 
         <div class="price-selection payment-view">
           <div class="price-option">
-            <input type="radio" id="basic" name="price-choice" value="135.00" checked>
-            <label for="basic">Lower Price - $135.00</label>
+            <input type="radio" id="basic" name="price-choice" value="{{ "%.2f"|format(trip.price_low/100) }}" checked>
+            <label for="basic">Lower Price - ${{ "%.2f"|format(trip.price_low/100) }}</label>
           </div>
           <div class="price-option">
-            <input type="radio" id="premium" name="price-choice" value="160.00">
-            <label for="premium">Higher Price - $160.00</label>
+            <input type="radio" id="premium" name="price-choice" value="{{ "%.2f"|format(trip.price_high/100) }}">
+            <label for="premium">Higher Price - ${{ "%.2f"|format(trip.price_high/100) }}</label>
           </div>
         </div>
 
