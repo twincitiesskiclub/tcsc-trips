@@ -99,6 +99,29 @@
   margin-top: 24px;
 }
 
+/* Add this after the existing .form-group styles */
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font-weight: 500;
+  color: var(--p);
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--p);
+}
+
+/* Add margin to the checkbox container */
+.form-group .checkbox-label {
+  margin-bottom: 16px;
+}
+
 /* Tables */
 table {
   width: 100%;
