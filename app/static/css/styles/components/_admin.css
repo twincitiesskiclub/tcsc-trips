@@ -141,6 +141,22 @@ th, td {
   color: #e44;
 }
 
+/* Additional Payment Status Badges */
+.status-pending {
+  background: #fff3dc;
+  color: #b07b2c;
+}
+
+.status-processing {
+  background: #e8f0fe;
+  color: #174ea6;
+}
+
+.status-refunded {
+  background: #fde7e7;
+  color: #a61717;
+}
+
 /* Buttons */
 .button {
   background: var(--p);
@@ -156,25 +172,36 @@ th, td {
 
 .button:hover {
   opacity: 0.9;
+  transform: translateY(-1px);
 }
 
 .button-secondary {
-  background: var(--g-b);
-  color: var(--p);
+  background: #e8e9ec;
+  color: #4a5568;
+}
+
+.button-success {
+  background: #c6f6d5;
+  color: #166534;
+}
+
+.button-danger {
+  background: #fee2e2;
+  color: #991b1b;
 }
 
 .button-small {
   padding: 4px 8px;
   font-size: 12px;
-}
-
-.button-danger {
-  background: #e44;
+  margin-top: 0;
+  width: auto;
 }
 
 .action-buttons {
   display: flex;
   gap: 8px;
+  justify-content: center;
+  align-items: center;
 }
 
 /* Responsive Design */
