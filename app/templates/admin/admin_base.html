@@ -1,11 +1,12 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+    <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
     <meta charset="UTF-8">
     <title>TCSC Admin - {% block title %}{{ title }}{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
     <!-- Include admin-specific styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/admin.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}">
 </head>
 <body>
     <div class="admin-container">

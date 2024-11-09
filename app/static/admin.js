@@ -31,6 +31,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const priceLow = document.getElementById('price_low');
   const priceHigh = document.getElementById('price_high');
   const priceLabel = document.getElementById('price-label');
+  const priceInputs = document.getElementById('price-inputs');
 
   actionButtons.forEach(button => {
     button.addEventListener('click', async (event) => {
@@ -123,27 +124,42 @@ document.addEventListener('DOMContentLoaded', () => {
     }, 5000);
   }
 
-  // Set initial state
-  if (trip && priceLow.value === priceHigh.value) {
-    singlePriceCheckbox.checked = true;
-    priceHighGroup.style.display = 'none';
-    priceLabel.textContent = 'Price ($)';
+  // Function to sync prices
+  function syncPrices(e) {
+    if (priceHigh) {
+      priceHigh.value = e.target.value;
+    }
   }
 
-  singlePriceCheckbox.addEventListener('change', (e) => {
-    if (e.target.checked) {
-      priceHighGroup.style.display = 'none';
-      priceLabel.textContent = 'Price ($)';
-      priceHigh.value = priceLow.value;
-      priceLow.addEventListener('input', syncPrices);
-    } else {
-      priceHighGroup.style.display = 'block';
-      priceLabel.textContent = 'Lower Price ($)';
-      priceLow.removeEventListener('input', syncPrices);
+  // Function to update UI for single price mode
+  function updateSinglePriceMode(isChecked) {
+    if (priceHighGroup && priceLabel) {
+      priceHighGroup.style.display = isChecked ? 'none' : 'block';
+      priceLabel.textContent = isChecked ? 'Price ($)' : 'Lower Price ($)';
+      
+      if (isChecked) {
+        if (priceLow && priceHigh) {
+          priceHigh.value = priceLow.value;
+          priceLow.addEventListener('input', syncPrices);
+        }
+      } else {
+        priceLow?.removeEventListener('input', syncPrices);
+      }
     }
-  });
+  }
 
-  function syncPrices(e) {
-    priceHigh.value = e.target.value;
+  // Set initial state if editing existing trip
+  if (priceLow && priceHigh && singlePriceCheckbox) {
+    if (priceLow.value === priceHigh.value) {
+      singlePriceCheckbox.checked = true;
+      updateSinglePriceMode(true);
+    }
+  }
+
+  // Handle checkbox changes
+  if (singlePriceCheckbox) {
+    singlePriceCheckbox.addEventListener('change', (e) => {
+      updateSinglePriceMode(e.target.checked);
+    });
   }
 });
