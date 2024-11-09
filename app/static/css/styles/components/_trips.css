@@ -4,31 +4,32 @@
     justify-content: center;
     gap: 16px;
     margin-bottom: 16px;
-    flex-wrap: wrap
-  }
-  
-  .trip-detail-item {
+    flex-wrap: wrap;
+}
+
+.trip-detail-item {
     display: flex;
     align-items: center;
-    margin-bottom: -16px;
     gap: 8px;
     color: var(--g-m);
-    font-size: 16px
-  }
-  
-  .trip-detail-item i { color: var(--p) }
-  
-  /*----------  Trip Cards  ----------*/
-  .trips-container {
+    font-size: 16px;
+}
+
+.trip-detail-item i {
+    color: var(--p);
+}
+
+/*----------  Trip Cards  ----------*/
+.trips-container {
     display: grid;
     grid-template-columns: repeat(auto-fit,minmax(280px,1fr));
     gap: 24px;
     width: 100%;
     max-width: 800px;
     margin: 0 auto
-  }
-  
-  .trip-card {
+}
+
+.trip-card {
     background: #fff;
     border: 1px solid var(--g-b);
     border-radius: var(--r);
@@ -37,52 +38,56 @@
     display: flex;
     flex-direction: column;
     gap: 16px
-  }
-  
-  .trip-card:hover {
+}
+
+.trip-card:hover {
     transform: translateY(-2px);
     box-shadow: 0 4px 12px rgba(28,44,68,.1)
-  }
-  
-  .trip-card h2 {
+}
+
+.trip-card h2 {
     margin: 0;
     color: var(--p);
     font-size: 20px
-  }
-  
-  .trip-description {
+}
+
+.trip-description {
     color: var(--g-m);
     font: 14px/1.5 var(--f);
     margin: 0
-  }
-  
-  .trip-price {
+}
+
+.trip-price {
     font: 600 18px var(--f);
     color: var(--p)
-  }
-  
-  .completed-view {
+}
+
+.completed-view {
     text-align: center;
-    padding: 40px 20px;
-  }
-  
-  .completed-view h1 {
+    padding: 20px;
+}
+
+.completed-view h1 {
     color: #32325d;
-    margin-bottom: 24px;
-  }
-  
-  .success-message {
+    margin-bottom: 16px;
+}
+
+.completed-payment-message {
+    margin-top: -40px;
+}
+
+.success-message {
     background: #f6f9fc;
     border-radius: 4px;
     padding: 20px;
-    margin-top: 10px;
-  }
-  
-  .success-message p {
+    margin-top: 20px;
+}
+
+.success-message p {
     margin: 8px 0;
     color: #525f7f;
-  }
-  
-  .hidden {
+}
+
+.hidden {
     display: none;
-  }
+}
