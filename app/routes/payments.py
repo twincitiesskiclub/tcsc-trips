@@ -3,6 +3,7 @@ import json
 import stripe
 import os
 from ..models import db, Payment
+from ..auth import admin_required
 
 payments = Blueprint('payments', __name__)
 
@@ -39,7 +40,7 @@ def create_payment():
             name=name,
             amount=amount,
             trip_id=trip_id,
-            status='pending'
+            status='requires_capture'
         )
         db.session.add(payment)
         db.session.commit()
@@ -90,3 +91,92 @@ def webhook_received():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 400
+
+@payments.route('/admin/payments/<int:payment_id>/capture', methods=['POST'])
+@admin_required
+def capture_payment(payment_id):
+    try:
+        payment = Payment.query.get_or_404(payment_id)
+        
+        # First, retrieve the current payment intent status from Stripe
+        intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
+        
+        # Check if the payment is in a capturable state
+        if intent.status != 'requires_capture':
+            return jsonify({
+                'error': f'Payment cannot be captured - current status: {intent.status}'
+            }), 400
+
+        # Attempt to capture the payment
+        captured_intent = stripe.PaymentIntent.capture(payment.payment_intent_id)
+        
+        # Verify the capture was successful
+        if captured_intent.status != 'succeeded':
+            return jsonify({
+                'error': f'Capture failed - status: {captured_intent.status}'
+            }), 400
+
+        # Update payment status in database
+        payment.status = captured_intent.status
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'payment': {
+                'id': payment.id,
+                'status': payment.status,
+                'payment_intent_id': payment.payment_intent_id
+            }
+        })
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@payments.route('/admin/payments/<int:payment_id>/refund', methods=['POST'])
+@admin_required
+def refund_payment(payment_id):
+    try:
+        payment = Payment.query.get_or_404(payment_id)
+        
+        # First, retrieve the current payment intent status from Stripe
+        intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
+        
+        # Check if the payment can be refunded
+        if intent.status not in ['succeeded', 'requires_capture']:
+            return jsonify({
+                'error': f'Payment cannot be refunded - current status: {intent.status}'
+            }), 400
+
+        # If payment is still on hold (requires_capture), we need to cancel it instead of refunding
+        if intent.status == 'requires_capture':
+            canceled_intent = stripe.PaymentIntent.cancel(payment.payment_intent_id)
+            payment.status = canceled_intent.status
+        else:
+            # Create refund for captured payments
+            refund = stripe.Refund.create(
+                payment_intent=payment.payment_intent_id
+            )
+            
+            # Verify the refund was successful
+            if refund.status != 'succeeded':
+                return jsonify({
+                    'error': f'Refund failed - status: {refund.status}'
+                }), 400
+                
+            payment.status = 'refunded'
+
+        db.session.commit()
+        
+        return jsonify({
+            'status': 'success',
+            'payment': {
+                'id': payment.id,
+                'status': payment.status,
+                'payment_intent_id': payment.payment_intent_id
+            }
+        })
+    except stripe.error.StripeError as e:
+        return jsonify({'error': str(e)}), 400
+    except Exception as e:
+        return jsonify({'error': 'An unexpected error occurred'}), 500

@@ -36,8 +36,18 @@
           <tr>
             <td>{{ payment.name }}</td>
             <td>
-              <span class="status-badge status-{{ payment.status }}">
-                {{ payment.status }}
+              <span class="status-badge status-{{ payment.status|replace('succeeded', 'success')|default('unknown') }}">
+                {% set display_status = {
+                  'requires_payment_method': 'Pending',
+                  'requires_confirmation': 'Pending',
+                  'requires_action': 'Pending',
+                  'requires_capture': 'Pending',
+                  'processing': 'Processing',
+                  'succeeded': 'Success',
+                  'canceled': 'Canceled',
+                  'refunded': 'Refunded'
+                } %}
+                {{ display_status[payment.status] if payment.status in display_status else 'Unknown' }}
               </span>
             </td>
             <td>{{ payment.email }}</td>
