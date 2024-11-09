@@ -60,3 +60,29 @@
     font: 600 18px var(--f);
     color: var(--p)
   }
+  
+  .completed-view {
+    text-align: center;
+    padding: 40px 20px;
+  }
+  
+  .completed-view h1 {
+    color: #32325d;
+    margin-bottom: 24px;
+  }
+  
+  .success-message {
+    background: #f6f9fc;
+    border-radius: 4px;
+    padding: 20px;
+    margin-top: 10px;
+  }
+  
+  .success-message p {
+    margin: 8px 0;
+    color: #525f7f;
+  }
+  
+  .hidden {
+    display: none;
+  }
