@@ -9,7 +9,7 @@ class PaymentForm {
   initializeProperties() {
     this.stripe = null;
     this.card = null;
-    this.selectedAmount = 135.00;
+    this.selectedAmount = null;
     this.clientSecret = null;
     this.paymentIntent = null;
   }
@@ -101,6 +101,14 @@ class PaymentForm {
   validateForm() {
     const { nameInput, emailInput } = this.elements;
     
+    const selectedPrice = this.getSelectedPrice();
+    
+    if (!selectedPrice) {
+      this.showError('Please select a price.');
+      return false;
+    }
+    this.selectedAmount = selectedPrice;
+    
     if (!nameInput.value) {
       this.showError('Please enter your name.');
       return false;
@@ -114,6 +122,17 @@ class PaymentForm {
       return false;
     }
     return true;
+  }
+
+  getSelectedPrice() {
+    const priceInputs = document.querySelectorAll('input[name="price-choice"]');
+    if (priceInputs.length > 0) {
+      const checkedInput = document.querySelector('input[name="price-choice"]:checked');
+      return checkedInput ? parseFloat(checkedInput.value) : null;
+    }
+    
+    const priceElement = document.querySelector('.price-amount');
+    return priceElement ? parseFloat(priceElement.textContent.replace('$', '')) : null;
   }
 
   validateEmail(email) {
