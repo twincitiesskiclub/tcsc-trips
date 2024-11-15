@@ -33,18 +33,6 @@ def create_payment():
             }
         )
 
-        # Save payment info to database
-        payment = Payment(
-            payment_intent_id=intent.id,
-            email=email,
-            name=name,
-            amount=amount,
-            trip_id=trip_id,
-            status='requires_capture'
-        )
-        db.session.add(payment)
-        db.session.commit()
-
         return jsonify({
             'clientSecret': intent.client_secret,
             'paymentIntent': {
@@ -80,11 +68,30 @@ def webhook_received():
         event_type = event['type']
         data_object = data['object']
 
-        if event_type == 'payment_intent.succeeded':
+        if event_type == 'payment_intent.requires_capture':
+            # Create database entry only when payment is successfully authorized
+            payment_intent = data_object
+            payment = Payment(
+                payment_intent_id=payment_intent.id,
+                email=payment_intent.metadata.get('email'),
+                name=payment_intent.metadata.get('name'),
+                amount=payment_intent.amount / 100,  # Convert from cents
+                trip_id=payment_intent.metadata.get('trip_id'),
+                status='requires_capture'
+            )
+            db.session.add(payment)
+            db.session.commit()
+        elif event_type == 'payment_intent.succeeded':
             # Update payment status in database
             payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
             if payment:
                 payment.status = 'completed'
+                db.session.commit()
+        elif event_type == 'payment_intent.canceled':
+            # Clean up any existing payment record if it exists
+            payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
+            if payment:
+                db.session.delete(payment)
                 db.session.commit()
 
         return jsonify({'status': 'success'})
