@@ -68,7 +68,7 @@ def webhook_received():
         event_type = event['type']
         data_object = data['object']
 
-        if event_type == 'payment_intent.requires_capture':
+        if event_type == 'charge.succeeded':
             # Create database entry only when payment is successfully authorized
             payment_intent = data_object
             payment = Payment(
