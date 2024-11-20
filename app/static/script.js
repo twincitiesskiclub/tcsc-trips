@@ -100,7 +100,11 @@ class PaymentForm {
     if (packageTypeElement) {
         const priceInputs = document.querySelectorAll('input[name="price-choice"]');
         packageTypeElement.parentElement.style.display = priceInputs.length > 1 ? 'block' : 'none';
-        packageTypeElement.textContent = amount === this.selectedAmount ? 'Lower' : 'Higher';
+        
+        // Get all price options to determine if this is the lower or higher price
+        const priceOptions = Array.from(priceInputs).map(input => parseFloat(input.value));
+        const isLowerPrice = amount === Math.min(...priceOptions);
+        packageTypeElement.textContent = isLowerPrice ? 'Lower' : 'Higher';
     }
   }
 
