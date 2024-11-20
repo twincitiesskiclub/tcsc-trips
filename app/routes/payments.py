@@ -85,7 +85,7 @@ def webhook_received():
             # Update payment status in database
             payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
             if payment:
-                payment.status = 'completed'
+                payment.status = 'succeeded'
                 db.session.commit()
         elif event_type == 'payment_intent.canceled':
             # Clean up any existing payment record if it exists
