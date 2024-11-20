@@ -7,6 +7,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'requires_capture': 'Pending',
     'processing': 'Processing',
     'succeeded': 'Success',
+    'completed': 'Success',
     'canceled': 'Canceled',
     'refunded': 'Refunded',
     'default': 'Unknown'  // Fallback for unexpected values
@@ -20,6 +21,7 @@ document.addEventListener('DOMContentLoaded', () => {
     'requires_capture': 'pending',
     'processing': 'processing',
     'succeeded': 'success',
+    'completed': 'success',
     'canceled': 'canceled',
     'refunded': 'refunded',
     'default': 'unknown'  // Fallback for unexpected values
