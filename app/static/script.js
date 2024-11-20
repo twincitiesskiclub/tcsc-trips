@@ -78,23 +78,24 @@ class PaymentForm {
 
   attachEventListeners() {
     document.querySelectorAll('input[name="price-choice"]')
-      .forEach(radio => radio.addEventListener('change', 
-        (e) => this.updatePrice(parseFloat(e.target.value))
-      ));
+        .forEach(radio => radio.addEventListener('change', (e) => {
+            const amount = parseFloat(e.target.value);
+            this.selectedAmount = amount;
+            this.updateUI(amount);
+        }));
 
     this.elements.submit.addEventListener('click', this.handleSubmit.bind(this));
   }
 
-  async updatePrice(amount) {
-    this.selectedAmount = amount;
+  updateUI(amount) {
     this.elements.amountDisplay.textContent = `$${amount.toFixed(2)}`;
     
     // Only show package type if there are multiple prices
     const packageTypeElement = this.elements.packageType;
     if (packageTypeElement) {
-      packageTypeElement.parentElement.style.display = 
-        document.querySelectorAll('input[name="price-choice"]').length > 0 ? 'block' : 'none';
-      packageTypeElement.textContent = amount === this.selectedAmount ? 'Lower' : 'Higher';
+        const priceInputs = document.querySelectorAll('input[name="price-choice"]');
+        packageTypeElement.parentElement.style.display = priceInputs.length > 1 ? 'block' : 'none';
+        packageTypeElement.textContent = amount === this.selectedAmount ? 'Lower' : 'Higher';
     }
   }
 
