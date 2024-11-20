@@ -77,12 +77,17 @@ class PaymentForm {
   }
 
   attachEventListeners() {
-    document.querySelectorAll('input[name="price-choice"]')
-        .forEach(radio => radio.addEventListener('change', (e) => {
-            const amount = parseFloat(e.target.value);
-            this.selectedAmount = amount;
-            this.updateUI(amount);
-        }));
+    // Add click handlers for the entire price option containers
+    document.querySelectorAll('.price-option-container').forEach(container => {
+      container.addEventListener('click', (e) => {
+        const radio = container.querySelector('input[type="radio"]');
+        radio.checked = true;
+        
+        const amount = parseFloat(container.dataset.value);
+        this.selectedAmount = amount;
+        this.updateUI(amount);
+      });
+    });
 
     this.elements.submit.addEventListener('click', this.handleSubmit.bind(this));
   }

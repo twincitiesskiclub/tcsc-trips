@@ -36,12 +36,12 @@
 
         {% if trip.price_low != trip.price_high %}
           <div class="price-selection payment-view">
-            <div class="price-option">
+            <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_low/100) }}">
               <input type="radio" id="basic" name="price-choice" 
                      value="{{ "%.2f"|format(trip.price_low/100) }}" checked>
               <label for="basic">Lower Price - ${{ "%.2f"|format(trip.price_low/100) }}</label>
             </div>
-            <div class="price-option">
+            <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_high/100) }}">
               <input type="radio" id="premium" name="price-choice"
                      value="{{ "%.2f"|format(trip.price_high/100) }}">
               <label for="premium">Higher Price - ${{ "%.2f"|format(trip.price_high/100) }}</label>
