@@ -46,13 +46,33 @@ label {
 }
 
 .price-option {
-  padding: 10px 12px;
-  border-radius: var(--r);
-  transition: .2s;
+  padding: 10px;
+}
+
+.price-option-container {
   cursor: pointer;
+  margin-bottom: 10px;
+  padding: 10px;
   display: flex;
   align-items: center;
-  margin: 4px 0
+  border-radius: 4px;
+}
+
+.price-option-container:hover {
+  background-color: rgba(0, 255, 0, 0.1);
+}
+
+.price-option-container input[type="radio"] {
+  margin-right: 12px;
+  cursor: pointer;
+  transform: scale(1.05);
+}
+
+.price-option-container label {
+  cursor: pointer;
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 500;
 }
 
 .price-option:hover {
