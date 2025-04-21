@@ -1,0 +1,143 @@
+.sr-root {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 600px;
+  min-height: 100vh;
+  padding: 48px 20px;
+  background: var(--g-l);
+}
+
+.sr-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 400px;  /* Increased from default */
+  width: 100%;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.sr-form-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+.registration-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fff3dc;
+  border-left: 4px solid #f90;
+  padding: 16px;
+  margin-bottom: 24px;
+  border-radius: var(--r);
+}
+
+.registration-notice i {
+  color: #f90;
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.registration-notice p {
+  margin: 0;
+  color: #b07b2c;
+  font: 14px/1.5 var(--f);
+}
+
+.registration-form {
+  background: #fff;
+  padding: 24px;
+  border-radius: var(--r);
+  box-shadow: 0 2px 4px rgba(28,44,68,.1);
+}
+
+.form-section {
+  background: #fff;
+  padding: 24px;
+  border-radius: var(--r);
+  box-shadow: 0 2px 4px rgba(28,44,68,.1);
+  margin-bottom: 24px;
+}
+
+.form-section h2 {
+  color: var(--p);
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.form-section h2 i {
+  color: var(--p);
+}
+
+.form-row {
+  display: flex;
+  gap: 24px;
+  margin-bottom: 16px;
+}
+
+.form-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  font: 16px var(--f);
+  color: var(--g-d);
+}
+
+.radio-group input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.registration-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--p);
+  color: white;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: var(--r);
+  font: 600 16px var(--f);
+  cursor: pointer;
+  transition: .2s;
+  margin-top: 24px;
+}
+
+.registration-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 960px) {
+  .form-row {
+    flex-direction: column;
+  }
+  
+  .form-group {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .sr-root {
+    padding: 24px 12px;
+  }
+} 
