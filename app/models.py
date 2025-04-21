@@ -79,20 +79,32 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     slack_user_id = db.Column(db.Integer, db.ForeignKey('slack_users.id'), unique=True)
-    first_name = db.Column(db.String(255), nullable=False)
-    last_name = db.Column(db.String(255), nullable=False)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
-    phone = db.Column(db.String(50))
     status = db.Column(db.String(50), nullable=False, default='pending')
     notes = db.Column(db.Text)
     user_metadata = db.Column(JSON)
+    phone = db.Column(db.String(20))
+    address = db.Column(db.String(255))
+    date_of_birth = db.Column(db.Date)
+    pronouns = db.Column(db.String(50))
+    preferred_technique = db.Column(db.String(50))
+    tshirt_size = db.Column(db.String(10))
+    ski_experience = db.Column(db.String(20))
+    emergency_contact_name = db.Column(db.String(100))
+    emergency_contact_relation = db.Column(db.String(50))
+    emergency_contact_phone = db.Column(db.String(20))
+    emergency_contact_email = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship with seasons through UserSeason
+    seasons = db.relationship('Season', secondary='user_seasons', lazy='dynamic')
 
     # Relationships
     roles = db.relationship('Role', secondary='user_roles', backref='users')
     committees = db.relationship('Committee', secondary='user_committees', backref='users')
-    seasons = db.relationship('Season', secondary='user_seasons', backref='users')
     status_changes = db.relationship('StatusChange', backref='user')
     payments = db.relationship('Payment', backref='user', lazy=True)
 
