@@ -1,0 +1,92 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+Product Specification: TCSC Trip & Membership Registration System
+1. Overview
+This web application serves as the primary platform for the Twin Cities Ski Club (TCSC) to manage and facilitate registrations for ski trips and general club membership. It provides a public-facing interface for users to view available trips and register for them (or join the club), and a secure administrative backend for TCSC staff to manage trips, payments, and potentially user data. The system integrates with Stripe for payment processing and Google OAuth for admin authentication.
+2. Target Users
+Public Users: Potential or existing TCSC members interested in signing up for specific ski trips or registering for general membership.
+Administrators: TCSC staff or volunteers responsible for creating/managing trips, overseeing registrations, and managing payments. Access is restricted to specific TCSC email domains.
+3. Core Features (User-Facing)
+3.1. Homepage (Trip Listing):
+Displays a list of currently "active" trips whose sign-up period has not ended.
+Each trip listing shows: Name, Destination, Formatted Date Range, Price Range (or single price), Description.
+Provides a "Sign Up" link/button directing users to the specific trip's registration page.
+Displays a "Coming Soon" message if no active trips are available.
+Includes the TCSC logo and a clear title.
+3.2. Trip Registration Page:
+Accessed via a unique URL slug for each trip (e.g., /training-trip).
+Displays detailed information about the specific trip (Name, Destination, Dates).
+Price Selection:
+If the trip has different price points (low/high), presents radio buttons for selection.
+If the trip has a single price point, displays the price clearly.
+Payment Form (Integration with Stripe):
+Collects the user's Full Name and Email address.
+Uses Stripe Elements for secure input of credit card details.
+Payment Authorization: Upon submission, the system creates a Stripe Payment Intent with capture_method='manual'. This places a hold (authorization) on the user's card for the selected amount but does not immediately charge it.
+Provides real-time validation feedback for card details.
+Registration Confirmation:
+Displays a success message confirming registration and informing the user that a hold has been placed, and their card will be charged later if selected (implying a lottery or selection process).
+3.3. Membership Registration Page (/register):
+A separate form for general TCSC membership registration (distinct from trip registration).
+Collects extensive personal information:
+Team Status (New, Former, Returning)
+Preferred Technique (Classic, Skate, None)
+First/Last Name, Pronouns, Date of Birth
+Email, Phone, Address
+T-Shirt Size
+Ski Experience (Years)
+Emergency Contact details (Name, Relation, Phone, Email)
+Submits data to be stored, likely associating the user with the current active "Season".
+Displays a notice regarding registration timing windows.
+4. Core Features (Admin-Facing - /admin/*)
+4.1. Secure Admin Access:
+Login enforced via Google OAuth.
+Access restricted exclusively to users with an @twincitiesskiclub.org email address.
+Protected routes using an @admin_required decorator.
+Provides login/logout functionality.
+Displays flash messages for feedback (e.g., success, error).
+4.2. Admin Dashboard:
+Central landing page for administrators.
+Provides navigation links to Payments and Trips management sections.
+4.3. Trip Management:
+List Trips: View all created trips (past, present, future) with key details (Name, Destination, Dates, Signup Period, Capacity, Price, Status).
+Create New Trip: Form to define all trip parameters:
+Name, Destination
+Unique URL Slug (lowercase letters, numbers, hyphens only; immutable after creation)
+Standard and Extra Participant Capacity
+Start/End Dates
+Signup Start/End Date & Time
+Pricing: Can set a single price or two distinct prices (low/high). Prices entered in dollars, stored in cents. UI includes a "Single Price Point" checkbox for convenience.
+Description (Text)
+Status (Draft, Active, Completed, Canceled)
+Edit Trip: Modify details of existing trips (slug cannot be changed).
+Delete Trip: Remove a trip record.
+4.4. Payment Management:
+List Payments: View a table of payment records associated with trip registrations. Includes: Registrant Name, Email, Payment Status (Pending, Success, Canceled, Refunded), Trip ID, Stripe Payment Intent ID, Timestamps. Statuses are derived from Stripe intent statuses (e.g., requires_capture maps to "Pending").
+Accept (Capture) Payment: Manually triggers the capture of funds for an authorized payment (status requires_capture). Interacts with Stripe API to charge the user's card. Updates status to succeeded.
+Refund/Cancel Payment:
+If payment status is succeeded (already captured), initiates a refund via Stripe API. Updates status to refunded.
+If payment status is requires_capture (hold only), cancels the Payment Intent via Stripe API. Updates status to canceled.
+(Potential Feature) Notify: A "Notify" button exists in the UI template, but corresponding backend logic is not present in the provided code snippets. Its intended function is unclear.
+5. Non-Functional Requirements / Technical Details
+Technology Stack: Python (Flask), SQLite (SQLAlchemy), Jinja2, HTML, CSS, JavaScript, Stripe API, Google OAuth (Authlib).
+Payment Processing: Securely handled via Stripe Elements (frontend) and Stripe API (backend), using Payment Intents with manual capture.
+Database: Uses SQLite with separate database files configured for development, production, and testing environments. Database schema defined using Flask-SQLAlchemy.
+Configuration: Managed via environment variables (.env file).
+Styling: Custom CSS with a structured approach (base, components, layout, utils), using CSS variables for theming. Responsive design included.
+Security: Admin access restricted by domain. Sensitive payment details handled directly by Stripe, reducing PCI scope. Uses Flask's secret key for session management.
+Deployment: Configured for deployment using gunicorn (indicated by Procfile).
+6. Data Models (Key Entities)
+Trip: Represents a ski trip with details like name, dates, location, pricing, capacity, status, signup window.
+Payment: Records a payment attempt/transaction linked to a Trip and potentially a User, storing Stripe Payment Intent ID, amount, status, registrant details.
+User: Represents a club member with extensive personal, contact, emergency, and skiing-related information. Linked to Seasons, Roles, Committees.
+Season: Defines specific time periods (e.g., "2024-2025 Winter Season") for membership.
+SlackUser: (Potentially for future integration) Stores Slack user profile information.
+Role, Committee: Support organizational structure within the club.
+(Various Join Tables): UserSeason, UserRole, UserCommittee to manage many-to-many relationships.
+7. Key Integrations
+Stripe: For processing payments (authorization and capture) and handling payment webhooks.
+Google OAuth: For admin authentication and authorization.
