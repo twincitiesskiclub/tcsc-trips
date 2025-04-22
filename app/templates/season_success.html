@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Registration Successful – TCSC</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+  </head>
+  <body>
+    <div class="sr-root">
+      <div class="sr-main">
+        <header class="sr-header">
+          <div class="sr-header__logo">
+            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
+          </div>
+          <h1 class="sr-header__title">Registration Complete</h1>
+        </header>
+        <div class="season-card season-card--compact">
+          <h2>Thank you for registering!</h2>
+          <p>Your registration for <strong>{{ season.name }}</strong> has been received.</p>
+          <p>
+            {% if payment_hold %}
+              A hold has been placed on your card. You will be notified if you are selected and your card will be charged at that time.
+            {% else %}
+              Your payment was successful and your membership is confirmed for this season.
+            {% endif %}
+          </p>
+          <p>If you have any questions, please contact <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a>.</p>
+          <div style="margin-top: 2em;">
+            <a href="/" class="sr-button">&larr; Back to Home</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html> 
