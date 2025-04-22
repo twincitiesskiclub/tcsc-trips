@@ -4,12 +4,25 @@ globs:
 alwaysApply: true
 ---
 Product Specification: TCSC Trip & Membership Registration System
-1. Overview
-This web application serves as the primary platform for the Twin Cities Ski Club (TCSC) to manage and facilitate registrations for ski trips and general club membership. It provides a public-facing interface for users to view available trips and register for them (or join the club), and a secure administrative backend for TCSC staff to manage trips, payments, and potentially user data. The system integrates with Stripe for payment processing and Google OAuth for admin authentication.
-2. Target Users
-Public Users: Potential or existing TCSC members interested in signing up for specific ski trips or registering for general membership.
-Administrators: TCSC staff or volunteers responsible for creating/managing trips, overseeing registrations, and managing payments. Access is restricted to specific TCSC email domains.
-3. Core Features (User-Facing)
+-----------------------------------------------------------------
+
+1.  Overview
+    The web application is the primary platform for the Twin Cities Ski Club (TCSC) to manage
+    ski-trip registrations and annual memberships. It offers:
+
+      *   A **public** interface where prospective or current members browse trips and join the club.
+      *   A **secure admin** interface—gated by Google OAuth and restricted to @twincitiesskiclub.org—
+          where staff configure seasons, trips, payments and member data.
+      *   Stripe for all payment flows.
+
+2.  Target Users
+      *   **Public users** – any skier who wants to purchase a membership or register for a trip.
+      *                      - Former / Returning Member (verified by checking email on record)
+                             - New Member (will be placed into lottery by placing hold on card during registration)
+      *   **Administrators** – volunteers or staff who create seasons, publish trips, reconcile
+          payments, and maintain the member roster.
+
+3.  Core Features (User-Facing)
 3.1. Homepage (Trip Listing):
 Displays a list of currently "active" trips whose sign-up period has not ended.
 Each trip listing shows: Name, Destination, Formatted Date Range, Price Range (or single price), Description.
@@ -41,17 +54,17 @@ Ski Experience (Years)
 Emergency Contact details (Name, Relation, Phone, Email)
 Submits data to be stored, likely associating the user with the current active "Season".
 Displays a notice regarding registration timing windows.
-4. Core Features (Admin-Facing - /admin/*)
-4.1. Secure Admin Access:
+4. Core Features (Admin-Facing – `/admin/*`)
+4.1  Secure Admin Access
 Login enforced via Google OAuth.
 Access restricted exclusively to users with an @twincitiesskiclub.org email address.
 Protected routes using an @admin_required decorator.
 Provides login/logout functionality.
 Displays flash messages for feedback (e.g., success, error).
-4.2. Admin Dashboard:
+4.2  Admin Dashboard
 Central landing page for administrators.
-Provides navigation links to Payments and Trips management sections.
-4.3. Trip Management:
+Provides navigation links to Payments, Trips, Seasons, and Users management sections.
+4.3  Trip Management
 List Trips: View all created trips (past, present, future) with key details (Name, Destination, Dates, Signup Period, Capacity, Price, Status).
 Create New Trip: Form to define all trip parameters:
 Name, Destination
@@ -64,13 +77,40 @@ Description (Text)
 Status (Draft, Active, Completed, Canceled)
 Edit Trip: Modify details of existing trips (slug cannot be changed).
 Delete Trip: Remove a trip record.
-4.4. Payment Management:
+4.4  Payment Management
 List Payments: View a table of payment records associated with trip registrations. Includes: Registrant Name, Email, Payment Status (Pending, Success, Canceled, Refunded), Trip ID, Stripe Payment Intent ID, Timestamps. Statuses are derived from Stripe intent statuses (e.g., requires_capture maps to "Pending").
 Accept (Capture) Payment: Manually triggers the capture of funds for an authorized payment (status requires_capture). Interacts with Stripe API to charge the user's card. Updates status to succeeded.
 Refund/Cancel Payment:
 If payment status is succeeded (already captured), initiates a refund via Stripe API. Updates status to refunded.
 If payment status is requires_capture (hold only), cancels the Payment Intent via Stripe API. Updates status to canceled.
 (Potential Feature) Notify: A "Notify" button exists in the UI template, but corresponding backend logic is not present in the provided code snippets. Its intended function is unclear.
+4.5  **User Management**
+**User List** – `/admin/users` paginated table.
+Columns: Full Name, Email, Slack UID, Phone, "Active This Season?" badge, Action menu.
+Filters & search: `?active=true`, `?missing_slack=true`, free-text search on name/e-mail.
+**User Detail / Edit** – `/admin/users/<id>/edit` form.
+Editable fields: Slack UID, Pronouns, Phone, Address, Notes, Global Status (`active / inactive / pending`). Read-only snapshot of latest registration data.
+**Per-Season Status Control** – In the Season Registrations view (4.6.3) each row
+includes a dropdown to set `PENDING_LOTTERY`, `ACTIVE`, or `DROPPED`; updates the
+associated `UserSeason` record and flashes confirmation.
+**Bulk Export** – CSV download of the currently filtered list (future enhancement).
+4.6  **Season Management**
+**Season List** – `/admin/seasons` table showing Name, Year, Price, Registration
+Windows (returning / new)
+**Create / Edit Season**
+Fields:
+– Name & Season Type (e.g. "Fall-Winter 2025")
+– Year span (integer or range)
+– Price (stored in cents)
+– Kick-off Date & Location (optional)
+– Registration windows: `returning_start / returning_end / new_start / new_end`
+– Status (Draft, Active, Closed) – implicit if windows have passed.
+**Season Registrations** – `/admin/seasons/<id>/registrations`
+Table of all members linked to the season.
+Columns: Name, Email, Member Type (New / Returning), Payment Status, Per-season
+Status (+ inline dropdown), Stripe Intent ID.
+**Delete / Archive Season** – allowed only if no active registrations exist; otherwise
+shows validation error.
 5. Non-Functional Requirements / Technical Details
 Technology Stack: Python (Flask), SQLite (SQLAlchemy), Jinja2, HTML, CSS, JavaScript, Stripe API, Google OAuth (Authlib).
 Payment Processing: Securely handled via Stripe Elements (frontend) and Stripe API (backend), using Payment Intents with manual capture.
