@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>{{ season.name }} – TCSC Season Info</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  </head>
+  <body>
+    <div class="sr-root">
+      <div class="sr-main">
+        <header class="sr-header">
+          <div class="sr-header__logo">
+            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
+          </div>
+          <h1 class="sr-header__title">{{ season.name }}</h1>
+        </header>
+        <div class="registration-notice">
+          <p><strong>Registration Opens:</strong></p>
+          <ul class="registration-dates-list">
+            {% if season.returning_start %}
+                <li>Returning Members: {{ season.returning_start.strftime('%b %d, %Y %I:%M %p') }}</li>
+            {% endif %}
+            {% if season.new_start %}
+                <li>New Members: {{ season.new_start.strftime('%b %d, %Y %I:%M %p') }}</li>
+            {% endif %}
+            {% if not season.returning_start and not season.new_start %}
+                <li>Registration dates will be announced soon.</li>
+            {% endif %}
+          </ul>
+        </div>
+        <div class="season-card">
+          <h2>{{ season.name }}</h2>
+          {% if season.description %}
+            <p class="season-description">{{ season.description }}</p>
+          {% endif %}
+          <div class="trip-details">
+            <div class="trip-detail-item">
+              <i class="fas fa-calendar"></i>
+              <span>{{ season.start_date.strftime('%b %d, %Y') }} to {{ season.end_date.strftime('%b %d, %Y') }}</span>
+            </div>
+            <div class="trip-detail-item">
+              <i class="fas fa-users"></i>
+              <span>Registration Limit: {{ season.registration_limit if season.registration_limit else 'No limit' }}</span>
+            </div>
+            {% if season.price_cents %}
+            <div class="trip-detail-item">
+              <i class="fas fa-dollar-sign"></i>
+              <span>Price: ${{ '%.2f' % (season.price_cents / 100) }}</span>
+            </div>
+            {% endif %}
+          </div>
+          <div class="season-status">
+            {% if season.returning_start and season.returning_start > now %}
+              Registration opens for returning members on {{ season.returning_start.strftime('%b %d, %Y') }}
+            {% elif season.new_start and season.new_start > now %}
+              Registration opens for new members on {{ season.new_start.strftime('%b %d, %Y') }}
+            {% else %}
+              Registration is now open!
+            {% endif %}
+          </div>
+          <a href="{{ url_for('registration.season_register', season_id=season.id) }}" class="trip-button">Register for this Season</a>
+          <div style="margin-top: 1.5em;">
+            <a href="/" class="sr-button sr-button-secondary">&larr; Back to Home</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html> 

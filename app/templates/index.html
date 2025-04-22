@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <title>TCSC Trip Registration</title>
-    <meta name="description" content="Twin Cities Ski Club Trip Registration" />
+    <meta name="description" content="Twin Cities Ski Club Registration" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
@@ -19,10 +19,32 @@
           <div class="sr-header__logo">
             <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
           </div>
-          <h1 class="sr-header__title">TCSC Trip Registration</h1>
+          <h1 class="sr-header__title">TCSC Registration</h1>
         </header>
 
         <div class="trips-container">
+          {% if season %}
+          <div class="season-card">
+            <h2>{{ season.name }}</h2>
+            <div class="trip-details">
+              <div class="trip-detail-item">
+                <i class="fas fa-calendar"></i>
+                <span>{{ season.start_date.strftime('%b %d, %Y') }} to {{ season.end_date.strftime('%b %d, %Y') }}</span>
+              </div>
+            </div>
+            <div class="season-status">
+              {% if season.returning_start and season.returning_start > now %}
+                Registration opens for returning members on {{ season.returning_start.strftime('%b %d, %Y') }}
+              {% elif season.new_start and season.new_start > now %}
+                Registration opens for new members on {{ season.new_start.strftime('%b %d, %Y') }}
+              {% else %}
+                Registration is now open!
+              {% endif %}
+            </div>
+            <a href="/seasons/{{ season.id }}" class="trip-button">Season Info & Register</a>
+          </div>
+          {% endif %}
+
           {% for trip in trips %}
           <div class="trip-card">
             <h2>{{ trip.name }}</h2>
@@ -54,7 +76,7 @@
           <div class="trip-card coming-soon">
             <h2>More Trips Coming Soon</h2>
             <p class="trip-description">
-              Stay tuned for additional winter trips and activities!
+              Summer and winter trips will be available here when sign up opens!
             </p>
           </div>
           {% endif %}

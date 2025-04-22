@@ -3,7 +3,7 @@
   flex-direction: column;
   justify-content: center;
   width: 100%;
-  max-width: 600px;
+  max-width: 700px;
   min-height: 100vh;
   padding: 48px 20px;
   background: var(--g-l);
@@ -13,16 +13,18 @@
   display: flex;
   flex-direction: column;
   justify-content: center;
-  max-width: 400px;  /* Increased from default */
+  max-width: 600px;  /* Increased from default */
   width: 100%;
   margin: 0 auto;
   padding: 0;
 }
 
 .sr-form-container {
-  max-width: 1200px;
+  max-width: 700px;
   margin: 0 auto;
   width: 100%;
+  padding-left: 16px;
+  padding-right: 16px;
 }
 
 .registration-notice {
@@ -75,7 +77,8 @@
 
 .form-row {
   display: flex;
-  gap: 24px;
+  flex-direction: column;
+  gap: 16px;
   margin-bottom: 16px;
 }
 
@@ -87,12 +90,13 @@
 .radio-group {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 20px;
 }
 
 .radio-group label {
   display: flex;
   align-items: center;
+  justify-content: flex-start;
   gap: 8px;
   cursor: pointer;
   font: 16px var(--f);
@@ -128,7 +132,7 @@
 
 @media (max-width: 960px) {
   .form-row {
-    flex-direction: column;
+ flex-direction: column;
   }
   
   .form-group {
@@ -140,4 +144,77 @@
   .sr-root {
     padding: 24px 12px;
   }
+}
+
+.registration-form fieldset.form-section {
+    border: none;
+    padding: 24px 0; /* Add vertical padding for more internal space */
+    margin-bottom: 48px; /* More space between sections */
+}
+
+.registration-form fieldset.form-section .sr-form-row:last-child {
+    margin-bottom: 0; /* Remove margin from last row inside section */
+}
+
+.registration-form legend {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--p);
+    margin-bottom: 12px;
+    padding: 0;
+}
+
+.registration-form .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--g-d);
+}
+
+.registration-form .form-group h3 {
+    text-align: left; /* Ensure headings are left-aligned */
+    margin-bottom: 10px; /* Add some space below heading */
+}
+
+.registration-form .radio-group {
+    align-items: flex-start; /* Align the labels themselves to the start */
+    text-align: left; /* Ensure radio group text is left-aligned */
+}
+
+.registration-form .form-group {
+    text-align: left;
+}
+
+.registration-form .sr-input {
+    margin-top: 0; /* Ensure input doesn't have extra margin */
+}
+
+/* Hide the sr-only label visually but keep for accessibility */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+.registration-form .form-section,
+.registration-form .form-row,
+.registration-form .form-group,
+.registration-form .radio-group {
+    text-align: left !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+}
+
+.registration-form .radio-group + * {
+    width: 100%;
+    text-align: center;
+    display: block;
+    margin-top: 8px;
 } 

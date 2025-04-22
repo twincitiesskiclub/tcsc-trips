@@ -35,6 +35,16 @@
           <p>View and manage payment transactions</p>
         </a>
         
+        <a href="{{ url_for('admin.get_admin_users') }}" class="admin-menu-item">
+          <h2>User Management</h2>
+          <p>View, edit, and manage club members</p>
+        </a>
+        
+        <a href="{{ url_for('admin.get_admin_seasons') }}" class="admin-menu-item">
+          <h2>Seasons Management</h2>
+          <p>Create and manage club seasons</p>
+        </a>
+        
         <a href="{{ url_for('admin.get_admin_trips') }}" class="admin-menu-item">
           <h2>Trips Management</h2>
           <p>Create and manage ski trips</p>
