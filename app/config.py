@@ -1,9 +1,6 @@
 import os
 from dotenv import load_dotenv, find_dotenv
 import stripe
-from flask_sqlalchemy import SQLAlchemy
-
-db = SQLAlchemy()
 
 def load_stripe_config():
     """Load Stripe configuration from environment variables"""

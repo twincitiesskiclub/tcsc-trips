@@ -11,6 +11,7 @@
 <body>
     <div class="admin-container">
         {% include 'admin/partials/header.html' %}
+        <!-- Child templates may add new fields such as registration limit and description -->
         <div class="admin-content">
             {% block content %}{% endblock %}
         </div>
