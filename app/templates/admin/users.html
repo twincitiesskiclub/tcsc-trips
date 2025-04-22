@@ -1,0 +1,45 @@
+{% extends 'admin/admin_base.html' %}
+{% block content %}
+<h1>Users</h1>
+<table class="table table-striped">
+    <thead>
+        <tr>
+            <th>Full Name</th>
+            <th>Email</th>
+            <th>Slack UID</th>
+            <th>Phone</th>
+            <th>Active This Season?</th>
+            <th>Actions</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for user in users %}
+        <tr>
+            <td>{{ user.full_name }}</td>
+            <td>{{ user.email }}</td>
+            <td>{{ user.slack_user.slack_uid if user.slack_user else '' }}</td>
+            <td>{{ user.phone or '' }}</td>
+            <td>
+                {% if current_season and user.id in user_season_map %}
+                    {% set us = user_season_map[user.id] %}
+                    {% if us.status == 'ACTIVE' %}
+                        <span class="badge bg-success">Active</span>
+                    {% elif us.status == 'PENDING_LOTTERY' %}
+                        <span class="badge bg-warning text-dark">Pending Lottery</span>
+                    {% elif us.status == 'DROPPED' %}
+                        <span class="badge bg-danger">Dropped</span>
+                    {% else %}
+                        <span class="badge bg-secondary">Unknown</span>
+                    {% endif %}
+                {% else %}
+                    <span class="badge bg-secondary">No</span>
+                {% endif %}
+            </td>
+            <td>
+                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm btn-primary">Edit</a>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% endblock %} 

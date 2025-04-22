@@ -1,0 +1,220 @@
+.sr-root {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  width: 100%;
+  max-width: 700px;
+  min-height: 100vh;
+  padding: 48px 20px;
+  background: var(--g-l);
+}
+
+.sr-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  max-width: 600px;  /* Increased from default */
+  width: 100%;
+  margin: 0 auto;
+  padding: 0;
+}
+
+.sr-form-container {
+  max-width: 700px;
+  margin: 0 auto;
+  width: 100%;
+  padding-left: 16px;
+  padding-right: 16px;
+}
+
+.registration-notice {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #fff3dc;
+  border-left: 4px solid #f90;
+  padding: 16px;
+  margin-bottom: 24px;
+  border-radius: var(--r);
+}
+
+.registration-notice i {
+  color: #f90;
+  font-size: 18px;
+  margin-top: 2px;
+}
+
+.registration-notice p {
+  margin: 0;
+  color: #b07b2c;
+  font: 14px/1.5 var(--f);
+}
+
+.registration-form {
+  background: #fff;
+  padding: 24px;
+  border-radius: var(--r);
+  box-shadow: 0 2px 4px rgba(28,44,68,.1);
+}
+
+.form-section {
+  background: #fff;
+  padding: 24px;
+  border-radius: var(--r);
+  box-shadow: 0 2px 4px rgba(28,44,68,.1);
+  margin-bottom: 24px;
+}
+
+.form-section h2 {
+  color: var(--p);
+  font-size: 20px;
+  margin-bottom: 16px;
+}
+
+.form-section h2 i {
+  color: var(--p);
+}
+
+.form-row {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 16px;
+}
+
+.form-group {
+  flex: 1;
+  min-width: 0;
+}
+
+.radio-group {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  cursor: pointer;
+  font: 16px var(--f);
+  color: var(--g-d);
+}
+
+.radio-group input[type="radio"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+}
+
+.registration-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--p);
+  color: white;
+  width: 100%;
+  padding: 16px;
+  border: none;
+  border-radius: var(--r);
+  font: 600 16px var(--f);
+  cursor: pointer;
+  transition: .2s;
+  margin-top: 24px;
+}
+
+.registration-button:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+@media (max-width: 960px) {
+  .form-row {
+ flex-direction: column;
+  }
+  
+  .form-group {
+    width: 100%;
+  }
+}
+
+@media (max-width: 720px) {
+  .sr-root {
+    padding: 24px 12px;
+  }
+}
+
+.registration-form fieldset.form-section {
+    border: none;
+    padding: 24px 0; /* Add vertical padding for more internal space */
+    margin-bottom: 48px; /* More space between sections */
+}
+
+.registration-form fieldset.form-section .sr-form-row:last-child {
+    margin-bottom: 0; /* Remove margin from last row inside section */
+}
+
+.registration-form legend {
+    font-size: 18px;
+    font-weight: 600;
+    color: var(--p);
+    margin-bottom: 12px;
+    padding: 0;
+}
+
+.registration-form .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--g-d);
+}
+
+.registration-form .form-group h3 {
+    text-align: left; /* Ensure headings are left-aligned */
+    margin-bottom: 10px; /* Add some space below heading */
+}
+
+.registration-form .radio-group {
+    align-items: flex-start; /* Align the labels themselves to the start */
+    text-align: left; /* Ensure radio group text is left-aligned */
+}
+
+.registration-form .form-group {
+    text-align: left;
+}
+
+.registration-form .sr-input {
+    margin-top: 0; /* Ensure input doesn't have extra margin */
+}
+
+/* Hide the sr-only label visually but keep for accessibility */
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+
+.registration-form .form-section,
+.registration-form .form-row,
+.registration-form .form-group,
+.registration-form .radio-group {
+    text-align: left !important;
+    align-items: flex-start !important;
+    justify-content: flex-start !important;
+}
+
+.registration-form .radio-group + * {
+    width: 100%;
+    text-align: center;
+    display: block;
+    margin-top: 8px;
+} 

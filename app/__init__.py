@@ -9,6 +9,7 @@ from .auth import init_oauth
 from .models import db
 from flask_migrate import Migrate
 import os
+from .routes.registration import registration
 
 def create_app(environment=None):
     if environment is None:
@@ -22,13 +23,14 @@ def create_app(environment=None):
     init_oauth(app)
     
     db.init_app(app)
-    #migrate = Migrate(app, db)
+    migrate = Migrate(app, db)
     
     app.register_blueprint(main)
     app.register_blueprint(trips)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
     app.register_blueprint(auth)
+    app.register_blueprint(registration)
     
     with app.app_context():
         db.create_all()

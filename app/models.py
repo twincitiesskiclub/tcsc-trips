@@ -79,40 +79,84 @@ class User(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     slack_user_id = db.Column(db.Integer, db.ForeignKey('slack_users.id'), unique=True)
-    first_name = db.Column(db.String(255), nullable=False)
-    last_name = db.Column(db.String(255), nullable=False)
+    first_name = db.Column(db.String(100), nullable=False)
+    last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
-    phone = db.Column(db.String(50))
     status = db.Column(db.String(50), nullable=False, default='pending')
     notes = db.Column(db.Text)
     user_metadata = db.Column(JSON)
+    phone = db.Column(db.String(20))
+    address = db.Column(db.String(255))
+    date_of_birth = db.Column(db.Date)
+    pronouns = db.Column(db.String(50))
+    preferred_technique = db.Column(db.String(50))
+    tshirt_size = db.Column(db.String(10))
+    ski_experience = db.Column(db.String(20))
+    emergency_contact_name = db.Column(db.String(100))
+    emergency_contact_relation = db.Column(db.String(50))
+    emergency_contact_phone = db.Column(db.String(20))
+    emergency_contact_email = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship with seasons through UserSeason
+    seasons = db.relationship('Season', secondary='user_seasons', lazy='dynamic', overlaps="user_seasons")
 
     # Relationships
     roles = db.relationship('Role', secondary='user_roles', backref='users')
     committees = db.relationship('Committee', secondary='user_committees', backref='users')
-    seasons = db.relationship('Season', secondary='user_seasons', backref='users')
     status_changes = db.relationship('StatusChange', backref='user')
     payments = db.relationship('Payment', backref='user', lazy=True)
+    user_seasons = db.relationship('UserSeason', backref='user', lazy=True, overlaps="seasons")
 
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
+
+    @property
+    def is_returning(self):
+        return any(us.status == 'ACTIVE' for us in self.user_seasons)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            status.in_(['pending', 'active', 'inactive', 'dropped']),
+            name='check_user_status_valid'
+        ),
+    )
 
 class Season(db.Model):
     __tablename__ = 'seasons'
     
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
-    type = db.Column(db.String(50), nullable=False)
+    season_type = db.Column(db.String(50), nullable=False)
     year = db.Column(db.Integer, nullable=False)
     start_date = db.Column(db.Date, nullable=False)
     end_date = db.Column(db.Date, nullable=False)
-    registration_open_date = db.Column(db.Date)
-    registration_close_date = db.Column(db.Date)
+    price_cents = db.Column(db.Integer, nullable=True)
+    returning_start = db.Column(db.DateTime, nullable=True)
+    returning_end = db.Column(db.DateTime, nullable=True)
+    new_start = db.Column(db.DateTime, nullable=True)
+    new_end = db.Column(db.DateTime, nullable=True)
+    registration_limit = db.Column(db.Integer, nullable=True)  # Max allowed registrations for this season
+    description = db.Column(db.Text, nullable=True)  # Season description
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def is_open_for(self, member_type: str, when: datetime = None) -> bool:
+        """
+        Returns True if registration is open for the given member_type ('new' or 'returning') at the given time.
+        If 'when' is not provided, uses current UTC time.
+        """
+        if when is None:
+            when = datetime.utcnow()
+        if member_type == 'new':
+            if self.new_start and self.new_end:
+                return self.new_start <= when <= self.new_end
+        elif member_type == 'returning':
+            if self.returning_start and self.returning_end:
+                return self.returning_start <= when <= self.returning_end
+        return False
 
 class UserSeason(db.Model):
     __tablename__ = 'user_seasons'
@@ -124,6 +168,13 @@ class UserSeason(db.Model):
     payment_date = db.Column(db.Date)
     status = db.Column(db.String(50), nullable=False, default='pending')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.CheckConstraint(
+            status.in_(['PENDING_LOTTERY', 'ACTIVE', 'DROPPED']),
+            name='check_userseason_status_valid'
+        ),
+    )
 
 class Role(db.Model):
     __tablename__ = 'roles'

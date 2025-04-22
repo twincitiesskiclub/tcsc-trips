@@ -1,0 +1,214 @@
+{% extends 'admin/admin_base.html' %}
+{% block content %}
+<h1>Edit User: {{ user.full_name }}</h1>
+
+<!-- Read-only User Info -->
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">User Information</h5>
+        <ul class="list-group list-group-flush">
+            <li class="list-group-item"><strong>Email:</strong> {{ user.email }}</li>
+            <li class="list-group-item"><strong>Status:</strong> {{ user.status|capitalize }}</li>
+            <li class="list-group-item"><strong>Pronouns:</strong> {{ user.pronouns }}</li>
+            <li class="list-group-item"><strong>Phone:</strong> {{ user.phone }}</li>
+            <li class="list-group-item"><strong>Address:</strong> {{ user.address }}</li>
+            <li class="list-group-item"><strong>Slack UID:</strong> {{ user.slack_user.slack_uid if user.slack_user else '' }}</li>
+            <li class="list-group-item"><strong>Notes:</strong> {{ user.notes }}</li>
+            <li class="list-group-item"><strong>Date of Birth:</strong> {{ user.date_of_birth }}</li>
+            <li class="list-group-item"><strong>Preferred Technique:</strong> {{ user.preferred_technique }}</li>
+            <li class="list-group-item"><strong>T-Shirt Size:</strong> {{ user.tshirt_size }}</li>
+            <li class="list-group-item"><strong>Ski Experience:</strong> {{ user.ski_experience }}</li>
+            <li class="list-group-item"><strong>Emergency Contact Name:</strong> {{ user.emergency_contact_name }}</li>
+            <li class="list-group-item"><strong>Emergency Contact Relation:</strong> {{ user.emergency_contact_relation }}</li>
+            <li class="list-group-item"><strong>Emergency Contact Phone:</strong> {{ user.emergency_contact_phone }}</li>
+            <li class="list-group-item"><strong>Emergency Contact Email:</strong> {{ user.emergency_contact_email }}</li>
+        </ul>
+    </div>
+</div>
+
+<!-- Quick Edit Form -->
+<form method="post" class="mb-4" id="quick-edit-form">
+    <input type="hidden" name="form_type" value="quick">
+    <div class="row g-2 align-items-end">
+        <div class="col-md-5" id="quick-email-field">
+            <label class="form-label">Email</label>
+            <input type="text" class="form-control" name="email" value="{{ user.email }}">
+        </div>
+        <div class="col-md-3" id="quick-status-field">
+            <label class="form-label">Status</label>
+            <select class="form-select" name="status">
+                <option value="pending" {% if user.status == 'pending' %}selected{% endif %}>Pending</option>
+                <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
+                <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                <option value="dropped" {% if user.status == 'dropped' %}selected{% endif %}>Dropped</option>
+            </select>
+        </div>
+        <div class="col-md-2">
+            <button type="submit" class="btn btn-success" id="quick-save-btn">Save</button>
+        </div>
+        <div class="col-md-2">
+            <button type="button" class="btn btn-outline-primary" id="show-full-edit">Edit All</button>
+        </div>
+    </div>
+</form>
+{% if feedback == 'quick' %}
+    <div class="alert alert-success">Quick edit saved!</div>
+{% endif %}
+
+<!-- Full Edit Form (hidden by default) -->
+<form method="post" id="full-edit-form" style="display:none;">
+    <input type="hidden" name="form_type" value="full">
+    <div class="mb-3">
+        <label class="form-label">First Name</label>
+        <input type="text" class="form-control" name="first_name" value="{{ user.first_name }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Last Name</label>
+        <input type="text" class="form-control" name="last_name" value="{{ user.last_name }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="text" class="form-control" name="email" value="{{ user.email }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Pronouns</label>
+        <input type="text" class="form-control" name="pronouns" value="{{ user.pronouns or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Phone</label>
+        <input type="text" class="form-control" name="phone" value="{{ user.phone or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Address</label>
+        <input type="text" class="form-control" name="address" value="{{ user.address or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Date of Birth</label>
+        <input type="date" class="form-control" name="date_of_birth" value="{{ user.date_of_birth }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Preferred Technique</label>
+        <select class="form-select" name="preferred_technique">
+            <option value="">--</option>
+            <option value="Classic" {% if user.preferred_technique == 'Classic' %}selected{% endif %}>Classic</option>
+            <option value="Skate" {% if user.preferred_technique == 'Skate' %}selected{% endif %}>Skate</option>
+            <option value="None" {% if user.preferred_technique == 'None' %}selected{% endif %}>None</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">T-Shirt Size</label>
+        <select class="form-select" name="tshirt_size">
+            <option value="">--</option>
+            <option value="XS" {% if user.tshirt_size == 'XS' %}selected{% endif %}>XS</option>
+            <option value="S" {% if user.tshirt_size == 'S' %}selected{% endif %}>S</option>
+            <option value="M" {% if user.tshirt_size == 'M' %}selected{% endif %}>M</option>
+            <option value="L" {% if user.tshirt_size == 'L' %}selected{% endif %}>L</option>
+            <option value="XL" {% if user.tshirt_size == 'XL' %}selected{% endif %}>XL</option>
+            <option value="XXL" {% if user.tshirt_size == 'XXL' %}selected{% endif %}>XXL</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Ski Experience (Years)</label>
+        <input type="text" class="form-control" name="ski_experience" value="{{ user.ski_experience or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Emergency Contact Name</label>
+        <input type="text" class="form-control" name="emergency_contact_name" value="{{ user.emergency_contact_name or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Emergency Contact Relation</label>
+        <input type="text" class="form-control" name="emergency_contact_relation" value="{{ user.emergency_contact_relation or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Emergency Contact Phone</label>
+        <input type="text" class="form-control" name="emergency_contact_phone" value="{{ user.emergency_contact_phone or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Emergency Contact Email</label>
+        <input type="text" class="form-control" name="emergency_contact_email" value="{{ user.emergency_contact_email or '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Slack UID</label>
+        <input type="text" class="form-control" name="slack_uid" value="{{ user.slack_user.slack_uid if user.slack_user else '' }}">
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Status</label>
+        <select class="form-select" name="status">
+            <option value="pending" {% if user.status == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
+            <option value="dropped" {% if user.status == 'dropped' %}selected{% endif %}>Dropped</option>
+        </select>
+    </div>
+    <div class="mb-3">
+        <label class="form-label">Notes</label>
+        <textarea class="form-control" name="notes">{{ user.notes or '' }}</textarea>
+    </div>
+    <button type="submit" class="btn btn-success">Save</button>
+    <button type="button" class="btn btn-secondary" id="cancel-full-edit">Cancel</button>
+</form>
+
+<script>
+document.getElementById('show-full-edit').onclick = function() {
+    document.getElementById('full-edit-form').style.display = 'block';
+    this.style.display = 'none';
+    document.getElementById('quick-save-btn').style.display = 'none';
+    document.getElementById('quick-email-field').style.display = 'none';
+    document.getElementById('quick-status-field').style.display = 'none';
+};
+document.getElementById('cancel-full-edit').onclick = function() {
+    document.getElementById('full-edit-form').style.display = 'none';
+    document.getElementById('show-full-edit').style.display = 'inline-block';
+    document.getElementById('quick-save-btn').style.display = 'inline-block';
+    document.getElementById('quick-email-field').style.display = 'block';
+    document.getElementById('quick-status-field').style.display = 'block';
+};
+</script>
+
+<!-- Seasons Table -->
+<div class="card mt-5">
+    <div class="card-body">
+        <h5 class="card-title">Seasons</h5>
+        {% if user_seasons and user_seasons|length > 0 %}
+        <div class="table-responsive">
+            <table class="table table-bordered table-striped">
+                <thead>
+                    <tr>
+                        <th>Season Name</th>
+                        <th>Year</th>
+                        <th>Member Type</th>
+                        <th>Status</th>
+                        <th>Registration Date</th>
+                        <th>Payment Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for us, season in user_seasons %}
+                    <tr>
+                        <td>{{ season.name }}</td>
+                        <td>{{ season.year }}</td>
+                        <td>{{ us.registration_type|capitalize }}</td>
+                        <td>
+                            {% if us.status == 'ACTIVE' %}
+                                <span class="badge bg-success">Active</span>
+                            {% elif us.status == 'PENDING_LOTTERY' %}
+                                <span class="badge bg-warning text-dark">Pending Lottery</span>
+                            {% elif us.status == 'DROPPED' %}
+                                <span class="badge bg-danger">Dropped</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ us.status|capitalize }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ us.registration_date }}</td>
+                        <td>{{ us.payment_date or '' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+            <p class="text-muted">No season registrations found for this user.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %} 

@@ -2,8 +2,10 @@ from flask import Blueprint, jsonify, request
 import json
 import stripe
 import os
-from ..models import db, Payment
+from ..models import db, Payment, Season, UserSeason, User
 from ..auth import admin_required
+from ..constants import MemberType
+from datetime import datetime
 
 payments = Blueprint('payments', __name__)
 
@@ -71,22 +73,46 @@ def webhook_received():
         if event_type == 'payment_intent.amount_capturable_updated':
             # Create database entry only when payment is successfully authorized
             payment_intent = data_object
-            payment = Payment(
-                payment_intent_id=payment_intent.id,
-                email=payment_intent.metadata.get('email'),
-                name=payment_intent.metadata.get('name'),
-                amount=payment_intent.amount / 100,  # Convert from cents
-                trip_id=payment_intent.metadata.get('trip_id'),
-                status='requires_capture'
-            )
-            db.session.add(payment)
-            db.session.commit()
+            member_type = payment_intent.metadata.get('member_type')
+            season_id = payment_intent.metadata.get('season_id')
+            email = payment_intent.metadata.get('email')
+            name = payment_intent.metadata.get('name')
+            # Only for NEW members
+            if member_type == MemberType.NEW.value:
+                # Find or create user
+                user = User.query.filter_by(email=email).first()
+                if not user:
+                    # Split name if possible
+                    first_name, last_name = (name.split(' ', 1) + [""])[:2]
+                    user = User(email=email, first_name=first_name, last_name=last_name, status='pending')
+                    db.session.add(user)
+                    db.session.commit()
+                # Check if UserSeason exists
+                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).first()
+                if not user_season:
+                    user_season = UserSeason(
+                        user_id=user.id,
+                        season_id=season_id,
+                        registration_type=member_type,
+                        registration_date=datetime.utcnow().date(),
+                        status='pending_lottery'
+                    )
+                    db.session.add(user_season)
+                    db.session.commit()
         elif event_type == 'payment_intent.succeeded':
-            # Update payment status in database
-            payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
-            if payment:
-                payment.status = 'succeeded'
-                db.session.commit()
+            payment_intent = data_object
+            member_type = payment_intent.metadata.get('member_type')
+            season_id = payment_intent.metadata.get('season_id')
+            email = payment_intent.metadata.get('email')
+            # Find user
+            user = User.query.filter_by(email=email).first()
+            if user:
+                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).first()
+                if user_season:
+                    user_season.status = 'active'
+                    user_season.payment_date = datetime.utcnow().date()
+                    user.status = 'active'
+                    db.session.commit()
         elif event_type == 'payment_intent.canceled':
             # Clean up any existing payment record if it exists
             payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
@@ -187,3 +213,49 @@ def refund_payment(payment_id):
         return jsonify({'error': str(e)}), 400
     except Exception as e:
         return jsonify({'error': 'An unexpected error occurred'}), 500
+
+@payments.route('/create-season-payment-intent', methods=['POST'])
+def create_season_payment_intent():
+    try:
+        data = request.get_json()
+        season_id = data.get('season_id')
+        email = data.get('email', '').strip().lower()
+        name = data.get('name', '')
+        if not all([season_id, email, name]):
+            return jsonify({'error': 'Missing required fields'}), 400
+        season = Season.query.get(season_id)
+        if not season or not season.price_cents:
+            return jsonify({'error': 'Invalid season or price'}), 400
+        # Derive member_type on the backend
+        user = User.query.filter_by(email=email).one_or_none()
+        member_type = 'returning' if user and user.is_returning else 'new'
+        # Determine capture method
+        if member_type == 'new':
+            capture_method = 'manual'
+        elif member_type == 'returning':
+            capture_method = 'automatic'
+        else:
+            return jsonify({'error': 'Invalid member_type'}), 400
+        intent = stripe.PaymentIntent.create(
+            amount=season.price_cents,
+            currency='usd',
+            capture_method=capture_method,
+            receipt_email=email,
+            metadata={
+                'name': name,
+                'email': email,
+                'season_id': str(season_id),
+                'member_type': member_type
+            }
+        )
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'paymentIntent': {
+                'id': intent.id,
+                'amount': intent.amount,
+                'status': intent.status,
+                'email': email
+            }
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 403

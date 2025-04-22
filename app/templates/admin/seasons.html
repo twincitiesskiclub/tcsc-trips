@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Admin - Seasons</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
+  </head>
+  <body>
+    <div class="admin-container">
+      {% include 'admin/partials/header.html' %}
+
+      <div class="admin-header">
+        <h1>Seasons Management</h1>
+        <div class="admin-actions">
+          <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+          <a href="{{ url_for('admin.new_season') }}" class="button">Create New Season</a>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Year</th>
+            <th>Dates</th>
+            <th>Returning Registration</th>
+            <th>New Registration</th>
+            <th>Price</th>
+            <th>Reg. Limit</th>
+            <th>Description</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for season in seasons %}
+          <tr>
+            <td>{{ season.name }}</td>
+            <td>{{ season.season_type }}</td>
+            <td>{{ season.year }}</td>
+            <td>{{ season.start_date.strftime('%Y-%m-%d') }} to {{ season.end_date.strftime('%Y-%m-%d') }}</td>
+            <td>
+              {% if season.returning_start and season.returning_end %}
+                {{ season.returning_start.strftime('%Y-%m-%d %H:%M') }}<br>to<br>{{ season.returning_end.strftime('%Y-%m-%d %H:%M') }}
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td>
+              {% if season.new_start and season.new_end %}
+                {{ season.new_start.strftime('%Y-%m-%d %H:%M') }}<br>to<br>{{ season.new_end.strftime('%Y-%m-%d %H:%M') }}
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td>
+              {% if season.price_cents %}
+                ${{ '%.2f'|format(season.price_cents/100) }}
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td>
+              {% if season.registration_limit %}
+                {{ season.registration_limit }}
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td>
+              {% if season.description %}
+                {{ season.description|truncate(60) }}
+              {% else %}
+                &mdash;
+              {% endif %}
+            </td>
+            <td>
+              <div class="action-buttons">
+                <a href="{{ url_for('admin.edit_season', season_id=season.id) }}" class="button button-small">Edit</a>
+                <button 
+                  class="button button-small button-danger"
+                  onclick="confirmDelete('{{ season.id }}', '{{ season.name }}')"
+                >
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <script>
+      function confirmDelete(seasonId, seasonName) {
+        if (confirm(`Are you sure you want to delete the season "${seasonName}"?`)) {
+          window.location.href = `/admin/seasons/${seasonId}/delete`;
+        }
+      }
+    </script>
+  </body>
+</html> 
