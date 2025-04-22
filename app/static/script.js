@@ -258,7 +258,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         const data = await resp.json();
         if (data.is_returning) {
-          emailStatusMsg.textContent = '✅ Returning Member';
+          emailStatusMsg.textContent = '✅ Returning/Former Member';
           emailStatusMsg.style.color = '#166534';
         } else {
           emailStatusMsg.textContent = '⚠️ We couldn’t find your email in our returning member records. Please register as a new member or try a different email address if you believe this is a mistake.';
