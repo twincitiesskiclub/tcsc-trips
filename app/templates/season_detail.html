@@ -53,15 +53,29 @@
             {% endif %}
           </div>
           <div class="season-status">
-            {% if season.returning_start and season.returning_start > now %}
-              Registration opens for returning members on {{ season.returning_start.strftime('%b %d, %Y') }}
+            {# Use the is_registration_open flag passed from the route #}
+            {% if is_registration_open %}
+              <span class="status-open">Registration is open!</span>
+              {% if season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end %}
+                  <span class="sub-status">Returning member window closes {{ season.returning_end.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+              {% endif %}
+              {% if season.new_start and season.new_end and season.new_start <= now <= season.new_end %}
+                  <span class="sub-status">New member window closes {{ season.new_end.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+              {% endif %}
+            {% elif season.returning_start and season.returning_start > now %}
+              <span class="status-upcoming">Registration opens for returning members on {{ season.returning_start.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
             {% elif season.new_start and season.new_start > now %}
-              Registration opens for new members on {{ season.new_start.strftime('%b %d, %Y') }}
-            {% else %}
-              Registration is now open!
+              <span class="status-upcoming">Registration opens for new members on {{ season.new_start.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+            {% else %}{# Must be closed (after end dates) #}
+              <span class="status-closed">Registration is currently closed.</span>
             {% endif %}
           </div>
-          <a href="{{ url_for('registration.season_register', season_id=season.id) }}" class="trip-button">Register for this Season</a>
+          {# Only show register button if registration is currently open #}
+          {% if is_registration_open %}
+            <a href="{{ url_for('registration.season_register', season_id=season.id) }}" class="trip-button">Register for this Season</a>
+          {% else %}
+            <button class="trip-button trip-button--disabled" disabled>Register for this Season</button>
+          {% endif %}
           <div style="margin-top: 1.5em;">
             <a href="/" class="sr-button sr-button-secondary">&larr; Back to Home</a>
           </div>
