@@ -52,7 +52,23 @@ def seasons_listing():
 def season_register(season_id):
     season = Season.query.get_or_404(season_id)
     central = pytz.timezone('America/Chicago')
-    current_time = datetime.now(central)
+    current_time = datetime.now(central) # Use localized time for potential display
+    now_utc = datetime.utcnow() # Use UTC for comparisons
+
+    # Helper to check if registration is open for any type
+    def is_registration_open_at_all(season, now):
+        returning_open = season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end
+        new_open = season.new_start and season.new_end and season.new_start <= now <= season.new_end
+        return returning_open or new_open
+
+    # Helper to check if registration is open for a specific type
+    def is_registration_open_for_type(season, now, is_returning):
+        if is_returning:
+            # Ensure returning dates exist before checking
+            return season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end
+        else:
+            # Ensure new dates exist before checking
+            return season.new_start and season.new_end and season.new_start <= now <= season.new_end
 
     if request.method == 'POST':
         try:
@@ -60,6 +76,26 @@ def season_register(season_id):
             email = form['email'].strip().lower()
             user = User.query.filter_by(email=email).one_or_none()
 
+            # Determine member_type from backend only BEFORE checking dates
+            # Check user existence first
+            is_returning = bool(user and getattr(user, 'is_returning', False))
+
+            # Check if registration window is open for this user type
+            if not is_registration_open_for_type(season, now_utc, is_returning):
+                status_msg = "returning members" if is_returning else "new members"
+                flash(f'Sorry, the registration window for {status_msg} is currently closed.', 'error')
+                return redirect(url_for('registration.season_register', season_id=season_id))
+
+            client_claimed_status = form['status']
+            # Check consistency between claimed status and actual status
+            if client_claimed_status == 'returning_former' and not is_returning:
+                flash('Your email is not associated with a returning member. Please register as a New Member.', 'error')
+                return redirect(url_for('registration.season_register', season_id=season_id))
+            if client_claimed_status == 'new' and is_returning:
+                 flash('Your email is associated with a returning member. Please register as a Returning Member.', 'error')
+                 return redirect(url_for('registration.season_register', season_id=season_id))
+            
+            # --- Proceed with form processing only if checks pass ---
             # Collect all personal fields from form
             user_fields = dict(
                 first_name=form['firstName'],
@@ -125,13 +161,49 @@ def season_register(season_id):
             flash(f'Error submitting registration: {str(e)}', 'error')
             return redirect(url_for('registration.season_register', season_id=season_id))
 
+    # --- GET Request Handling ---
+    if not is_registration_open_at_all(season, now_utc):
+        # Determine the appropriate message based on timing
+        message = "Registration is currently closed for this season."
+        # Check timezone handling for accurate display
+        if season.returning_start and now_utc < season.returning_start:
+            message = f"Registration for returning members opens on {season.returning_start.astimezone(central).strftime('%b %d, %Y %I:%M %p %Z')}."
+        elif season.new_start and now_utc < season.new_start:
+             # Check if returning window might still be open or hasn't started
+            if not (season.returning_start and season.returning_start <= now_utc):
+                 message = f"Registration for new members opens on {season.new_start.astimezone(central).strftime('%b %d, %Y %I:%M %p %Z')}."
+
+        flash(message, 'info')
+        return redirect(url_for('main.get_home_page')) # Redirect to home page which shows status
+
+    # If GET request and registration is open, render the form
     return render_template('season_register.html', season=season)
 
 @registration.route('/seasons/<int:season_id>')
 def season_detail(season_id):
-    from datetime import datetime
     season = Season.query.get_or_404(season_id)
-    return render_template('season_detail.html', season=season, now=datetime.utcnow())
+    now_utc = datetime.utcnow()
+
+    # Check if registration is currently open for returning or new members
+    returning_open = season.returning_start and season.returning_end and season.returning_start <= now_utc <= season.returning_end
+    new_open = season.new_start and season.new_end and season.new_start <= now_utc <= season.new_end
+    is_registration_open = returning_open or new_open
+
+    # # --- Redirect if registration is NOT open --- Currently allow viewing details even if closed
+    # if not is_registration_open:
+    #     message = "Registration is currently closed for this season."
+    #     if season.returning_start and now_utc < season.returning_start:
+    #         message = f"Registration for returning members opens on {season.returning_start.strftime('%b %d, %Y %I:%M %p UTC')}."
+    #     elif season.new_start and now_utc < season.new_start:
+    #         if not (season.returning_start and season.returning_start <= now_utc):
+    #              message = f"Registration for new members opens on {season.new_start.strftime('%b %d, %Y %I:%M %p UTC')}."
+    #     flash(message, 'info')
+    #     return redirect(url_for('main.get_home_page'))
+
+    return render_template('season_detail.html', 
+                           season=season, 
+                           now=now_utc, 
+                           is_registration_open=is_registration_open)
 
 @registration.route('/api/is_returning_member', methods=['POST'])
 def api_is_returning_member():
