@@ -127,14 +127,14 @@ def new_season():
             returning_end = datetime.strptime(request.form['returning_end'], '%Y-%m-%dT%H:%M') if request.form.get('returning_end') else None
             new_start = datetime.strptime(request.form['new_start'], '%Y-%m-%dT%H:%M') if request.form.get('new_start') else None
             new_end = datetime.strptime(request.form['new_end'], '%Y-%m-%dT%H:%M') if request.form.get('new_end') else None
-            # Registration windows must be before the season start date
-            if (returning_start and returning_start >= start_date) or (returning_end and returning_end >= start_date):
-                flash('Returning registration window must be before the season start date.', 'error')
+            # Registration start dates should be before the season start date (but end dates can be after for late registration)
+            if returning_start and returning_start >= start_date:
+                flash('Returning registration start must be before the season start date.', 'error')
                 form_data = dict(request.form)
                 form_data['price_cents'] = request.form.get('price_cents')
                 return render_template('admin/season_form.html', season=form_data)
-            if (new_start and new_start >= start_date) or (new_end and new_end >= start_date):
-                flash('New registration window must be before the season start date.', 'error')
+            if new_start and new_start >= start_date:
+                flash('New registration start must be before the season start date.', 'error')
                 form_data = dict(request.form)
                 form_data['price_cents'] = request.form.get('price_cents')
                 return render_template('admin/season_form.html', season=form_data)
@@ -204,14 +204,14 @@ def edit_season(season_id):
             returning_end = datetime.strptime(request.form['returning_end'], '%Y-%m-%dT%H:%M') if request.form.get('returning_end') else None
             new_start = datetime.strptime(request.form['new_start'], '%Y-%m-%dT%H:%M') if request.form.get('new_start') else None
             new_end = datetime.strptime(request.form['new_end'], '%Y-%m-%dT%H:%M') if request.form.get('new_end') else None
-            # Registration windows must be before the season start date
-            if (returning_start and returning_start >= start_date) or (returning_end and returning_end >= start_date):
-                flash('Returning registration window must be before the season start date.', 'error')
+            # Registration start dates should be before the season start date (but end dates can be after for late registration)
+            if returning_start and returning_start >= start_date:
+                flash('Returning registration start must be before the season start date.', 'error')
                 form_data = dict(request.form)
                 form_data['price_cents'] = request.form.get('price_cents')
                 return render_template('admin/season_form.html', season=form_data)
-            if (new_start and new_start >= start_date) or (new_end and new_end >= start_date):
-                flash('New registration window must be before the season start date.', 'error')
+            if new_start and new_start >= start_date:
+                flash('New registration start must be before the season start date.', 'error')
                 form_data = dict(request.form)
                 form_data['price_cents'] = request.form.get('price_cents')
                 return render_template('admin/season_form.html', season=form_data)
