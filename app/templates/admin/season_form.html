@@ -12,17 +12,19 @@
     <div class="form-row">
         <div class="form-group">
             <label for="year">Year</label>
+            {% set year_val = season.year if season and season.__class__.__name__ != 'dict' else season.get('year') if season else None %}
             <select id="year" name="year" required>
                 {% for y in range(2024, 2100) %}
-                    <option value="{{ y }}" {% if season and season.year == y %}selected{% endif %}>{{ y }}</option>
+                    <option value="{{ y }}" {% if year_val == y or (year_val and year_val|string == y|string) %}selected{% endif %}>{{ y }}</option>
                 {% endfor %}
             </select>
         </div>
         <div class="form-group">
             <label for="season_type">Type</label>
+            {% set season_type_val = season.season_type if season and season.__class__.__name__ != 'dict' else season.get('season_type') if season else None %}
             <select id="season_type" name="season_type" required>
-                <option value="spring/summer" {% if season and season.season_type == 'spring/summer' %}selected{% endif %}>Spring / Summer</option>
-                <option value="fall/winter" {% if season and season.season_type == 'fall/winter' %}selected{% endif %}>Fall / Winter</option>
+                <option value="spring/summer" {% if season_type_val == 'spring/summer' %}selected{% endif %}>Spring / Summer</option>
+                <option value="fall/winter" {% if season_type_val == 'fall/winter' %}selected{% endif %}>Fall / Winter</option>
             </select>
         </div>
     </div>
@@ -30,49 +32,58 @@
     <div class="form-row">
         <div class="form-group">
             <label for="start_date">Start Date</label>
-            <input type="date" id="start_date" name="start_date" value="{{ season.start_date.strftime('%Y-%m-%d') if season and season.start_date else '' }}" required>
+            {% set start_date_val = season.start_date if season and season.__class__.__name__ != 'dict' else season.get('start_date') if season else None %}
+            <input type="date" id="start_date" name="start_date" value="{% if start_date_val %}{% if start_date_val is string %}{{ start_date_val }}{% else %}{{ start_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required>
         </div>
         <div class="form-group">
             <label for="end_date">End Date</label>
-            <input type="date" id="end_date" name="end_date" value="{{ season.end_date.strftime('%Y-%m-%d') if season and season.end_date else '' }}" required>
+            {% set end_date_val = season.end_date if season and season.__class__.__name__ != 'dict' else season.get('end_date') if season else None %}
+            <input type="date" id="end_date" name="end_date" value="{% if end_date_val %}{% if end_date_val is string %}{{ end_date_val }}{% else %}{{ end_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required>
         </div>
     </div>
 
     <div class="form-group">
         <label for="price_cents">Price ($)</label>
-        <input type="number" id="price_cents" name="price_cents" step="0.01" min="0" value="{{ '%.2f'|format(season.price_cents/100) if season and season.price_cents else '' }}">
+        {% set price_cents_val = season.price_cents if season and season.__class__.__name__ != 'dict' else season.get('price_cents') if season else None %}
+        <input type="number" id="price_cents" name="price_cents" step="0.01" min="0" value="{% if price_cents_val %}{% if price_cents_val is number %}{{ '%.2f'|format(price_cents_val/100) }}{% else %}{{ price_cents_val }}{% endif %}{% endif %}">
     </div>
 
     <div class="form-row">
         <div class="form-group">
             <label for="returning_start">Returning Registration Start</label>
-            <input type="datetime-local" id="returning_start" name="returning_start" value="{{ season.returning_start.strftime('%Y-%m-%dT%H:%M') if season and season.returning_start else '' }}">
+            {% set returning_start_val = season.returning_start if season and season.__class__.__name__ != 'dict' else season.get('returning_start') if season else None %}
+            <input type="datetime-local" id="returning_start" name="returning_start" value="{% if returning_start_val %}{% if returning_start_val is string %}{{ returning_start_val }}{% else %}{{ returning_start_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
         </div>
         <div class="form-group">
             <label for="returning_end">Returning Registration End</label>
-            <input type="datetime-local" id="returning_end" name="returning_end" value="{{ season.returning_end.strftime('%Y-%m-%dT%H:%M') if season and season.returning_end else '' }}">
+            {% set returning_end_val = season.returning_end if season and season.__class__.__name__ != 'dict' else season.get('returning_end') if season else None %}
+            <input type="datetime-local" id="returning_end" name="returning_end" value="{% if returning_end_val %}{% if returning_end_val is string %}{{ returning_end_val }}{% else %}{{ returning_end_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
         </div>
     </div>
 
     <div class="form-row">
         <div class="form-group">
             <label for="new_start">New Registration Start</label>
-            <input type="datetime-local" id="new_start" name="new_start" value="{{ season.new_start.strftime('%Y-%m-%dT%H:%M') if season and season.new_start else '' }}">
+            {% set new_start_val = season.new_start if season and season.__class__.__name__ != 'dict' else season.get('new_start') if season else None %}
+            <input type="datetime-local" id="new_start" name="new_start" value="{% if new_start_val %}{% if new_start_val is string %}{{ new_start_val }}{% else %}{{ new_start_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
         </div>
         <div class="form-group">
             <label for="new_end">New Registration End</label>
-            <input type="datetime-local" id="new_end" name="new_end" value="{{ season.new_end.strftime('%Y-%m-%dT%H:%M') if season and season.new_end else '' }}">
+            {% set new_end_val = season.new_end if season and season.__class__.__name__ != 'dict' else season.get('new_end') if season else None %}
+            <input type="datetime-local" id="new_end" name="new_end" value="{% if new_end_val %}{% if new_end_val is string %}{{ new_end_val }}{% else %}{{ new_end_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
         </div>
     </div>
 
     <div class="form-group">
         <label for="registration_limit">Registration Limit</label>
-        <input type="number" id="registration_limit" name="registration_limit" min="1" value="{{ season.registration_limit if season and season.registration_limit else '' }}">
+        {% set reg_limit_val = season.registration_limit if season and season.__class__.__name__ != 'dict' else season.get('registration_limit') if season else None %}
+        <input type="number" id="registration_limit" name="registration_limit" min="1" value="{{ reg_limit_val if reg_limit_val else '' }}">
     </div>
 
     <div class="form-group">
         <label for="description">Description</label>
-        <textarea id="description" name="description" rows="3">{{ season.description if season and season.description else '' }}</textarea>
+        {% set desc_val = season.description if season and season.__class__.__name__ != 'dict' else season.get('description') if season else None %}
+        <textarea id="description" name="description" rows="3">{{ desc_val if desc_val else '' }}</textarea>
     </div>
 
     <div class="form-actions">
