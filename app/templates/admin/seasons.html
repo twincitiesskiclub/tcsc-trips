@@ -80,7 +80,8 @@
             <td>
               <div class="action-buttons">
                 <a href="{{ url_for('admin.edit_season', season_id=season.id) }}" class="button button-small">Edit</a>
-                <button 
+                <a href="{{ url_for('admin.export_season_members', season_id=season.id) }}" class="button button-small">Export</a>
+                <button
                   class="button button-small button-danger"
                   onclick="confirmDelete('{{ season.id }}', '{{ season.name }}')"
                 >
