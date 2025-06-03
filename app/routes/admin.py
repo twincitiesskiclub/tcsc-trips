@@ -1,7 +1,9 @@
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, Response
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason
 from datetime import datetime, timedelta
+import csv
+from io import StringIO
 
 admin = Blueprint('admin', __name__)
 
@@ -262,6 +264,79 @@ def delete_season(season_id):
     except Exception as e:
         flash(f'Error deleting season: {str(e)}', 'error')
     return redirect(url_for('admin.get_admin_seasons'))
+
+
+@admin.route('/admin/seasons/<int:season_id>/export')
+@admin_required
+def export_season_members(season_id):
+    season = Season.query.get_or_404(season_id)
+    results = (
+        db.session.query(User, UserSeason)
+        .join(UserSeason, User.id == UserSeason.user_id)
+        .filter(UserSeason.season_id == season.id)
+        .all()
+    )
+
+    output = StringIO()
+    writer = csv.writer(output)
+
+    header = [
+        'First Name',
+        'Last Name',
+        'Email',
+        'Slack UID',
+        'Status',
+        'Notes',
+        'Phone',
+        'Address',
+        'Date of Birth',
+        'Pronouns',
+        'Preferred Technique',
+        'T-Shirt Size',
+        'Ski Experience',
+        'Emergency Contact Name',
+        'Emergency Contact Relation',
+        'Emergency Contact Phone',
+        'Emergency Contact Email',
+        'Registration Type',
+        'Registration Date',
+        'Payment Date',
+        'Season Status',
+    ]
+
+    writer.writerow(header)
+    for user, us in results:
+        writer.writerow([
+            user.first_name,
+            user.last_name,
+            user.email,
+            user.slack_user.slack_uid if user.slack_user else '',
+            user.status,
+            user.notes or '',
+            user.phone or '',
+            user.address or '',
+            user.date_of_birth or '',
+            user.pronouns or '',
+            user.preferred_technique or '',
+            user.tshirt_size or '',
+            user.ski_experience or '',
+            user.emergency_contact_name or '',
+            user.emergency_contact_relation or '',
+            user.emergency_contact_phone or '',
+            user.emergency_contact_email or '',
+            us.registration_type,
+            us.registration_date,
+            us.payment_date or '',
+            us.status,
+        ])
+
+    output.seek(0)
+    filename = f"{season.name.replace(' ', '_')}_members.csv"
+    return Response(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': f'attachment; filename={filename}'}
+    )
 
 @admin.route('/admin/users')
 @admin_required
