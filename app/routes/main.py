@@ -40,3 +40,7 @@ def get_home_page():
                            season=season, 
                            now=now_utc, # Pass UTC time for template date comparisons
                            is_season_registration_open=is_season_registration_open)
+
+@main.route('/tri')
+def dryland_triathlon_page():
+    return render_template('dryland-triathlon.html')
