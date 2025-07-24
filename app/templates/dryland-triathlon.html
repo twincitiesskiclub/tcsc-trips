@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>TCSC Dryland Triathlon</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+  </head>
+  <body>
+    <div class="sr-root">
+      <div class="sr-main">
+        <header class="sr-header">
+          <div class="sr-header__logo">
+            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
+          </div>
+          <h1 class="sr-header__title">Dryland Triathlon</h1>
+        </header>
+        <div class="triathlon-hero">
+          <h2>Roll. Ride. Run.</h2>
+          <p>Saturday, October 25th, 2025 – Carver Park Reserve, Parley Lake Area</p>
+        </div>
+        <section class="triathlon-section">
+          <h3>About the Event</h3>
+          <p>Join us for TCSC's pilot year of the Dryland Triathlon! This fun event combines three common off-season activities for Nordic skiers: rollerskiing, mountain biking, and trail running. Show off your off-season gains before winter arrives!</p>
+          <p>Compete individually or with two teammates. Each leg starts and ends in the Parley Lake lot where your team will have a designated transition zone.</p>
+        </section>
+        <section class="triathlon-section">
+          <h3>Distances &amp; Schedule</h3>
+          <ul class="triathlon-list">
+            <li>Long course: 18K roll, 17K ride, 11K run – starts at 9:00&nbsp;AM</li>
+            <li>Short course: 9.5K roll, 9K ride, 6K run – starts at 9:30&nbsp;AM</li>
+          </ul>
+        </section>
+        <section class="triathlon-section">
+          <h3>Equipment Rules</h3>
+          <ul class="triathlon-list">
+            <li><strong>Roll:</strong> Fastest wheels allowed are #2 or Marwe #6. Freestyle technique only.</li>
+            <li><strong>Ride:</strong> No e-bikes. Rigid, hardtail, or full-suspension mountain bikes are welcome.</li>
+            <li>Helmets required for all legs.</li>
+          </ul>
+        </section>
+        <section class="triathlon-section">
+          <h3>Registration</h3>
+          <p>Registration opens July 25th, 2025 and is limited to 100 total participants or teams (50 short course, 50 long course). Pricing will be announced soon.</p>
+        </section>
+        <section class="triathlon-section">
+          <h3>About TCSC</h3>
+          <p>The Twin Cities Ski Club (TCSC) is a welcoming community of Nordic skiers offering training, trips, and fun events for skiers of all abilities. Come meet fellow skiers and join the community!</p>
+        </section>
+        <div style="margin-top: 1.5em;">
+          <a href="/" class="trip-button">&larr; Back to Home</a>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
