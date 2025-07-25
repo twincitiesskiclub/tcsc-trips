@@ -5,6 +5,7 @@ from .routes.trips import trips
 from .routes.payments import payments
 from .routes.admin import admin
 from .routes.auth import auth
+from .routes.practice_posts import practice_posts_bp
 from .auth import init_oauth
 from .models import db
 from flask_migrate import Migrate
@@ -31,6 +32,7 @@ def create_app(environment=None):
     app.register_blueprint(admin)
     app.register_blueprint(auth)
     app.register_blueprint(registration)
+    app.register_blueprint(practice_posts_bp)
     
     with app.app_context():
         db.create_all()

@@ -4,12 +4,56 @@ from ..models import db, Payment, Trip, Season, User, UserSeason
 from datetime import datetime, timedelta
 import csv
 from io import StringIO
+import requests
+import os
+import threading
 
 admin = Blueprint('admin', __name__)
+
+# In-memory cache for practice posts
+practice_post_cache = {}
+
+def fetch_today_practice_post():
+    """Fetch today's practice post from announcer service in background."""
+    try:
+        today = datetime.now().strftime('%Y-%m-%d')
+        announcer_url = os.getenv('ANNOUNCER_SERVICE_URL')
+        api_key = os.getenv('ANNOUNCER_API_KEY')
+        
+        if not announcer_url or not api_key:
+            return  # Skip if not configured
+        
+        response = requests.get(
+            f"{announcer_url}/api/announcements/today",
+            headers={'X-API-Key': api_key},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            data = response.json()
+            practice_post_cache[today] = {
+                'id': data.get('id'),
+                'date': data.get('date'),
+                'slack_message_ts': data.get('slack_message_ts'),
+                'slack_channel': data.get('slack_channel'),
+                'content': data.get('content'),
+                'original_content': data.get('content'),
+                'created_at': data.get('created_at'),
+                'posted_at': data.get('posted_at'),
+                'fetched_at': datetime.utcnow()
+            }
+    except Exception:
+        # Silently fail - this is a background optimization
+        pass
 
 @admin.route('/admin')
 @admin_required
 def get_admin_page():
+    # Kick off background fetch of today's practice post
+    thread = threading.Thread(target=fetch_today_practice_post)
+    thread.daemon = True
+    thread.start()
+    
     return render_template('admin/index.html')
 
 @admin.route('/admin/payments')
