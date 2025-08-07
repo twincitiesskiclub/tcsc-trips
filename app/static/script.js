@@ -236,6 +236,11 @@ class PaymentForm {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+  // Initialize PaymentForm for trip registration pages (with .sr-payment-form)
+  if (document.querySelector('.sr-payment-form')) {
+    new PaymentForm();
+  }
+
   // Email validation for returning member (always runs)
   const emailInput = document.getElementById('email');
   if (emailInput) {
