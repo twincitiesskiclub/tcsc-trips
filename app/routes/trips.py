@@ -23,6 +23,11 @@ def get_birkie_page():
     trip = Trip.query.filter_by(slug='birkie').first_or_404()
     return render_template('trips/birkie.html', trip=trip)
 
+@trips.route('/cuyuna')
+def get_cuyuna_page():
+    trip = Trip.query.filter_by(slug='cuyuna').first_or_404()
+    return render_template('trips/cuyuna.html', trip=trip)
+
 @trips.route('/great-bear-chase')
 def get_great_bear_chase_page():
     trip = Trip.query.filter_by(slug='great-bear-chase').first_or_404()
