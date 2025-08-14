@@ -18,13 +18,13 @@ def get_home_page():
         Trip.signup_end > now_utc # Use UTC for DB query
     ).order_by(Trip.start_date).all()
 
-    # Fetch the current or next season by registration window or start date
+    # Fetch the most recent season by registration window or start date
     season = (
         Season.query
         .filter(
             (Season.returning_start != None) | (Season.new_start != None)
         )
-        .order_by(Season.start_date.asc())
+        .order_by(Season.start_date.desc())
         .first()
     )
     
