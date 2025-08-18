@@ -341,14 +341,29 @@ def export_season_members(season_id):
 @admin.route('/admin/users')
 @admin_required
 def get_admin_users():
+    from datetime import date
+    
     users = User.query.order_by(User.last_name, User.first_name).all()
-    # Optionally, get the current season for per-season status
-    current_season = Season.query.order_by(Season.start_date.desc()).first()
+    today = date.today()
+    
+    active_season = Season.query.filter(
+        Season.start_date <= today,
+        Season.end_date >= today
+    ).first()
+    
+    if active_season:
+        current_season = active_season
+    else:
+        current_season = Season.query.filter(
+            Season.start_date > today
+        ).order_by(Season.start_date.asc()).first()
+    
     user_season_map = {}
     if current_season:
         user_season_map = {
             us.user_id: us for us in UserSeason.query.filter_by(season_id=current_season.id).all()
         }
+    
     return render_template('admin/users.html', users=users, user_season_map=user_season_map, current_season=current_season)
 
 @admin.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
