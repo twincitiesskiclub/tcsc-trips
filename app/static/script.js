@@ -236,8 +236,8 @@ class PaymentForm {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize PaymentForm for trip registration pages (with .sr-payment-form)
-  if (document.querySelector('.sr-payment-form')) {
+  // Initialize PaymentForm for trip registration pages (with .sr-payment-form but NOT registration forms)
+  if (document.querySelector('.sr-payment-form') && !document.getElementById('registration-form')) {
     new PaymentForm();
   }
 
