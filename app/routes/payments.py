@@ -95,7 +95,7 @@ def webhook_received():
                         season_id=season_id,
                         registration_type=member_type,
                         registration_date=datetime.utcnow().date(),
-                        status='pending_lottery'
+                        status='PENDING_LOTTERY'
                     )
                     db.session.add(user_season)
                     db.session.commit()
@@ -109,7 +109,7 @@ def webhook_received():
             if user:
                 user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).first()
                 if user_season:
-                    user_season.status = 'active'
+                    user_season.status = 'ACTIVE'
                     user_season.payment_date = datetime.utcnow().date()
                     user.status = 'active'
                     db.session.commit()

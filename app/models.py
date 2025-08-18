@@ -115,7 +115,11 @@ class User(db.Model):
 
     @property
     def is_returning(self):
-        return any(us.status == 'ACTIVE' for us in self.user_seasons)
+        # A user is returning if they have been ACTIVE in any past season
+        # This includes users who were "new" but made it through the lottery
+        # Excludes PENDING_LOTTERY and DROPPED users who never made it through
+        # Check both uppercase and lowercase for compatibility with existing data
+        return any(us.status in ('ACTIVE', 'active') for us in self.user_seasons)
 
     __table_args__ = (
         db.CheckConstraint(
