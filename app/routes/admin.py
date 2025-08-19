@@ -118,7 +118,7 @@ def new_season():
                 return render_template('admin/season_form.html', season=form_data)
             start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
             end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
-            now = datetime.now()
+            now = datetime.utcnow()
             week_ago = now - timedelta(days=7)
             if start_date < week_ago or end_date < week_ago:
                 flash('Season start and end dates cannot be more than a week in the past.', 'error')
@@ -195,7 +195,7 @@ def edit_season(season_id):
                 return render_template('admin/season_form.html', season=form_data)
             start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
             end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
-            now = datetime.now()
+            now = datetime.utcnow()
             week_ago = now - timedelta(days=7)
             if start_date < week_ago or end_date < week_ago:
                 flash('Season start and end dates cannot be more than a week in the past.', 'error')
@@ -341,10 +341,8 @@ def export_season_members(season_id):
 @admin.route('/admin/users')
 @admin_required
 def get_admin_users():
-    from datetime import date
-    
     users = User.query.order_by(User.last_name, User.first_name).all()
-    today = date.today()
+    today = datetime.utcnow().date()
     
     active_season = Season.query.filter(
         Season.start_date <= today,
@@ -369,7 +367,6 @@ def get_admin_users():
 @admin.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def edit_user(user_id):
-    from datetime import datetime
     user = User.query.get_or_404(user_id)
     feedback = None
     # Fetch all UserSeason records for this user, joined with Season
