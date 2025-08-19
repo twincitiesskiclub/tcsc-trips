@@ -7,7 +7,6 @@ registration = Blueprint('registration', __name__)
 
 @registration.route('/seasons')
 def seasons_listing():
-    from datetime import datetime
     now = datetime.utcnow()
     # Find the next or current season by registration window
     season = (
@@ -144,7 +143,7 @@ def season_register(season_id):
                     user_id=user.id,
                     season_id=season.id,
                     registration_type=member_type,
-                    registration_date=current_time.date(),
+                    registration_date=datetime.utcnow().date(),
                     status='ACTIVE' if is_returning else 'PENDING_LOTTERY'
                 )
                 db.session.add(user_season)
