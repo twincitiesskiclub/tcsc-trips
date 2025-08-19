@@ -103,7 +103,7 @@
   font-weight: 500;
 }
 
-.form-group input,
+.form-group input:not([type="radio"]):not([type="checkbox"]),
 .form-group select,
 .form-group textarea {
   width: 100%;
