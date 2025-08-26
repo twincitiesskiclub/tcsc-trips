@@ -190,6 +190,15 @@
     color: var(--s-d);
     font-size: 14px;
     font-style: italic;
+    margin-bottom: 8px;
+}
+
+.triathlon-deadline {
+    text-align: center;
+    color: var(--p);
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0;
 }
 
 /* Enhanced Link Styling */
