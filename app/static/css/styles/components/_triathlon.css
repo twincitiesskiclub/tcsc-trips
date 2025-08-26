@@ -1,22 +1,43 @@
 /*----------  Dryland Triathlon Page  ----------*/
 .triathlon-hero {
     text-align: center;
-    padding: 32px 16px;
-    background: linear-gradient(135deg, var(--s), #e0f7ea);
-    border-radius: var(--r);
+    padding: 32px 20px;
+    background: linear-gradient(135deg, #e8f5e9, #e0f7ea);
+    border-radius: 12px;
     margin-bottom: 24px;
 }
 
 .triathlon-hero h2 {
-    margin: 0 0 8px;
-    font-size: 28px;
+    margin: 0 0 16px;
+    font-size: 36px;
+    font-weight: 700;
     color: var(--p);
+    letter-spacing: -0.5px;
 }
 
-.triathlon-hero p {
-    margin: 0;
+.triathlon-hero__details {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    font-size: 17px;
     color: var(--g-d);
-    font-size: 16px;
+}
+
+.triathlon-hero__separator {
+    color: var(--g-m);
+    font-size: 12px;
+}
+
+@media (max-width: 600px) {
+    .triathlon-hero__separator {
+        display: none;
+    }
+    .triathlon-hero__details {
+        flex-direction: column;
+        gap: 4px;
+    }
 }
 
 .triathlon-section {
@@ -24,17 +45,176 @@
 }
 
 .triathlon-section h3 {
-    margin-bottom: 8px;
+    margin: 0 0 16px;
+    font-size: 20px;
+    font-weight: 600;
     color: var(--p);
 }
 
+.triathlon-section p {
+    line-height: 1.6;
+    color: var(--g-d);
+    margin: 0 0 12px;
+}
+
+.triathlon-section p:last-child {
+    margin-bottom: 0;
+}
+
+/* Course Schedule Styling */
+.triathlon-courses {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.triathlon-course {
+    flex: 1;
+    padding: 16px;
+    background: var(--g-l);
+    border-radius: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.triathlon-course strong {
+    color: var(--p);
+    font-size: 16px;
+    margin-bottom: 4px;
+}
+
+.triathlon-course span {
+    color: var(--g-d);
+    font-size: 14px;
+}
+
+.triathlon-course__time {
+    color: var(--s-d);
+    font-weight: 500;
+    margin-top: 4px;
+}
+
+@media (max-width: 600px) {
+    .triathlon-courses {
+        flex-direction: column;
+    }
+}
+
+/* Participant Guide Link */
+.triathlon-guide-link {
+    padding: 10px 12px;
+    background: rgba(172,243,196,0.15);
+    border-left: 3px solid var(--s);
+    border-radius: 4px;
+    margin-top: 16px;
+    font-size: 14px;
+}
+
+.triathlon-guide-link a {
+    color: var(--p);
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 1px solid transparent;
+    transition: border-color 0.2s;
+}
+
+.triathlon-guide-link a:hover {
+    border-bottom-color: var(--p);
+}
+
+/* Registration Section */
+.triathlon-registration {
+    background: linear-gradient(to bottom, transparent, rgba(76, 175, 80, 0.03));
+    padding: 0;
+    border-radius: 12px;
+    margin: 24px -24px 24px;
+}
+
+@media (max-width: 600px) {
+    .triathlon-registration {
+        margin-left: -12px;
+        margin-right: -12px;
+        padding: 0;
+        border-radius: 8px;
+    }
+}
+
+.triathlon-reg-buttons {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.triathlon-reg-button {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 18px;
+    background: var(--p);
+    color: white;
+    text-decoration: none;
+    border-radius: 8px;
+    transition: all 0.2s;
+    box-shadow: 0 3px 6px rgba(28,44,68,0.15);
+    border: 2px solid transparent;
+}
+
+.triathlon-reg-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 12px rgba(28,44,68,0.25);
+    background: #243554;
+    border-color: var(--s);
+}
+
+.triathlon-reg-button__type {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 4px;
+}
+
+.triathlon-reg-button__price {
+    font-size: 24px;
+    font-weight: 700;
+}
+
+@media (max-width: 480px) {
+    .triathlon-reg-buttons {
+        flex-direction: column;
+    }
+}
+
+.triathlon-discount-note {
+    text-align: center;
+    color: var(--s-d);
+    font-size: 14px;
+    font-style: italic;
+}
+
+/* Enhanced Link Styling */
+.triathlon-link {
+    color: var(--s-d);
+    font-weight: 500;
+    text-decoration: none;
+    border-bottom: 2px solid var(--s);
+    transition: background 0.2s;
+    padding: 0 2px;
+}
+
+.triathlon-link:hover {
+    background: rgba(76, 175, 80, 0.1);
+}
+
+/* List styling (if any lists remain) */
 .triathlon-list {
     padding-left: 20px;
-    margin: 0;
+    margin: 0 0 16px;
 }
 
 .triathlon-list li {
     margin-bottom: 8px;
     color: var(--g-m);
     font-size: 16px;
+    line-height: 1.5;
 }
