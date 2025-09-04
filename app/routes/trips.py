@@ -32,3 +32,8 @@ def get_cuyuna_page():
 def get_great_bear_chase_page():
     trip = Trip.query.filter_by(slug='great-bear-chase').first_or_404()
     return render_template('trips/great-bear-chase.html', trip=trip)
+
+@trips.route('/north-shore')
+def get_north_shore_page():
+    trip = Trip.query.filter_by(slug='north-shore').first_or_404()
+    return render_template('trips/north-shore.html', trip=trip)
