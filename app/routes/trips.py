@@ -37,3 +37,8 @@ def get_great_bear_chase_page():
 def get_north_shore_page():
     trip = Trip.query.filter_by(slug='north-shore').first_or_404()
     return render_template('trips/north-shore.html', trip=trip)
+
+@trips.route('/50kum')
+def get_50kum_page():
+    trip = Trip.query.filter_by(slug='50kum').first_or_404()
+    return render_template('trips/50kum.html', trip=trip)
