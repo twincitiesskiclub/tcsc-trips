@@ -1,5 +1,5 @@
-from flask import Blueprint, render_template, jsonify
-from ..models import db, Trip, Season
+from flask import Blueprint, render_template
+from ..models import Trip, Season
 from datetime import datetime
 import pytz
 
@@ -45,11 +45,3 @@ def get_home_page():
 def dryland_triathlon_page():
     return render_template('dryland-triathlon.html')
 
-@main.route('/health')
-def health_check():
-    try:
-        # Check database connectivity
-        db.session.execute('SELECT 1')
-        return jsonify({'status': 'healthy'}), 200
-    except Exception as e:
-        return jsonify({'status': 'unhealthy', 'error': str(e)}), 503
