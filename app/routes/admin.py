@@ -1,4 +1,5 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, Response
+from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR
@@ -320,31 +321,143 @@ def export_season_members(season_id):
         headers={'Content-Disposition': f'attachment; filename={filename}'}
     )
 
-@admin.route('/admin/users')
-@admin_required
-def get_admin_users():
-    users = User.query.order_by(User.last_name, User.first_name).all()
+def get_current_season():
+    """Get the current or next upcoming season."""
     today = datetime.utcnow().date()
-    
     active_season = Season.query.filter(
         Season.start_date <= today,
         Season.end_date >= today
     ).first()
-    
+
     if active_season:
-        current_season = active_season
-    else:
-        current_season = Season.query.filter(
-            Season.start_date > today
-        ).order_by(Season.start_date.asc()).first()
-    
-    user_season_map = {}
-    if current_season:
-        user_season_map = {
-            us.user_id: us for us in UserSeason.query.filter_by(season_id=current_season.id).all()
-        }
-    
-    return render_template('admin/users.html', users=users, user_season_map=user_season_map, current_season=current_season)
+        return active_season
+    return Season.query.filter(
+        Season.start_date > today
+    ).order_by(Season.start_date.asc()).first()
+
+
+@admin.route('/admin/users')
+@admin_required
+def get_admin_users():
+    current_season = get_current_season()
+    all_seasons = Season.query.order_by(Season.start_date.desc()).all()
+    return render_template('admin/users.html', current_season=current_season, all_seasons=all_seasons)
+
+
+@admin.route('/admin/users/data')
+@admin_required
+def get_users_data():
+    """Return all users as JSON for the data grid."""
+    users = User.query.order_by(User.last_name, User.first_name).all()
+    current_season = get_current_season()
+    all_seasons = Season.query.order_by(Season.start_date.desc()).all()
+
+    # Build a map of user_id -> {season_id: status} for all seasons
+    all_user_seasons = UserSeason.query.all()
+    user_seasons_map = {}
+    for us in all_user_seasons:
+        if us.user_id not in user_seasons_map:
+            user_seasons_map[us.user_id] = {}
+        user_seasons_map[us.user_id][us.season_id] = us.status
+
+    # Build a map of user_id -> {trip_count, total_paid} from successful payments
+    payment_stats = db.session.query(
+        Payment.user_id,
+        func.count(func.distinct(Payment.trip_id)).label('trip_count'),
+        func.sum(Payment.amount).label('total_cents')
+    ).filter(
+        Payment.user_id != None,
+        Payment.status == 'succeeded'
+    ).group_by(Payment.user_id).all()
+
+    payment_map = {uid: {'trips': tc, 'total': tot or 0}
+                   for uid, tc, tot in payment_stats}
+
+    users_data = []
+    for user in users:
+        user_season_data = user_seasons_map.get(user.id, {})
+        current_season_status = user_season_data.get(current_season.id, '') if current_season else ''
+        user_payment_stats = payment_map.get(user.id, {'trips': 0, 'total': 0})
+
+        users_data.append({
+            'id': user.id,
+            'first_name': user.first_name,
+            'last_name': user.last_name,
+            'full_name': user.full_name,
+            'email': user.email,
+            'phone': user.phone or '',
+            'address': user.address or '',
+            'status': user.status,
+            'pronouns': user.pronouns or '',
+            'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else '',
+            'preferred_technique': user.preferred_technique or '',
+            'tshirt_size': user.tshirt_size or '',
+            'ski_experience': user.ski_experience or '',
+            'emergency_contact_name': user.emergency_contact_name or '',
+            'emergency_contact_phone': user.emergency_contact_phone or '',
+            'emergency_contact_email': user.emergency_contact_email or '',
+            'emergency_contact_relation': user.emergency_contact_relation or '',
+            'slack_uid': user.slack_user.slack_uid if user.slack_user else '',
+            'season_status': current_season_status,
+            'seasons': user_season_data,  # {season_id: status} for all seasons
+            'is_returning': user.is_returning,
+            'created_at': user.created_at.isoformat() if user.created_at else '',
+            'trip_count': user_payment_stats['trips'],
+            'total_paid': user_payment_stats['total'] / 100,  # Convert cents to dollars
+        })
+
+    return jsonify({
+        'users': users_data,
+        'current_season': {'id': current_season.id, 'name': current_season.name} if current_season else None,
+        'seasons': [{'id': s.id, 'name': s.name} for s in all_seasons]
+    })
+
+
+@admin.route('/admin/users/<int:user_id>')
+@admin_required
+def user_detail(user_id):
+    """Display member detail page with payment history."""
+    user = User.query.get_or_404(user_id)
+
+    # Get all payments for this user
+    payments = Payment.query.filter_by(user_id=user.id).order_by(Payment.created_at.desc()).all()
+
+    # Get all season registrations
+    user_seasons = (
+        db.session.query(UserSeason, Season)
+        .join(Season, UserSeason.season_id == Season.id)
+        .filter(UserSeason.user_id == user.id)
+        .order_by(Season.start_date.desc())
+        .all()
+    )
+
+    # Build trip registrations from payments (grouped by trip)
+    trip_registrations = {}
+    for payment in payments:
+        if payment.trip_id not in trip_registrations:
+            trip_registrations[payment.trip_id] = {
+                'trip': payment.trip,
+                'total_paid': 0,
+                'payment_count': 0,
+                'latest_status': payment.status,
+                'latest_date': payment.created_at,
+            }
+        if payment.status == 'succeeded':
+            trip_registrations[payment.trip_id]['total_paid'] += payment.amount
+        trip_registrations[payment.trip_id]['payment_count'] += 1
+
+    # Sort by trip start date descending
+    sorted_trips = sorted(
+        trip_registrations.values(),
+        key=lambda x: x['trip'].start_date if x['trip'].start_date else datetime.min,
+        reverse=True
+    )
+
+    return render_template('admin/user_detail.html',
+                          user=user,
+                          payments=payments,
+                          user_seasons=user_seasons,
+                          trip_registrations=sorted_trips)
 
 @admin.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
 @admin_required
