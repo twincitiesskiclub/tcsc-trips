@@ -23,11 +23,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    python3 -m flask run
    ```
 
+### Stripe Webhook Testing (Local Development)
+To test Stripe webhooks locally:
+```bash
+stripe listen --forward-to localhost:5000/webhook
+```
+This provides a webhook signing secret (`whsec_...`) to set as `STRIPE_WEBHOOK_SECRET`.
+
 ### Database Management
 - **Initialize/Migrate Database:** `flask db upgrade`
 - **Create New Migration:** `flask db migrate -m "description"`
-- **Database Location:** SQLite databases stored in `app/instance/` directory
+- **Database Location:** Production/dev databases in `/var/lib/`, testing in `app/instance/`
 - **Migration Files:** Located in `migrations/versions/`
+
+### Helper Scripts
+- `scripts/seed_former_members.py` - Import CSV of former members (sets status='inactive')
+- `scripts/seed_former_member_season.py` - Create legacy season linking inactive users
 
 ## Architecture Overview
 
@@ -57,10 +68,17 @@ This is a Flask web application for the Twin Cities Ski Club (TCSC) trip and mem
 - **Payment Security:** Stripe Payment Intents with manual capture (authorization holds)
 
 ### Payment Flow Architecture
-1. **Authorization:** Stripe creates payment intent with `capture_method='manual'`
-2. **Hold Placement:** User's card is authorized but not charged
-3. **Manual Capture:** Admins manually capture payments for accepted registrations
-4. **Refund/Cancel:** Can refund captured payments or cancel uncaptured authorizations
+**Two-tier capture system based on member type:**
+- **New Members:** `capture_method='manual'` - card authorized but not charged (lottery system)
+- **Returning Members:** `capture_method='automatic'` - card charged immediately
+
+**Payment lifecycle:**
+1. **Authorization:** Payment intent created, card validated
+2. **Hold Placement:** New members have funds held pending lottery
+3. **Manual Capture:** Admins capture payments for lottery-selected new members
+4. **Refund/Cancel:** Refund captured payments OR cancel uncaptured authorizations
+
+**Member type determination:** Server-side via `User.is_returning` property (checks for any ACTIVE UserSeason in past seasons)
 
 ### Key Integrations
 - **Stripe API:** Payment processing, webhooks, refunds
@@ -88,12 +106,23 @@ Check `.env.example` for complete list. Critical variables include:
 - **Admin Interface:** Manage trips, seasons, users, and payment captures
 - **Lottery System:** New members go into lottery; payment holds allow selective acceptance
 
-### Season Management  
+### Season Management
 - **Registration Windows:** Separate periods for returning vs new members
 - **Member Status Tracking:** Users can be PENDING_LOTTERY, ACTIVE, or DROPPED per season
 - **Historical Data:** Former member verification by email lookup
+- **API Endpoint:** `POST /api/is_returning_member` - Frontend can check member status by email
+
+### Status Fields (Two Levels)
+- **User.status** (global): `pending`, `active`, `inactive`, `dropped`
+- **UserSeason.status** (per-season): `PENDING_LOTTERY`, `ACTIVE`, `DROPPED`
+
+### Data Conventions
+- **Prices:** Stored in cents (e.g., $50.00 = 5000), converted from dollars on form input
+- **Timestamps:** UTC in database, displayed in US Central (America/Chicago)
+- **Member type:** Derived property (`User.is_returning`), not stored as a column
 
 ## Important Files
 - **Product Specification:** `.cursor/rules/tcsc_registration_spec.mdc` contains detailed business requirements
+- **Contributing Guide:** `CONTRIBUTING.md` explains User/UserSeason model and member type logic
 - **Static Assets:** CSS organized in modular structure under `app/static/css/styles/`
 - **Templates:** Jinja2 templates in `app/templates/` with admin-specific subdirectory
