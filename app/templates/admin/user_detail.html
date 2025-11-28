@@ -129,6 +129,8 @@
                 <dd>{{ user.pronouns or '-' }}</dd>
                 <dt>Date of Birth</dt>
                 <dd>{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '-' }}</dd>
+                <dt>Member Since</dt>
+                <dd>{{ user.created_at.strftime('%b %d, %Y') if user.created_at else '-' }}</dd>
             </dl>
         </div>
 

@@ -1,205 +1,345 @@
 {% extends 'admin/admin_base.html' %}
 {% from 'macros.html' import user_season_badge %}
+
+{% block extra_css %}
+<style>
+.user-edit-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.user-edit-header h1 {
+    margin: 0;
+}
+
+.user-edit-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.edit-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.edit-card {
+    background: white;
+    padding: 20px;
+    border-radius: var(--r);
+    border: 1px solid var(--g-b);
+}
+
+.edit-card h3 {
+    margin: 0 0 16px 0;
+    color: var(--p);
+    font-size: 16px;
+    border-bottom: 1px solid var(--g-b);
+    padding-bottom: 8px;
+}
+
+.edit-card .form-group {
+    margin-bottom: 16px;
+}
+
+.edit-card .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.edit-card .form-group label {
+    display: block;
+    font-weight: 500;
+    color: var(--g-m);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.edit-card .form-group input,
+.edit-card .form-group select,
+.edit-card .form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    font-size: 14px;
+    font-family: var(--f);
+    box-sizing: border-box;
+}
+
+.edit-card .form-group input:focus,
+.edit-card .form-group select:focus,
+.edit-card .form-group textarea:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 2px rgba(28,44,68,0.1);
+}
+
+.edit-card .form-group textarea {
+    resize: vertical;
+    min-height: 80px;
+}
+
+.edit-section {
+    margin-top: 32px;
+    background: white;
+    padding: 20px;
+    border-radius: var(--r);
+    border: 1px solid var(--g-b);
+}
+
+.edit-section h2 {
+    margin: 0 0 16px 0;
+    color: var(--p);
+    font-size: 18px;
+}
+
+.edit-section table {
+    margin-bottom: 0;
+}
+
+.empty-state {
+    color: var(--g-m);
+    text-align: center;
+    padding: 24px;
+}
+
+.form-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--g-b);
+}
+
+/* Reset global button styles for form footer */
+.form-footer button,
+.form-footer .button,
+.form-footer a.button {
+    /* Reset globals from _buttons.css */
+    width: auto;
+    display: inline-flex;
+    margin-top: 0;
+    /* Form footer button styles */
+    height: 40px;
+    padding: 0 24px;
+    align-items: center;
+    justify-content: center;
+    font: 500 14px var(--f);
+    border-radius: var(--r);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.form-footer .button-secondary {
+    background: #f2f4f7;
+    color: #344054;
+    border: 1px solid #d0d5dd;
+}
+
+.form-footer .button-secondary:hover {
+    background: #e4e7ec;
+    transform: none;
+}
+
+.form-footer button:not(.button-secondary),
+.form-footer .button:not(.button-secondary) {
+    background: var(--p);
+    color: white;
+    border: none;
+}
+
+.form-footer button:not(.button-secondary):hover,
+.form-footer .button:not(.button-secondary):hover {
+    opacity: 0.9;
+    transform: none;
+}
+
+/* Flash message within edit page */
+.edit-flash {
+    padding: 12px 16px;
+    border-radius: var(--r);
+    margin-bottom: 20px;
+    background: var(--s);
+    color: var(--p);
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>Edit User: {{ user.full_name }}</h1>
-
-<!-- Read-only User Info -->
-<div class="card mb-4">
-    <div class="card-body">
-        <h5 class="card-title">User Information</h5>
-        <ul class="list-group list-group-flush">
-            <li class="list-group-item"><strong>Email:</strong> {{ user.email }}</li>
-            <li class="list-group-item"><strong>Status:</strong> {{ user.status|capitalize }}</li>
-            <li class="list-group-item"><strong>Pronouns:</strong> {{ user.pronouns }}</li>
-            <li class="list-group-item"><strong>Phone:</strong> {{ user.phone }}</li>
-            <li class="list-group-item"><strong>Address:</strong> {{ user.address }}</li>
-            <li class="list-group-item"><strong>Slack UID:</strong> {{ user.slack_user.slack_uid if user.slack_user else '' }}</li>
-            <li class="list-group-item"><strong>Notes:</strong> {{ user.notes }}</li>
-            <li class="list-group-item"><strong>Date of Birth:</strong> {{ user.date_of_birth }}</li>
-            <li class="list-group-item"><strong>Preferred Technique:</strong> {{ user.preferred_technique }}</li>
-            <li class="list-group-item"><strong>T-Shirt Size:</strong> {{ user.tshirt_size }}</li>
-            <li class="list-group-item"><strong>Ski Experience:</strong> {{ user.ski_experience }}</li>
-            <li class="list-group-item"><strong>Emergency Contact Name:</strong> {{ user.emergency_contact_name }}</li>
-            <li class="list-group-item"><strong>Emergency Contact Relation:</strong> {{ user.emergency_contact_relation }}</li>
-            <li class="list-group-item"><strong>Emergency Contact Phone:</strong> {{ user.emergency_contact_phone }}</li>
-            <li class="list-group-item"><strong>Emergency Contact Email:</strong> {{ user.emergency_contact_email }}</li>
-        </ul>
-    </div>
-</div>
-
-<!-- Quick Edit Form -->
-<form method="post" class="mb-4" id="quick-edit-form">
-    <input type="hidden" name="form_type" value="quick">
-    <div class="row g-2 align-items-end">
-        <div class="col-md-5" id="quick-email-field">
-            <label class="form-label">Email</label>
-            <input type="text" class="form-control" name="email" value="{{ user.email }}">
-        </div>
-        <div class="col-md-3" id="quick-status-field">
-            <label class="form-label">Status</label>
-            <select class="form-select" name="status">
-                <option value="pending" {% if user.status == 'pending' %}selected{% endif %}>Pending</option>
-                <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
-                <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
-                <option value="dropped" {% if user.status == 'dropped' %}selected{% endif %}>Dropped</option>
-            </select>
-        </div>
-        <div class="col-md-2">
-            <button type="submit" class="btn btn-success" id="quick-save-btn">Save</button>
-        </div>
-        <div class="col-md-2">
-            <button type="button" class="btn btn-outline-primary" id="show-full-edit">Edit All</button>
+<div class="user-edit">
+    <div class="user-edit-header">
+        <h1>Edit: {{ user.full_name }}</h1>
+        <div class="user-edit-actions">
+            <a href="{{ url_for('admin.get_admin_users') }}" class="button button-secondary">Back to List</a>
+            <a href="{{ url_for('admin.user_detail', user_id=user.id) }}" class="button button-secondary">View Details</a>
         </div>
     </div>
-</form>
-{% if feedback == 'quick' %}
-    <div class="alert alert-success">Quick edit saved!</div>
-{% endif %}
 
-<!-- Full Edit Form (hidden by default) -->
-<form method="post" id="full-edit-form" style="display:none;">
-    <input type="hidden" name="form_type" value="full">
-    <div class="mb-3">
-        <label class="form-label">First Name</label>
-        <input type="text" class="form-control" name="first_name" value="{{ user.first_name }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Last Name</label>
-        <input type="text" class="form-control" name="last_name" value="{{ user.last_name }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Email</label>
-        <input type="text" class="form-control" name="email" value="{{ user.email }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Pronouns</label>
-        <input type="text" class="form-control" name="pronouns" value="{{ user.pronouns or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Phone</label>
-        <input type="text" class="form-control" name="phone" value="{{ user.phone or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Address</label>
-        <input type="text" class="form-control" name="address" value="{{ user.address or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Date of Birth</label>
-        <input type="date" class="form-control" name="date_of_birth" value="{{ user.date_of_birth }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Preferred Technique</label>
-        <select class="form-select" name="preferred_technique">
-            <option value="">--</option>
-            <option value="Classic" {% if user.preferred_technique == 'Classic' %}selected{% endif %}>Classic</option>
-            <option value="Skate" {% if user.preferred_technique == 'Skate' %}selected{% endif %}>Skate</option>
-            <option value="None" {% if user.preferred_technique == 'None' %}selected{% endif %}>None</option>
-        </select>
-    </div>
-    <div class="mb-3">
-        <label class="form-label">T-Shirt Size</label>
-        <select class="form-select" name="tshirt_size">
-            <option value="">--</option>
-            <option value="XS" {% if user.tshirt_size == 'XS' %}selected{% endif %}>XS</option>
-            <option value="S" {% if user.tshirt_size == 'S' %}selected{% endif %}>S</option>
-            <option value="M" {% if user.tshirt_size == 'M' %}selected{% endif %}>M</option>
-            <option value="L" {% if user.tshirt_size == 'L' %}selected{% endif %}>L</option>
-            <option value="XL" {% if user.tshirt_size == 'XL' %}selected{% endif %}>XL</option>
-            <option value="XXL" {% if user.tshirt_size == 'XXL' %}selected{% endif %}>XXL</option>
-        </select>
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Ski Experience (Years)</label>
-        <input type="text" class="form-control" name="ski_experience" value="{{ user.ski_experience or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Emergency Contact Name</label>
-        <input type="text" class="form-control" name="emergency_contact_name" value="{{ user.emergency_contact_name or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Emergency Contact Relation</label>
-        <input type="text" class="form-control" name="emergency_contact_relation" value="{{ user.emergency_contact_relation or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Emergency Contact Phone</label>
-        <input type="text" class="form-control" name="emergency_contact_phone" value="{{ user.emergency_contact_phone or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Emergency Contact Email</label>
-        <input type="text" class="form-control" name="emergency_contact_email" value="{{ user.emergency_contact_email or '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Slack UID</label>
-        <input type="text" class="form-control" name="slack_uid" value="{{ user.slack_user.slack_uid if user.slack_user else '' }}">
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Status</label>
-        <select class="form-select" name="status">
-            <option value="pending" {% if user.status == 'pending' %}selected{% endif %}>Pending</option>
-            <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
-            <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
-            <option value="dropped" {% if user.status == 'dropped' %}selected{% endif %}>Dropped</option>
-        </select>
-    </div>
-    <div class="mb-3">
-        <label class="form-label">Notes</label>
-        <textarea class="form-control" name="notes">{{ user.notes or '' }}</textarea>
-    </div>
-    <button type="submit" class="btn btn-success">Save</button>
-    <button type="button" class="btn btn-secondary" id="cancel-full-edit">Cancel</button>
-</form>
+    {% if feedback %}
+    <div class="edit-flash">Changes saved successfully!</div>
+    {% endif %}
 
-<script>
-document.getElementById('show-full-edit').onclick = function() {
-    document.getElementById('full-edit-form').style.display = 'block';
-    this.style.display = 'none';
-    document.getElementById('quick-save-btn').style.display = 'none';
-    document.getElementById('quick-email-field').style.display = 'none';
-    document.getElementById('quick-status-field').style.display = 'none';
-};
-document.getElementById('cancel-full-edit').onclick = function() {
-    document.getElementById('full-edit-form').style.display = 'none';
-    document.getElementById('show-full-edit').style.display = 'inline-block';
-    document.getElementById('quick-save-btn').style.display = 'inline-block';
-    document.getElementById('quick-email-field').style.display = 'block';
-    document.getElementById('quick-status-field').style.display = 'block';
-};
-</script>
+    <form method="post">
+        <input type="hidden" name="form_type" value="full">
 
-<!-- Seasons Table -->
-<div class="card mt-5">
-    <div class="card-body">
-        <h5 class="card-title">Seasons</h5>
+        <div class="edit-grid">
+            <!-- Contact Information (matches detail page) -->
+            <div class="edit-card">
+                <h3>Contact Information</h3>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="email" value="{{ user.email }}" required>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" name="phone" value="{{ user.phone or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Address</label>
+                    <input type="text" name="address" value="{{ user.address or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Slack UID</label>
+                    <input type="text" name="slack_uid" value="{{ user.slack_user.slack_uid if user.slack_user else '' }}">
+                </div>
+            </div>
+
+            <!-- Profile (matches detail page) -->
+            <div class="edit-card">
+                <h3>Profile</h3>
+                <div class="form-group">
+                    <label>First Name</label>
+                    <input type="text" name="first_name" value="{{ user.first_name or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Last Name</label>
+                    <input type="text" name="last_name" value="{{ user.last_name or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Status</label>
+                    <select name="status">
+                        <option value="pending" {% if user.status == 'pending' %}selected{% endif %}>Pending</option>
+                        <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
+                        <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
+                        <option value="dropped" {% if user.status == 'dropped' %}selected{% endif %}>Dropped</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Pronouns</label>
+                    <input type="text" name="pronouns" value="{{ user.pronouns or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Date of Birth</label>
+                    <input type="date" name="date_of_birth" value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}">
+                </div>
+            </div>
+
+            <!-- Skiing Info (matches detail page) -->
+            <div class="edit-card">
+                <h3>Skiing Info</h3>
+                <div class="form-group">
+                    <label>Preferred Technique</label>
+                    <select name="preferred_technique">
+                        <option value="">--</option>
+                        <option value="Classic" {% if user.preferred_technique == 'Classic' %}selected{% endif %}>Classic</option>
+                        <option value="Skate" {% if user.preferred_technique == 'Skate' %}selected{% endif %}>Skate</option>
+                        <option value="None" {% if user.preferred_technique == 'None' %}selected{% endif %}>None</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Experience (Years)</label>
+                    <input type="text" name="ski_experience" value="{{ user.ski_experience or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>T-Shirt Size</label>
+                    <select name="tshirt_size">
+                        <option value="">--</option>
+                        <option value="XS" {% if user.tshirt_size == 'XS' %}selected{% endif %}>XS</option>
+                        <option value="S" {% if user.tshirt_size == 'S' %}selected{% endif %}>S</option>
+                        <option value="M" {% if user.tshirt_size == 'M' %}selected{% endif %}>M</option>
+                        <option value="L" {% if user.tshirt_size == 'L' %}selected{% endif %}>L</option>
+                        <option value="XL" {% if user.tshirt_size == 'XL' %}selected{% endif %}>XL</option>
+                        <option value="XXL" {% if user.tshirt_size == 'XXL' %}selected{% endif %}>XXL</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Emergency Contact (matches detail page) -->
+            <div class="edit-card">
+                <h3>Emergency Contact</h3>
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="emergency_contact_name" value="{{ user.emergency_contact_name or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Relation</label>
+                    <input type="text" name="emergency_contact_relation" value="{{ user.emergency_contact_relation or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" name="emergency_contact_phone" value="{{ user.emergency_contact_phone or '' }}">
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="emergency_contact_email" value="{{ user.emergency_contact_email or '' }}">
+                </div>
+            </div>
+
+            <!-- Admin Notes (in grid) -->
+            <div class="edit-card">
+                <h3>Admin Notes</h3>
+                <div class="form-group">
+                    <textarea name="notes" placeholder="Internal notes about this member...">{{ user.notes or '' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="form-footer">
+            <a href="{{ url_for('admin.user_detail', user_id=user.id) }}" class="button button-secondary">Cancel</a>
+            <button type="submit" class="button">Save Changes</button>
+        </div>
+    </form>
+
+    <!-- Season History -->
+    <div class="edit-section">
+        <h2>Season History</h2>
         {% if user_seasons and user_seasons|length > 0 %}
-        <div class="table-responsive">
-            <table class="table table-bordered table-striped">
-                <thead>
-                    <tr>
-                        <th>Season Name</th>
-                        <th>Year</th>
-                        <th>Member Type</th>
-                        <th>Status</th>
-                        <th>Registration Date</th>
-                        <th>Payment Date</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {% for us, season in user_seasons %}
-                    <tr>
-                        <td>{{ season.name }}</td>
-                        <td>{{ season.year }}</td>
-                        <td>{{ us.registration_type|capitalize }}</td>
-                        <td>{{ user_season_badge(us.status) }}</td>
-                        <td>{{ us.registration_date }}</td>
-                        <td>{{ us.payment_date or '' }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </div>
+        <table>
+            <thead>
+                <tr>
+                    <th>Season</th>
+                    <th>Year</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Registration Date</th>
+                    <th>Payment Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for us, season in user_seasons %}
+                <tr>
+                    <td>{{ season.name }}</td>
+                    <td>{{ season.year }}</td>
+                    <td>{{ us.registration_type|capitalize if us.registration_type else '-' }}</td>
+                    <td>{{ user_season_badge(us.status) }}</td>
+                    <td>{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
+                    <td>{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
         {% else %}
-            <p class="text-muted">No season registrations found for this user.</p>
+        <p class="empty-state">No season registrations found.</p>
         {% endif %}
     </div>
 </div>
-{% endblock %} 
+{% endblock %}

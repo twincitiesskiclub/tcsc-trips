@@ -232,7 +232,7 @@ function openEditModal(userId) {
     document.getElementById('modal-form-fields').innerHTML = `
         <div class="form-group">
             <label>Email</label>
-            <input type="email" name="email" value="${user.email}" required>
+            <input type="email" name="email" value="${user.email || ''}" required>
         </div>
         <div class="form-group">
             <label>Status</label>
@@ -245,7 +245,7 @@ function openEditModal(userId) {
         </div>
         <div class="form-group">
             <label>Phone</label>
-            <input type="text" name="phone" value="${user.phone}">
+            <input type="tel" name="phone" value="${user.phone || ''}" placeholder="Optional">
         </div>
     `;
 
