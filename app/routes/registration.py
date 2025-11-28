@@ -1,7 +1,7 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for
+from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from ..models import db, Season, UserSeason, User
 from datetime import datetime
-import pytz
+from ..utils import get_current_times, normalize_email
 
 registration = Blueprint('registration', __name__)
 
@@ -50,9 +50,9 @@ def seasons_listing():
 @registration.route('/seasons/<int:season_id>/register', methods=['GET', 'POST'])
 def season_register(season_id):
     season = Season.query.get_or_404(season_id)
-    central = pytz.timezone('America/Chicago')
-    current_time = datetime.now(central) # Use localized time for potential display
-    now_utc = datetime.utcnow() # Use UTC for comparisons
+    times = get_current_times()
+    current_time = times['central']  # Use localized time for potential display
+    now_utc = times['utc']  # Use UTC for comparisons
 
     # Helper to check if registration is open for any type
     def is_registration_open_at_all(season, now):
@@ -72,7 +72,7 @@ def season_register(season_id):
     if request.method == 'POST':
         try:
             form = request.form
-            email = form['email'].strip().lower()
+            email = normalize_email(form['email'])
             user = User.query.filter_by(email=email).one_or_none()
 
             # Determine member_type from backend only BEFORE checking dates
@@ -207,7 +207,7 @@ def season_detail(season_id):
 @registration.route('/api/is_returning_member', methods=['POST'])
 def api_is_returning_member():
     data = request.get_json()
-    email = data.get('email', '').strip().lower()
+    email = normalize_email(data.get('email', ''))
     user = User.query.filter_by(email=email).one_or_none()
     is_returning = bool(user and getattr(user, 'is_returning', False))
-    return {'is_returning': is_returning} 
+    return jsonify({'is_returning': is_returning}) 
