@@ -248,39 +248,137 @@
 .modal-header {
     display: flex;
     justify-content: space-between;
-    align-items: center;
-    padding: 16px 20px;
+    align-items: flex-start;
+    padding: 20px;
     border-bottom: 1px solid var(--g-b);
+    gap: 16px;
 }
 
 .modal-header h2 {
     margin: 0;
     font-size: 18px;
+    color: var(--p);
+    flex: 1;
 }
 
 .modal-body {
     padding: 20px;
 }
 
-.modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 12px;
-    padding: 16px 20px;
-    border-top: 1px solid var(--g-b);
-}
-
 .modal-close {
-    background: none;
-    border: none;
-    font-size: 24px;
+    /* Reset global button styles */
+    all: unset;
+    /* Custom close button styles */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 32px;
+    height: 32px;
+    font-size: 20px;
     cursor: pointer;
     color: var(--g-m);
-    line-height: 1;
+    border-radius: 4px;
+    flex-shrink: 0;
+    box-sizing: border-box;
 }
 
 .modal-close:hover {
     color: var(--p);
+    background: #f2f4f7;
+}
+
+/* Modal Form Styles */
+.modal-body .form-group {
+    margin-bottom: 16px;
+}
+
+.modal-body .form-group:last-child {
+    margin-bottom: 0;
+}
+
+.modal-body .form-group label {
+    display: block;
+    font-weight: 500;
+    color: var(--g-m);
+    font-size: 13px;
+    margin-bottom: 6px;
+}
+
+.modal-body .form-group input,
+.modal-body .form-group select,
+.modal-body .form-group textarea {
+    width: 100%;
+    height: auto;
+    padding: 10px 12px;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    font-size: 14px;
+    font-family: var(--f);
+    box-sizing: border-box;
+    color: var(--p);
+    background: white;
+}
+
+.modal-body .form-group input:focus,
+.modal-body .form-group select:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 2px rgba(28,44,68,0.1);
+}
+
+/* Modal Footer Button Consistency */
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--g-b);
+}
+
+/* Reset global button styles for modal */
+.modal-footer button,
+.modal-footer .button,
+.modal-footer a.button {
+    /* Reset globals from _buttons.css */
+    width: auto;
+    display: inline-flex;
+    margin-top: 0;
+    /* Modal-specific styles */
+    height: 38px;
+    padding: 0 20px;
+    align-items: center;
+    justify-content: center;
+    font: 500 14px var(--f);
+    border-radius: var(--r);
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    box-sizing: border-box;
+}
+
+.modal-footer .button-secondary {
+    background: #f2f4f7;
+    color: #344054;
+    border: 1px solid #d0d5dd;
+}
+
+.modal-footer .button-secondary:hover {
+    background: #e4e7ec;
+    transform: none;
+}
+
+.modal-footer button:not(.button-secondary),
+.modal-footer .button:not(.button-secondary) {
+    background: var(--p);
+    color: white;
+    border: none;
+}
+
+.modal-footer button:not(.button-secondary):hover,
+.modal-footer .button:not(.button-secondary):hover {
+    opacity: 0.9;
+    transform: none;
 }
 </style>
 {% endblock %}
