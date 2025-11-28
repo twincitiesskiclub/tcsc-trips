@@ -1,12 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
     <meta charset="UTF-8">
     <title>TCSC Admin - {% block title %}{{ title }}{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
     <!-- Include admin-specific styles -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}">
+    <!-- Tabulator CSS -->
+    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
     <div class="admin-container">
@@ -16,5 +18,9 @@
             {% block content %}{% endblock %}
         </div>
     </div>
+    <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+    <!-- Tabulator JS -->
+    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
+    {% block extra_js %}{% endblock %}
 </body>
 </html> 
