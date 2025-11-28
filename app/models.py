@@ -58,7 +58,7 @@ class Trip(db.Model):
 
 class SlackUser(db.Model):
     __tablename__ = 'slack_users'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     slack_uid = db.Column(db.String(255), unique=True, nullable=False)
     display_name = db.Column(db.String(255))
@@ -70,9 +70,12 @@ class SlackUser(db.Model):
     timezone = db.Column(db.String(100))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationship
     user = db.relationship('User', backref='slack_user', uselist=False)
+
+    def __repr__(self):
+        return f'<SlackUser {self.slack_uid}>'
 
 class User(db.Model):
     __tablename__ = 'users'
@@ -108,6 +111,9 @@ class User(db.Model):
     status_changes = db.relationship('StatusChange', backref='user')
     payments = db.relationship('Payment', backref='user', lazy=True)
     user_seasons = db.relationship('UserSeason', backref='user', lazy=True, overlaps="seasons")
+
+    def __repr__(self):
+        return f'<User {self.id} {self.email}>'
 
     @property
     def full_name(self):
@@ -147,6 +153,9 @@ class Season(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
+    def __repr__(self):
+        return f'<Season {self.id} {self.name}>'
+
     def is_open_for(self, member_type: str, when: datetime = None) -> bool:
         """
         Returns True if registration is open for the given member_type ('new' or 'returning') at the given time.
@@ -162,9 +171,10 @@ class Season(db.Model):
                 return self.returning_start <= when <= self.returning_end
         return False
 
+
 class UserSeason(db.Model):
     __tablename__ = 'user_seasons'
-    
+
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
     season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), primary_key=True)
     registration_type = db.Column(db.String(50), nullable=False)
@@ -173,6 +183,9 @@ class UserSeason(db.Model):
     status = db.Column(db.String(50), nullable=False, default='pending')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
+    def __repr__(self):
+        return f'<UserSeason user={self.user_id} season={self.season_id} status={self.status}>'
+
     __table_args__ = (
         db.CheckConstraint(
             status.in_(['PENDING_LOTTERY', 'ACTIVE', 'DROPPED']),
@@ -180,41 +193,61 @@ class UserSeason(db.Model):
         ),
     )
 
+
 class Role(db.Model):
     __tablename__ = 'roles'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(50), unique=True, nullable=False)
     description = db.Column(db.Text)
 
+    def __repr__(self):
+        return f'<Role {self.name}>'
+
+
 class UserRole(db.Model):
     __tablename__ = 'user_roles'
-    
+
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
     role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), primary_key=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
+    def __repr__(self):
+        return f'<UserRole user={self.user_id} role={self.role_id}>'
+
+
 class Committee(db.Model):
     __tablename__ = 'committees'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     description = db.Column(db.Text)
 
+    def __repr__(self):
+        return f'<Committee {self.name}>'
+
+
 class UserCommittee(db.Model):
     __tablename__ = 'user_committees'
-    
+
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
     committee_id = db.Column(db.Integer, db.ForeignKey('committees.id'), primary_key=True)
     role = db.Column(db.String(50))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
+    def __repr__(self):
+        return f'<UserCommittee user={self.user_id} committee={self.committee_id}>'
+
+
 class StatusChange(db.Model):
     __tablename__ = 'status_changes'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'))
     previous_status = db.Column(db.String(50))
     new_status = db.Column(db.String(50))
     reason = db.Column(db.Text)
     changed_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<StatusChange {self.id} {self.previous_status}->{self.new_status}>'
