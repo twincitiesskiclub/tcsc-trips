@@ -3,15 +3,42 @@
 =============================================*/
 
 :root {
+    /* Brand colors */
     --p: #1c2c44;
     --s: #acf3c4;
+
+    /* Grays (based on primary) */
     --g-o: rgba(28,44,68,.03);
     --g-b: rgba(28,44,68,.15);
     --g-l: rgba(28,44,68,.4);
     --g-m: rgba(28,44,68,.7);
     --g-d: rgba(28,44,68,.9);
     --w: #fcfefd;
+
+    /* Status colors - backgrounds */
+    --status-success-bg: #c6f6d5;
+    --status-warning-bg: #fff3dc;
+    --status-error-bg: #fee2e2;
+    --status-info-bg: #e8f0fe;
+    --status-neutral-bg: #e2e8f0;
+    --status-purple-bg: #faf5ff;
+
+    /* Status colors - text */
+    --status-success-text: #166534;
+    --status-warning-text: #b07b2c;
+    --status-error-text: #991b1b;
+    --status-info-text: #174ea6;
+    --status-neutral-text: #4a5568;
+    --status-purple-text: #5521b5;
+
+    /* Alert colors */
+    --alert-error: #e44;
+    --alert-orange: #f90;
+
+    /* Typography */
     --f: -apple-system,BlinkMacSystemFont,sans-serif;
+
+    /* Spacing */
     --r: 6px;
     --fw: 343px
   }

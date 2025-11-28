@@ -1,4 +1,22 @@
 // script.js
+
+// Shared Stripe card element styles
+const STRIPE_CARD_STYLES = {
+  style: {
+    base: {
+      color: '#32325d',
+      fontFamily: '"Helvetica Neue", Helvetica, sans-serif',
+      fontSmoothing: 'antialiased',
+      fontSize: '16px',
+      '::placeholder': { color: '#aab7c4' }
+    },
+    invalid: {
+      color: '#fa755a',
+      iconColor: '#fa755a'
+    }
+  }
+};
+
 class PaymentForm {
   constructor() {
     this.initializeProperties();
@@ -59,21 +77,7 @@ class PaymentForm {
   }
 
   getCardElementStyles() {
-    return {
-      style: {
-        base: {
-          color: '#32325d',
-          fontFamily: '"Helvetica Neue", Helvetica, sans-serif',
-          fontSmoothing: 'antialiased',
-          fontSize: '16px',
-          '::placeholder': { color: '#aab7c4' }
-        },
-        invalid: {
-          color: '#fa755a',
-          iconColor: '#fa755a'
-        }
-      }
-    };
+    return STRIPE_CARD_STYLES;
   }
 
   attachEventListeners() {
@@ -321,18 +325,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const { publicKey } = await fetchStripeKey();
       stripe = Stripe(publicKey);
       const elements = stripe.elements();
-      card = elements.create('card', {
-        style: {
-          base: {
-            color: '#32325d',
-            fontFamily: 'Helvetica Neue, Helvetica, sans-serif',
-            fontSmoothing: 'antialiased',
-            fontSize: '16px',
-            '::placeholder': { color: '#aab7c4' }
-          },
-          invalid: { color: '#fa755a', iconColor: '#fa755a' }
-        }
-      });
+      card = elements.create('card', STRIPE_CARD_STYLES);
       card.mount('#card-element');
       card.on('change', ({error}) => showError(error?.message || ''));
     }

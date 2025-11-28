@@ -83,7 +83,7 @@
                 <a href="{{ url_for('admin.export_season_members', season_id=season.id) }}" class="button button-small">Export</a>
                 <button
                   class="button button-small button-danger"
-                  onclick="confirmDelete('{{ season.id }}', '{{ season.name }}')"
+                  onclick="confirmDelete('season', '{{ season.id }}', '{{ season.name }}')"
                 >
                   Delete
                 </button>
@@ -95,12 +95,6 @@
       </table>
     </div>
 
-    <script>
-      function confirmDelete(seasonId, seasonName) {
-        if (confirm(`Are you sure you want to delete the season "${seasonName}"?`)) {
-          window.location.href = `/admin/seasons/${seasonId}/delete`;
-        }
-      }
-    </script>
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
   </body>
 </html> 

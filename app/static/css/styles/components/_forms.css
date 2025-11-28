@@ -27,7 +27,7 @@ label {
   padding: 5px 12px;
   height: 44px;
   width: 100%;
-  transition: .2s;
+  transition: 0.2s;
   background: #fff;
   appearance: none;
   color: var(--p)

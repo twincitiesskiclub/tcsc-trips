@@ -8,7 +8,7 @@ button,.trip-button {
     margin-top: 16px;
     font: 600 16px var(--f);
     cursor: pointer;
-    transition: .2s;
+    transition: 0.2s;
     display: block;
     width: 100%
   }
