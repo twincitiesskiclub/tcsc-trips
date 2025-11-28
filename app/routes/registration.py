@@ -1,7 +1,11 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
+from pytz import timezone
 from ..models import db, Season, UserSeason, User
+from ..constants import DATE_FORMAT
 from datetime import datetime
 from ..utils import get_current_times, normalize_email
+
+CENTRAL_TZ = timezone('America/Chicago')
 
 registration = Blueprint('registration', __name__)
 
@@ -22,8 +26,8 @@ def seasons_listing():
     can_register = False
     if season:
         # Determine if registration is open for returning or new
-        returning_open = season.returning_start and season.returning_start <= now <= season.returning_end
-        new_open = season.new_start and season.new_start <= now <= season.new_end
+        returning_open = season.is_returning_open(now)
+        new_open = season.is_new_open(now)
         if returning_open or new_open:
             can_register = True
         if returning_open and not new_open:
@@ -54,21 +58,6 @@ def season_register(season_id):
     current_time = times['central']  # Use localized time for potential display
     now_utc = times['utc']  # Use UTC for comparisons
 
-    # Helper to check if registration is open for any type
-    def is_registration_open_at_all(season, now):
-        returning_open = season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end
-        new_open = season.new_start and season.new_end and season.new_start <= now <= season.new_end
-        return returning_open or new_open
-
-    # Helper to check if registration is open for a specific type
-    def is_registration_open_for_type(season, now, is_returning):
-        if is_returning:
-            # Ensure returning dates exist before checking
-            return season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end
-        else:
-            # Ensure new dates exist before checking
-            return season.new_start and season.new_end and season.new_start <= now <= season.new_end
-
     if request.method == 'POST':
         try:
             form = request.form
@@ -80,7 +69,8 @@ def season_register(season_id):
             is_returning = bool(user and getattr(user, 'is_returning', False))
 
             # Check if registration window is open for this user type
-            if not is_registration_open_for_type(season, now_utc, is_returning):
+            member_type_str = 'returning' if is_returning else 'new'
+            if not season.is_open_for(member_type_str, now_utc):
                 status_msg = "returning members" if is_returning else "new members"
                 flash(f'Sorry, the registration window for {status_msg} is currently closed.', 'error')
                 return redirect(url_for('registration.season_register', season_id=season_id))
@@ -115,8 +105,8 @@ def season_register(season_id):
             dob_str = form['dob']
             if dob_str:
                 try:
-                    user_fields['date_of_birth'] = datetime.strptime(dob_str, '%Y-%m-%d').date()
-                except Exception:
+                    user_fields['date_of_birth'] = datetime.strptime(dob_str, DATE_FORMAT).date()
+                except ValueError as e:
                     flash('Invalid date format for Date of Birth. Please use YYYY-MM-DD.', 'error')
                     return redirect(url_for('registration.season_register', season_id=season_id))
 
@@ -161,16 +151,16 @@ def season_register(season_id):
             return redirect(url_for('registration.season_register', season_id=season_id))
 
     # --- GET Request Handling ---
-    if not is_registration_open_at_all(season, now_utc):
+    if not season.is_any_registration_open(now_utc):
         # Determine the appropriate message based on timing
         message = "Registration is currently closed for this season."
         # Check timezone handling for accurate display
         if season.returning_start and now_utc < season.returning_start:
-            message = f"Registration for returning members opens on {season.returning_start.astimezone(central).strftime('%b %d, %Y %I:%M %p %Z')}."
+            message = f"Registration for returning members opens on {season.returning_start.astimezone(CENTRAL_TZ).strftime('%b %d, %Y %I:%M %p %Z')}."
         elif season.new_start and now_utc < season.new_start:
              # Check if returning window might still be open or hasn't started
             if not (season.returning_start and season.returning_start <= now_utc):
-                 message = f"Registration for new members opens on {season.new_start.astimezone(central).strftime('%b %d, %Y %I:%M %p %Z')}."
+                 message = f"Registration for new members opens on {season.new_start.astimezone(CENTRAL_TZ).strftime('%b %d, %Y %I:%M %p %Z')}."
 
         flash(message, 'info')
         return redirect(url_for('main.get_home_page')) # Redirect to home page which shows status
@@ -184,9 +174,7 @@ def season_detail(season_id):
     now_utc = datetime.utcnow()
 
     # Check if registration is currently open for returning or new members
-    returning_open = season.returning_start and season.returning_end and season.returning_start <= now_utc <= season.returning_end
-    new_open = season.new_start and season.new_end and season.new_start <= now_utc <= season.new_end
-    is_registration_open = returning_open or new_open
+    is_registration_open = season.is_any_registration_open(now_utc)
 
     # # --- Redirect if registration is NOT open --- Currently allow viewing details even if closed
     # if not is_registration_open:

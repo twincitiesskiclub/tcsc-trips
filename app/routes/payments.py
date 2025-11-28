@@ -1,10 +1,9 @@
 from flask import Blueprint, jsonify, request
-import json
 import stripe
 import os
 from ..models import db, Payment, Season, UserSeason, User
 from ..auth import admin_required
-from ..constants import MemberType
+from ..constants import MemberType, StripeEvent
 from ..utils import normalize_email
 from datetime import datetime
 
@@ -17,8 +16,8 @@ def get_stripe_key():
 @payments.route('/create-payment-intent', methods=['POST'])
 def create_payment():
     try:
-        data = json.loads(request.data)
-        email = data.get('email', '')
+        data = request.get_json()
+        email = normalize_email(data.get('email', ''))
         name = data.get('name', '')
         amount = float(data.get('amount', 135.00))
         trip_id = request.referrer.split('/')[-1] if request.referrer else 'generic-trip'
@@ -51,7 +50,7 @@ def create_payment():
 @payments.route('/webhook', methods=['POST'])
 def webhook_received():
     webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
-    request_data = json.loads(request.data)
+    request_data = request.get_json()
 
     try:
         if webhook_secret:
@@ -71,17 +70,17 @@ def webhook_received():
         event_type = event['type']
         data_object = data['object']
 
-        if event_type == 'payment_intent.amount_capturable_updated':
+        if event_type == StripeEvent.PAYMENT_CAPTURABLE:
             # Create database entry only when payment is successfully authorized
             payment_intent = data_object
             member_type = payment_intent.metadata.get('member_type')
             season_id = payment_intent.metadata.get('season_id')
-            email = payment_intent.metadata.get('email')
+            email = normalize_email(payment_intent.metadata.get('email') or '')
             name = payment_intent.metadata.get('name')
             # Only for NEW members
             if member_type == MemberType.NEW.value:
                 # Find or create user
-                user = User.query.filter_by(email=email).first()
+                user = User.query.filter_by(email=email).one_or_none()
                 if not user:
                     # Split name if possible
                     first_name, last_name = (name.split(' ', 1) + [""])[:2]
@@ -89,7 +88,7 @@ def webhook_received():
                     db.session.add(user)
                     db.session.commit()
                 # Check if UserSeason exists
-                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).first()
+                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).one_or_none()
                 if not user_season:
                     user_season = UserSeason(
                         user_id=user.id,
@@ -100,21 +99,21 @@ def webhook_received():
                     )
                     db.session.add(user_season)
                     db.session.commit()
-        elif event_type == 'payment_intent.succeeded':
+        elif event_type == StripeEvent.PAYMENT_SUCCEEDED:
             payment_intent = data_object
             member_type = payment_intent.metadata.get('member_type')
             season_id = payment_intent.metadata.get('season_id')
-            email = payment_intent.metadata.get('email')
+            email = normalize_email(payment_intent.metadata.get('email') or '')
             # Find user
-            user = User.query.filter_by(email=email).first()
+            user = User.query.filter_by(email=email).one_or_none()
             if user:
-                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).first()
+                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).one_or_none()
                 if user_season:
                     user_season.status = 'ACTIVE'
                     user_season.payment_date = datetime.utcnow().date()
                     user.status = 'active'
                     db.session.commit()
-        elif event_type == 'payment_intent.canceled':
+        elif event_type == StripeEvent.PAYMENT_CANCELED:
             # Clean up any existing payment record if it exists
             payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
             if payment:

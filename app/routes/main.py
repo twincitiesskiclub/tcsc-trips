@@ -26,12 +26,7 @@ def get_home_page():
         .first()
     )
     
-    is_season_registration_open = False
-    if season:
-        # Check if registration is currently open for returning or new members
-        returning_open = season.returning_start and season.returning_end and season.returning_start <= now_utc <= season.returning_end
-        new_open = season.new_start and season.new_end and season.new_start <= now_utc <= season.new_end
-        is_season_registration_open = returning_open or new_open
+    is_season_registration_open = season.is_any_registration_open(now_utc) if season else False
 
     return render_template('index.html', 
                            trips=active_trips, 

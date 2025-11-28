@@ -1,12 +1,34 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, Response
 from ..auth import admin_required
-from ..models import db, Payment, Trip, Season, User, UserSeason
+from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR
 from datetime import datetime, timedelta
 import csv
 from io import StringIO
 
 admin = Blueprint('admin', __name__)
+
+
+def delete_entity(model, entity_id, entity_name, redirect_endpoint):
+    """Generic delete handler for admin CRUD operations.
+
+    Args:
+        model: SQLAlchemy model class
+        entity_id: ID of the entity to delete
+        entity_name: Human-readable name for flash messages (e.g., 'Trip', 'Season')
+        redirect_endpoint: Flask endpoint to redirect to after deletion
+
+    Returns:
+        Flask redirect response
+    """
+    entity = model.query.get_or_404(entity_id)
+    try:
+        db.session.delete(entity)
+        db.session.commit()
+        flash(f'{entity_name} deleted successfully!', 'success')
+    except Exception as e:
+        flash(f'Error deleting {entity_name.lower()}: {str(e)}', 'error')
+    return redirect(url_for(redirect_endpoint))
 
 
 def validate_season_form(form):
@@ -170,15 +192,7 @@ def edit_trip(trip_id):
 @admin.route('/admin/trips/<int:trip_id>/delete')
 @admin_required
 def delete_trip(trip_id):
-    trip = Trip.query.get_or_404(trip_id)
-    try:
-        db.session.delete(trip)
-        db.session.commit()
-        flash('Trip deleted successfully!', 'success')
-    except Exception as e:
-        flash(f'Error deleting trip: {str(e)}', 'error')
-    
-    return redirect(url_for('admin.get_admin_trips'))
+    return delete_entity(Trip, trip_id, 'Trip', 'admin.get_admin_trips')
 
 @admin.route('/admin/seasons')
 @admin_required
@@ -230,14 +244,7 @@ def edit_season(season_id):
 @admin.route('/admin/seasons/<int:season_id>/delete')
 @admin_required
 def delete_season(season_id):
-    season = Season.query.get_or_404(season_id)
-    try:
-        db.session.delete(season)
-        db.session.commit()
-        flash('Season deleted successfully!', 'success')
-    except Exception as e:
-        flash(f'Error deleting season: {str(e)}', 'error')
-    return redirect(url_for('admin.get_admin_seasons'))
+    return delete_entity(Season, season_id, 'Season', 'admin.get_admin_seasons')
 
 
 @admin.route('/admin/seasons/<int:season_id>/export')
@@ -376,8 +383,8 @@ def edit_user(user_id):
             dob = request.form.get('date_of_birth')
             if dob:
                 try:
-                    user.date_of_birth = datetime.strptime(dob, '%Y-%m-%d').date()
-                except Exception:
+                    user.date_of_birth = datetime.strptime(dob, DATE_FORMAT).date()
+                except ValueError as e:
                     flash('Invalid date format for Date of Birth. Please use YYYY-MM-DD.', 'error')
             update_if_present('preferred_technique', request.form.get('preferred_technique'))
             update_if_present('tshirt_size', request.form.get('tshirt_size'))
@@ -393,7 +400,6 @@ def edit_user(user_id):
                 if user.slack_user:
                     user.slack_user.slack_uid = slack_uid
                 else:
-                    from ..models import SlackUser
                     slack_user = SlackUser(slack_uid=slack_uid, full_name=user.full_name, email=user.email)
                     db.session.add(slack_user)
                     db.session.flush()

@@ -125,7 +125,7 @@ class User(db.Model):
         # This includes users who were "new" but made it through the lottery
         # Excludes PENDING_LOTTERY and DROPPED users who never made it through
         # Check both uppercase and lowercase for compatibility with existing data
-        return any(us.status in ('ACTIVE', 'active') for us in self.user_seasons)
+        return any(us.status.upper() == 'ACTIVE' for us in self.user_seasons)
 
     __table_args__ = (
         db.CheckConstraint(
@@ -171,6 +171,18 @@ class Season(db.Model):
                 return self.returning_start <= when <= self.returning_end
         return False
 
+    def is_returning_open(self, when: datetime = None) -> bool:
+        """Check if returning member registration is open at the given time."""
+        return self.is_open_for('returning', when)
+
+    def is_new_open(self, when: datetime = None) -> bool:
+        """Check if new member registration is open at the given time."""
+        return self.is_open_for('new', when)
+
+    def is_any_registration_open(self, when: datetime = None) -> bool:
+        """Check if any registration (new or returning) is open at the given time."""
+        return self.is_returning_open(when) or self.is_new_open(when)
+
 
 class UserSeason(db.Model):
     __tablename__ = 'user_seasons'
@@ -182,6 +194,7 @@ class UserSeason(db.Model):
     payment_date = db.Column(db.Date)
     status = db.Column(db.String(50), nullable=False, default='pending')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f'<UserSeason user={self.user_id} season={self.season_id} status={self.status}>'
