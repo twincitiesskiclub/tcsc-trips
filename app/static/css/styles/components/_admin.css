@@ -185,53 +185,53 @@ th, td {
 
 /* Additional Payment Status Badges */
 .status-pending {
-  background: #fff3dc;
-  color: #b07b2c;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
 }
 
 .status-processing {
-  background: #e8f0fe;
-  color: #174ea6;
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
 }
 
 .status-refunded {
-  background: #fde7e7;
-  color: #a61717;
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
 }
 
 .status-unknown {
-  background: #e2e8f0;
-  color: #4a5568;
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-text);
 }
 
 .status-success {
-  background: #c6f6d5;
-  color: #166534;
+  background: var(--status-success-bg);
+  color: var(--status-success-text);
 }
 
 .status-requires_capture {
-  background: #faf5ff;
-  color: #5521b5;
+  background: var(--status-purple-bg);
+  color: var(--status-purple-text);
 }
 
 .status-requires_payment_method {
-  background: #fff3dc;
-  color: #b07b2c;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
 }
 
 .status-requires_confirmation {
-  background: #fff3dc;
-  color: #b07b2c;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
 }
 
 .status-requires_action {
-  background: #fff3dc;
-  color: #b07b2c;
+  background: var(--status-warning-bg);
+  color: var(--status-warning-text);
 }
 
 .status-canceled {
-  background: #fee2e2;
-  color: #991b1b;
+  background: var(--status-error-bg);
+  color: var(--status-error-text);
 }
 
 /* Buttons */

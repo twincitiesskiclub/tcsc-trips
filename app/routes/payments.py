@@ -3,7 +3,7 @@ import stripe
 import os
 from ..models import db, Payment, Season, UserSeason, User
 from ..auth import admin_required
-from ..constants import MemberType, StripeEvent
+from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus
 from ..utils import normalize_email
 from datetime import datetime
 
@@ -45,7 +45,7 @@ def create_payment():
             }
         })
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        return jsonify({'error': str(e)}), 500
 
 @payments.route('/webhook', methods=['POST'])
 def webhook_received():
@@ -80,22 +80,22 @@ def webhook_received():
             # Only for NEW members
             if member_type == MemberType.NEW.value:
                 # Find or create user
-                user = User.query.filter_by(email=email).one_or_none()
+                user = User.get_by_email(email)
                 if not user:
                     # Split name if possible
                     first_name, last_name = (name.split(' ', 1) + [""])[:2]
-                    user = User(email=email, first_name=first_name, last_name=last_name, status='pending')
+                    user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.PENDING)
                     db.session.add(user)
                     db.session.commit()
                 # Check if UserSeason exists
-                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).one_or_none()
+                user_season = UserSeason.get_for_user_season(user.id, season_id)
                 if not user_season:
                     user_season = UserSeason(
                         user_id=user.id,
                         season_id=season_id,
                         registration_type=member_type,
                         registration_date=datetime.utcnow().date(),
-                        status='PENDING_LOTTERY'
+                        status=UserSeasonStatus.PENDING_LOTTERY
                     )
                     db.session.add(user_season)
                     db.session.commit()
@@ -105,13 +105,13 @@ def webhook_received():
             season_id = payment_intent.metadata.get('season_id')
             email = normalize_email(payment_intent.metadata.get('email') or '')
             # Find user
-            user = User.query.filter_by(email=email).one_or_none()
+            user = User.get_by_email(email)
             if user:
-                user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).one_or_none()
+                user_season = UserSeason.get_for_user_season(user.id, season_id)
                 if user_season:
-                    user_season.status = 'ACTIVE'
+                    user_season.status = UserSeasonStatus.ACTIVE
                     user_season.payment_date = datetime.utcnow().date()
-                    user.status = 'active'
+                    user.status = UserStatus.ACTIVE
                     db.session.commit()
         elif event_type == StripeEvent.PAYMENT_CANCELED:
             # Clean up any existing payment record if it exists
@@ -227,7 +227,7 @@ def create_season_payment_intent():
         if not season or not season.price_cents:
             return jsonify({'error': 'Invalid season or price'}), 400
         # Derive member_type on the backend
-        user = User.query.filter_by(email=email).one_or_none()
+        user = User.get_by_email(email)
         member_type = 'returning' if user and user.is_returning else 'new'
         # Determine capture method
         if member_type == 'new':
