@@ -12,13 +12,22 @@ button,.trip-button {
     display: block;
     width: 100%
   }
-  
+
   button:hover,.trip-button:hover {
     opacity: .9;
     transform: translateY(-1px)
   }
-  
+
   button:active {
     transform: translateY(1px);
     opacity: .8
   }
+
+/*----------  Back Link Container  ----------*/
+.back-link-container {
+  margin-top: 1.5em;
+}
+
+.back-link-container--lg {
+  margin-top: 2em;
+}
