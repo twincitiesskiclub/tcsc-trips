@@ -1,38 +1,356 @@
 {% extends 'admin/admin_base.html' %}
-{% from 'macros.html' import user_season_badge %}
+{% block extra_css %}
+<style>
+/* Users Grid Styles */
+.users-grid-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+}
+
+/* Toolbar */
+.users-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+/* Unified control height and styling */
+.toolbar-control {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 400 13px var(--f);
+    color: #344054;
+    box-sizing: border-box;
+}
+
+.toolbar-control:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 1px var(--p);
+}
+
+/* Segmented Button Group */
+.btn-group {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+}
+
+.btn-group .view-btn {
+    /* Reset global button styles */
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    padding: 7px 14px;
+    border-right: 1px solid #d0d5dd;
+    background: transparent;
+    cursor: pointer;
+    font: 500 13px var(--f);
+    color: #344054;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-group .view-btn:last-child {
+    border-right: none;
+}
+
+.btn-group .view-btn:hover {
+    background: #f9fafb;
+}
+
+.btn-group .view-btn.active {
+    background: var(--p);
+    color: white;
+}
+
+/* Dropdowns */
+.users-toolbar select {
+    height: 32px;
+    padding: 0 28px 0 10px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+    font: 400 13px var(--f);
+    color: #344054;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+}
+
+.users-toolbar select:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+#global-season-select {
+    min-width: 130px;
+}
+
+/* Member Count Badge */
+.member-count {
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    background: #f2f4f7;
+    border: 1px solid #e4e7ec;
+    border-radius: 6px;
+    font: 500 13px var(--f);
+    color: #475467;
+    white-space: nowrap;
+}
+
+/* Search Input */
+#users-search {
+    height: 32px;
+    width: 160px;
+    padding: 0 10px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 400 13px var(--f);
+    color: #344054;
+}
+
+#users-search::placeholder {
+    color: #98a2b3;
+}
+
+#users-search:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+/* Table Footer */
+.table-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e4e7ec;
+}
+
+.table-footer .button-secondary {
+    height: 36px;
+    padding: 0 16px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 500 13px var(--f);
+    color: #344054;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.table-footer .button-secondary:hover {
+    background: #f9fafb;
+    border-color: #98a2b3;
+}
+
+/* Page Title */
+.page-title {
+    margin: 0 0 12px 0;
+    font-size: 20px;
+    color: var(--p);
+}
+
+/* Tabulator theme overrides */
+.tabulator {
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    font-family: var(--f);
+}
+
+.tabulator .tabulator-header {
+    background: var(--p);
+    color: white;
+    border-bottom: none;
+}
+
+.tabulator .tabulator-header .tabulator-col {
+    background: var(--p);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+    padding: 10px 8px;
+}
+
+.tabulator-row.tabulator-row-even {
+    background: #f9f9f9;
+}
+
+.tabulator-row:hover {
+    background: #f0f0f0;
+}
+
+.tabulator-cell {
+    padding: 8px;
+}
+
+.tabulator-cell a {
+    color: var(--p);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.tabulator-cell a:hover {
+    text-decoration: underline;
+}
+
+/* Modal Styles */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+}
+
+.modal-content {
+    position: relative;
+    background: white;
+    border-radius: var(--r);
+    width: 90%;
+    max-width: 500px;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--g-b);
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+}
+
+.modal-body {
+    padding: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 20px;
+    border-top: 1px solid var(--g-b);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--g-m);
+    line-height: 1;
+}
+
+.modal-close:hover {
+    color: var(--p);
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<h1>Users</h1>
-<table class="table table-striped">
-    <thead>
-        <tr>
-            <th>Full Name</th>
-            <th>Email</th>
-            <th>Slack UID</th>
-            <th>Phone</th>
-            <th>Active This Season?</th>
-            <th>Actions</th>
-        </tr>
-    </thead>
-    <tbody>
-        {% for user in users %}
-        <tr>
-            <td>{{ user.full_name }}</td>
-            <td>{{ user.email }}</td>
-            <td>{{ user.slack_user.slack_uid if user.slack_user else '' }}</td>
-            <td>{{ user.phone or '' }}</td>
-            <td>
-                {% if current_season and user.id in user_season_map %}
-                    {% set us = user_season_map[user.id] %}
-                    {{ user_season_badge(us.status) }}
-                {% else %}
-                    <span class="badge bg-secondary">No</span>
-                {% endif %}
-            </td>
-            <td>
-                <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="btn btn-sm btn-primary">Edit</a>
-            </td>
-        </tr>
-        {% endfor %}
-    </tbody>
-</table>
-{% endblock %} 
+<div class="users-grid-container">
+    <h1 class="page-title" id="view-title">Members</h1>
+
+    <!-- Toolbar -->
+    <div class="users-toolbar">
+        <div class="btn-group">
+            <button class="view-btn active" data-view="all">All</button>
+            <button class="view-btn" data-view="current">Current</button>
+            <button class="view-btn" data-view="inactive">Inactive</button>
+        </div>
+        <select id="global-season-select">
+            <option value="">Season...</option>
+            {% for season in all_seasons %}
+            <option value="{{ season.id }}">{{ season.name }}</option>
+            {% endfor %}
+        </select>
+        <span id="member-count" class="member-count">0 members</span>
+        <input type="text" id="users-search" placeholder="Search...">
+        <select id="status-filter">
+            <option value="">Status</option>
+            <option value="active">Active</option>
+            <option value="pending">Pending</option>
+            <option value="inactive">Inactive</option>
+            <option value="dropped">Dropped</option>
+        </select>
+        <select id="season-filter">
+            <option value="">Season Status</option>
+            <option value="ACTIVE">Active</option>
+            <option value="PENDING_LOTTERY">Pending Lottery</option>
+            <option value="DROPPED">Dropped</option>
+            <option value="registered">Registered</option>
+            <option value="not_registered">Not Registered</option>
+        </select>
+    </div>
+
+    <div id="users-table"></div>
+
+    <div class="table-footer">
+        <button id="export-csv" class="button-secondary">Export CSV</button>
+    </div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modal-title">Edit Member</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <form id="edit-user-form" method="POST">
+                <input type="hidden" name="form_type" value="quick">
+                <div id="modal-form-fields"></div>
+            </form>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="button button-secondary" onclick="closeModal()">Cancel</button>
+            <a href="#" class="button button-secondary" id="view-details-link">View Details</a>
+            <button type="submit" form="edit-user-form" class="button">Save Changes</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_users.js') }}"></script>
+{% endblock %}
