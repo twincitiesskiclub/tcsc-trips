@@ -5,6 +5,7 @@ import os
 from ..models import db, Payment, Season, UserSeason, User
 from ..auth import admin_required
 from ..constants import MemberType
+from ..utils import normalize_email
 from datetime import datetime
 
 payments = Blueprint('payments', __name__)
@@ -45,7 +46,7 @@ def create_payment():
             }
         })
     except Exception as e:
-        return jsonify(error=str(e)), 403
+        return jsonify(error=str(e)), 500
 
 @payments.route('/webhook', methods=['POST'])
 def webhook_received():
@@ -219,7 +220,7 @@ def create_season_payment_intent():
     try:
         data = request.get_json()
         season_id = data.get('season_id')
-        email = data.get('email', '').strip().lower()
+        email = normalize_email(data.get('email', ''))
         name = data.get('name', '')
         if not all([season_id, email, name]):
             return jsonify({'error': 'Missing required fields'}), 400
@@ -258,4 +259,4 @@ def create_season_payment_intent():
             }
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 403
+        return jsonify({'error': str(e)}), 500

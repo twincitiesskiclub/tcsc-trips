@@ -1,17 +1,15 @@
 from flask import Blueprint, render_template
 from ..models import Trip, Season
-from datetime import datetime
-import pytz
+from ..utils import get_current_times
 
 main = Blueprint('main', __name__)
 
+
 @main.route('/')
 def get_home_page():
-    # Get current time in US Central timezone for display consistency
-    central = pytz.timezone('America/Chicago')
-    now_central = datetime.now(central)
-    # Use UTC for database comparisons
-    now_utc = datetime.utcnow()
+    # Get current times for display (Central) and database comparisons (UTC)
+    times = get_current_times()
+    now_utc = times['utc']
 
     active_trips = Trip.query.filter(
         Trip.status == 'active',
