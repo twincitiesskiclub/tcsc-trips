@@ -5,6 +5,9 @@ import pytz
 
 from .constants import TIMEZONE, DATE_FORMAT, DATETIME_FORMAT
 
+# Pre-configured timezone object for Central time
+CENTRAL_TZ = pytz.timezone(TIMEZONE)
+
 
 def normalize_email(email: str) -> str:
     """Normalize email: strip whitespace and convert to lowercase."""
@@ -27,11 +30,34 @@ def get_current_times() -> dict:
     Returns:
         dict with 'central' and 'utc' datetime objects
     """
-    central = pytz.timezone(TIMEZONE)
     return {
-        'central': datetime.now(central),
+        'central': datetime.now(CENTRAL_TZ),
         'utc': datetime.utcnow()
     }
+
+
+def format_datetime_central(dt: datetime, fmt: str = '%b %d, %Y %I:%M %p %Z') -> str:
+    """Format a datetime in Central timezone.
+
+    Args:
+        dt: datetime object (timezone-aware or naive UTC)
+        fmt: strftime format string
+
+    Returns:
+        Formatted datetime string in Central time
+    """
+    if dt is None:
+        return ''
+    return dt.astimezone(CENTRAL_TZ).strftime(fmt)
+
+
+def today_central() -> date:
+    """Get today's date in Central timezone.
+
+    Use this for Date columns that represent 'the day the user did something'
+    (registration_date, payment_date) rather than datetime.utcnow().date().
+    """
+    return datetime.now(CENTRAL_TZ).date()
 
 
 def get_user_member_type(user) -> str:

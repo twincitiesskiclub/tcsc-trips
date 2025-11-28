@@ -4,7 +4,8 @@ import os
 from ..models import db, Payment, Season, UserSeason, User
 from ..auth import admin_required
 from ..constants import MemberType, StripeEvent
-from ..utils import normalize_email
+from ..errors import json_error, json_success
+from ..utils import normalize_email, today_central
 from datetime import datetime
 
 payments = Blueprint('payments', __name__)
@@ -45,7 +46,7 @@ def create_payment():
             }
         })
     except Exception as e:
-        return jsonify(error=str(e)), 500
+        return json_error(str(e), 500)
 
 @payments.route('/webhook', methods=['POST'])
 def webhook_received():
@@ -94,7 +95,7 @@ def webhook_received():
                         user_id=user.id,
                         season_id=season_id,
                         registration_type=member_type,
-                        registration_date=datetime.utcnow().date(),
+                        registration_date=today_central(),
                         status='PENDING_LOTTERY'
                     )
                     db.session.add(user_season)
@@ -110,7 +111,7 @@ def webhook_received():
                 user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season_id).one_or_none()
                 if user_season:
                     user_season.status = 'ACTIVE'
-                    user_season.payment_date = datetime.utcnow().date()
+                    user_season.payment_date = today_central()
                     user.status = 'active'
                     db.session.commit()
         elif event_type == StripeEvent.PAYMENT_CANCELED:
@@ -120,10 +121,10 @@ def webhook_received():
                 db.session.delete(payment)
                 db.session.commit()
 
-        return jsonify({'status': 'success'})
+        return json_success()
 
     except Exception as e:
-        return jsonify({'error': str(e)}), 400
+        return json_error(str(e))
 
 @payments.route('/admin/payments/<int:payment_id>/capture', methods=['POST'])
 @admin_required
@@ -136,25 +137,20 @@ def capture_payment(payment_id):
         
         # Check if the payment is in a capturable state
         if intent.status != 'requires_capture':
-            return jsonify({
-                'error': f'Payment cannot be captured - current status: {intent.status}'
-            }), 400
+            return json_error(f'Payment cannot be captured - current status: {intent.status}')
 
         # Attempt to capture the payment
         captured_intent = stripe.PaymentIntent.capture(payment.payment_intent_id)
         
         # Verify the capture was successful
         if captured_intent.status != 'succeeded':
-            return jsonify({
-                'error': f'Capture failed - status: {captured_intent.status}'
-            }), 400
+            return json_error(f'Capture failed - status: {captured_intent.status}')
 
         # Update payment status in database
         payment.status = captured_intent.status
         db.session.commit()
         
-        return jsonify({
-            'status': 'success',
+        return json_success({
             'payment': {
                 'id': payment.id,
                 'status': payment.status,
@@ -162,9 +158,9 @@ def capture_payment(payment_id):
             }
         })
     except stripe.error.StripeError as e:
-        return jsonify({'error': str(e)}), 400
+        return json_error(str(e))
     except Exception as e:
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        return json_error('An unexpected error occurred', 500)
 
 @payments.route('/admin/payments/<int:payment_id>/refund', methods=['POST'])
 @admin_required
@@ -177,9 +173,7 @@ def refund_payment(payment_id):
         
         # Check if the payment can be refunded
         if intent.status not in ['succeeded', 'requires_capture']:
-            return jsonify({
-                'error': f'Payment cannot be refunded - current status: {intent.status}'
-            }), 400
+            return json_error(f'Payment cannot be refunded - current status: {intent.status}')
 
         # If payment is still on hold (requires_capture), we need to cancel it instead of refunding
         if intent.status == 'requires_capture':
@@ -193,16 +187,13 @@ def refund_payment(payment_id):
             
             # Verify the refund was successful
             if refund.status != 'succeeded':
-                return jsonify({
-                    'error': f'Refund failed - status: {refund.status}'
-                }), 400
+                return json_error(f'Refund failed - status: {refund.status}')
                 
             payment.status = 'refunded'
 
         db.session.commit()
         
-        return jsonify({
-            'status': 'success',
+        return json_success({
             'payment': {
                 'id': payment.id,
                 'status': payment.status,
@@ -210,9 +201,9 @@ def refund_payment(payment_id):
             }
         })
     except stripe.error.StripeError as e:
-        return jsonify({'error': str(e)}), 400
+        return json_error(str(e))
     except Exception as e:
-        return jsonify({'error': 'An unexpected error occurred'}), 500
+        return json_error('An unexpected error occurred', 500)
 
 @payments.route('/create-season-payment-intent', methods=['POST'])
 def create_season_payment_intent():
@@ -222,10 +213,10 @@ def create_season_payment_intent():
         email = normalize_email(data.get('email', ''))
         name = data.get('name', '')
         if not all([season_id, email, name]):
-            return jsonify({'error': 'Missing required fields'}), 400
+            return json_error('Missing required fields')
         season = Season.query.get(season_id)
         if not season or not season.price_cents:
-            return jsonify({'error': 'Invalid season or price'}), 400
+            return json_error('Invalid season or price')
         # Derive member_type on the backend
         user = User.query.filter_by(email=email).one_or_none()
         member_type = 'returning' if user and user.is_returning else 'new'
@@ -235,7 +226,7 @@ def create_season_payment_intent():
         elif member_type == 'returning':
             capture_method = 'automatic'
         else:
-            return jsonify({'error': 'Invalid member_type'}), 400
+            return json_error('Invalid member_type')
         intent = stripe.PaymentIntent.create(
             amount=season.price_cents,
             currency='usd',
@@ -258,4 +249,4 @@ def create_season_payment_intent():
             }
         })
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        return json_error(str(e), 500)

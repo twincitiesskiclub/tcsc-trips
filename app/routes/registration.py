@@ -1,11 +1,9 @@
-from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
-from pytz import timezone
+from flask import Blueprint, render_template, request, redirect, url_for, jsonify
 from ..models import db, Season, UserSeason, User
 from ..constants import DATE_FORMAT
 from datetime import datetime
-from ..utils import get_current_times, normalize_email
-
-CENTRAL_TZ = timezone('America/Chicago')
+from ..errors import flash_error, flash_info
+from ..utils import get_current_times, normalize_email, format_datetime_central, today_central
 
 registration = Blueprint('registration', __name__)
 
@@ -72,17 +70,17 @@ def season_register(season_id):
             member_type_str = 'returning' if is_returning else 'new'
             if not season.is_open_for(member_type_str, now_utc):
                 status_msg = "returning members" if is_returning else "new members"
-                flash(f'Sorry, the registration window for {status_msg} is currently closed.', 'error')
+                flash_error(f'Sorry, the registration window for {status_msg} is currently closed.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
 
             client_claimed_status = form['status']
             # Check consistency between claimed status and actual status
             if client_claimed_status == 'returning_former' and not is_returning:
-                flash('Your email is not associated with a returning member. Please register as a New Member.', 'error')
+                flash_error('Your email is not associated with a returning member. Please register as a New Member.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
             if client_claimed_status == 'new' and is_returning:
-                 flash('Your email is associated with a returning member. Please register as a Returning Member.', 'error')
-                 return redirect(url_for('registration.season_register', season_id=season_id))
+                flash_error('Your email is associated with a returning member. Please register as a Returning Member.')
+                return redirect(url_for('registration.season_register', season_id=season_id))
             
             # --- Proceed with form processing only if checks pass ---
             # Collect all personal fields from form
@@ -107,7 +105,7 @@ def season_register(season_id):
                 try:
                     user_fields['date_of_birth'] = datetime.strptime(dob_str, DATE_FORMAT).date()
                 except ValueError as e:
-                    flash('Invalid date format for Date of Birth. Please use YYYY-MM-DD.', 'error')
+                    flash_error('Invalid date format for Date of Birth. Please use YYYY-MM-DD.')
                     return redirect(url_for('registration.season_register', season_id=season_id))
 
             if user:
@@ -122,7 +120,7 @@ def season_register(season_id):
             is_returning = user.is_returning
             client_claimed_status = form['status']
             if client_claimed_status == 'returning_former' and not is_returning:
-                flash('You have no active past membership; register as New.', 'error')
+                flash_error('You have no active past membership; register as New.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
             member_type = 'returning' if is_returning else 'new'
 
@@ -133,7 +131,7 @@ def season_register(season_id):
                     user_id=user.id,
                     season_id=season.id,
                     registration_type=member_type,
-                    registration_date=datetime.utcnow().date(),
+                    registration_date=today_central(),
                     status='ACTIVE' if is_returning else 'PENDING_LOTTERY'
                 )
                 db.session.add(user_season)
@@ -147,7 +145,7 @@ def season_register(season_id):
             payment_hold = not is_returning
             return render_template('season_success.html', season=season, payment_hold=payment_hold)
         except Exception as e:
-            flash(f'Error submitting registration: {str(e)}', 'error')
+            flash_error(f'Error submitting registration: {str(e)}')
             return redirect(url_for('registration.season_register', season_id=season_id))
 
     # --- GET Request Handling ---
@@ -156,13 +154,13 @@ def season_register(season_id):
         message = "Registration is currently closed for this season."
         # Check timezone handling for accurate display
         if season.returning_start and now_utc < season.returning_start:
-            message = f"Registration for returning members opens on {season.returning_start.astimezone(CENTRAL_TZ).strftime('%b %d, %Y %I:%M %p %Z')}."
+            message = f"Registration for returning members opens on {format_datetime_central(season.returning_start)}."
         elif season.new_start and now_utc < season.new_start:
-             # Check if returning window might still be open or hasn't started
+            # Check if returning window might still be open or hasn't started
             if not (season.returning_start and season.returning_start <= now_utc):
-                 message = f"Registration for new members opens on {season.new_start.astimezone(CENTRAL_TZ).strftime('%b %d, %Y %I:%M %p %Z')}."
+                message = f"Registration for new members opens on {format_datetime_central(season.new_start)}."
 
-        flash(message, 'info')
+        flash_info(message)
         return redirect(url_for('main.get_home_page')) # Redirect to home page which shows status
 
     # If GET request and registration is open, render the form

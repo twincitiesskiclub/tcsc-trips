@@ -1,7 +1,8 @@
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, Response
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, Response
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR
+from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
 import csv
 from io import StringIO
@@ -25,9 +26,9 @@ def delete_entity(model, entity_id, entity_name, redirect_endpoint):
     try:
         db.session.delete(entity)
         db.session.commit()
-        flash(f'{entity_name} deleted successfully!', 'success')
+        flash_success(f'{entity_name} deleted successfully!')
     except Exception as e:
-        flash(f'Error deleting {entity_name.lower()}: {str(e)}', 'error')
+        flash_error(f'Error deleting {entity_name.lower()}: {str(e)}')
     return redirect(url_for(redirect_endpoint))
 
 
@@ -160,10 +161,10 @@ def new_trip():
             trip = Trip(**parse_trip_form(request.form))
             db.session.add(trip)
             db.session.commit()
-            flash('Trip created successfully!', 'success')
+            flash_success('Trip created successfully!')
             return redirect(url_for('admin.get_admin_page'))
         except Exception as e:
-            flash(f'Error creating trip: {str(e)}', 'error')
+            flash_error(f'Error creating trip: {str(e)}')
             return redirect(url_for('admin.new_trip'))
 
     return render_template('admin/trip_form.html', trip=None)
@@ -181,10 +182,10 @@ def edit_trip(trip_id):
             for key, value in parsed_data.items():
                 setattr(trip, key, value)
             db.session.commit()
-            flash('Trip updated successfully!', 'success')
+            flash_success('Trip updated successfully!')
             return redirect(url_for('admin.get_admin_trips'))
         except Exception as e:
-            flash(f'Error updating trip: {str(e)}', 'error')
+            flash_error(f'Error updating trip: {str(e)}')
             return redirect(url_for('admin.edit_trip', trip_id=trip_id))
 
     return render_template('admin/trip_form.html', trip=trip)
@@ -206,17 +207,17 @@ def new_season():
     if request.method == 'POST':
         is_valid, error_message, parsed_data = validate_season_form(request.form)
         if not is_valid:
-            flash(error_message, 'error')
+            flash_error(error_message)
             return render_template('admin/season_form.html', season=get_season_form_data(request.form))
 
         try:
             season = Season(**parsed_data)
             db.session.add(season)
             db.session.commit()
-            flash('Season created successfully!', 'success')
+            flash_success('Season created successfully!')
             return redirect(url_for('admin.get_admin_seasons'))
         except Exception as e:
-            flash(f'Error creating season: {str(e)}', 'error')
+            flash_error(f'Error creating season: {str(e)}')
             return redirect(url_for('admin.new_season'))
     return render_template('admin/season_form.html', season=None)
 
@@ -227,17 +228,17 @@ def edit_season(season_id):
     if request.method == 'POST':
         is_valid, error_message, parsed_data = validate_season_form(request.form)
         if not is_valid:
-            flash(error_message, 'error')
+            flash_error(error_message)
             return render_template('admin/season_form.html', season=get_season_form_data(request.form))
 
         try:
             for key, value in parsed_data.items():
                 setattr(season, key, value)
             db.session.commit()
-            flash('Season updated successfully!', 'success')
+            flash_success('Season updated successfully!')
             return redirect(url_for('admin.get_admin_seasons'))
         except Exception as e:
-            flash(f'Error updating season: {str(e)}', 'error')
+            flash_error(f'Error updating season: {str(e)}')
             return redirect(url_for('admin.edit_season', season_id=season_id))
     return render_template('admin/season_form.html', season=season)
 
@@ -365,11 +366,11 @@ def edit_user(user_id):
             user.status = request.form.get('status')
             try:
                 db.session.commit()
-                flash('User email/status updated!', 'success')
+                flash_success('User email/status updated!')
                 feedback = 'quick'
             except Exception as e:
                 db.session.rollback()
-                flash(f'Error updating user: {str(e)}', 'error')
+                flash_error(f'Error updating user: {str(e)}')
         elif form_type == 'full':
             def update_if_present(field, value):
                 if value is not None and value != '':
@@ -385,7 +386,7 @@ def edit_user(user_id):
                 try:
                     user.date_of_birth = datetime.strptime(dob, DATE_FORMAT).date()
                 except ValueError as e:
-                    flash('Invalid date format for Date of Birth. Please use YYYY-MM-DD.', 'error')
+                    flash_error('Invalid date format for Date of Birth. Please use YYYY-MM-DD.')
             update_if_present('preferred_technique', request.form.get('preferred_technique'))
             update_if_present('tshirt_size', request.form.get('tshirt_size'))
             update_if_present('ski_experience', request.form.get('ski_experience'))
@@ -406,10 +407,10 @@ def edit_user(user_id):
                     user.slack_user_id = slack_user.id
             try:
                 db.session.commit()
-                flash('User updated successfully!', 'success')
+                flash_success('User updated successfully!')
                 feedback = 'full'
                 return redirect(url_for('admin.edit_user', user_id=user.id))
             except Exception as e:
                 db.session.rollback()
-                flash(f'Error updating user: {str(e)}', 'error')
+                flash_error(f'Error updating user: {str(e)}')
     return render_template('admin/user_edit.html', user=user, feedback=feedback, user_seasons=user_seasons)
