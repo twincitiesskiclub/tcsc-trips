@@ -1,6 +1,7 @@
-from flask import Blueprint, redirect, url_for, session, flash, current_app, request
+from flask import Blueprint, redirect, url_for, session, current_app, request
 from ..auth import oauth, admin_required, is_allowed_domain
 from ..constants import ALLOWED_EMAIL_DOMAIN
+from ..errors import flash_error, flash_success
 
 auth = Blueprint('auth', __name__)
 
@@ -21,20 +22,20 @@ def authorize():
                 'name': user_info['name']
             }
             if not is_allowed_domain(user_info['email']):
-                flash(f'Unauthorized domain. Access restricted to {ALLOWED_EMAIL_DOMAIN}', 'error')
+                flash_error(f'Unauthorized domain. Access restricted to {ALLOWED_EMAIL_DOMAIN}')
                 return redirect(url_for('main.get_home_page'))
-                
-            flash('Successfully logged in!', 'success')
+
+            flash_success('Successfully logged in!')
             next_url = session.pop('next_url', url_for('admin.get_admin_page'))
             return redirect(next_url)
     except Exception as e:
-        flash(f'Authentication failed: {str(e)}', 'error')
-        
+        flash_error(f'Authentication failed: {str(e)}')
+
     return redirect(url_for('main.get_home_page'))
 
 @auth.route('/logout')
 def logout():
     session.pop('user', None)
     session.pop('next_url', None)
-    flash('Successfully logged out', 'success')
+    flash_success('Successfully logged out')
     return redirect(url_for('main.get_home_page'))
