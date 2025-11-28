@@ -1,9 +1,8 @@
 from functools import wraps
-from flask import redirect, url_for, session, flash, current_app, request
+from flask import redirect, url_for, session, flash, request
 from authlib.integrations.flask_client import OAuth
 from authlib.integrations.base_client.errors import OAuthError
 import os
-from urllib.parse import urlencode
 
 from .constants import ALLOWED_EMAIL_DOMAIN
 

@@ -1,15 +1,17 @@
+import os
+
 from flask import Flask
-from .config import load_stripe_config, configure_database
-from .routes.main import main
-from .routes.trips import trips
-from .routes.payments import payments
+from flask_migrate import Migrate
+
+from .auth import init_oauth
+from .config import configure_database, load_stripe_config
+from .models import db
 from .routes.admin import admin
 from .routes.auth import auth
-from .auth import init_oauth
-from .models import db
-from flask_migrate import Migrate
-import os
+from .routes.main import main
+from .routes.payments import payments
 from .routes.registration import registration
+from .routes.trips import trips
 
 
 def create_app(environment=None):
