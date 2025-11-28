@@ -1,11 +1,117 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, flash, Response
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason
+from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR
 from datetime import datetime, timedelta
 import csv
 from io import StringIO
 
 admin = Blueprint('admin', __name__)
+
+
+def validate_season_form(form):
+    """Validate and parse season form data.
+
+    Returns:
+        tuple: (is_valid, error_message, parsed_data)
+        - If valid: (True, None, dict of parsed data)
+        - If invalid: (False, error_message, None)
+    """
+    try:
+        # Parse basic fields
+        year = int(form['year'])
+        season_type = form['season_type']
+        name = f"{year} {season_type.title()}"
+
+        # Parse price
+        price_cents = None
+        if form.get('price_cents'):
+            price_cents = int(float(form['price_cents']) * CENTS_PER_DOLLAR)
+        if price_cents is None or price_cents < MIN_PRICE_CENTS:
+            return (False, 'Price must be at least $1.00 (100 cents).', None)
+
+        # Parse dates
+        start_date = datetime.strptime(form['start_date'], DATE_FORMAT)
+        end_date = datetime.strptime(form['end_date'], DATE_FORMAT)
+
+        # Validate dates aren't too far in past
+        now = datetime.utcnow()
+        week_ago = now - timedelta(days=7)
+        if start_date < week_ago or end_date < week_ago:
+            return (False, 'Season start and end dates cannot be more than a week in the past.', None)
+
+        # Parse registration windows
+        returning_start = datetime.strptime(form['returning_start'], DATETIME_FORMAT) if form.get('returning_start') else None
+        returning_end = datetime.strptime(form['returning_end'], DATETIME_FORMAT) if form.get('returning_end') else None
+        new_start = datetime.strptime(form['new_start'], DATETIME_FORMAT) if form.get('new_start') else None
+        new_end = datetime.strptime(form['new_end'], DATETIME_FORMAT) if form.get('new_end') else None
+
+        # Validate registration start dates are before season start
+        if returning_start and returning_start >= start_date:
+            return (False, 'Returning registration start must be before the season start date.', None)
+        if new_start and new_start >= start_date:
+            return (False, 'New registration start must be before the season start date.', None)
+
+        # Validate start dates are before end dates
+        if start_date >= end_date:
+            return (False, 'Season start date must be before end date.', None)
+        if returning_start and returning_end and returning_start >= returning_end:
+            return (False, 'Returning registration start must be before end.', None)
+        if new_start and new_end and new_start >= new_end:
+            return (False, 'New registration start must be before end.', None)
+
+        # Parse optional fields
+        registration_limit = int(form['registration_limit']) if form.get('registration_limit') else None
+        description = form.get('description')
+
+        # Return parsed data
+        return (True, None, {
+            'name': name,
+            'season_type': season_type,
+            'year': year,
+            'start_date': start_date,
+            'end_date': end_date,
+            'price_cents': price_cents,
+            'returning_start': returning_start,
+            'returning_end': returning_end,
+            'new_start': new_start,
+            'new_end': new_end,
+            'registration_limit': registration_limit,
+            'description': description,
+        })
+    except ValueError as e:
+        return (False, f'Invalid form data: {str(e)}', None)
+
+
+def get_season_form_data(form):
+    """Prepare form data for re-rendering on validation error."""
+    form_data = dict(form)
+    form_data['price_cents'] = form.get('price_cents')
+    return form_data
+
+
+def parse_trip_form(form):
+    """Parse and validate trip form data.
+
+    Returns:
+        dict: Parsed trip data ready for model creation/update
+    """
+    return {
+        'slug': form['slug'],
+        'name': form['name'],
+        'destination': form['destination'],
+        'max_participants_standard': int(form['max_participants_standard']),
+        'max_participants_extra': int(form['max_participants_extra']),
+        'start_date': datetime.strptime(form['start_date'], DATE_FORMAT),
+        'end_date': datetime.strptime(form['end_date'], DATE_FORMAT),
+        'signup_start': datetime.strptime(form['signup_start'], DATETIME_FORMAT),
+        'signup_end': datetime.strptime(form['signup_end'], DATETIME_FORMAT),
+        'price_low': int(float(form['price_low']) * CENTS_PER_DOLLAR),
+        'price_high': int(float(form['price_high']) * CENTS_PER_DOLLAR),
+        'description': form['description'],
+        'status': form['status'],
+    }
+
 
 @admin.route('/admin')
 @admin_required
@@ -29,21 +135,7 @@ def get_admin_trips():
 def new_trip():
     if request.method == 'POST':
         try:
-            trip = Trip(
-                slug=request.form['slug'],
-                name=request.form['name'],
-                destination=request.form['destination'],
-                max_participants_standard=int(request.form['max_participants_standard']),
-                max_participants_extra=int(request.form['max_participants_extra']),
-                start_date=datetime.strptime(request.form['start_date'], '%Y-%m-%d'),
-                end_date=datetime.strptime(request.form['end_date'], '%Y-%m-%d'),
-                signup_start=datetime.strptime(request.form['signup_start'], '%Y-%m-%dT%H:%M'),
-                signup_end=datetime.strptime(request.form['signup_end'], '%Y-%m-%dT%H:%M'),
-                price_low=int(float(request.form['price_low']) * 100),  # Convert to cents
-                price_high=int(float(request.form['price_high']) * 100),  # Convert to cents
-                description=request.form['description'],
-                status=request.form['status']
-            )
+            trip = Trip(**parse_trip_form(request.form))
             db.session.add(trip)
             db.session.commit()
             flash('Trip created successfully!', 'success')
@@ -51,36 +143,28 @@ def new_trip():
         except Exception as e:
             flash(f'Error creating trip: {str(e)}', 'error')
             return redirect(url_for('admin.new_trip'))
-    
+
     return render_template('admin/trip_form.html', trip=None)
 
 @admin.route('/admin/trips/<int:trip_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def edit_trip(trip_id):
     trip = Trip.query.get_or_404(trip_id)
-    
+
     if request.method == 'POST':
         try:
-            trip.name = request.form['name']
-            trip.destination = request.form['destination']
-            trip.max_participants_standard = int(request.form['max_participants_standard'])
-            trip.max_participants_extra = int(request.form['max_participants_extra'])
-            trip.start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
-            trip.end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
-            trip.signup_start = datetime.strptime(request.form['signup_start'], '%Y-%m-%dT%H:%M')
-            trip.signup_end = datetime.strptime(request.form['signup_end'], '%Y-%m-%dT%H:%M')
-            trip.price_low = int(float(request.form['price_low']) * 100)
-            trip.price_high = int(float(request.form['price_high']) * 100)
-            trip.description = request.form['description']
-            trip.status = request.form['status']
-            
+            parsed_data = parse_trip_form(request.form)
+            # Skip slug on edit - it's set only during creation
+            parsed_data.pop('slug', None)
+            for key, value in parsed_data.items():
+                setattr(trip, key, value)
             db.session.commit()
             flash('Trip updated successfully!', 'success')
             return redirect(url_for('admin.get_admin_trips'))
         except Exception as e:
             flash(f'Error updating trip: {str(e)}', 'error')
             return redirect(url_for('admin.edit_trip', trip_id=trip_id))
-    
+
     return render_template('admin/trip_form.html', trip=trip)
 
 @admin.route('/admin/trips/<int:trip_id>/delete')
@@ -106,70 +190,13 @@ def get_admin_seasons():
 @admin_required
 def new_season():
     if request.method == 'POST':
+        is_valid, error_message, parsed_data = validate_season_form(request.form)
+        if not is_valid:
+            flash(error_message, 'error')
+            return render_template('admin/season_form.html', season=get_season_form_data(request.form))
+
         try:
-            year = int(request.form['year'])
-            season_type = request.form['season_type']
-            name = f"{year} {season_type.title()}"
-            price_cents = int(float(request.form['price_cents']) * 100) if request.form.get('price_cents') else None
-            if price_cents is None or price_cents < 100:
-                flash('Price must be at least $1.00 (100 cents).', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
-            end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
-            now = datetime.utcnow()
-            week_ago = now - timedelta(days=7)
-            if start_date < week_ago or end_date < week_ago:
-                flash('Season start and end dates cannot be more than a week in the past.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            returning_start = datetime.strptime(request.form['returning_start'], '%Y-%m-%dT%H:%M') if request.form.get('returning_start') else None
-            returning_end = datetime.strptime(request.form['returning_end'], '%Y-%m-%dT%H:%M') if request.form.get('returning_end') else None
-            new_start = datetime.strptime(request.form['new_start'], '%Y-%m-%dT%H:%M') if request.form.get('new_start') else None
-            new_end = datetime.strptime(request.form['new_end'], '%Y-%m-%dT%H:%M') if request.form.get('new_end') else None
-            # Registration start dates should be before the season start date (but end dates can be after for late registration)
-            if returning_start and returning_start >= start_date:
-                flash('Returning registration start must be before the season start date.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            if new_start and new_start >= start_date:
-                flash('New registration start must be before the season start date.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            # Start dates must be before end dates
-            if start_date >= end_date:
-                flash('Season start date must be before end date.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            if (returning_start and returning_end and returning_start >= returning_end):
-                flash('Returning registration start must be before end.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            if (new_start and new_end and new_start >= new_end):
-                flash('New registration start must be before end.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            season = Season(
-                name=name,
-                season_type=season_type,
-                year=year,
-                start_date=start_date,
-                end_date=end_date,
-                price_cents=price_cents,
-                returning_start=returning_start,
-                returning_end=returning_end,
-                new_start=new_start,
-                new_end=new_end,
-                registration_limit=int(request.form['registration_limit']) if request.form.get('registration_limit') else None,
-                description=request.form.get('description')
-            )
+            season = Season(**parsed_data)
             db.session.add(season)
             db.session.commit()
             flash('Season created successfully!', 'success')
@@ -184,67 +211,14 @@ def new_season():
 def edit_season(season_id):
     season = Season.query.get_or_404(season_id)
     if request.method == 'POST':
+        is_valid, error_message, parsed_data = validate_season_form(request.form)
+        if not is_valid:
+            flash(error_message, 'error')
+            return render_template('admin/season_form.html', season=get_season_form_data(request.form))
+
         try:
-            year = int(request.form['year'])
-            season_type = request.form['season_type']
-            price_cents = int(float(request.form['price_cents']) * 100) if request.form.get('price_cents') else None
-            if price_cents is None or price_cents < 100:
-                flash('Price must be at least $1.00 (100 cents).', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            start_date = datetime.strptime(request.form['start_date'], '%Y-%m-%d')
-            end_date = datetime.strptime(request.form['end_date'], '%Y-%m-%d')
-            now = datetime.utcnow()
-            week_ago = now - timedelta(days=7)
-            if start_date < week_ago or end_date < week_ago:
-                flash('Season start and end dates cannot be more than a week in the past.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            returning_start = datetime.strptime(request.form['returning_start'], '%Y-%m-%dT%H:%M') if request.form.get('returning_start') else None
-            returning_end = datetime.strptime(request.form['returning_end'], '%Y-%m-%dT%H:%M') if request.form.get('returning_end') else None
-            new_start = datetime.strptime(request.form['new_start'], '%Y-%m-%dT%H:%M') if request.form.get('new_start') else None
-            new_end = datetime.strptime(request.form['new_end'], '%Y-%m-%dT%H:%M') if request.form.get('new_end') else None
-            # Registration start dates should be before the season start date (but end dates can be after for late registration)
-            if returning_start and returning_start >= start_date:
-                flash('Returning registration start must be before the season start date.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            if new_start and new_start >= start_date:
-                flash('New registration start must be before the season start date.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            # Start dates must be before end dates
-            if start_date >= end_date:
-                flash('Season start date must be before end date.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            if (returning_start and returning_end and returning_start >= returning_end):
-                flash('Returning registration start must be before end.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            if (new_start and new_end and new_start >= new_end):
-                flash('New registration start must be before end.', 'error')
-                form_data = dict(request.form)
-                form_data['price_cents'] = request.form.get('price_cents')
-                return render_template('admin/season_form.html', season=form_data)
-            season.name = f"{year} {season_type.title()}"
-            season.season_type = season_type
-            season.year = year
-            season.start_date = start_date
-            season.end_date = end_date
-            season.price_cents = price_cents
-            season.returning_start = returning_start
-            season.returning_end = returning_end
-            season.new_start = new_start
-            season.new_end = new_end
-            season.registration_limit = int(request.form['registration_limit']) if request.form.get('registration_limit') else None
-            season.description = request.form.get('description')
+            for key, value in parsed_data.items():
+                setattr(season, key, value)
             db.session.commit()
             flash('Season updated successfully!', 'success')
             return redirect(url_for('admin.get_admin_seasons'))
