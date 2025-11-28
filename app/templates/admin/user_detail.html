@@ -1,0 +1,306 @@
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+.user-detail-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+    flex-wrap: wrap;
+    gap: 16px;
+}
+
+.user-detail-header h1 {
+    margin: 0;
+}
+
+.user-detail-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.detail-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+    margin-bottom: 32px;
+}
+
+.detail-card {
+    background: white;
+    padding: 20px;
+    border-radius: var(--r);
+    border: 1px solid var(--g-b);
+}
+
+.detail-card h3 {
+    margin: 0 0 16px 0;
+    color: var(--p);
+    font-size: 16px;
+    border-bottom: 1px solid var(--g-b);
+    padding-bottom: 8px;
+}
+
+.detail-card dl {
+    margin: 0;
+}
+
+.detail-card dt {
+    font-weight: 500;
+    color: var(--g-m);
+    font-size: 13px;
+    margin-top: 12px;
+}
+
+.detail-card dt:first-child {
+    margin-top: 0;
+}
+
+.detail-card dd {
+    margin: 4px 0 0 0;
+    color: var(--p);
+}
+
+.detail-section {
+    margin-top: 32px;
+    background: white;
+    padding: 20px;
+    border-radius: var(--r);
+    border: 1px solid var(--g-b);
+}
+
+.detail-section h2 {
+    margin: 0 0 16px 0;
+    color: var(--p);
+    font-size: 18px;
+}
+
+.detail-section table {
+    margin-bottom: 0;
+}
+
+.empty-state {
+    color: var(--g-m);
+    text-align: center;
+    padding: 24px;
+}
+
+.payment-id {
+    font-family: monospace;
+    font-size: 12px;
+    color: var(--g-m);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="user-detail">
+    <div class="user-detail-header">
+        <h1>{{ user.full_name }}</h1>
+        <div class="user-detail-actions">
+            <a href="{{ url_for('admin.get_admin_users') }}" class="button button-secondary">Back to List</a>
+            <a href="{{ url_for('admin.edit_user', user_id=user.id) }}" class="button">Edit Member</a>
+        </div>
+    </div>
+
+    <div class="detail-grid">
+        <div class="detail-card">
+            <h3>Contact Information</h3>
+            <dl>
+                <dt>Email</dt>
+                <dd>{{ user.email }}</dd>
+                <dt>Phone</dt>
+                <dd>{{ user.phone or '-' }}</dd>
+                <dt>Address</dt>
+                <dd>{{ user.address or '-' }}</dd>
+                <dt>Slack UID</dt>
+                <dd>{{ user.slack_user.slack_uid if user.slack_user else '-' }}</dd>
+            </dl>
+        </div>
+
+        <div class="detail-card">
+            <h3>Profile</h3>
+            <dl>
+                <dt>Status</dt>
+                <dd><span class="status-badge status-{{ user.status }}">{{ user.status }}</span></dd>
+                <dt>Member Type</dt>
+                <dd>{{ 'Returning' if user.is_returning else 'New' }}</dd>
+                <dt>Pronouns</dt>
+                <dd>{{ user.pronouns or '-' }}</dd>
+                <dt>Date of Birth</dt>
+                <dd>{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '-' }}</dd>
+            </dl>
+        </div>
+
+        <div class="detail-card">
+            <h3>Skiing Info</h3>
+            <dl>
+                <dt>Preferred Technique</dt>
+                <dd>{{ user.preferred_technique or '-' }}</dd>
+                <dt>Experience</dt>
+                <dd>{{ user.ski_experience or '-' }}</dd>
+                <dt>T-Shirt Size</dt>
+                <dd>{{ user.tshirt_size or '-' }}</dd>
+            </dl>
+        </div>
+
+        <div class="detail-card">
+            <h3>Emergency Contact</h3>
+            <dl>
+                <dt>Name</dt>
+                <dd>{{ user.emergency_contact_name or '-' }}</dd>
+                <dt>Relation</dt>
+                <dd>{{ user.emergency_contact_relation or '-' }}</dd>
+                <dt>Phone</dt>
+                <dd>{{ user.emergency_contact_phone or '-' }}</dd>
+                <dt>Email</dt>
+                <dd>{{ user.emergency_contact_email or '-' }}</dd>
+            </dl>
+        </div>
+    </div>
+
+    <!-- Season History -->
+    <div class="detail-section">
+        <h2>Season History</h2>
+        {% if user_seasons and user_seasons|length > 0 %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Season</th>
+                    <th>Year</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Registration Date</th>
+                    <th>Payment Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for us, season in user_seasons %}
+                <tr>
+                    <td>{{ season.name }}</td>
+                    <td>{{ season.year }}</td>
+                    <td>{{ us.registration_type|capitalize if us.registration_type else '-' }}</td>
+                    <td>
+                        {% if us.status == 'ACTIVE' %}
+                            <span class="status-badge status-active">Active</span>
+                        {% elif us.status == 'PENDING_LOTTERY' %}
+                            <span class="status-badge status-pending">Pending Lottery</span>
+                        {% elif us.status == 'DROPPED' %}
+                            <span class="status-badge status-canceled">Dropped</span>
+                        {% else %}
+                            <span class="status-badge">{{ us.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
+                    <td>{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">No season registrations found.</p>
+        {% endif %}
+    </div>
+
+    <!-- Trip Registrations -->
+    <div class="detail-section">
+        <h2>Trip Registrations</h2>
+        {% if trip_registrations and trip_registrations|length > 0 %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Trip</th>
+                    <th>Destination</th>
+                    <th>Dates</th>
+                    <th>Status</th>
+                    <th>Amount Paid</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for reg in trip_registrations %}
+                <tr>
+                    <td><a href="{{ url_for('admin.view_trip', trip_id=reg.trip.id) }}">{{ reg.trip.name }}</a></td>
+                    <td>{{ reg.trip.destination or '-' }}</td>
+                    <td>
+                        {% if reg.trip.start_date %}
+                            {{ reg.trip.start_date.strftime('%b %d') }}{% if reg.trip.end_date %} - {{ reg.trip.end_date.strftime('%b %d, %Y') }}{% endif %}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if reg.latest_status == 'succeeded' %}
+                            <span class="status-badge status-success">Paid</span>
+                        {% elif reg.latest_status == 'requires_capture' %}
+                            <span class="status-badge status-pending">Authorized</span>
+                        {% elif reg.latest_status == 'canceled' %}
+                            <span class="status-badge status-canceled">Canceled</span>
+                        {% else %}
+                            <span class="status-badge">{{ reg.latest_status }}</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ reg.total_paid | format_price }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">No trip registrations found.</p>
+        {% endif %}
+    </div>
+
+    <!-- Payment History -->
+    <div class="detail-section">
+        <h2>Payment History</h2>
+        {% if payments and payments|length > 0 %}
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Trip</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                    <th>Payment ID</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for payment in payments %}
+                <tr>
+                    <td>{{ payment.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+                    <td>{{ payment.trip.name }}</td>
+                    <td>{{ payment.amount | format_price }}</td>
+                    <td>
+                        {% if payment.status == 'succeeded' %}
+                            <span class="status-badge status-success">Succeeded</span>
+                        {% elif payment.status == 'requires_capture' %}
+                            <span class="status-badge status-requires_capture">Requires Capture</span>
+                        {% elif payment.status in ['requires_payment_method', 'requires_confirmation', 'requires_action'] %}
+                            <span class="status-badge status-pending">{{ payment.status | replace('_', ' ') | title }}</span>
+                        {% elif payment.status == 'canceled' %}
+                            <span class="status-badge status-canceled">Canceled</span>
+                        {% elif payment.status == 'processing' %}
+                            <span class="status-badge status-processing">Processing</span>
+                        {% elif payment.status == 'refunded' %}
+                            <span class="status-badge status-refunded">Refunded</span>
+                        {% else %}
+                            <span class="status-badge status-unknown">{{ payment.status }}</span>
+                        {% endif %}
+                    </td>
+                    <td><code class="payment-id">{{ payment.payment_intent_id[:20] }}...</code></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p class="empty-state">No payments found for this member.</p>
+        {% endif %}
+    </div>
+
+    {% if user.notes %}
+    <div class="detail-section">
+        <h2>Admin Notes</h2>
+        <p>{{ user.notes }}</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
