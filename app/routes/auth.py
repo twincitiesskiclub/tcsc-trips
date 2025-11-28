@@ -1,5 +1,6 @@
 from flask import Blueprint, redirect, url_for, session, flash, current_app, request
-from ..auth import oauth, admin_required
+from ..auth import oauth, admin_required, is_allowed_domain
+from ..constants import ALLOWED_EMAIL_DOMAIN
 
 auth = Blueprint('auth', __name__)
 
@@ -19,8 +20,8 @@ def authorize():
                 'email': user_info['email'],
                 'name': user_info['name']
             }
-            if not user_info['email'].endswith('@twincitiesskiclub.org'):
-                flash('Unauthorized domain. Access restricted to @twincitiesskiclub.org', 'error')
+            if not is_allowed_domain(user_info['email']):
+                flash(f'Unauthorized domain. Access restricted to {ALLOWED_EMAIL_DOMAIN}', 'error')
                 return redirect(url_for('main.get_home_page'))
                 
             flash('Successfully logged in!', 'success')
