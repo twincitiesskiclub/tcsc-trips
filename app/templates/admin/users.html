@@ -1,4 +1,5 @@
 {% extends 'admin/admin_base.html' %}
+{% from 'macros.html' import user_season_badge %}
 {% block content %}
 <h1>Users</h1>
 <table class="table table-striped">
@@ -22,15 +23,7 @@
             <td>
                 {% if current_season and user.id in user_season_map %}
                     {% set us = user_season_map[user.id] %}
-                    {% if us.status == 'ACTIVE' %}
-                        <span class="badge bg-success">Active</span>
-                    {% elif us.status == 'PENDING_LOTTERY' %}
-                        <span class="badge bg-warning text-dark">Pending Lottery</span>
-                    {% elif us.status == 'DROPPED' %}
-                        <span class="badge bg-danger">Dropped</span>
-                    {% else %}
-                        <span class="badge bg-secondary">Unknown</span>
-                    {% endif %}
+                    {{ user_season_badge(us.status) }}
                 {% else %}
                     <span class="badge bg-secondary">No</span>
                 {% endif %}

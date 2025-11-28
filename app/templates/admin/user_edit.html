@@ -1,4 +1,5 @@
 {% extends 'admin/admin_base.html' %}
+{% from 'macros.html' import user_season_badge %}
 {% block content %}
 <h1>Edit User: {{ user.full_name }}</h1>
 
@@ -188,17 +189,7 @@ document.getElementById('cancel-full-edit').onclick = function() {
                         <td>{{ season.name }}</td>
                         <td>{{ season.year }}</td>
                         <td>{{ us.registration_type|capitalize }}</td>
-                        <td>
-                            {% if us.status == 'ACTIVE' %}
-                                <span class="badge bg-success">Active</span>
-                            {% elif us.status == 'PENDING_LOTTERY' %}
-                                <span class="badge bg-warning text-dark">Pending Lottery</span>
-                            {% elif us.status == 'DROPPED' %}
-                                <span class="badge bg-danger">Dropped</span>
-                            {% else %}
-                                <span class="badge bg-secondary">{{ us.status|capitalize }}</span>
-                            {% endif %}
-                        </td>
+                        <td>{{ user_season_badge(us.status) }}</td>
                         <td>{{ us.registration_date }}</td>
                         <td>{{ us.payment_date or '' }}</td>
                     </tr>

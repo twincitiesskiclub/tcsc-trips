@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, request, flash, redirect, url_for, jsonify
 from pytz import timezone
 from ..models import db, Season, UserSeason, User
-from ..constants import DATE_FORMAT
+from ..constants import DATE_FORMAT, UserStatus, UserSeasonStatus
 from datetime import datetime
 from ..utils import get_current_times, normalize_email
 
@@ -62,7 +62,7 @@ def season_register(season_id):
         try:
             form = request.form
             email = normalize_email(form['email'])
-            user = User.query.filter_by(email=email).one_or_none()
+            user = User.get_by_email(email)
 
             # Determine member_type from backend only BEFORE checking dates
             # Check user existence first
@@ -114,7 +114,7 @@ def season_register(season_id):
                 for k, v in user_fields.items():
                     setattr(user, k, v)
             else:
-                user = User(email=email, status='pending', **user_fields)
+                user = User(email=email, status=UserStatus.PENDING, **user_fields)
                 db.session.add(user)
                 db.session.flush()  # get user.id
 
@@ -127,20 +127,20 @@ def season_register(season_id):
             member_type = 'returning' if is_returning else 'new'
 
             # Find or create UserSeason for this user and season
-            user_season = UserSeason.query.filter_by(user_id=user.id, season_id=season.id).one_or_none()
+            user_season = UserSeason.get_for_user_season(user.id, season.id)
             if not user_season:
                 user_season = UserSeason(
                     user_id=user.id,
                     season_id=season.id,
                     registration_type=member_type,
                     registration_date=datetime.utcnow().date(),
-                    status='ACTIVE' if is_returning else 'PENDING_LOTTERY'
+                    status=UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
                 )
                 db.session.add(user_season)
             else:
                 user_season.registration_type = member_type
                 user_season.registration_date = current_time.date()
-                user_season.status = 'ACTIVE' if is_returning else 'PENDING_LOTTERY'
+                user_season.status = UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
 
             db.session.commit()
             # flash('Registration submitted successfully!', 'success')
@@ -196,6 +196,6 @@ def season_detail(season_id):
 def api_is_returning_member():
     data = request.get_json()
     email = normalize_email(data.get('email', ''))
-    user = User.query.filter_by(email=email).one_or_none()
+    user = User.get_by_email(email)
     is_returning = bool(user and getattr(user, 'is_returning', False))
     return jsonify({'is_returning': is_returning}) 

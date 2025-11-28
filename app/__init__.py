@@ -54,9 +54,25 @@ def register_template_filters(app):
             return '$0.00'
         return f"${cents / 100:.2f}"
 
+    @app.template_filter('format_cents')
+    def format_cents(cents):
+        """Format price from cents to decimal string without $ (e.g., 5000 -> '50.00').
+        Useful for data attributes and form values."""
+        if cents is None:
+            return '0.00'
+        return f"{cents / 100:.2f}"
+
     @app.template_filter('format_date')
     def format_date(dt, fmt='%b %d, %Y'):
-        """Format datetime with optional format string."""
+        """Format datetime with optional format string.
+
+        Common formats:
+        - '%b %d, %Y' (default): Jan 15, 2025
+        - '%Y-%m-%d': 2025-01-15 (ISO date for form inputs)
+        - '%Y-%m-%dT%H:%M': 2025-01-15T14:30 (datetime-local input)
+        - '%b %d, %Y %I:%M %p': Jan 15, 2025 02:30 PM
+        - '%b %d, %Y %I:%M %p %Z': Jan 15, 2025 02:30 PM UTC
+        """
         if dt is None:
             return ''
         return dt.strftime(fmt)

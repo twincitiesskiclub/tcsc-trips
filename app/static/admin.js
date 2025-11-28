@@ -1,3 +1,11 @@
+// Generic delete confirmation for admin pages
+// Usage: confirmDelete('trip', 123, 'My Trip Name')
+function confirmDelete(entityType, entityId, entityName) {
+  if (confirm(`Are you sure you want to delete the ${entityType} "${entityName}"?`)) {
+    window.location.href = `/admin/${entityType}s/${entityId}/delete`;
+  }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   // Status mapping for UI display
   const STATUS_DISPLAY = {

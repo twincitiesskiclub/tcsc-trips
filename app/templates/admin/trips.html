@@ -40,8 +40,8 @@
             <td>{{ trip.destination }}</td>
             <td>{{ trip.formatted_date_range }}</td>
             <td>
-              {{ trip.signup_start.strftime('%Y-%m-%d') }} to
-              {{ trip.signup_end.strftime('%Y-%m-%d') }}
+              {{ trip.signup_start|format_date('%Y-%m-%d') }} to
+              {{ trip.signup_end|format_date('%Y-%m-%d') }}
             </td>
             <td>
               Standard: {{ trip.max_participants_standard }}<br>
@@ -49,9 +49,9 @@
             </td>
             <td>
               {% if trip.price_low == trip.price_high %}
-                ${{ "%.2f"|format(trip.price_low/100) }}
+                {{ trip.price_low|format_price }}
               {% else %}
-                ${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}
+                {{ trip.price_low|format_price }} - {{ trip.price_high|format_price }}
               {% endif %}
             </td>
             <td>
@@ -62,9 +62,9 @@
             <td>
               <div class="action-buttons">
                 <a href="{{ url_for('admin.edit_trip', trip_id=trip.id) }}" class="button button-small">Edit</a>
-                <button 
+                <button
                   class="button button-small button-danger"
-                  onclick="confirmDelete('{{ trip.id }}', '{{ trip.name }}')"
+                  onclick="confirmDelete('trip', '{{ trip.id }}', '{{ trip.name }}')"
                 >
                   Delete
                 </button>
@@ -76,12 +76,6 @@
       </table>
     </div>
 
-    <script>
-      function confirmDelete(tripId, tripName) {
-        if (confirm(`Are you sure you want to delete the trip "${tripName}"?`)) {
-          window.location.href = `/admin/trips/${tripId}/delete`;
-        }
-      }
-    </script>
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
   </body>
 </html> 

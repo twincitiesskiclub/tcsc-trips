@@ -115,6 +115,11 @@ class User(db.Model):
     def __repr__(self):
         return f'<User {self.id} {self.email}>'
 
+    @classmethod
+    def get_by_email(cls, email):
+        """Find a user by email address. Returns None if not found."""
+        return cls.query.filter_by(email=email).one_or_none()
+
     @property
     def full_name(self):
         return f"{self.first_name} {self.last_name}"
@@ -198,6 +203,11 @@ class UserSeason(db.Model):
 
     def __repr__(self):
         return f'<UserSeason user={self.user_id} season={self.season_id} status={self.status}>'
+
+    @classmethod
+    def get_for_user_season(cls, user_id, season_id):
+        """Find a UserSeason by user_id and season_id. Returns None if not found."""
+        return cls.query.filter_by(user_id=user_id, season_id=season_id).one_or_none()
 
     __table_args__ = (
         db.CheckConstraint(
