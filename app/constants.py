@@ -36,4 +36,11 @@ class UserSeasonStatus:
     ACTIVE = 'ACTIVE'
     DROPPED = 'DROPPED'
 
-    ALL = [PENDING_LOTTERY, ACTIVE, DROPPED] 
+    ALL = [PENDING_LOTTERY, ACTIVE, DROPPED]
+
+
+class StripeEvent:
+    """Stripe webhook event types"""
+    PAYMENT_CAPTURABLE = 'payment_intent.amount_capturable_updated'
+    PAYMENT_SUCCEEDED = 'payment_intent.succeeded'
+    PAYMENT_CANCELED = 'payment_intent.canceled'
