@@ -5,12 +5,15 @@ from authlib.integrations.base_client.errors import OAuthError
 import os
 from urllib.parse import urlencode
 
+from .constants import ALLOWED_EMAIL_DOMAIN
+
 oauth = OAuth()
+
 
 def init_oauth(app):
     """Initialize OAuth with Google configuration"""
     oauth.init_app(app)
-    
+
     # Configure Google OAuth
     oauth.register(
         name='google',
@@ -23,9 +26,11 @@ def init_oauth(app):
         }
     )
 
+
 def is_allowed_domain(email):
     """Check if email domain is allowed"""
-    return email and email.endswith('@twincitiesskiclub.org')
+    return email and email.endswith(ALLOWED_EMAIL_DOMAIN)
+
 
 def admin_required(f):
     """Decorator to protect admin routes"""
@@ -33,11 +38,11 @@ def admin_required(f):
     def decorated_function(*args, **kwargs):
         if 'user' not in session:
             return redirect(url_for('auth.login', next=request.url))
-        
+
         if not is_allowed_domain(session['user'].get('email')):
-            flash('Access restricted to @twincitieskiclub.org domain', 'error')
+            flash(f'Access restricted to {ALLOWED_EMAIL_DOMAIN} domain', 'error')
             return redirect(url_for('main.get_home_page'))
-            
+
         return f(*args, **kwargs)
     return decorated_function
 
