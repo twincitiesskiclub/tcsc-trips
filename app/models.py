@@ -7,20 +7,30 @@ db = SQLAlchemy()
 
 class Payment(db.Model):
     __tablename__ = 'payments'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     payment_intent_id = db.Column(db.String(255), unique=True, nullable=False)
     email = db.Column(db.String(255), nullable=False)
     name = db.Column(db.String(255), nullable=False)
     amount = db.Column(db.Integer, nullable=False)  # Amount in cents
     status = db.Column(db.String(50), nullable=False)
-    trip_id = db.Column(db.Integer, db.ForeignKey('trips.id'), nullable=False)
+    payment_type = db.Column(db.String(50), nullable=False)  # 'season', 'trip', future: 'social_event'
+    trip_id = db.Column(db.Integer, db.ForeignKey('trips.id'), nullable=True)  # Nullable for season payments
+    season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)  # For season payments
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+
+    # Relationships
+    season = db.relationship('Season', backref='payments', lazy=True)
 
     def __repr__(self):
         return f'<Payment {self.payment_intent_id}>'
+
+    @classmethod
+    def get_by_payment_intent(cls, payment_intent_id):
+        """Find a payment by Stripe payment_intent_id. Returns None if not found."""
+        return cls.query.filter_by(payment_intent_id=payment_intent_id).first()
 
 class Trip(db.Model):
     __tablename__ = 'trips'

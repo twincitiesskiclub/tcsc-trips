@@ -1,9 +1,9 @@
 from flask import Blueprint, jsonify, request
 import stripe
 import os
-from ..models import db, Payment, Season, UserSeason, User
+from ..models import db, Payment, Season, UserSeason, User, Trip
 from ..auth import admin_required
-from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus
+from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, PaymentType
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
 
@@ -20,18 +20,28 @@ def create_payment():
         email = normalize_email(data.get('email', ''))
         name = data.get('name', '')
         amount = float(data.get('amount', 135.00))
-        trip_id = request.referrer.split('/')[-1] if request.referrer else 'generic-trip'
+        trip_slug = request.referrer.split('/')[-1] if request.referrer else None
+
+        # Look up trip by slug to get the actual trip_id
+        trip = Trip.query.filter_by(slug=trip_slug).first() if trip_slug else None
+
+        # Determine member type based on whether user exists and has active seasons
+        user = User.get_by_email(email)
+        member_type = MemberType.RETURNING.value if user and user.is_returning else MemberType.NEW.value
 
         # Create a PaymentIntent with the order amount and currency
         intent = stripe.PaymentIntent.create(
             amount=int(amount * 100),  # Convert to cents
             currency='usd',
-            capture_method='manual',
+            capture_method='manual',  # Always manual for trips (lottery system)
             receipt_email=email,
             metadata={
                 'name': name,
                 'email': email,
-                'trip_id': trip_id
+                'payment_type': PaymentType.TRIP,
+                'trip_id': str(trip.id) if trip else None,
+                'trip_slug': trip_slug,
+                'member_type': member_type
             }
         )
 
@@ -71,53 +81,122 @@ def webhook_received():
         data_object = data['object']
 
         if event_type == StripeEvent.PAYMENT_CAPTURABLE:
-            # Create database entry only when payment is successfully authorized
+            # Payment authorized but not yet captured (new members with manual capture)
             payment_intent = data_object
+            payment_type = payment_intent.metadata.get('payment_type', PaymentType.SEASON)
             member_type = payment_intent.metadata.get('member_type')
             season_id = payment_intent.metadata.get('season_id')
+            trip_id = payment_intent.metadata.get('trip_id')
             email = normalize_email(payment_intent.metadata.get('email') or '')
-            name = payment_intent.metadata.get('name')
-            # Only for NEW members
+            name = payment_intent.metadata.get('name') or ''
+
+            # Find or create user for new members
+            user = None
             if member_type == MemberType.NEW.value:
-                # Find or create user
                 user = User.get_by_email(email)
                 if not user:
-                    # Split name if possible
                     first_name, last_name = (name.split(' ', 1) + [""])[:2]
                     user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.PENDING)
                     db.session.add(user)
                     db.session.commit()
-                # Check if UserSeason exists
-                user_season = UserSeason.get_for_user_season(user.id, season_id)
-                if not user_season:
-                    user_season = UserSeason(
-                        user_id=user.id,
-                        season_id=season_id,
-                        registration_type=member_type,
-                        registration_date=today_central(),
-                        status=UserSeasonStatus.PENDING_LOTTERY
-                    )
-                    db.session.add(user_season)
-                    db.session.commit()
+
+                # Create UserSeason for season payments
+                if payment_type == PaymentType.SEASON and season_id:
+                    user_season = UserSeason.get_for_user_season(user.id, season_id)
+                    if not user_season:
+                        user_season = UserSeason(
+                            user_id=user.id,
+                            season_id=season_id,
+                            registration_type=member_type,
+                            registration_date=today_central(),
+                            status=UserSeasonStatus.PENDING_LOTTERY
+                        )
+                        db.session.add(user_season)
+                        db.session.commit()
+
+            # Create Payment record (idempotent - check if exists first)
+            payment = Payment.get_by_payment_intent(payment_intent.id)
+            if not payment:
+                payment = Payment(
+                    payment_intent_id=payment_intent.id,
+                    email=email,
+                    name=name,
+                    amount=payment_intent.amount,
+                    status='requires_capture',
+                    payment_type=payment_type,
+                    season_id=int(season_id) if season_id else None,
+                    trip_id=int(trip_id) if trip_id else None,
+                    user_id=user.id if user else None
+                )
+                db.session.add(payment)
+                db.session.commit()
+
         elif event_type == StripeEvent.PAYMENT_SUCCEEDED:
+            # Payment captured (returning members auto-capture, or manual capture completed)
             payment_intent = data_object
+            payment_type = payment_intent.metadata.get('payment_type', PaymentType.SEASON)
             member_type = payment_intent.metadata.get('member_type')
             season_id = payment_intent.metadata.get('season_id')
+            trip_id = payment_intent.metadata.get('trip_id')
             email = normalize_email(payment_intent.metadata.get('email') or '')
-            # Find user
+            name = payment_intent.metadata.get('name') or ''
+
+            # Find or create user
             user = User.get_by_email(email)
-            if user:
+            if not user and member_type == MemberType.RETURNING.value:
+                # Returning member should already exist, but create if not
+                first_name, last_name = (name.split(' ', 1) + [""])[:2]
+                user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.ACTIVE)
+                db.session.add(user)
+                db.session.commit()
+
+            # Update UserSeason for season payments
+            if payment_type == PaymentType.SEASON and season_id and user:
                 user_season = UserSeason.get_for_user_season(user.id, season_id)
                 if user_season:
                     user_season.status = UserSeasonStatus.ACTIVE
                     user_season.payment_date = today_central()
                     user.status = UserStatus.ACTIVE
-                    db.session.commit()
+                elif member_type == MemberType.RETURNING.value:
+                    # Create UserSeason for returning member
+                    user_season = UserSeason(
+                        user_id=user.id,
+                        season_id=season_id,
+                        registration_type=member_type,
+                        registration_date=today_central(),
+                        payment_date=today_central(),
+                        status=UserSeasonStatus.ACTIVE
+                    )
+                    db.session.add(user_season)
+                    user.status = UserStatus.ACTIVE
+
+            # Create or update Payment record
+            payment = Payment.get_by_payment_intent(payment_intent.id)
+            if not payment:
+                payment = Payment(
+                    payment_intent_id=payment_intent.id,
+                    email=email,
+                    name=name,
+                    amount=payment_intent.amount,
+                    status='succeeded',
+                    payment_type=payment_type,
+                    season_id=int(season_id) if season_id else None,
+                    trip_id=int(trip_id) if trip_id else None,
+                    user_id=user.id if user else None
+                )
+                db.session.add(payment)
+            else:
+                payment.status = 'succeeded'
+                if user and not payment.user_id:
+                    payment.user_id = user.id
+
+            db.session.commit()
+
         elif event_type == StripeEvent.PAYMENT_CANCELED:
-            # Clean up any existing payment record if it exists
-            payment = Payment.query.filter_by(payment_intent_id=data_object.id).first()
+            # Payment was canceled - update status (don't delete, keep for audit)
+            payment = Payment.get_by_payment_intent(data_object.id)
             if payment:
-                db.session.delete(payment)
+                payment.status = 'canceled'
                 db.session.commit()
 
         return json_success()
@@ -130,25 +209,39 @@ def webhook_received():
 def capture_payment(payment_id):
     try:
         payment = Payment.query.get_or_404(payment_id)
-        
+
         # First, retrieve the current payment intent status from Stripe
         intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
-        
+
         # Check if the payment is in a capturable state
         if intent.status != 'requires_capture':
             return json_error(f'Payment cannot be captured - current status: {intent.status}')
 
         # Attempt to capture the payment
         captured_intent = stripe.PaymentIntent.capture(payment.payment_intent_id)
-        
+
         # Verify the capture was successful
         if captured_intent.status != 'succeeded':
             return json_error(f'Capture failed - status: {captured_intent.status}')
 
         # Update payment status in database
         payment.status = captured_intent.status
+
+        # Auto-sync: Update UserSeason status for season payments
+        if payment.payment_type == PaymentType.SEASON and payment.season_id:
+            user = User.get_by_email(payment.email)
+            if user:
+                user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+                if user_season:
+                    user_season.status = UserSeasonStatus.ACTIVE
+                    user_season.payment_date = today_central()
+                    user.status = UserStatus.ACTIVE
+                # Link payment to user if not already linked
+                if not payment.user_id:
+                    payment.user_id = user.id
+
         db.session.commit()
-        
+
         return json_success({
             'payment': {
                 'id': payment.id,
@@ -166,10 +259,10 @@ def capture_payment(payment_id):
 def refund_payment(payment_id):
     try:
         payment = Payment.query.get_or_404(payment_id)
-        
+
         # First, retrieve the current payment intent status from Stripe
         intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
-        
+
         # Check if the payment can be refunded
         if intent.status not in ['succeeded', 'requires_capture']:
             return json_error(f'Payment cannot be refunded - current status: {intent.status}')
@@ -183,15 +276,23 @@ def refund_payment(payment_id):
             refund = stripe.Refund.create(
                 payment_intent=payment.payment_intent_id
             )
-            
+
             # Verify the refund was successful
             if refund.status != 'succeeded':
                 return json_error(f'Refund failed - status: {refund.status}')
-                
+
             payment.status = 'refunded'
 
+        # Auto-sync: Update UserSeason status for season payments
+        if payment.payment_type == PaymentType.SEASON and payment.season_id:
+            user = User.get_by_email(payment.email)
+            if user:
+                user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+                if user_season:
+                    user_season.status = UserSeasonStatus.DROPPED
+
         db.session.commit()
-        
+
         return json_success({
             'payment': {
                 'id': payment.id,
@@ -235,7 +336,8 @@ def create_season_payment_intent():
                 'name': name,
                 'email': email,
                 'season_id': str(season_id),
-                'member_type': member_type
+                'member_type': member_type,
+                'payment_type': PaymentType.SEASON
             }
         )
         return jsonify({
