@@ -24,10 +24,10 @@
             <th>Name</th>
             <th>Status</th>
             <th>Email</th>
-            <th>Trip ID</th>
-            <th>Payment Intent ID</th>
+            <th>Type</th>
+            <th>For</th>
+            <th>Amount</th>
             <th>Created At</th>
-            <th>Updated At</th>
             <th>Actions</th>
           </tr>
         </thead>
@@ -36,7 +36,7 @@
           <tr>
             <td>{{ payment.name }}</td>
             <td>
-              <span class="status-badge status-{{ payment.status|replace('succeeded', 'success')|default('unknown') }}">
+              <span class="status-badge status-{{ payment.status|replace('succeeded', 'success')|replace('requires_capture', 'pending')|default('unknown') }}">
                 {% set display_status = {
                   'requires_payment_method': 'Pending',
                   'requires_confirmation': 'Pending',
@@ -51,15 +51,28 @@
               </span>
             </td>
             <td>{{ payment.email }}</td>
-            <td>{{ payment.trip_id }}</td>
-            <td>{{ payment.payment_intent_id }}</td>
-            <td>{{ payment.created_at }}</td>
-            <td>{{ payment.updated_at }}</td>
+            <td>
+              <span class="type-badge type-{{ payment.payment_type }}">
+                {{ payment.payment_type|capitalize }}
+              </span>
+            </td>
+            <td>
+              {% if payment.payment_type == 'season' and payment.season %}
+                {{ payment.season.name }}
+              {% elif payment.payment_type == 'trip' and payment.trip %}
+                {{ payment.trip.name }}
+              {% else %}
+                -
+              {% endif %}
+            </td>
+            <td>{{ payment.amount|format_cents }}</td>
+            <td>{{ payment.created_at|format_date('%Y-%m-%d %H:%M') }}</td>
             <td>
               <div class="action-buttons">
-                <button class="button button-small button-success" data-action="accept" data-payment-id="{{ payment.id }}">Accept</button>
-                <button class="button button-small" data-action="notify" data-payment-id="{{ payment.id }}">Notify</button>
-                <button class="button button-small button-danger" data-action="refund" data-payment-id="{{ payment.id }}">Refund</button>
+                <button class="button button-small button-success" data-action="accept" data-payment-id="{{ payment.id }}"
+                        {% if payment.status != 'requires_capture' %}disabled{% endif %}>Accept</button>
+                <button class="button button-small button-danger" data-action="refund" data-payment-id="{{ payment.id }}"
+                        {% if payment.status not in ['requires_capture', 'succeeded'] %}disabled{% endif %}>Refund</button>
               </div>
             </td>
           </tr>
