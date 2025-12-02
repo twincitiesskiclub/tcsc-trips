@@ -20,9 +20,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         selectable: true,
 
         columns: [
-            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40, cellClick: function(e, cell) {
-                cell.getRow().toggleSelect();
-            }},
+            {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {title: "Name", field: "name", minWidth: 150, frozen: true},
             {title: "Email", field: "email", minWidth: 200},
             {title: "Type", field: "payment_type", minWidth: 80,
@@ -67,7 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
                     <button class="button button-small button-success" onclick="capturePayment(${data.id}); event.stopPropagation();" ${acceptDisabled}>Accept</button>
                     <button class="button button-small button-danger" onclick="refundPayment(${data.id}); event.stopPropagation();" ${refundDisabled}>Refund</button>
                 </div>`;
-            }, headerSort: false, width: 160, hozAlign: "center"}
+            }, headerSort: false, width: 180, hozAlign: "center", frozen: true}
         ],
 
         initialSort: [{column: "created_at", dir: "desc"}],
@@ -259,8 +257,8 @@ async function capturePayment(paymentId) {
 
         const result = await response.json();
 
-        if (result.success) {
-            // Refresh data
+        if (response.ok && result.success) {
+            // Refresh data silently on success
             const dataResponse = await fetch('/admin/payments/data');
             const data = await dataResponse.json();
             paymentsData = data.payments;
@@ -269,7 +267,12 @@ async function capturePayment(paymentId) {
             alert(`Error: ${result.error || 'Failed to capture payment'}`);
         }
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        // Network error or JSON parse error - refresh anyway in case it succeeded
+        console.error('Capture error:', error);
+        const dataResponse = await fetch('/admin/payments/data');
+        const data = await dataResponse.json();
+        paymentsData = data.payments;
+        paymentsTable.replaceData(paymentsData);
     }
 }
 
@@ -284,8 +287,8 @@ async function refundPayment(paymentId) {
 
         const result = await response.json();
 
-        if (result.success) {
-            // Refresh data
+        if (response.ok && result.success) {
+            // Refresh data silently on success
             const dataResponse = await fetch('/admin/payments/data');
             const data = await dataResponse.json();
             paymentsData = data.payments;
@@ -294,7 +297,12 @@ async function refundPayment(paymentId) {
             alert(`Error: ${result.error || 'Failed to refund payment'}`);
         }
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        // Network error or JSON parse error - refresh anyway in case it succeeded
+        console.error('Refund error:', error);
+        const dataResponse = await fetch('/admin/payments/data');
+        const data = await dataResponse.json();
+        paymentsData = data.payments;
+        paymentsTable.replaceData(paymentsData);
     }
 }
 
