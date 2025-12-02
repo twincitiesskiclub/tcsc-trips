@@ -3,6 +3,30 @@ let paymentsData = [];
 let pendingBulkAction = null;
 let selectedPaymentIds = [];
 
+// Toast notification system
+function showToast(message, type = 'success') {
+    const container = document.getElementById('toast-container');
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+
+    const icon = type === 'success' ? '&#10003;' : '&#10007;';
+    toast.innerHTML = `
+        <span class="toast-icon">${icon}</span>
+        <span class="toast-message">${message}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
+    `;
+
+    container.appendChild(toast);
+
+    // Auto-remove after 4 seconds
+    setTimeout(() => {
+        if (toast.parentElement) {
+            toast.style.animation = 'slideOut 0.3s ease forwards';
+            setTimeout(() => toast.remove(), 300);
+        }
+    }, 4000);
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Fetch payment data from API
     const response = await fetch('/admin/payments/data');
@@ -23,16 +47,10 @@ document.addEventListener('DOMContentLoaded', async () => {
             {formatter: "rowSelection", titleFormatter: "rowSelection", hozAlign: "center", headerSort: false, width: 40},
             {title: "Name", field: "name", minWidth: 150, frozen: true},
             {title: "Email", field: "email", minWidth: 200},
-            {title: "Type", field: "payment_type", minWidth: 80,
-                formatter: function(cell) {
-                    const type = cell.getValue();
-                    return `<span class="type-badge type-${type}">${type ? type.charAt(0).toUpperCase() + type.slice(1) : ''}</span>`;
-                }
-            },
-            {title: "For", field: "for_name", minWidth: 120},
             {title: "Amount", field: "amount", minWidth: 100,
                 formatter: "money", formatterParams: {symbol: "$", precision: 2}
             },
+            {title: "For", field: "for_name", minWidth: 120},
             {title: "Status", field: "display_status", minWidth: 100,
                 formatter: function(cell) {
                     const status = cell.getValue();
@@ -55,6 +73,12 @@ document.addEventListener('DOMContentLoaded', async () => {
                     return `<span class="${classes[status] || 'status-badge'}">${labels[status] || status}</span>`;
                 }
             },
+            {title: "Type", field: "payment_type", minWidth: 80,
+                formatter: function(cell) {
+                    const type = cell.getValue();
+                    return `<span class="type-badge type-${type}">${type ? type.charAt(0).toUpperCase() + type.slice(1) : ''}</span>`;
+                }
+            },
             {title: "Created", field: "created_at", minWidth: 140},
             {title: "Actions", formatter: function(cell) {
                 const data = cell.getRow().getData();
@@ -68,15 +92,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             }, headerSort: false, width: 180, hozAlign: "center", frozen: true}
         ],
 
-        initialSort: [{column: "created_at", dir: "desc"}],
+        initialSort: [{column: "created_at", dir: "desc"}]
+    });
 
-        rowSelectionChanged: function(data, rows) {
-            updateBulkButtons();
-        },
+    // Tabulator 5.x event binding using .on() method
+    paymentsTable.on("rowSelectionChanged", function(data, rows) {
+        updateBulkButtons();
+    });
 
-        dataFiltered: function(filters, rows) {
-            updatePaymentCount(rows.length);
-        }
+    paymentsTable.on("dataFiltered", function(filters, rows) {
+        updatePaymentCount(rows.length);
     });
 
     updatePaymentCount(paymentsData.length);
@@ -165,7 +190,7 @@ function showBulkConfirmation(action) {
     }
 
     if (actionablePayments.length === 0) {
-        alert(`No selected payments can be ${action === 'accept' ? 'accepted' : 'refunded'}.`);
+        showToast(`No selected payments can be ${action === 'accept' ? 'accepted' : 'refunded'}.`, 'error');
         return;
     }
 
@@ -222,7 +247,7 @@ async function executeBulkAction() {
 
         const result = await response.json();
 
-        if (result.success) {
+        if (response.ok && result.status === 'success') {
             // Refresh data
             const dataResponse = await fetch('/admin/payments/data');
             const data = await dataResponse.json();
@@ -234,12 +259,12 @@ async function executeBulkAction() {
 
             // Show success message
             const successCount = result.results ? result.results.filter(r => r.success).length : selectedPaymentIds.length;
-            alert(`Successfully processed ${successCount} payment(s).`);
+            showToast(`Successfully processed ${successCount} payment(s).`);
         } else {
-            alert(`Error: ${result.error || 'Unknown error occurred'}`);
+            showToast(result.error || 'Unknown error occurred', 'error');
         }
     } catch (error) {
-        alert(`Error: ${error.message}`);
+        showToast(error.message, 'error');
     } finally {
         document.getElementById('confirm-action').disabled = false;
         document.getElementById('confirm-action').textContent = action === 'accept' ? 'Accept All' : 'Refund All';
@@ -257,14 +282,14 @@ async function capturePayment(paymentId) {
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
+        if (response.ok && result.status === 'success') {
             // Refresh data silently on success
             const dataResponse = await fetch('/admin/payments/data');
             const data = await dataResponse.json();
             paymentsData = data.payments;
             paymentsTable.replaceData(paymentsData);
         } else {
-            alert(`Error: ${result.error || 'Failed to capture payment'}`);
+            showToast(result.error || 'Failed to capture payment', 'error');
         }
     } catch (error) {
         // Network error or JSON parse error - refresh anyway in case it succeeded
@@ -287,14 +312,14 @@ async function refundPayment(paymentId) {
 
         const result = await response.json();
 
-        if (response.ok && result.success) {
+        if (response.ok && result.status === 'success') {
             // Refresh data silently on success
             const dataResponse = await fetch('/admin/payments/data');
             const data = await dataResponse.json();
             paymentsData = data.payments;
             paymentsTable.replaceData(paymentsData);
         } else {
-            alert(`Error: ${result.error || 'Failed to refund payment'}`);
+            showToast(result.error || 'Failed to refund payment', 'error');
         }
     } catch (error) {
         // Network error or JSON parse error - refresh anyway in case it succeeded
