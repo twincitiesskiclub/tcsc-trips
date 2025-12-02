@@ -1,4 +1,4 @@
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for, Response
+from flask import Blueprint, render_template, jsonify, request, redirect, url_for, Response, session
 from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser
@@ -9,6 +9,18 @@ import csv
 from io import StringIO
 
 admin = Blueprint('admin', __name__)
+
+# Users authorized to view payment amounts
+FINANCE_AUTHORIZED_EMAILS = [
+    'admin@twincitiesskiclub.org',
+    'finance@twincitiesskiclub.org'
+]
+
+
+def is_finance_authorized():
+    """Check if the current user is authorized to view payment amounts."""
+    user = session.get('user', {})
+    return user.get('email', '').lower() in [e.lower() for e in FINANCE_AUTHORIZED_EMAILS]
 
 
 def delete_entity(model, entity_id, entity_name, redirect_endpoint):
@@ -153,6 +165,7 @@ def get_admin_payments():
 def get_payments_data():
     """Return all payments as JSON for the Tabulator data grid."""
     payments = Payment.query.order_by(Payment.created_at.desc()).all()
+    can_view_amounts = is_finance_authorized()
 
     payments_data = []
     for payment in payments:
@@ -181,14 +194,14 @@ def get_payments_data():
             'email': payment.email,
             'payment_type': payment.payment_type,
             'for_name': for_name,
-            'amount': payment.amount / 100,  # Convert cents to dollars
+            'amount': payment.amount / 100 if can_view_amounts else None,
             'status': payment.status,
             'display_status': display_status,
             'created_at': payment.created_at.strftime('%Y-%m-%d %H:%M') if payment.created_at else '',
             'payment_intent_id': payment.payment_intent_id,
         })
 
-    return jsonify({'payments': payments_data})
+    return jsonify({'payments': payments_data, 'can_view_amounts': can_view_amounts})
 
 @admin.route('/admin/trips')
 @admin_required
