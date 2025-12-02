@@ -44,3 +44,12 @@ class StripeEvent:
     PAYMENT_CAPTURABLE = 'payment_intent.amount_capturable_updated'
     PAYMENT_SUCCEEDED = 'payment_intent.succeeded'
     PAYMENT_CANCELED = 'payment_intent.canceled'
+
+
+class PaymentType:
+    """Type of payment - what entity is being paid for"""
+    SEASON = 'season'
+    TRIP = 'trip'
+    # SOCIAL_EVENT = 'social_event'  # Future: pickleball, etc.
+
+    ALL = [SEASON, TRIP]
