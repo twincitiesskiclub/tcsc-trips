@@ -305,6 +305,129 @@ def refund_payment(payment_id):
     except Exception as e:
         return json_error('An unexpected error occurred', 500)
 
+@payments.route('/admin/payments/bulk-capture', methods=['POST'])
+@admin_required
+def bulk_capture_payments():
+    """Capture multiple payments at once."""
+    try:
+        data = request.get_json()
+        payment_ids = data.get('payment_ids', [])
+
+        if not payment_ids:
+            return json_error('No payment IDs provided')
+
+        results = []
+        for payment_id in payment_ids:
+            try:
+                payment = Payment.query.get(payment_id)
+                if not payment:
+                    results.append({'id': payment_id, 'success': False, 'error': 'Payment not found'})
+                    continue
+
+                # Retrieve current status from Stripe
+                intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
+
+                if intent.status != 'requires_capture':
+                    results.append({'id': payment_id, 'success': False, 'error': f'Cannot capture - status: {intent.status}'})
+                    continue
+
+                # Capture the payment
+                captured_intent = stripe.PaymentIntent.capture(payment.payment_intent_id)
+
+                if captured_intent.status != 'succeeded':
+                    results.append({'id': payment_id, 'success': False, 'error': f'Capture failed - status: {captured_intent.status}'})
+                    continue
+
+                # Update payment status
+                payment.status = captured_intent.status
+
+                # Auto-sync: Update UserSeason status for season payments
+                if payment.payment_type == PaymentType.SEASON and payment.season_id:
+                    user = User.get_by_email(payment.email)
+                    if user:
+                        user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+                        if user_season:
+                            user_season.status = UserSeasonStatus.ACTIVE
+                            user_season.payment_date = today_central()
+                            user.status = UserStatus.ACTIVE
+                        if not payment.user_id:
+                            payment.user_id = user.id
+
+                results.append({'id': payment_id, 'success': True})
+
+            except stripe.error.StripeError as e:
+                results.append({'id': payment_id, 'success': False, 'error': str(e)})
+            except Exception as e:
+                results.append({'id': payment_id, 'success': False, 'error': str(e)})
+
+        db.session.commit()
+
+        return json_success({'results': results})
+
+    except Exception as e:
+        return json_error(str(e), 500)
+
+
+@payments.route('/admin/payments/bulk-refund', methods=['POST'])
+@admin_required
+def bulk_refund_payments():
+    """Refund or cancel multiple payments at once."""
+    try:
+        data = request.get_json()
+        payment_ids = data.get('payment_ids', [])
+
+        if not payment_ids:
+            return json_error('No payment IDs provided')
+
+        results = []
+        for payment_id in payment_ids:
+            try:
+                payment = Payment.query.get(payment_id)
+                if not payment:
+                    results.append({'id': payment_id, 'success': False, 'error': 'Payment not found'})
+                    continue
+
+                # Retrieve current status from Stripe
+                intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
+
+                if intent.status not in ['succeeded', 'requires_capture']:
+                    results.append({'id': payment_id, 'success': False, 'error': f'Cannot refund - status: {intent.status}'})
+                    continue
+
+                # Cancel uncaptured payments, refund captured ones
+                if intent.status == 'requires_capture':
+                    canceled_intent = stripe.PaymentIntent.cancel(payment.payment_intent_id)
+                    payment.status = canceled_intent.status
+                else:
+                    refund = stripe.Refund.create(payment_intent=payment.payment_intent_id)
+                    if refund.status != 'succeeded':
+                        results.append({'id': payment_id, 'success': False, 'error': f'Refund failed - status: {refund.status}'})
+                        continue
+                    payment.status = 'refunded'
+
+                # Auto-sync: Update UserSeason status for season payments
+                if payment.payment_type == PaymentType.SEASON and payment.season_id:
+                    user = User.get_by_email(payment.email)
+                    if user:
+                        user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+                        if user_season:
+                            user_season.status = UserSeasonStatus.DROPPED
+
+                results.append({'id': payment_id, 'success': True})
+
+            except stripe.error.StripeError as e:
+                results.append({'id': payment_id, 'success': False, 'error': str(e)})
+            except Exception as e:
+                results.append({'id': payment_id, 'success': False, 'error': str(e)})
+
+        db.session.commit()
+
+        return json_success({'results': results})
+
+    except Exception as e:
+        return json_error(str(e), 500)
+
+
 @payments.route('/create-season-payment-intent', methods=['POST'])
 def create_season_payment_intent():
     try:
