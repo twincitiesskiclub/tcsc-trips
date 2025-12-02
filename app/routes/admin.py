@@ -145,8 +145,50 @@ def get_admin_page():
 @admin.route('/admin/payments')
 @admin_required
 def get_admin_payments():
-    payments = Payment.query.all()
-    return render_template('admin/payments.html', payments=payments)
+    return render_template('admin/payments.html')
+
+
+@admin.route('/admin/payments/data')
+@admin_required
+def get_payments_data():
+    """Return all payments as JSON for the Tabulator data grid."""
+    payments = Payment.query.order_by(Payment.created_at.desc()).all()
+
+    payments_data = []
+    for payment in payments:
+        # Get the associated trip or season name
+        for_name = '-'
+        if payment.payment_type == 'trip' and payment.trip:
+            for_name = payment.trip.name
+        elif payment.payment_type == 'season' and payment.season:
+            for_name = payment.season.name
+
+        # Map status to display status
+        display_status = {
+            'requires_payment_method': 'pending',
+            'requires_confirmation': 'pending',
+            'requires_action': 'pending',
+            'requires_capture': 'pending',
+            'processing': 'processing',
+            'succeeded': 'success',
+            'canceled': 'canceled',
+            'refunded': 'refunded'
+        }.get(payment.status, 'unknown')
+
+        payments_data.append({
+            'id': payment.id,
+            'name': payment.name,
+            'email': payment.email,
+            'payment_type': payment.payment_type,
+            'for_name': for_name,
+            'amount': payment.amount / 100,  # Convert cents to dollars
+            'status': payment.status,
+            'display_status': display_status,
+            'created_at': payment.created_at.strftime('%Y-%m-%d %H:%M') if payment.created_at else '',
+            'payment_intent_id': payment.payment_intent_id,
+        })
+
+    return jsonify({'payments': payments_data})
 
 @admin.route('/admin/trips')
 @admin_required
