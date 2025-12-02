@@ -2,6 +2,7 @@ let paymentsTable;
 let paymentsData = [];
 let pendingBulkAction = null;
 let selectedPaymentIds = [];
+let canViewAmounts = false;
 
 // Toast notification system
 function showToast(message, type = 'success') {
@@ -32,6 +33,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const response = await fetch('/admin/payments/data');
     const data = await response.json();
     paymentsData = data.payments;
+    canViewAmounts = data.can_view_amounts;
 
     // Initialize Tabulator
     paymentsTable = new Tabulator("#payments-table", {
@@ -48,7 +50,13 @@ document.addEventListener('DOMContentLoaded', async () => {
             {title: "Name", field: "name", minWidth: 150, frozen: true},
             {title: "Email", field: "email", minWidth: 200},
             {title: "Amount", field: "amount", minWidth: 100,
-                formatter: "money", formatterParams: {symbol: "$", precision: 2}
+                formatter: function(cell) {
+                    const value = cell.getValue();
+                    if (value === null) {
+                        return '<span class="amount-hidden">-</span>';
+                    }
+                    return '$' + value.toFixed(2);
+                }
             },
             {title: "For", field: "for_name", minWidth: 120},
             {title: "Status", field: "display_status", minWidth: 100,
@@ -197,9 +205,6 @@ function showBulkConfirmation(action) {
     pendingBulkAction = action;
     selectedPaymentIds = actionablePayments.map(p => p.id);
 
-    // Calculate total amount
-    const totalAmount = actionablePayments.reduce((sum, p) => sum + p.amount, 0);
-
     // Build modal content
     const actionText = action === 'accept' ? 'Accept' : 'Refund';
     const actionClass = action === 'accept' ? 'button-success' : 'button-danger';
@@ -211,11 +216,15 @@ function showBulkConfirmation(action) {
     let bodyHtml = `<p>You are about to <strong>${action}</strong> the following payments:</p>`;
     bodyHtml += `<div class="bulk-summary">`;
     bodyHtml += `<div class="summary-stat"><span class="stat-value">${actionablePayments.length}</span><span class="stat-label">Payments</span></div>`;
-    bodyHtml += `<div class="summary-stat"><span class="stat-value">$${totalAmount.toFixed(2)}</span><span class="stat-label">Total Amount</span></div>`;
+    if (canViewAmounts) {
+        const totalAmount = actionablePayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+        bodyHtml += `<div class="summary-stat"><span class="stat-value">$${totalAmount.toFixed(2)}</span><span class="stat-label">Total Amount</span></div>`;
+    }
     bodyHtml += `</div>`;
     bodyHtml += `<div class="payment-list">`;
     actionablePayments.forEach(p => {
-        bodyHtml += `<div class="payment-item">${p.name} - $${p.amount.toFixed(2)}</div>`;
+        const amountDisplay = canViewAmounts && p.amount !== null ? ` - $${p.amount.toFixed(2)}` : '';
+        bodyHtml += `<div class="payment-item">${p.name}${amountDisplay}</div>`;
     });
     bodyHtml += `</div>`;
 
