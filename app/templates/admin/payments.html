@@ -1,84 +1,320 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Admin - Payments</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
-    <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
-  </head>
-  <body>
-    <div class="admin-container">
-      {% include 'admin/partials/header.html' %}
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+/* Payments Grid Styles */
+.payments-grid-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+}
 
-      <div class="admin-header">
-        <h1>Payments Overview</h1>
-        <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
-      </div>
+/* Toolbar */
+.payments-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: nowrap;
+}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Email</th>
-            <th>Type</th>
-            <th>For</th>
-            <th>Amount</th>
-            <th>Created At</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for payment in payments %}
-          <tr>
-            <td>{{ payment.name }}</td>
-            <td>
-              <span class="status-badge status-{{ payment.status|replace('succeeded', 'success')|replace('requires_capture', 'pending')|default('unknown') }}">
-                {% set display_status = {
-                  'requires_payment_method': 'Pending',
-                  'requires_confirmation': 'Pending',
-                  'requires_action': 'Pending',
-                  'requires_capture': 'Pending',
-                  'processing': 'Processing',
-                  'succeeded': 'Success',
-                  'canceled': 'Canceled',
-                  'refunded': 'Refunded'
-                } %}
-                {{ display_status[payment.status] if payment.status in display_status else 'Unknown' }}
-              </span>
-            </td>
-            <td>{{ payment.email }}</td>
-            <td>
-              <span class="type-badge type-{{ payment.payment_type }}">
-                {{ payment.payment_type|capitalize }}
-              </span>
-            </td>
-            <td>
-              {% if payment.payment_type == 'season' and payment.season %}
-                {{ payment.season.name }}
-              {% elif payment.payment_type == 'trip' and payment.trip %}
-                {{ payment.trip.name }}
-              {% else %}
-                -
-              {% endif %}
-            </td>
-            <td>{{ payment.amount|format_cents }}</td>
-            <td>{{ payment.created_at|format_date('%Y-%m-%d %H:%M') }}</td>
-            <td>
-              <div class="action-buttons">
-                <button class="button button-small button-success" data-action="accept" data-payment-id="{{ payment.id }}"
-                        {% if payment.status != 'requires_capture' %}disabled{% endif %}>Accept</button>
-                <button class="button button-small button-danger" data-action="refund" data-payment-id="{{ payment.id }}"
-                        {% if payment.status not in ['requires_capture', 'succeeded'] %}disabled{% endif %}>Refund</button>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+/* Unified control height and styling */
+.toolbar-control {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 400 13px var(--f);
+    color: #344054;
+    box-sizing: border-box;
+}
+
+.toolbar-control:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 1px var(--p);
+}
+
+/* Dropdowns - use !important to override _forms.css global styles */
+.payments-toolbar select {
+    height: 32px !important;
+    width: auto !important;
+    padding: 0 28px 0 10px !important;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+    font: 400 13px var(--f);
+    color: #344054;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    box-sizing: border-box;
+}
+
+.payments-toolbar select:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+/* Payment Count Badge */
+.payment-count {
+    height: 32px;
+    display: inline-flex;
+    align-items: center;
+    padding: 0 12px;
+    background: #f2f4f7;
+    border: 1px solid #e4e7ec;
+    border-radius: 6px;
+    font: 500 13px var(--f);
+    color: #475467;
+    white-space: nowrap;
+}
+
+/* Search Input - use !important to override _forms.css global styles */
+.payments-toolbar #payments-search {
+    height: 32px !important;
+    width: 160px !important;
+    padding: 0 10px !important;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 400 13px var(--f);
+    color: #344054;
+    box-sizing: border-box;
+}
+
+.payments-toolbar #payments-search::placeholder {
+    color: #98a2b3;
+}
+
+.payments-toolbar #payments-search:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+/* Toolbar Spacer */
+.toolbar-spacer {
+    flex: 1;
+}
+
+/* Bulk Action Buttons */
+.bulk-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.bulk-actions .button {
+    height: 32px !important;
+    padding: 0 14px !important;
+    margin: 0 !important;
+    margin-top: 0 !important;
+    width: auto !important;
+    display: inline-flex !important;
+    font-size: 13px;
+    font-weight: 500;
+    border-radius: 6px;
+    border: none;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    white-space: nowrap;
+    align-items: center;
+    justify-content: center;
+    box-sizing: border-box;
+}
+
+.bulk-actions .button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Table Footer */
+.table-footer {
+    display: flex;
+    justify-content: flex-end;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e4e7ec;
+}
+
+.table-footer .button-secondary {
+    height: 36px;
+    padding: 0 16px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 500 13px var(--f);
+    color: #344054;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.table-footer .button-secondary:hover {
+    background: #f9fafb;
+    border-color: #98a2b3;
+}
+
+/* Page Title */
+.page-title {
+    margin: 0 0 12px 0;
+    font-size: 20px;
+    color: var(--p);
+}
+
+/* Tabulator theme overrides */
+.tabulator {
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    font-family: var(--f);
+}
+
+.tabulator .tabulator-header {
+    background: var(--p);
+    color: white;
+    border-bottom: none;
+}
+
+.tabulator .tabulator-header .tabulator-col {
+    background: var(--p);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+    padding: 10px 8px;
+}
+
+.tabulator-row.tabulator-row-even {
+    background: #f9f9f9;
+}
+
+.tabulator-row:hover {
+    background: #f0f0f0;
+}
+
+.tabulator-row.tabulator-selected {
+    background: #e8f0fe !important;
+}
+
+.tabulator-cell {
+    padding: 8px;
+}
+
+/* Action buttons in table */
+.action-buttons {
+    display: flex;
+    gap: 4px;
+}
+
+.action-buttons .button-small {
+    padding: 4px 8px;
+    font-size: 11px;
+}
+
+/* Bulk Summary in Modal */
+.bulk-summary {
+    display: flex;
+    gap: 24px;
+    margin: 16px 0;
+    padding: 16px;
+    background: #f9fafb;
+    border-radius: 8px;
+}
+
+.summary-stat {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--p);
+}
+
+.stat-label {
+    font-size: 12px;
+    color: #667085;
+    margin-top: 4px;
+}
+
+.payment-list {
+    max-height: 200px;
+    overflow-y: auto;
+    border: 1px solid #e4e7ec;
+    border-radius: 6px;
+    margin-top: 12px;
+}
+
+.payment-item {
+    padding: 8px 12px;
+    border-bottom: 1px solid #e4e7ec;
+    font-size: 13px;
+}
+
+.payment-item:last-child {
+    border-bottom: none;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="payments-grid-container">
+    <h1 class="page-title">Payments</h1>
+
+    <!-- Toolbar -->
+    <div class="payments-toolbar">
+        <input type="text" id="payments-search" placeholder="Search...">
+        <select id="type-filter">
+            <option value="">All Types</option>
+            <option value="trip">Trip</option>
+            <option value="season">Season</option>
+        </select>
+        <select id="status-filter">
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="success">Success</option>
+            <option value="refunded">Refunded</option>
+            <option value="canceled">Canceled</option>
+        </select>
+        <span id="payment-count" class="payment-count">0 payments</span>
+        <div class="toolbar-spacer"></div>
+        <div class="bulk-actions">
+            <button id="bulk-accept" class="button button-success" disabled>Accept Selected</button>
+            <button id="bulk-refund" class="button button-danger" disabled>Refund Selected</button>
+        </div>
     </div>
-  </body>
-</html> 
+
+    <div id="payments-table"></div>
+
+    <div class="table-footer">
+        <button id="export-csv" class="button-secondary">Export CSV</button>
+    </div>
+</div>
+
+<!-- Bulk Action Confirmation Modal -->
+<div id="bulk-modal" class="modal" style="display: none;">
+    <div class="modal-overlay"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modal-title">Confirm Action</h2>
+            <button class="modal-close">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body">
+            <!-- Dynamic content -->
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="button button-secondary" id="cancel-action">Cancel</button>
+            <button type="button" class="button button-success" id="confirm-action">Confirm</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_payments.js') }}"></script>
+{% endblock %}
