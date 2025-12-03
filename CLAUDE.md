@@ -6,7 +6,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Local Development
 
-**Requirements:** Python 3.12+ (see `runtime.txt`)
+**Requirements:**
+- Python 3.12+ (see `runtime.txt`)
+- Docker (for local PostgreSQL)
+- Stripe CLI (for webhook testing)
 
 1. Create and activate virtual environment:
    ```bash
@@ -24,16 +27,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    - Copy `.env.example` to `.env`
    - Fill in Stripe API keys and Google OAuth credentials
 
-4. Initialize database:
+4. Run the development server:
    ```bash
-   flask db upgrade
+   ./scripts/dev.sh              # PostgreSQL on port 5001 (default)
+   ./scripts/dev.sh 5000         # PostgreSQL on port 5000
+   ./scripts/dev.sh --sqlite     # SQLite for quick testing (no Docker)
    ```
 
-5. Run the development server (recommended):
-   ```bash
-   ./scripts/dev.sh        # Starts on port 5001
-   ./scripts/dev.sh 5000   # Or specify custom port
-   ```
+   On first run with PostgreSQL, the script will:
+   - Pull and start a PostgreSQL 18 container (`tcsc-postgres`)
+   - Migrate data from `app.db` (if present) or create empty tables
+
+### Managing Local PostgreSQL
+
+```bash
+docker stop tcsc-postgres     # Stop the container (data persists)
+docker start tcsc-postgres    # Restart it
+docker rm -f tcsc-postgres    # Delete container and reset data
+```
 
 ### Stripe Webhook Testing
 The `dev.sh` script automatically handles webhook configuration. It:
@@ -48,13 +59,15 @@ stripe listen --forward-to localhost:5000/webhook
 This provides a webhook signing secret (`whsec_...`) to set as `STRIPE_WEBHOOK_SECRET`.
 
 ### Database Management
-- **Initialize/Migrate Database:** `flask db upgrade`
+- **Local Development:** PostgreSQL via Docker (default) or SQLite (`--sqlite` flag)
+- **Production:** PostgreSQL on Render (via `DATABASE_URL` env var)
 - **Create New Migration:** `flask db migrate -m "description"`
-- **Database Location:** Production/dev databases in `/var/lib/`, testing in `app/instance/`
+- **Apply Migrations:** `flask db upgrade`
 - **Migration Files:** Located in `migrations/versions/`
 
 ### Helper Scripts
-- `scripts/dev.sh` - **Recommended** dev startup (runs Stripe listener + Flask, auto-configures webhook secret)
+- `scripts/dev.sh` - **Recommended** dev startup (PostgreSQL + Stripe + Flask)
+- `scripts/migrate_to_postgres.py` - Migrate data from SQLite to PostgreSQL
 - `scripts/seed_former_members.py` - Import CSV of former members (sets status='inactive')
 - `scripts/seed_former_member_season.py` - Create legacy season linking inactive users
 
@@ -120,7 +133,7 @@ The admin dashboard (`/admin`) provides:
 - **Stripe API:** Payment processing, webhooks, refunds
 - **Google OAuth:** Admin authentication via Authlib
 - **Flask-Migrate:** Database schema versioning with Alembic
-- **SQLAlchemy:** ORM for SQLite database
+- **SQLAlchemy:** ORM with PostgreSQL (production) and SQLite (optional local)
 
 ## Configuration
 
@@ -133,7 +146,7 @@ Check `.env.example` for complete list. Critical variables include:
 
 ### Deployment
 - **Production Server:** Configured for Gunicorn (see `Procfile`)
-- **Database:** Environment-specific SQLite files via `app/config.py`
+- **Database:** PostgreSQL on Render via `DATABASE_URL` env var (falls back to SQLite if not set)
 
 ## Business Logic Notes
 
