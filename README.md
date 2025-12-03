@@ -12,6 +12,7 @@ A Flask web application for the Twin Cities Ski Club (TCSC) trip registration an
 ## Requirements
 
 - Python 3.12+
+- [Docker](https://www.docker.com/products/docker-desktop/) (for local PostgreSQL)
 - [Stripe CLI](https://stripe.com/docs/stripe-cli) (for local webhook testing)
 - Google OAuth credentials (for admin access)
 
@@ -30,22 +31,37 @@ A Flask web application for the Twin Cities Ski Club (TCSC) trip registration an
    - Copy `.env.example` to `.env`
    - Fill in Stripe API keys and Google OAuth credentials
 
-3. **Initialize database:**
-   ```bash
-   flask db upgrade
-   ```
-
-4. **Run the development server:**
+3. **Run the development server:**
    ```bash
    ./scripts/dev.sh
    ```
-   This starts Flask on port 5001 and automatically configures Stripe webhooks.
+   This starts PostgreSQL via Docker, Flask on port 5001, and automatically configures Stripe webhooks.
 
-5. **Access the app:**
+   On first run, it will:
+   - Pull and start a PostgreSQL 18 container
+   - Migrate data from `app.db` (if present) or create empty tables
+
+4. **Access the app:**
    - Public site: http://localhost:5001
    - Admin dashboard: http://localhost:5001/admin (requires @twincitiesskiclub.org Google login)
 
 ## Development
+
+### Dev Script Options
+
+```bash
+./scripts/dev.sh              # PostgreSQL on port 5001 (default)
+./scripts/dev.sh 5000         # PostgreSQL on port 5000
+./scripts/dev.sh --sqlite     # SQLite for quick testing (no Docker needed)
+```
+
+### Managing Local PostgreSQL
+
+```bash
+docker stop tcsc-postgres     # Stop the container (data persists)
+docker start tcsc-postgres    # Restart it
+docker rm -f tcsc-postgres    # Delete container and reset data
+```
 
 ### Running Manually
 
@@ -55,7 +71,8 @@ If you need to run components separately:
 # Terminal 1: Stripe webhook listener
 stripe listen --forward-to localhost:5000/webhook
 
-# Terminal 2: Flask app
+# Terminal 2: Flask app (with PostgreSQL)
+export DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips
 export STRIPE_WEBHOOK_SECRET=whsec_...  # from stripe listen output
 python3 -m flask run
 ```
