@@ -1,48 +1,104 @@
-# Setup local environment
+# TCSC Trips & Membership Registration
+
+A Flask web application for the Twin Cities Ski Club (TCSC) trip registration and membership management system.
+
+## Features
+
+- **Trip Registration:** Public signup for ski trips with Stripe payment processing
+- **Membership Management:** Season-based membership with lottery system for new members
+- **Admin Dashboard:** Manage trips, members, and payments via interactive data grids
+- **Payment Processing:** Two-tier system (automatic for returning members, manual capture for lottery)
 
 ## Requirements
 
-- Python 3
-- [Configured .env file](../README.md)
+- Python 3.12+
+- [Stripe CLI](https://stripe.com/docs/stripe-cli) (for local webhook testing)
+- Google OAuth credentials (for admin access)
 
-## How to run
+## Quick Start
 
-1. Create and activate a new virtual environment
+1. **Clone and setup environment:**
+   ```bash
+   git clone <repo-url>
+   cd tcsc-trips
+   python3 -m venv env
+   source env/bin/activate  # Windows: .\env\Scripts\activate.bat
+   pip install -r requirements.txt
+   ```
 
-**MacOS / Unix**
+2. **Configure environment:**
+   - Copy `.env.example` to `.env`
+   - Fill in Stripe API keys and Google OAuth credentials
 
-```
-python3 -m venv env
-source env/bin/activate
-```
+3. **Initialize database:**
+   ```bash
+   flask db upgrade
+   ```
 
-**Windows (PowerShell)**
+4. **Run the development server:**
+   ```bash
+   ./scripts/dev.sh
+   ```
+   This starts Flask on port 5001 and automatically configures Stripe webhooks.
 
-```
-python3 -m venv env
-.\env\Scripts\activate.bat
-```
+5. **Access the app:**
+   - Public site: http://localhost:5001
+   - Admin dashboard: http://localhost:5001/admin (requires @twincitiesskiclub.org Google login)
 
-2. Install dependencies
+## Development
 
-```
-pip install -r requirements.txt
-```
+### Running Manually
 
-3. Export and run the application
+If you need to run components separately:
 
-**MacOS / Unix**
+```bash
+# Terminal 1: Stripe webhook listener
+stripe listen --forward-to localhost:5000/webhook
 
-```
-export FLASK_APP=app.py
+# Terminal 2: Flask app
+export STRIPE_WEBHOOK_SECRET=whsec_...  # from stripe listen output
 python3 -m flask run
 ```
 
-**Windows (PowerShell)**
+### Database Migrations
+
+```bash
+flask db migrate -m "description"  # Create migration
+flask db upgrade                   # Apply migrations
+```
+
+### Project Structure
 
 ```
-$env:FLASK_APP=“app.py"
-python3 -m flask run
+app/
+├── __init__.py          # Flask app factory
+├── models.py            # SQLAlchemy models (User, Trip, Payment, Season)
+├── constants.py         # Status enums, Stripe events, PaymentType
+├── routes/
+│   ├── admin.py         # Admin dashboard & API
+│   ├── payments.py      # Stripe payment processing
+│   ├── trips.py         # Trip registration
+│   └── registration.py  # Membership signup
+├── static/
+│   ├── admin_users.js   # Member management grid (Tabulator)
+│   └── admin_payments.js # Payment management grid (Tabulator)
+└── templates/
+    └── admin/           # Admin dashboard templates
 ```
 
-4. Go to `localhost:5000` in your browser to see the site. 
+### Key Concepts
+
+- **Member Types:** `NEW` (first-time), `RETURNING` (active in past season), `FORMER` (inactive)
+- **Payment Types:** `trip` or `season` - stored in `payment_type` field
+- **Lottery System:** New members get `manual` capture; admins approve via bulk capture
+- **Status Levels:** Global `User.status` + per-season `UserSeason.status`
+
+See `CLAUDE.md` for detailed architecture documentation.
+
+## Contributing
+
+1. Create a feature branch from `main`
+2. Make changes and test locally with `./scripts/dev.sh`
+3. Submit a pull request
+
+Admin access requires a `@twincitiesskiclub.org` email. For local testing without admin features, you can still access public registration pages.
