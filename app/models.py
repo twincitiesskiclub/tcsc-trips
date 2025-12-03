@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from sqlalchemy.dialects.sqlite import JSON  # Since you're using SQLite
+from sqlalchemy import JSON  # Database-agnostic: uses JSONB on PostgreSQL, TEXT on SQLite
 from sqlalchemy.sql import func
 
 db = SQLAlchemy()
@@ -112,15 +112,12 @@ class User(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Relationship with seasons through UserSeason
-    seasons = db.relationship('Season', secondary='user_seasons', lazy='dynamic', overlaps="user_seasons")
-
     # Relationships
     roles = db.relationship('Role', secondary='user_roles', backref='users')
     committees = db.relationship('Committee', secondary='user_committees', backref='users')
     status_changes = db.relationship('StatusChange', backref='user')
     payments = db.relationship('Payment', backref='user', lazy=True)
-    user_seasons = db.relationship('UserSeason', backref='user', lazy=True, overlaps="seasons")
+    user_seasons = db.relationship('UserSeason', backref='user', lazy=True)
 
     def __repr__(self):
         return f'<User {self.id} {self.email}>'
