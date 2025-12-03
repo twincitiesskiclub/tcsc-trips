@@ -19,3 +19,4 @@ Authlib==1.6.0
 google-auth==2.40.1
 Flask-Migrate==4.1.0
 pytz==2025.2
+psycopg2-binary==2.9.10
