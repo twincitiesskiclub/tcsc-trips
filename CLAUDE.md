@@ -5,6 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Development Environment Setup
 
 ### Local Development
+
+**Requirements:** Python 3.12+ (see `runtime.txt`)
+
 1. Create and activate virtual environment:
    ```bash
    python3 -m venv env
@@ -17,14 +20,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    pip install -r requirements.txt
    ```
 
-3. Set up environment and run:
+3. Configure environment:
+   - Copy `.env.example` to `.env`
+   - Fill in Stripe API keys and Google OAuth credentials
+
+4. Initialize database:
    ```bash
-   export FLASK_APP=app.py
-   python3 -m flask run
+   flask db upgrade
    ```
 
-### Stripe Webhook Testing (Local Development)
-To test Stripe webhooks locally:
+5. Run the development server (recommended):
+   ```bash
+   ./scripts/dev.sh        # Starts on port 5001
+   ./scripts/dev.sh 5000   # Or specify custom port
+   ```
+
+### Stripe Webhook Testing
+The `dev.sh` script automatically handles webhook configuration. It:
+- Starts Stripe webhook listener
+- Extracts and sets `STRIPE_WEBHOOK_SECRET` in `.env`
+- Launches Flask with the correct environment
+
+**Manual method** (if needed separately):
 ```bash
 stripe listen --forward-to localhost:5000/webhook
 ```
@@ -37,6 +54,7 @@ This provides a webhook signing secret (`whsec_...`) to set as `STRIPE_WEBHOOK_S
 - **Migration Files:** Located in `migrations/versions/`
 
 ### Helper Scripts
+- `scripts/dev.sh` - **Recommended** dev startup (runs Stripe listener + Flask, auto-configures webhook secret)
 - `scripts/seed_former_members.py` - Import CSV of former members (sets status='inactive')
 - `scripts/seed_former_member_season.py` - Create legacy season linking inactive users
 
@@ -57,7 +75,7 @@ This is a Flask web application for the Twin Cities Ski Club (TCSC) trip and mem
 
 **Database Models (`app/models.py`):**
 - **Trip:** Ski trip details, pricing, capacity, signup windows
-- **Payment:** Stripe payment intents, amounts, statuses
+- **Payment:** Stripe payment intents, amounts, statuses, payment type (trip or season)
 - **User:** Member profiles with extensive personal information
 - **Season:** Membership seasons with registration windows
 - **UserSeason:** Many-to-many relationship between users and seasons
@@ -66,6 +84,24 @@ This is a Flask web application for the Twin Cities Ski Club (TCSC) trip and mem
 - **Admin Access:** Restricted to `@twincitiesskiclub.org` email addresses via Google OAuth
 - **Public Access:** Trip registration and membership signup (no authentication required)
 - **Payment Security:** Stripe Payment Intents with manual capture (authorization holds)
+- **Finance Authorization:** Payment amounts visible only to authorized finance admins (`FINANCE_AUTHORIZED_EMAILS`)
+
+### Admin Interface
+The admin dashboard (`/admin`) provides:
+- **Tabulator.js Data Grids:** Interactive spreadsheet-style views for Members and Payments
+- **Bulk Payment Actions:** Accept (capture) or refund multiple payments at once
+- **CSV Export:** Export member and payment data
+- **Toast Notifications:** Real-time feedback for admin actions
+
+**Key Admin Static Files:**
+- `app/static/admin_users.js` - Member management grid
+- `app/static/admin_payments.js` - Payment management grid
+
+### Admin API Endpoints
+- `GET /admin/payments/data` - JSON payment data for Tabulator grid
+- `POST /admin/payments/bulk-capture` - Capture multiple payment intents
+- `POST /admin/payments/bulk-refund` - Refund multiple payments
+- `GET /admin/users/data` - JSON user data for Tabulator grid
 
 ### Payment Flow Architecture
 **Two-tier capture system based on member type:**
@@ -124,5 +160,7 @@ Check `.env.example` for complete list. Critical variables include:
 ## Important Files
 - **Product Specification:** `.cursor/rules/tcsc_registration_spec.mdc` contains detailed business requirements
 - **Contributing Guide:** `CONTRIBUTING.md` explains User/UserSeason model and member type logic
+- **Constants:** `app/constants.py` - Status enums (`UserStatus`, `UserSeasonStatus`), `StripeEvent` types, `PaymentType`
+- **Admin JS:** `app/static/admin_users.js`, `app/static/admin_payments.js` - Tabulator grid implementations
 - **Static Assets:** CSS organized in modular structure under `app/static/css/styles/`
 - **Templates:** Jinja2 templates in `app/templates/` with admin-specific subdirectory
