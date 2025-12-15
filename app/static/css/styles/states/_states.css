@@ -22,15 +22,15 @@
   }
   
   .sr-legal-text {
-    background: #ffe8e8;
+    background: #fef2f2;
     padding: 16px;
     border-radius: var(--r);
     margin-top: 24px;
-    border-left: 4px solid #f90
+    border-left: 4px solid #dc2626
   }
-  
+
   .sr-legal-text p {
-    color: #d14343;
+    color: #991b1b;
     margin: 0;
     font: 14px/1.5 var(--f)
   }
