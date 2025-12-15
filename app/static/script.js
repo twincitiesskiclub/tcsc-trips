@@ -17,6 +17,11 @@ const STRIPE_CARD_STYLES = {
   }
 };
 
+// Generate a unique idempotency key for payment requests
+function generateIdempotencyKey() {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
 class PaymentForm {
   constructor() {
     this.initializeProperties();
@@ -30,6 +35,8 @@ class PaymentForm {
     this.selectedAmount = null;
     this.clientSecret = null;
     this.paymentIntent = null;
+    this.idempotencyKey = null;
+    this.isSubmitting = false;
   }
 
   initializeElements() {
@@ -155,8 +162,15 @@ class PaymentForm {
 
   async handleSubmit(e) {
     e.preventDefault();
-    
+
+    // Prevent double submissions
+    if (this.isSubmitting) return;
+
     if (!this.validateForm()) return;
+
+    this.isSubmitting = true;
+    // Generate a new idempotency key for this submission attempt
+    this.idempotencyKey = generateIdempotencyKey();
 
     this.toggleLoadingState(true);
     try {
@@ -164,6 +178,9 @@ class PaymentForm {
     } catch (error) {
       console.error('Payment error:', error);
       this.showError('Payment failed. Please try again.');
+      // Reset submission state on error to allow retry
+      this.isSubmitting = false;
+      this.idempotencyKey = null;
     } finally {
       this.toggleLoadingState(false);
     }
@@ -195,7 +212,10 @@ class PaymentForm {
   async createOrUpdatePaymentIntent() {
     const response = await fetch('/create-payment-intent', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'Idempotency-Key': this.idempotencyKey
+      },
       body: JSON.stringify({
         currency: 'usd',
         amount: this.selectedAmount,
@@ -203,6 +223,12 @@ class PaymentForm {
         name: this.elements.nameInput.value
       })
     });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `Server error: ${response.status}`);
+    }
+
     const data = await response.json();
     this.clientSecret = data.clientSecret;
     this.paymentIntent = data.paymentIntent;
@@ -289,6 +315,8 @@ document.addEventListener('DOMContentLoaded', () => {
   // Only run payment logic if the form and card element exist
   if (registrationForm && document.getElementById('card-element')) {
     let stripe, card, clientSecret;
+    let isSubmitting = false;
+    let idempotencyKey = null;
 
     async function fetchStripeKey() {
       const response = await fetch('/get-stripe-key');
@@ -296,15 +324,25 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function createPaymentIntent(name, email) {
+      idempotencyKey = generateIdempotencyKey();
       const response = await fetch('/create-season-payment-intent', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'Idempotency-Key': idempotencyKey
+        },
         body: JSON.stringify({
           season_id: registrationForm.dataset.seasonId,
           email,
           name
         })
       });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        return { error: errorData.error || `Server error: ${response.status}` };
+      }
+
       return response.json();
     }
 
@@ -332,8 +370,14 @@ document.addEventListener('DOMContentLoaded', () => {
 
     registrationForm.addEventListener('submit', async function(e) {
       e.preventDefault();
+
+      // Prevent double submissions
+      if (isSubmitting) return;
+
       showError('');
+      isSubmitting = true;
       toggleLoadingState(true);
+
       try {
         // Get payment info from form
         const name = registrationForm.querySelector('#name').value;
@@ -342,6 +386,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const paymentIntentData = await createPaymentIntent(name, email);
         if (paymentIntentData.error) {
           showError(paymentIntentData.error);
+          isSubmitting = false;
           toggleLoadingState(false);
           return;
         }
@@ -355,6 +400,7 @@ document.addEventListener('DOMContentLoaded', () => {
         });
         if (result.error) {
           showError(result.error.message);
+          isSubmitting = false;
           toggleLoadingState(false);
           return;
         }
@@ -363,6 +409,7 @@ document.addEventListener('DOMContentLoaded', () => {
         registrationForm.submit();
       } catch (err) {
         showError('Payment failed. Please try again.');
+        isSubmitting = false;
         toggleLoadingState(false);
       }
     });
