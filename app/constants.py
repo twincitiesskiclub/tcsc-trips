@@ -50,6 +50,6 @@ class PaymentType:
     """Type of payment - what entity is being paid for"""
     SEASON = 'season'
     TRIP = 'trip'
-    # SOCIAL_EVENT = 'social_event'  # Future: pickleball, etc.
+    SOCIAL_EVENT = 'social_event'
 
-    ALL = [SEASON, TRIP]
+    ALL = [SEASON, TRIP, SOCIAL_EVENT]

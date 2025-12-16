@@ -1,0 +1,82 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}{{ 'Edit Social Event' if social_event else 'New Social Event' }}{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>{{ 'Edit Social Event' if social_event else 'New Social Event' }}</h1>
+    <a href="{{ url_for('admin.get_admin_social_events') }}" class="button button-secondary">Back to Social Events</a>
+</div>
+
+<form class="admin-form" method="POST">
+    <div class="form-row">
+        <div class="form-group">
+            <label for="name">Event Name</label>
+            <input type="text" id="name" name="name" value="{{ social_event.name if social_event else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="slug">Event Slug</label>
+            <input type="text" id="slug" name="slug" value="{{ social_event.slug if social_event else '' }}" required
+                   pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens allowed"
+                   {% if social_event %}readonly{% endif %}>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="location">Location</label>
+        <input type="text" id="location" name="location" value="{{ social_event.location if social_event else '' }}" required>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="max_participants">Maximum Participants</label>
+            <input type="number" id="max_participants" name="max_participants"
+                   value="{{ social_event.max_participants if social_event else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="price">Price ($)</label>
+            <input type="number" id="price" name="price" step="0.01"
+                   value="{{ '%.2f'|format(social_event.price / 100) if social_event else '' }}" required>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="event_date">Event Date & Time</label>
+        <input type="datetime-local" id="event_date" name="event_date"
+               value="{{ social_event.event_date.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label for="signup_start">Signup Start</label>
+            <input type="datetime-local" id="signup_start" name="signup_start"
+                   value="{{ social_event.signup_start.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required>
+        </div>
+        <div class="form-group">
+            <label for="signup_end">Signup End</label>
+            <input type="datetime-local" id="signup_end" name="signup_end"
+                   value="{{ social_event.signup_end.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required>
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label for="description">Description</label>
+        <textarea id="description" name="description" rows="4" required>{{ social_event.description if social_event else '' }}</textarea>
+    </div>
+
+    <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status" required>
+            <option value="draft" {% if social_event and social_event.status == 'draft' %}selected{% endif %}>Draft</option>
+            <option value="active" {% if social_event and social_event.status == 'active' %}selected{% endif %}>Active</option>
+            <option value="completed" {% if social_event and social_event.status == 'completed' %}selected{% endif %}>Completed</option>
+            <option value="canceled" {% if social_event and social_event.status == 'canceled' %}selected{% endif %}>Cancelled</option>
+        </select>
+    </div>
+
+    <div class="form-actions">
+        <button type="submit" class="button">Save Event</button>
+        <a href="{{ url_for('admin.get_admin_social_events') }}" class="button button-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

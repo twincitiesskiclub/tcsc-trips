@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Admin - Social Events</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
+  </head>
+  <body>
+    <div class="admin-container">
+      {% include 'admin/partials/header.html' %}
+
+      <div class="admin-header">
+        <h1>Social Events Management</h1>
+        <div class="admin-actions">
+          <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+          <a href="{{ url_for('admin.new_social_event') }}" class="button">Create New Event</a>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Location</th>
+            <th>Date</th>
+            <th>Signup Period</th>
+            <th>Capacity</th>
+            <th>Price</th>
+            <th>Status</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for event in social_events %}
+          <tr>
+            <td>{{ event.name }}</td>
+            <td>{{ event.location }}</td>
+            <td>{{ event.formatted_date }}</td>
+            <td>
+              {{ event.signup_start|format_date('%Y-%m-%d') }} to
+              {{ event.signup_end|format_date('%Y-%m-%d') }}
+            </td>
+            <td>{{ event.max_participants }}</td>
+            <td>{{ event.price|format_price }}</td>
+            <td>
+              <span class="status-badge status-{{ event.status }}">
+                {{ event.status }}
+              </span>
+            </td>
+            <td>
+              <div class="action-buttons">
+                <a href="{{ url_for('admin.edit_social_event', event_id=event.id) }}" class="button button-small">Edit</a>
+                <button
+                  class="button button-small button-danger"
+                  onclick="confirmDelete('social-event', '{{ event.id }}', '{{ event.name }}')"
+                >
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+
+    <script src="{{ url_for('static', filename='admin.js') }}"></script>
+  </body>
+</html>

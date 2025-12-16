@@ -88,11 +88,39 @@
           </div>
           {% endfor %}
 
-          {% if not trips %}
-          <div class="trip-card coming-soon">
-            <h2>More Trips Coming Soon</h2>
+          {% for event in social_events %}
+          <div class="trip-card social-event-card">
+            <span class="event-badge">Social Event</span>
+            <h2>{{ event.name }}</h2>
+            <div class="trip-details">
+              <div class="trip-detail-item">
+                <i class="fas fa-map-marker-alt"></i>
+                <span>{{ event.location }}</span>
+              </div>
+              <div class="trip-detail-item">
+                <i class="fas fa-calendar"></i>
+                <span>{{ event.formatted_date }}</span>
+              </div>
+              <div class="trip-detail-item">
+                <i class="fas fa-clock"></i>
+                <span>{{ event.formatted_time }}</span>
+              </div>
+            </div>
             <p class="trip-description">
-              Summer and winter trips will be available here when sign up opens!
+              {{ event.description }}
+            </p>
+            <div class="trip-price">
+              <span>${{ "%.2f"|format(event.price/100) }}</span>
+            </div>
+            <a href="/social/{{ event.slug }}" class="trip-button">Sign Up</a>
+          </div>
+          {% endfor %}
+
+          {% if not trips and not social_events %}
+          <div class="trip-card coming-soon">
+            <h2>More Events Coming Soon</h2>
+            <p class="trip-description">
+              Trips and social events will be available here when sign up opens!
             </p>
           </div>
           {% endif %}
