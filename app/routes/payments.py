@@ -1,7 +1,7 @@
 from flask import Blueprint, jsonify, request
 import stripe
 import os
-from ..models import db, Payment, Season, UserSeason, User, Trip
+from ..models import db, Payment, Season, UserSeason, User, Trip, SocialEvent
 from ..auth import admin_required
 from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, PaymentType
 from ..errors import json_error, json_success
@@ -88,6 +88,7 @@ def webhook_received():
             member_type = payment_intent.metadata.get('member_type')
             season_id = payment_intent.metadata.get('season_id')
             trip_id = payment_intent.metadata.get('trip_id')
+            social_event_id = payment_intent.metadata.get('social_event_id')
             email = normalize_email(payment_intent.metadata.get('email') or '')
             name = payment_intent.metadata.get('name') or ''
 
@@ -127,6 +128,7 @@ def webhook_received():
                     payment_type=payment_type,
                     season_id=int(season_id) if season_id else None,
                     trip_id=int(trip_id) if trip_id else None,
+                    social_event_id=int(social_event_id) if social_event_id else None,
                     user_id=user.id if user else None
                 )
                 db.session.add(payment)
@@ -139,6 +141,7 @@ def webhook_received():
             member_type = payment_intent.metadata.get('member_type')
             season_id = payment_intent.metadata.get('season_id')
             trip_id = payment_intent.metadata.get('trip_id')
+            social_event_id = payment_intent.metadata.get('social_event_id')
             email = normalize_email(payment_intent.metadata.get('email') or '')
             name = payment_intent.metadata.get('name') or ''
 
@@ -183,6 +186,7 @@ def webhook_received():
                     payment_type=payment_type,
                     season_id=int(season_id) if season_id else None,
                     trip_id=int(trip_id) if trip_id else None,
+                    social_event_id=int(social_event_id) if social_event_id else None,
                     user_id=user.id if user else None
                 )
                 db.session.add(payment)
@@ -480,6 +484,53 @@ def create_season_payment_intent():
                 'payment_type': PaymentType.SEASON
             }
         )
+        return jsonify({
+            'clientSecret': intent.client_secret,
+            'paymentIntent': {
+                'id': intent.id,
+                'amount': intent.amount,
+                'status': intent.status,
+                'email': email
+            }
+        })
+    except Exception as e:
+        return json_error(str(e), 500)
+
+
+@payments.route('/create-social-event-payment-intent', methods=['POST'])
+def create_social_event_payment_intent():
+    """Create a payment intent for social event registration.
+
+    Social events use automatic capture (immediate charge) - no lottery system.
+    """
+    try:
+        data = request.get_json()
+        social_event_id = data.get('social_event_id')
+        email = normalize_email(data.get('email', ''))
+        name = data.get('name', '')
+
+        if not all([social_event_id, email, name]):
+            return json_error('Missing required fields')
+
+        social_event = SocialEvent.query.get(social_event_id)
+        if not social_event:
+            return json_error('Social event not found')
+
+        # Create PaymentIntent with AUTOMATIC capture (immediate charge)
+        intent = stripe.PaymentIntent.create(
+            amount=social_event.price,
+            currency='usd',
+            capture_method='automatic',  # Immediate charge - no lottery
+            receipt_email=email,
+            metadata={
+                'name': name,
+                'email': email,
+                'payment_type': PaymentType.SOCIAL_EVENT,
+                'social_event_id': str(social_event.id),
+                'social_event_slug': social_event.slug
+            }
+        )
+
         return jsonify({
             'clientSecret': intent.client_secret,
             'paymentIntent': {

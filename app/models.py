@@ -14,9 +14,10 @@ class Payment(db.Model):
     name = db.Column(db.String(255), nullable=False)
     amount = db.Column(db.Integer, nullable=False)  # Amount in cents
     status = db.Column(db.String(50), nullable=False)
-    payment_type = db.Column(db.String(50), nullable=False)  # 'season', 'trip', future: 'social_event'
+    payment_type = db.Column(db.String(50), nullable=False)  # 'season', 'trip', 'social_event'
     trip_id = db.Column(db.Integer, db.ForeignKey('trips.id'), nullable=True)  # Nullable for season payments
     season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)  # For season payments
+    social_event_id = db.Column(db.Integer, db.ForeignKey('social_events.id'), nullable=True)  # For social event payments
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -65,6 +66,41 @@ class Trip(db.Model):
         if self.start_date.month == self.end_date.month:
             return f"{self.start_date.strftime('%B %-d')}-{self.end_date.strftime('%-d, %Y')}"
         return f"{self.start_date.strftime('%B %-d')} - {self.end_date.strftime('%B %-d, %Y')}"
+
+
+class SocialEvent(db.Model):
+    __tablename__ = 'social_events'
+
+    id = db.Column(db.Integer, primary_key=True)
+    slug = db.Column(db.String(255), unique=True, nullable=False)  # e.g., 'pickleball-spring-2025'
+    name = db.Column(db.String(255), nullable=False)
+    location = db.Column(db.String(255), nullable=False)
+    max_participants = db.Column(db.Integer, nullable=False)
+    event_date = db.Column(db.DateTime, nullable=False)
+    signup_start = db.Column(db.DateTime, nullable=False)
+    signup_end = db.Column(db.DateTime, nullable=False)
+    price = db.Column(db.Integer, nullable=False)  # Amount in cents
+    description = db.Column(db.Text)
+    status = db.Column(db.String(50), default='draft')
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationship with payments
+    payments = db.relationship('Payment', backref='social_event', lazy=True)
+
+    def __repr__(self):
+        return f'<SocialEvent {self.slug}>'
+
+    @property
+    def formatted_date(self):
+        """Returns formatted date for display"""
+        return self.event_date.strftime('%B %-d, %Y')
+
+    @property
+    def formatted_time(self):
+        """Returns formatted time for display"""
+        return self.event_date.strftime('%-I:%M %p')
+
 
 class SlackUser(db.Model):
     __tablename__ = 'slack_users'

@@ -143,3 +143,22 @@
     font-size: 15px;
     gap: 4px;
 }
+
+/*----------  Social Event Cards  ----------*/
+.social-event-card {
+    position: relative;
+}
+
+.event-badge {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    background: var(--s);
+    color: var(--p);
+    font-size: 11px;
+    font-weight: 600;
+    padding: 4px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}

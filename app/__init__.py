@@ -5,12 +5,13 @@ from flask_migrate import Migrate
 
 from .auth import init_oauth
 from .config import configure_database, load_stripe_config
-from .models import db
+from .models import db, SocialEvent
 from .routes.admin import admin
 from .routes.auth import auth
 from .routes.main import main
 from .routes.payments import payments
 from .routes.registration import registration
+from .routes.socials import socials
 from .routes.trips import trips
 
 
@@ -30,6 +31,7 @@ def create_app(environment=None):
 
     app.register_blueprint(main)
     app.register_blueprint(trips)
+    app.register_blueprint(socials)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
     app.register_blueprint(auth)
