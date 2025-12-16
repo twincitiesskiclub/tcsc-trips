@@ -120,7 +120,7 @@ fi
 # Start stripe listener in background and capture the secret
 echo "Starting Stripe webhook listener..."
 STRIPE_OUTPUT=$(mktemp)
-stripe listen --forward-to localhost:$PORT/webhook > "$STRIPE_OUTPUT" 2>&1 &
+stripe listen --forward-to 127.0.0.1:$PORT/webhook > "$STRIPE_OUTPUT" 2>&1 &
 STRIPE_PID=$!
 
 # Wait for stripe to output the secret
