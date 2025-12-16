@@ -6,6 +6,7 @@ from ..auth import admin_required
 from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, PaymentType
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
+from ..notifications.slack import send_payment_notification
 
 payments = Blueprint('payments', __name__)
 
@@ -192,6 +193,14 @@ def webhook_received():
 
             db.session.commit()
 
+            # Send Slack notification for successful payment
+            send_payment_notification(
+                name=payment.name,
+                amount_cents=payment.amount,
+                email=payment.email,
+                payment_intent_id=payment.payment_intent_id
+            )
+
         elif event_type == StripeEvent.PAYMENT_CANCELED:
             # Payment was canceled - update status (don't delete, keep for audit)
             payment = Payment.get_by_payment_intent(data_object.id)
@@ -241,6 +250,14 @@ def capture_payment(payment_id):
                     payment.user_id = user.id
 
         db.session.commit()
+
+        # Send Slack notification for successful capture
+        send_payment_notification(
+            name=payment.name,
+            amount_cents=payment.amount,
+            email=payment.email,
+            payment_intent_id=payment.payment_intent_id
+        )
 
         return json_success({
             'payment': {
