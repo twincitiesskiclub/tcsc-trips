@@ -16,30 +16,50 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
-    # Create social_events table
-    op.create_table('social_events',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('slug', sa.String(length=255), nullable=False),
-        sa.Column('name', sa.String(length=255), nullable=False),
-        sa.Column('location', sa.String(length=255), nullable=False),
-        sa.Column('max_participants', sa.Integer(), nullable=False),
-        sa.Column('event_date', sa.DateTime(), nullable=False),
-        sa.Column('signup_start', sa.DateTime(), nullable=False),
-        sa.Column('signup_end', sa.DateTime(), nullable=False),
-        sa.Column('price', sa.Integer(), nullable=False),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('status', sa.String(length=50), nullable=True),
-        sa.Column('created_at', sa.DateTime(), nullable=False),
-        sa.Column('updated_at', sa.DateTime(), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('slug')
-    )
+def table_exists(table_name):
+    """Check if a table exists in the database."""
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.tables WHERE table_name = :table_name)"
+    ), {"table_name": table_name})
+    return result.scalar()
 
-    # Add social_event_id column to payments table
-    with op.batch_alter_table('payments', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('social_event_id', sa.Integer(), nullable=True))
-        batch_op.create_foreign_key('fk_payments_social_event_id', 'social_events', ['social_event_id'], ['id'])
+
+def column_exists(table_name, column_name):
+    """Check if a column exists in a table."""
+    conn = op.get_bind()
+    result = conn.execute(sa.text(
+        "SELECT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = :table_name AND column_name = :column_name)"
+    ), {"table_name": table_name, "column_name": column_name})
+    return result.scalar()
+
+
+def upgrade():
+    # Create social_events table (if it doesn't exist)
+    if not table_exists('social_events'):
+        op.create_table('social_events',
+            sa.Column('id', sa.Integer(), nullable=False),
+            sa.Column('slug', sa.String(length=255), nullable=False),
+            sa.Column('name', sa.String(length=255), nullable=False),
+            sa.Column('location', sa.String(length=255), nullable=False),
+            sa.Column('max_participants', sa.Integer(), nullable=False),
+            sa.Column('event_date', sa.DateTime(), nullable=False),
+            sa.Column('signup_start', sa.DateTime(), nullable=False),
+            sa.Column('signup_end', sa.DateTime(), nullable=False),
+            sa.Column('price', sa.Integer(), nullable=False),
+            sa.Column('description', sa.Text(), nullable=True),
+            sa.Column('status', sa.String(length=50), nullable=True),
+            sa.Column('created_at', sa.DateTime(), nullable=False),
+            sa.Column('updated_at', sa.DateTime(), nullable=False),
+            sa.PrimaryKeyConstraint('id'),
+            sa.UniqueConstraint('slug')
+        )
+
+    # Add social_event_id column to payments table (if it doesn't exist)
+    if not column_exists('payments', 'social_event_id'):
+        with op.batch_alter_table('payments', schema=None) as batch_op:
+            batch_op.add_column(sa.Column('social_event_id', sa.Integer(), nullable=True))
+            batch_op.create_foreign_key('fk_payments_social_event_id', 'social_events', ['social_event_id'], ['id'])
 
 
 def downgrade():
