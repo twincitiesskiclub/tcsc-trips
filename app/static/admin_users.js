@@ -41,12 +41,18 @@ document.addEventListener('DOMContentLoaded', async () => {
              formatter: function(cell) {
                  const status = cell.getValue();
                  const classes = {
-                     'active': 'status-badge status-active',
-                     'pending': 'status-badge status-pending',
-                     'inactive': 'status-badge status-draft',
-                     'dropped': 'status-badge status-canceled'
+                     'ACTIVE': 'status-badge status-active',
+                     'PENDING': 'status-badge status-pending',
+                     'ALUMNI': 'status-badge status-alumni',
+                     'DROPPED': 'status-badge status-canceled'
                  };
-                 return `<span class="${classes[status] || 'status-badge'}">${status}</span>`;
+                 const labels = {
+                     'ACTIVE': 'Active',
+                     'PENDING': 'Pending',
+                     'ALUMNI': 'Alumni',
+                     'DROPPED': 'Dropped'
+                 };
+                 return `<span class="${classes[status] || 'status-badge'}">${labels[status] || status}</span>`;
              }
             },
             {title: "Season", field: "season_status", minWidth: 130,
@@ -54,7 +60,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                  const status = cell.getValue();
                  if (status === 'ACTIVE') return '<span class="status-badge status-active">Active</span>';
                  if (status === 'PENDING_LOTTERY') return '<span class="status-badge status-pending">Pending Lottery</span>';
-                 if (status === 'DROPPED') return '<span class="status-badge status-canceled">Dropped</span>';
+                 if (status === 'DROPPED_LOTTERY') return '<span class="status-badge status-info">Dropped (Lottery)</span>';
+                 if (status === 'DROPPED_VOLUNTARY') return '<span class="status-badge status-draft">Dropped (Voluntary)</span>';
+                 if (status === 'DROPPED_CAUSE') return '<span class="status-badge status-canceled">Dropped (Cause)</span>';
                  return '<span class="status-badge status-draft">Not Registered</span>';
              }
             },
@@ -137,8 +145,8 @@ function applyGlobalView() {
     } else if (currentView === 'season' && selectedSeasonId) {
         const season = allSeasons.find(s => s.id === selectedSeasonId);
         title = `${season ? season.name : 'Season'} Members`;
-    } else if (currentView === 'inactive') {
-        title = 'Inactive Members';
+    } else if (currentView === 'alumni') {
+        title = 'Alumni Members';
     } else {
         title = 'All Members';
     }
@@ -168,8 +176,8 @@ function applyFilters() {
 
     usersTable.setFilter(function(data) {
         // Global view filter
-        if (currentView === 'inactive') {
-            if (data.status !== 'inactive' && data.status !== 'dropped') {
+        if (currentView === 'alumni') {
+            if (data.status !== 'ALUMNI' && data.status !== 'DROPPED') {
                 return false;
             }
         } else if (currentView === 'current' && currentSeason) {
@@ -237,10 +245,10 @@ function openEditModal(userId) {
         <div class="form-group">
             <label>Status</label>
             <select name="status">
-                <option value="pending" ${user.status === 'pending' ? 'selected' : ''}>Pending</option>
-                <option value="active" ${user.status === 'active' ? 'selected' : ''}>Active</option>
-                <option value="inactive" ${user.status === 'inactive' ? 'selected' : ''}>Inactive</option>
-                <option value="dropped" ${user.status === 'dropped' ? 'selected' : ''}>Dropped</option>
+                <option value="PENDING" ${user.status === 'PENDING' ? 'selected' : ''}>Pending</option>
+                <option value="ACTIVE" ${user.status === 'ACTIVE' ? 'selected' : ''}>Active</option>
+                <option value="ALUMNI" ${user.status === 'ALUMNI' ? 'selected' : ''}>Alumni</option>
+                <option value="DROPPED" ${user.status === 'DROPPED' ? 'selected' : ''}>Dropped</option>
             </select>
         </div>
         <div class="form-group">

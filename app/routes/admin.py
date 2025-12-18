@@ -326,6 +326,52 @@ def delete_season(season_id):
     return delete_entity(Season, season_id, 'Season', 'admin.get_admin_seasons')
 
 
+@admin.route('/admin/seasons/<int:season_id>/activate', methods=['POST'])
+@admin_required
+def activate_season(season_id):
+    """Activate a season as the current season and sync all user statuses."""
+    season = Season.query.get_or_404(season_id)
+
+    try:
+        # Unset is_current on all seasons
+        Season.query.update({Season.is_current: False})
+
+        # Set this season as current
+        season.is_current = True
+
+        # Sync status for all users
+        users = User.query.all()
+        active_count = 0
+        alumni_count = 0
+        pending_count = 0
+        dropped_count = 0
+
+        for user in users:
+            old_status = user.status
+            user.sync_status()
+            if user.status == 'ACTIVE':
+                active_count += 1
+            elif user.status == 'ALUMNI':
+                alumni_count += 1
+            elif user.status == 'PENDING':
+                pending_count += 1
+            elif user.status == 'DROPPED':
+                dropped_count += 1
+
+        db.session.commit()
+
+        flash_success(
+            f'Season "{season.name}" is now active. '
+            f'Updated {len(users)} users: {active_count} active, {alumni_count} alumni, '
+            f'{pending_count} pending, {dropped_count} dropped.'
+        )
+    except Exception as e:
+        db.session.rollback()
+        flash_error(f'Error activating season: {str(e)}')
+
+    return redirect(url_for('admin.get_admin_seasons'))
+
+
 # Social Events CRUD
 @admin.route('/admin/social-events')
 @admin_required

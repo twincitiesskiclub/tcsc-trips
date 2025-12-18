@@ -22,21 +22,23 @@ class MemberType(Enum):
 
 class UserStatus:
     """Global user status across all seasons"""
-    PENDING = 'pending'
-    ACTIVE = 'active'
-    INACTIVE = 'inactive'
-    DROPPED = 'dropped'
+    PENDING = 'PENDING'      # Registered, awaiting lottery
+    ACTIVE = 'ACTIVE'        # Current season member
+    ALUMNI = 'ALUMNI'        # Not active this season (formerly INACTIVE)
+    DROPPED = 'DROPPED'      # Removed for cause
 
-    ALL = [PENDING, ACTIVE, INACTIVE, DROPPED]
+    ALL = [PENDING, ACTIVE, ALUMNI, DROPPED]
 
 
 class UserSeasonStatus:
-    """Per-season user status"""
-    PENDING_LOTTERY = 'PENDING_LOTTERY'
-    ACTIVE = 'ACTIVE'
-    DROPPED = 'DROPPED'
+    """Per-season user status (expanded for lottery tracking)"""
+    PENDING_LOTTERY = 'PENDING_LOTTERY'      # Registered, awaiting lottery
+    ACTIVE = 'ACTIVE'                        # Accepted member
+    DROPPED_LOTTERY = 'DROPPED_LOTTERY'      # Lost lottery -> priority next time
+    DROPPED_VOLUNTARY = 'DROPPED_VOLUNTARY'  # Withdrew by choice
+    DROPPED_CAUSE = 'DROPPED_CAUSE'          # Removed for cause
 
-    ALL = [PENDING_LOTTERY, ACTIVE, DROPPED]
+    ALL = [PENDING_LOTTERY, ACTIVE, DROPPED_LOTTERY, DROPPED_VOLUNTARY, DROPPED_CAUSE]
 
 
 class StripeEvent:

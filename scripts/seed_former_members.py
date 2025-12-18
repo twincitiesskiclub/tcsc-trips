@@ -1,6 +1,7 @@
 import csv
 from app import create_app
 from app.models import db, User
+from app.constants import UserStatus
 
 CSV_PATH = 'scripts/former_members.csv'
 
@@ -35,7 +36,7 @@ with app.app_context():
                         email=email,
                         first_name=first_name,
                         last_name=last_name,
-                        status='inactive' # Set status explicitly
+                        status=UserStatus.ALUMNI  # Former members are alumni
                     )
                     db.session.add(user)
                     count += 1
