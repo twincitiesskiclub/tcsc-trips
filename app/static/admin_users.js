@@ -194,7 +194,7 @@ function applyFilters() {
     usersTable.setFilter(function(data) {
         // Global view filter
         if (currentView === 'alumni') {
-            if (data.status !== 'ALUMNI' && data.status !== 'DROPPED') {
+            if (data.status !== 'ALUMNI') {
                 return false;
             }
         } else if (currentView === 'current' && currentSeason) {
