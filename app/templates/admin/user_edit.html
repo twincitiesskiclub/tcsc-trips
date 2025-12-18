@@ -227,10 +227,10 @@
                 <div class="form-group">
                     <label>Status</label>
                     <select name="status">
-                        <option value="pending" {% if user.status == 'pending' %}selected{% endif %}>Pending</option>
-                        <option value="active" {% if user.status == 'active' %}selected{% endif %}>Active</option>
-                        <option value="inactive" {% if user.status == 'inactive' %}selected{% endif %}>Inactive</option>
-                        <option value="dropped" {% if user.status == 'dropped' %}selected{% endif %}>Dropped</option>
+                        <option value="PENDING" {% if user.status == 'PENDING' %}selected{% endif %}>Pending</option>
+                        <option value="ACTIVE" {% if user.status == 'ACTIVE' %}selected{% endif %}>Active</option>
+                        <option value="ALUMNI" {% if user.status == 'ALUMNI' %}selected{% endif %}>Alumni</option>
+                        <option value="DROPPED" {% if user.status == 'DROPPED' %}selected{% endif %}>Dropped</option>
                     </select>
                 </div>
                 <div class="form-group">

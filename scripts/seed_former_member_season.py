@@ -1,5 +1,6 @@
 from app import create_app
 from app.models import db, User, Season, UserSeason
+from app.constants import UserStatus, UserSeasonStatus
 from datetime import date
 
 app = create_app()
@@ -22,7 +23,7 @@ with app.app_context():
         print("'Former Members (Legacy)' season already exists.")
 
     # 2. For each 'former' user, create UserSeason if not present
-    former_users = User.query.filter_by(status='inactive').all()
+    former_users = User.query.filter_by(status=UserStatus.ALUMNI).all()
     count = 0
     skipped = 0
     for user in former_users:
@@ -33,7 +34,7 @@ with app.app_context():
                 season_id=season.id,
                 registration_type='returning',
                 registration_date=date(1900, 1, 1),
-                status='ACTIVE'
+                status=UserSeasonStatus.ACTIVE
             )
             db.session.add(us)
             count += 1

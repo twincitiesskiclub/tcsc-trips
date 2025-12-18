@@ -178,6 +178,16 @@ th, td {
   color: var(--g-m);
 }
 
+.status-alumni {
+  background: var(--status-neutral-bg);
+  color: var(--status-neutral-text);
+}
+
+.status-info {
+  background: var(--status-info-bg);
+  color: var(--status-info-text);
+}
+
 .status-completed {
   background: var(--p);
   color: white;
