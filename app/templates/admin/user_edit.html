@@ -1,5 +1,5 @@
 {% extends 'admin/admin_base.html' %}
-{% from 'macros.html' import user_season_badge %}
+{% from 'macros.html' import user_season_badge, user_status_badge %}
 
 {% block extra_css %}
 <style>
@@ -171,6 +171,116 @@
     background: var(--s);
     color: var(--p);
 }
+
+/* Status display (read-only) */
+.status-display {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 8px 0;
+}
+
+.status-hint {
+    font-size: 12px;
+    color: var(--g-m);
+    font-style: italic;
+}
+
+/* Season status dropdown styling */
+.season-status-select {
+    padding: 6px 10px;
+    font-size: 13px;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    background: white;
+    min-width: 160px;
+    font-family: var(--f);
+}
+
+.season-status-select:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 2px rgba(28,44,68,0.1);
+}
+
+/* Visual indicator when status changed from original */
+.season-status-select.changed {
+    border-color: #f59e0b;
+    background: #fffbeb;
+}
+
+/* Delete button styling */
+.button-danger {
+    background: #dc2626 !important;
+    color: white !important;
+    border: none !important;
+}
+
+.button-danger:hover {
+    background: #b91c1c !important;
+}
+
+/* Delete confirmation modal */
+.modal-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay.active {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    padding: 24px;
+    border-radius: var(--r);
+    max-width: 400px;
+    width: 90%;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.modal-content h3 {
+    margin: 0 0 12px 0;
+    color: var(--p);
+}
+
+.modal-content p {
+    margin: 0 0 20px 0;
+    color: var(--g-m);
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+}
+
+.modal-actions button {
+    padding: 8px 16px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    cursor: pointer;
+}
+
+.modal-actions .button-secondary {
+    background: #f2f4f7;
+    color: #344054;
+    border: 1px solid #d0d5dd;
+}
+
+.modal-actions .button-danger {
+    background: #dc2626;
+    color: white;
+    border: none;
+}
 </style>
 {% endblock %}
 
@@ -181,6 +291,7 @@
         <div class="user-edit-actions">
             <a href="{{ url_for('admin.get_admin_users') }}" class="button button-secondary">Back to List</a>
             <a href="{{ url_for('admin.user_detail', user_id=user.id) }}" class="button button-secondary">View Details</a>
+            <button type="button" class="button button-danger" onclick="showDeleteModal()">Delete User</button>
         </div>
     </div>
 
@@ -226,12 +337,10 @@
                 </div>
                 <div class="form-group">
                     <label>Status</label>
-                    <select name="status">
-                        <option value="PENDING" {% if user.status == 'PENDING' %}selected{% endif %}>Pending</option>
-                        <option value="ACTIVE" {% if user.status == 'ACTIVE' %}selected{% endif %}>Active</option>
-                        <option value="ALUMNI" {% if user.status == 'ALUMNI' %}selected{% endif %}>Alumni</option>
-                        <option value="DROPPED" {% if user.status == 'DROPPED' %}selected{% endif %}>Dropped</option>
-                    </select>
+                    <div class="status-display">
+                        {{ user_status_badge(user.status) }}
+                        <span class="status-hint">Derived from season registration</span>
+                    </div>
                 </div>
                 <div class="form-group">
                     <label>Pronouns</label>
@@ -303,43 +412,126 @@
             </div>
         </div>
 
+        <!-- Season History (inside form for status editing) -->
+        <div class="edit-section">
+            <h2>Season History</h2>
+            {% if user_seasons and user_seasons|length > 0 %}
+            <table>
+                <thead>
+                    <tr>
+                        <th>Season</th>
+                        <th>Year</th>
+                        <th>Type</th>
+                        <th>Status</th>
+                        <th>Registration Date</th>
+                        <th>Payment Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for us, season in user_seasons %}
+                    <tr>
+                        <td>{{ season.name }}</td>
+                        <td>{{ season.year }}</td>
+                        <td>{{ us.registration_type|capitalize if us.registration_type else '-' }}</td>
+                        <td>
+                            <select name="user_season_status_{{ us.season_id }}" class="season-status-select" data-original="{{ us.status }}">
+                                <option value="PENDING_LOTTERY" {% if us.status == 'PENDING_LOTTERY' %}selected{% endif %}>Pending Lottery</option>
+                                <option value="ACTIVE" {% if us.status == 'ACTIVE' %}selected{% endif %}>Active</option>
+                                <option value="DROPPED_LOTTERY" {% if us.status == 'DROPPED_LOTTERY' %}selected{% endif %}>Dropped (Lottery)</option>
+                                <option value="DROPPED_VOLUNTARY" {% if us.status == 'DROPPED_VOLUNTARY' %}selected{% endif %}>Dropped (Voluntary)</option>
+                                <option value="DROPPED_CAUSE" {% if us.status == 'DROPPED_CAUSE' %}selected{% endif %}>Dropped (Cause)</option>
+                            </select>
+                        </td>
+                        <td>{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
+                        <td>{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p class="empty-state">No season registrations found.</p>
+            {% endif %}
+        </div>
+
         <div class="form-footer">
             <a href="{{ url_for('admin.user_detail', user_id=user.id) }}" class="button button-secondary">Cancel</a>
             <button type="submit" class="button">Save Changes</button>
         </div>
     </form>
+</div>
 
-    <!-- Season History -->
-    <div class="edit-section">
-        <h2>Season History</h2>
-        {% if user_seasons and user_seasons|length > 0 %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Season</th>
-                    <th>Year</th>
-                    <th>Type</th>
-                    <th>Status</th>
-                    <th>Registration Date</th>
-                    <th>Payment Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for us, season in user_seasons %}
-                <tr>
-                    <td>{{ season.name }}</td>
-                    <td>{{ season.year }}</td>
-                    <td>{{ us.registration_type|capitalize if us.registration_type else '-' }}</td>
-                    <td>{{ user_season_badge(us.status) }}</td>
-                    <td>{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
-                    <td>{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <p class="empty-state">No season registrations found.</p>
-        {% endif %}
+<!-- Delete Confirmation Modal -->
+<div id="deleteModal" class="modal-overlay">
+    <div class="modal-content">
+        <h3>Delete User</h3>
+        <p>Are you sure you want to delete <strong>{{ user.full_name }}</strong>? This action cannot be undone.</p>
+        <div class="modal-actions">
+            <button type="button" class="button-secondary" onclick="hideDeleteModal()">Cancel</button>
+            <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" style="display: inline;">
+                <button type="submit" class="button-danger">Delete</button>
+            </form>
+        </div>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Season status dropdown change handling
+    const statusSelects = document.querySelectorAll('.season-status-select');
+
+    statusSelects.forEach(select => {
+        select.addEventListener('change', function(e) {
+            const newValue = e.target.value;
+            const originalValue = e.target.dataset.original;
+
+            // Highlight changed dropdowns
+            if (newValue !== originalValue) {
+                e.target.classList.add('changed');
+            } else {
+                e.target.classList.remove('changed');
+            }
+
+            // Confirmation for DROPPED statuses
+            if (newValue.startsWith('DROPPED_') && originalValue !== newValue) {
+                const statusLabels = {
+                    'DROPPED_LOTTERY': 'Dropped (Lottery)',
+                    'DROPPED_VOLUNTARY': 'Dropped (Voluntary)',
+                    'DROPPED_CAUSE': 'Dropped (Cause)'
+                };
+                const confirmed = confirm(
+                    `Are you sure you want to change this season status to "${statusLabels[newValue]}"?\n\n` +
+                    `This will affect the user's global status when saved.`
+                );
+                if (!confirmed) {
+                    e.target.value = originalValue;
+                    e.target.classList.remove('changed');
+                }
+            }
+        });
+    });
+});
+
+// Delete modal functions
+function showDeleteModal() {
+    document.getElementById('deleteModal').classList.add('active');
+}
+
+function hideDeleteModal() {
+    document.getElementById('deleteModal').classList.remove('active');
+}
+
+// Close modal on escape key
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        hideDeleteModal();
+    }
+});
+
+// Close modal when clicking outside
+document.getElementById('deleteModal').addEventListener('click', function(e) {
+    if (e.target === this) {
+        hideDeleteModal();
+    }
+});
+</script>
 {% endblock %}
