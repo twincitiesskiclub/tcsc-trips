@@ -221,7 +221,8 @@
             <tbody>
                 {% for reg in trip_registrations %}
                 <tr>
-                    <td><a href="{{ url_for('admin.view_trip', trip_id=reg.trip.id) }}">{{ reg.trip.name }}</a></td>
+                    {% if reg.trip %}
+                    <td><a href="{{ url_for('admin.edit_trip', trip_id=reg.trip.id) }}">{{ reg.trip.name }}</a></td>
                     <td>{{ reg.trip.destination or '-' }}</td>
                     <td>
                         {% if reg.trip.start_date %}
@@ -230,6 +231,11 @@
                             -
                         {% endif %}
                     </td>
+                    {% else %}
+                    <td>-</td>
+                    <td>-</td>
+                    <td>-</td>
+                    {% endif %}
                     <td>
                         {% if reg.latest_status == 'succeeded' %}
                             <span class="status-badge status-success">Paid</span>
@@ -259,7 +265,8 @@
             <thead>
                 <tr>
                     <th>Date</th>
-                    <th>Trip</th>
+                    <th>Type</th>
+                    <th>Description</th>
                     <th>Amount</th>
                     <th>Status</th>
                     <th>Payment ID</th>
@@ -269,7 +276,28 @@
                 {% for payment in payments %}
                 <tr>
                     <td>{{ payment.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
-                    <td>{{ payment.trip.name }}</td>
+                    <td>
+                        {% if payment.payment_type == 'season' %}
+                            <span class="status-badge status-info">Season</span>
+                        {% elif payment.payment_type == 'trip' %}
+                            <span class="status-badge status-active">Trip</span>
+                        {% elif payment.payment_type == 'social_event' %}
+                            <span class="status-badge status-pending">Social</span>
+                        {% else %}
+                            <span class="status-badge">{{ payment.payment_type }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if payment.payment_type == 'season' and payment.season %}
+                            {{ payment.season.name }}
+                        {% elif payment.payment_type == 'trip' and payment.trip %}
+                            {{ payment.trip.name }}
+                        {% elif payment.payment_type == 'social_event' and payment.social_event %}
+                            {{ payment.social_event.name }}
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
                     <td>{{ payment.amount | format_price }}</td>
                     <td>
                         {% if payment.status == 'succeeded' %}

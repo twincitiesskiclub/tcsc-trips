@@ -5,6 +5,23 @@ let currentSeason = null;
 let selectedSeasonId = null;
 let currentView = 'all';
 
+// Helper function to generate status badge HTML
+function getStatusBadge(status) {
+    const classes = {
+        'ACTIVE': 'status-badge status-active',
+        'PENDING': 'status-badge status-pending',
+        'ALUMNI': 'status-badge status-alumni',
+        'DROPPED': 'status-badge status-canceled'
+    };
+    const labels = {
+        'ACTIVE': 'Active',
+        'PENDING': 'Pending',
+        'ALUMNI': 'Alumni',
+        'DROPPED': 'Dropped'
+    };
+    return `<span class="${classes[status] || 'status-badge'}">${labels[status] || status}</span>`;
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Fetch user data from API
     const response = await fetch('/admin/users/data');
@@ -236,7 +253,8 @@ function openEditModal(userId) {
     document.getElementById('view-details-link').href = `/admin/users/${userId}`;
     document.getElementById('edit-user-form').action = `/admin/users/${userId}/edit`;
 
-    // Build form fields
+    // Build form fields (status is read-only, derived from season registration)
+    const statusBadge = getStatusBadge(user.status);
     document.getElementById('modal-form-fields').innerHTML = `
         <div class="form-group">
             <label>Email</label>
@@ -244,12 +262,10 @@ function openEditModal(userId) {
         </div>
         <div class="form-group">
             <label>Status</label>
-            <select name="status">
-                <option value="PENDING" ${user.status === 'PENDING' ? 'selected' : ''}>Pending</option>
-                <option value="ACTIVE" ${user.status === 'ACTIVE' ? 'selected' : ''}>Active</option>
-                <option value="ALUMNI" ${user.status === 'ALUMNI' ? 'selected' : ''}>Alumni</option>
-                <option value="DROPPED" ${user.status === 'DROPPED' ? 'selected' : ''}>Dropped</option>
-            </select>
+            <div style="padding: 8px 0; display: flex; align-items: center; gap: 12px;">
+                ${statusBadge}
+                <span style="font-size: 12px; color: #667085; font-style: italic;">Derived from season registration</span>
+            </div>
         </div>
         <div class="form-group">
             <label>Phone</label>
