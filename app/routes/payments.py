@@ -85,36 +85,36 @@ def webhook_received():
             # Payment authorized but not yet captured (new members with manual capture)
             payment_intent = data_object
             payment_type = payment_intent.metadata.get('payment_type', PaymentType.SEASON)
-            member_type = payment_intent.metadata.get('member_type')
+            member_type = (payment_intent.metadata.get('member_type') or '').upper()  # Normalize case
             season_id = payment_intent.metadata.get('season_id')
             trip_id = payment_intent.metadata.get('trip_id')
             social_event_id = payment_intent.metadata.get('social_event_id')
             email = normalize_email(payment_intent.metadata.get('email') or '')
             name = payment_intent.metadata.get('name') or ''
 
-            # Find or create user for new members
-            user = None
-            if member_type == MemberType.NEW.value:
-                user = User.get_by_email(email)
-                if not user:
-                    first_name, last_name = (name.split(' ', 1) + [""])[:2]
-                    user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.PENDING)
-                    db.session.add(user)
-                    db.session.commit()
+            # Always try to find existing user by email
+            user = User.get_by_email(email)
 
-                # Create UserSeason for season payments
-                if payment_type == PaymentType.SEASON and season_id:
-                    user_season = UserSeason.get_for_user_season(user.id, season_id)
-                    if not user_season:
-                        user_season = UserSeason(
-                            user_id=user.id,
-                            season_id=season_id,
-                            registration_type=member_type,
-                            registration_date=today_central(),
-                            status=UserSeasonStatus.PENDING_LOTTERY
-                        )
-                        db.session.add(user_season)
-                        db.session.commit()
+            # Create new user only if not found and member_type is NEW
+            if not user and member_type == MemberType.NEW.value:
+                first_name, last_name = (name.split(' ', 1) + [""])[:2]
+                user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.PENDING)
+                db.session.add(user)
+                db.session.commit()
+
+            # Create UserSeason for season payments (for any user, found or created)
+            if user and payment_type == PaymentType.SEASON and season_id:
+                user_season = UserSeason.get_for_user_season(user.id, season_id)
+                if not user_season:
+                    user_season = UserSeason(
+                        user_id=user.id,
+                        season_id=season_id,
+                        registration_type=member_type,
+                        registration_date=today_central(),
+                        status=UserSeasonStatus.PENDING_LOTTERY
+                    )
+                    db.session.add(user_season)
+                    db.session.commit()
 
             # Create Payment record (idempotent - check if exists first)
             payment = Payment.get_by_payment_intent(payment_intent.id)
@@ -138,7 +138,7 @@ def webhook_received():
             # Payment captured (returning members auto-capture, or manual capture completed)
             payment_intent = data_object
             payment_type = payment_intent.metadata.get('payment_type', PaymentType.SEASON)
-            member_type = payment_intent.metadata.get('member_type')
+            member_type = (payment_intent.metadata.get('member_type') or '').upper()  # Normalize case
             season_id = payment_intent.metadata.get('season_id')
             trip_id = payment_intent.metadata.get('trip_id')
             social_event_id = payment_intent.metadata.get('social_event_id')
@@ -463,11 +463,11 @@ def create_season_payment_intent():
             return json_error('Invalid season or price')
         # Derive member_type on the backend
         user = User.get_by_email(email)
-        member_type = 'returning' if user and user.is_returning else 'new'
+        member_type = MemberType.RETURNING.value if user and user.is_returning else MemberType.NEW.value
         # Determine capture method
-        if member_type == 'new':
+        if member_type == MemberType.NEW.value:
             capture_method = 'manual'
-        elif member_type == 'returning':
+        elif member_type == MemberType.RETURNING.value:
             capture_method = 'automatic'
         else:
             return json_error('Invalid member_type')
