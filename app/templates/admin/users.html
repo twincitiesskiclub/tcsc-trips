@@ -223,7 +223,7 @@
         <div class="btn-group">
             <button class="view-btn active" data-view="all">All</button>
             <button class="view-btn" data-view="current">Current</button>
-            <button class="view-btn" data-view="inactive">Inactive</button>
+            <button class="view-btn" data-view="alumni">Alumni</button>
         </div>
         <select id="global-season-select">
             <option value="">Season...</option>
@@ -235,16 +235,18 @@
         <input type="text" id="users-search" placeholder="Search...">
         <select id="status-filter">
             <option value="">Status</option>
-            <option value="active">Active</option>
-            <option value="pending">Pending</option>
-            <option value="inactive">Inactive</option>
-            <option value="dropped">Dropped</option>
+            <option value="ACTIVE">Active</option>
+            <option value="PENDING">Pending</option>
+            <option value="ALUMNI">Alumni</option>
+            <option value="DROPPED">Dropped</option>
         </select>
         <select id="season-filter">
             <option value="">Season Status</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING_LOTTERY">Pending Lottery</option>
-            <option value="DROPPED">Dropped</option>
+            <option value="DROPPED_LOTTERY">Dropped (Lottery)</option>
+            <option value="DROPPED_VOLUNTARY">Dropped (Voluntary)</option>
+            <option value="DROPPED_CAUSE">Dropped (Cause)</option>
             <option value="registered">Registered</option>
             <option value="not_registered">Not Registered</option>
         </select>
