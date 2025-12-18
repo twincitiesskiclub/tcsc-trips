@@ -3,6 +3,8 @@ from datetime import datetime
 from sqlalchemy import JSON  # Database-agnostic: uses JSONB on PostgreSQL, TEXT on SQLite
 from sqlalchemy.sql import func
 
+from app.constants import UserStatus, UserSeasonStatus
+
 db = SQLAlchemy()
 
 class Payment(db.Model):
@@ -125,13 +127,14 @@ class SlackUser(db.Model):
 
 class User(db.Model):
     __tablename__ = 'users'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     slack_user_id = db.Column(db.Integer, db.ForeignKey('slack_users.id'), unique=True)
     first_name = db.Column(db.String(100), nullable=False)
     last_name = db.Column(db.String(100), nullable=False)
     email = db.Column(db.String(255), unique=True, nullable=False)
-    status = db.Column(db.String(50), nullable=False, default='pending')
+    status = db.Column(db.String(50), nullable=False, default=UserStatus.PENDING)
+    seasons_since_active = db.Column(db.Integer, default=0, nullable=False)  # 0=active now, 1=skipped 1 season, 2+=long-term alumni
     notes = db.Column(db.Text)
     user_metadata = db.Column(JSON)
     phone = db.Column(db.String(20))
@@ -147,7 +150,7 @@ class User(db.Model):
     emergency_contact_email = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Relationships
     roles = db.relationship('Role', secondary='user_roles', backref='users')
     committees = db.relationship('Committee', secondary='user_committees', backref='users')
@@ -172,19 +175,70 @@ class User(db.Model):
         # A user is returning if they have been ACTIVE in any past season
         # This includes users who were "new" but made it through the lottery
         # Excludes PENDING_LOTTERY and DROPPED users who never made it through
-        # Check both uppercase and lowercase for compatibility with existing data
-        return any(us.status.upper() == 'ACTIVE' for us in self.user_seasons)
+        return any(us.status == UserSeasonStatus.ACTIVE for us in self.user_seasons)
+
+    @property
+    def derived_status(self):
+        """Compute status from UserSeason history. Source of truth."""
+        current_season = Season.get_current()
+        if not current_season:
+            return self.status  # fallback to cached
+
+        user_season = UserSeason.get_for_user_season(self.id, current_season.id)
+        if not user_season:
+            return UserStatus.ALUMNI  # Not registered in current season
+
+        status_map = {
+            UserSeasonStatus.ACTIVE: UserStatus.ACTIVE,
+            UserSeasonStatus.PENDING_LOTTERY: UserStatus.PENDING,
+            UserSeasonStatus.DROPPED_LOTTERY: UserStatus.DROPPED,
+            UserSeasonStatus.DROPPED_VOLUNTARY: UserStatus.DROPPED,
+            UserSeasonStatus.DROPPED_CAUSE: UserStatus.DROPPED,
+        }
+        return status_map.get(user_season.status, UserStatus.PENDING)
+
+    def sync_status(self):
+        """Update cached status and counter from computed values.
+
+        Called when activating a new season to update all users' statuses.
+        """
+        new_status = self.derived_status
+        if new_status == UserStatus.ACTIVE:
+            self.seasons_since_active = 0
+        elif self.status == UserStatus.ACTIVE and new_status == UserStatus.ALUMNI:
+            # Was active, now alumni - start counter at 1
+            self.seasons_since_active = 1
+        elif self.status == UserStatus.ALUMNI and new_status == UserStatus.ALUMNI:
+            # Still alumni - increment counter (cap at 2 for long-term alumni)
+            if self.seasons_since_active < 2:
+                self.seasons_since_active += 1
+        elif new_status == UserStatus.ALUMNI:
+            # Transitioning from PENDING/DROPPED to ALUMNI
+            self.seasons_since_active = 2  # Treat as long-term
+        self.status = new_status
+
+    def get_slack_tier(self):
+        """Determine Slack membership tier based on status and activity."""
+        if self.status == UserStatus.ACTIVE:
+            return 'full_member'
+        elif self.status == UserStatus.ALUMNI:
+            if self.seasons_since_active == 1:
+                return 'multi_channel_guest'
+            else:  # 2+ seasons
+                return 'single_channel_guest'
+        # PENDING and DROPPED = no Slack automation
+        return None
 
     __table_args__ = (
         db.CheckConstraint(
-            status.in_(['pending', 'active', 'inactive', 'dropped']),
+            status.in_([UserStatus.PENDING, UserStatus.ACTIVE, UserStatus.ALUMNI, UserStatus.DROPPED]),
             name='check_user_status_valid'
         ),
     )
 
 class Season(db.Model):
     __tablename__ = 'seasons'
-    
+
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(100), unique=True, nullable=False)
     season_type = db.Column(db.String(50), nullable=False)
@@ -198,11 +252,17 @@ class Season(db.Model):
     new_end = db.Column(db.DateTime, nullable=True)
     registration_limit = db.Column(db.Integer, nullable=True)  # Max allowed registrations for this season
     description = db.Column(db.Text, nullable=True)  # Season description
+    is_current = db.Column(db.Boolean, default=False, nullable=False)  # Only one season should be current
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f'<Season {self.id} {self.name}>'
+
+    @classmethod
+    def get_current(cls):
+        """Get the current season. Returns None if no season is marked current."""
+        return cls.query.filter_by(is_current=True).first()
 
     def is_open_for(self, member_type: str, when: datetime = None) -> bool:
         """
@@ -240,7 +300,7 @@ class UserSeason(db.Model):
     registration_type = db.Column(db.String(50), nullable=False)
     registration_date = db.Column(db.Date, nullable=False)
     payment_date = db.Column(db.Date)
-    status = db.Column(db.String(50), nullable=False, default='pending')
+    status = db.Column(db.String(50), nullable=False, default=UserSeasonStatus.PENDING_LOTTERY)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -254,7 +314,13 @@ class UserSeason(db.Model):
 
     __table_args__ = (
         db.CheckConstraint(
-            status.in_(['PENDING_LOTTERY', 'ACTIVE', 'DROPPED']),
+            status.in_([
+                UserSeasonStatus.PENDING_LOTTERY,
+                UserSeasonStatus.ACTIVE,
+                UserSeasonStatus.DROPPED_LOTTERY,
+                UserSeasonStatus.DROPPED_VOLUNTARY,
+                UserSeasonStatus.DROPPED_CAUSE
+            ]),
             name='check_userseason_status_valid'
         ),
     )

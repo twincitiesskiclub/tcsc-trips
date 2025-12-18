@@ -6,8 +6,12 @@
         <span class="badge bg-success">Active</span>
     {% elif status == 'PENDING_LOTTERY' %}
         <span class="badge bg-warning text-dark">Pending Lottery</span>
-    {% elif status == 'DROPPED' %}
-        <span class="badge bg-danger">Dropped</span>
+    {% elif status == 'DROPPED_LOTTERY' %}
+        <span class="badge bg-info">Dropped (Lottery)</span>
+    {% elif status == 'DROPPED_VOLUNTARY' %}
+        <span class="badge bg-secondary">Dropped (Voluntary)</span>
+    {% elif status == 'DROPPED_CAUSE' %}
+        <span class="badge bg-danger">Dropped (Cause)</span>
     {% else %}
         <span class="badge bg-secondary">{{ status|capitalize if status else 'Unknown' }}</span>
     {% endif %}
@@ -15,13 +19,13 @@
 
 {# Status badge for User global status #}
 {% macro user_status_badge(status) %}
-    {% if status == 'active' %}
+    {% if status == 'ACTIVE' %}
         <span class="badge bg-success">Active</span>
-    {% elif status == 'pending' %}
+    {% elif status == 'PENDING' %}
         <span class="badge bg-warning text-dark">Pending</span>
-    {% elif status == 'inactive' %}
-        <span class="badge bg-secondary">Inactive</span>
-    {% elif status == 'dropped' %}
+    {% elif status == 'ALUMNI' %}
+        <span class="badge bg-secondary">Alumni</span>
+    {% elif status == 'DROPPED' %}
         <span class="badge bg-danger">Dropped</span>
     {% else %}
         <span class="badge bg-secondary">{{ status|capitalize if status else 'Unknown' }}</span>

@@ -24,6 +24,7 @@
         <thead>
           <tr>
             <th>Name</th>
+            <th>Status</th>
             <th>Type</th>
             <th>Year</th>
             <th>Dates</th>
@@ -39,6 +40,13 @@
           {% for season in seasons %}
           <tr>
             <td>{{ season.name }}</td>
+            <td>
+              {% if season.is_current %}
+                <span class="status-badge status-active">Current</span>
+              {% else %}
+                <span class="status-badge status-draft">—</span>
+              {% endif %}
+            </td>
             <td>{{ season.season_type }}</td>
             <td>{{ season.year }}</td>
             <td>{{ season.start_date.strftime('%Y-%m-%d') }} to {{ season.end_date.strftime('%Y-%m-%d') }}</td>
@@ -81,6 +89,13 @@
               <div class="action-buttons">
                 <a href="{{ url_for('admin.edit_season', season_id=season.id) }}" class="button button-small">Edit</a>
                 <a href="{{ url_for('admin.export_season_members', season_id=season.id) }}" class="button button-small">Export</a>
+                {% if not season.is_current %}
+                <form action="{{ url_for('admin.activate_season', season_id=season.id) }}" method="POST" style="display: inline;">
+                  <button type="submit" class="button button-small button-success" onclick="return confirm('Activate season &quot;{{ season.name }}&quot;?\n\nThis will:\n• Set this as the current season\n• Update all user statuses based on their registration\n• Recalculate seasons_since_active counters\n\nContinue?')">
+                    Activate
+                  </button>
+                </form>
+                {% endif %}
                 <button
                   class="button button-small button-danger"
                   onclick="confirmDelete('season', '{{ season.id }}', '{{ season.name }}')"
