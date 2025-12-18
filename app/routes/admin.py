@@ -2,7 +2,7 @@ from flask import Blueprint, render_template, jsonify, request, redirect, url_fo
 from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent
-from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR
+from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
 import csv
@@ -622,10 +622,10 @@ def user_detail(user_id):
             trip_registrations[payment.trip_id]['total_paid'] += payment.amount
         trip_registrations[payment.trip_id]['payment_count'] += 1
 
-    # Sort by trip start date descending
+    # Sort by trip start date descending (handle None trips)
     sorted_trips = sorted(
         trip_registrations.values(),
-        key=lambda x: x['trip'].start_date if x['trip'].start_date else datetime.min,
+        key=lambda x: x['trip'].start_date if x['trip'] and x['trip'].start_date else datetime.min,
         reverse=True
     )
 
@@ -684,7 +684,8 @@ def edit_user(user_id):
             update_if_present('emergency_contact_phone', request.form.get('emergency_contact_phone'))
             update_if_present('emergency_contact_email', request.form.get('emergency_contact_email'))
             update_if_present('notes', request.form.get('notes'))
-            update_if_present('status', request.form.get('status'))
+            # Note: User.status is now derived from UserSeason, not set directly
+
             slack_uid = request.form.get('slack_uid')
             if slack_uid is not None and slack_uid != '':
                 if user.slack_user:
@@ -694,6 +695,22 @@ def edit_user(user_id):
                     db.session.add(slack_user)
                     db.session.flush()
                     user.slack_user_id = slack_user.id
+
+            # Process UserSeason status changes
+            for key, value in request.form.items():
+                if key.startswith('user_season_status_'):
+                    try:
+                        season_id = int(key.replace('user_season_status_', ''))
+                        if value in UserSeasonStatus.ALL:
+                            user_season = UserSeason.get_for_user_season(user.id, season_id)
+                            if user_season and user_season.status != value:
+                                user_season.status = value
+                    except ValueError:
+                        continue
+
+            # Sync global User.status from UserSeason data
+            user.sync_status()
+
             try:
                 db.session.commit()
                 flash_success('User updated successfully!')
@@ -703,3 +720,29 @@ def edit_user(user_id):
                 db.session.rollback()
                 flash_error(f'Error updating user: {str(e)}')
     return render_template('admin/user_edit.html', user=user, feedback=feedback, user_seasons=user_seasons)
+
+
+@admin.route('/admin/users/<int:user_id>/delete', methods=['POST'])
+@admin_required
+def delete_user(user_id):
+    """Delete a user and their related records."""
+    user = User.query.get_or_404(user_id)
+    name = user.full_name
+
+    try:
+        # Delete UserSeason records for this user
+        UserSeason.query.filter_by(user_id=user_id).delete()
+
+        # Set user_id to NULL on Payment records (preserve for audit trail)
+        Payment.query.filter_by(user_id=user_id).update({'user_id': None})
+
+        # Delete the user
+        db.session.delete(user)
+        db.session.commit()
+
+        flash_success(f'User "{name}" has been deleted.')
+        return redirect(url_for('admin.get_admin_users'))
+    except Exception as e:
+        db.session.rollback()
+        flash_error(f'Error deleting user: {str(e)}')
+        return redirect(url_for('admin.edit_user', user_id=user_id))
