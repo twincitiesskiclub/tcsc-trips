@@ -30,7 +30,7 @@
         </div>
 
         <div class="sr-form-container">
-          <form class="sr-payment-form registration-form" method="POST" id="registration-form" data-season-id="{{ season.id }}">
+          <form class="sr-payment-form registration-form" method="POST" id="registration-form" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}">
             <fieldset class="form-section">
               <legend>Email Address</legend>
               <div class="sr-form-row form-group">

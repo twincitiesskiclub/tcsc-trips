@@ -1,9 +1,9 @@
 from flask import Blueprint, render_template, request, redirect, url_for, jsonify
-from ..models import db, Season, UserSeason, User
+from ..models import db, Season, UserSeason, User, Payment
 from ..constants import DATE_FORMAT, UserStatus, UserSeasonStatus
 from datetime import datetime
 from ..errors import flash_error, flash_info
-from ..utils import get_current_times, normalize_email, format_datetime_central, today_central
+from ..utils import get_current_times, normalize_email, format_datetime_central, today_central, validate_registration_form
 
 registration = Blueprint('registration', __name__)
 
@@ -62,6 +62,12 @@ def season_register(season_id):
             email = normalize_email(form['email'])
             user = User.get_by_email(email)
 
+            # Get payment_intent_id for coordination with webhook
+            payment_intent_id = form.get('payment_intent_id')
+            existing_payment = None
+            if payment_intent_id:
+                existing_payment = Payment.get_by_payment_intent(payment_intent_id)
+
             # Determine member_type from backend only BEFORE checking dates
             # Check user existence first
             is_returning = bool(user and getattr(user, 'is_returning', False))
@@ -108,6 +114,13 @@ def season_register(season_id):
                     flash_error('Invalid date format for Date of Birth. Please use YYYY-MM-DD.')
                     return redirect(url_for('registration.season_register', season_id=season_id))
 
+            # Validate all form fields before proceeding
+            is_valid, validation_errors = validate_registration_form(form, user_fields.get('date_of_birth'))
+            if not is_valid:
+                for error in validation_errors:
+                    flash_error(error)
+                return redirect(url_for('registration.season_register', season_id=season_id))
+
             if user:
                 for k, v in user_fields.items():
                     setattr(user, k, v)
@@ -115,6 +128,10 @@ def season_register(season_id):
                 user = User(email=email, status=UserStatus.PENDING, **user_fields)
                 db.session.add(user)
                 db.session.flush()  # get user.id
+
+            # Link payment to user if webhook created it before form submission
+            if existing_payment and not existing_payment.user_id:
+                existing_payment.user_id = user.id
 
             # Determine member_type from backend only
             is_returning = user.is_returning
@@ -125,6 +142,8 @@ def season_register(season_id):
             member_type = 'returning' if is_returning else 'new'
 
             # Find or create UserSeason for this user and season
+            # Note: Webhook may have already created this record. We check first to avoid
+            # duplicates. If webhook created it, we just update the fields.
             user_season = UserSeason.get_for_user_season(user.id, season.id)
             if not user_season:
                 user_season = UserSeason(
