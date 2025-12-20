@@ -285,6 +285,11 @@ document.addEventListener('DOMContentLoaded', () => {
       emailStatusMsg.textContent = '';
       if (!email) return;
       emailStatusMsg.textContent = 'Checking membership status...';
+
+      // Get radio buttons for member status
+      const newMemberRadio = document.querySelector('input[name="status"][value="new"]');
+      const returningRadio = document.querySelector('input[name="status"][value="returning_former"]');
+
       try {
         const resp = await fetch('/api/is_returning_member', {
           method: 'POST',
@@ -295,9 +300,13 @@ document.addEventListener('DOMContentLoaded', () => {
         if (data.is_returning) {
           emailStatusMsg.textContent = '✅ Returning/Former Member';
           emailStatusMsg.style.color = '#166534';
+          // Auto-select the returning member radio
+          if (returningRadio) returningRadio.checked = true;
         } else {
-          emailStatusMsg.textContent = '⚠️ We couldn’t find your email in our returning member records. Please register as a new member or try a different email address if you believe this is a mistake.';
+          emailStatusMsg.textContent = '⚠️ We couldn\'t find your email in our returning member records. Please register as a new member or try a different email address if you believe this is a mistake.';
           emailStatusMsg.style.color = '#b07b2c';
+          // Auto-select the new member radio
+          if (newMemberRadio) newMemberRadio.checked = true;
         }
       } catch (err) {
         emailStatusMsg.textContent = 'Error checking membership status.';
@@ -406,6 +415,14 @@ document.addEventListener('DOMContentLoaded', () => {
         }
         // Payment succeeded, submit the form (remove card details so they aren't sent to backend)
         document.getElementById('card-element').remove();
+
+        // Add payment_intent_id to form for backend coordination with webhook
+        const paymentIntentInput = document.createElement('input');
+        paymentIntentInput.type = 'hidden';
+        paymentIntentInput.name = 'payment_intent_id';
+        paymentIntentInput.value = result.paymentIntent.id;
+        registrationForm.appendChild(paymentIntentInput);
+
         registrationForm.submit();
       } catch (err) {
         showError('Payment failed. Please try again.');
