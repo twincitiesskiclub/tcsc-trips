@@ -14,6 +14,10 @@ payments = Blueprint('payments', __name__)
 def get_stripe_key():
     return jsonify({'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')})
 
+@payments.route('/get-google-places-key')
+def get_google_places_key():
+    return jsonify({'apiKey': os.getenv('GOOGLE_PLACES_API_KEY', '')})
+
 @payments.route('/create-payment-intent', methods=['POST'])
 def create_payment():
     try:
