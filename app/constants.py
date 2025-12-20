@@ -55,3 +55,21 @@ class PaymentType:
     SOCIAL_EVENT = 'social_event'
 
     ALL = [SEASON, TRIP, SOCIAL_EVENT]
+
+
+# Registration form valid values (must match season_register.html)
+VALID_TSHIRT_SIZES = {'XS', 'S', 'M', 'L', 'XL', '2XL'}
+VALID_TECHNIQUES = {'classic', 'skate', 'no_preference'}
+VALID_EXPERIENCE_LEVELS = {'1-3', '3-7', '7+'}
+VALID_MEMBER_STATUSES = {'new', 'returning_former'}
+
+# Field length limits
+MAX_NAME_LENGTH = 100
+MAX_ADDRESS_LENGTH = 500
+MAX_PHONE_LENGTH = 30
+MAX_PRONOUNS_LENGTH = 50
+MAX_RELATION_LENGTH = 100
+
+# Age limits for date of birth validation
+MIN_MEMBER_AGE = 16
+MAX_MEMBER_AGE = 120
