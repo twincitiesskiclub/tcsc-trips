@@ -2,9 +2,11 @@
 from dataclasses import dataclass
 from flask import current_app
 
-from app.models import db, SlackUser, User
+from datetime import date
+
+from app.models import db, SlackUser, User, Season, UserSeason
 from app.slack.client import fetch_workspace_members
-from app.constants import UserStatus
+from app.constants import UserStatus, UserSeasonStatus
 
 
 @dataclass
@@ -17,6 +19,7 @@ class SyncResult:
     unmatched_db_users: int = 0
     skipped_bots: int = 0
     skipped_no_email: int = 0
+    skipped_deactivated: int = 0
     errors: list = None
 
     def __post_init__(self):
@@ -32,6 +35,7 @@ class SyncResult:
             'unmatched_db_users': self.unmatched_db_users,
             'skipped_bots': self.skipped_bots,
             'skipped_no_email': self.skipped_no_email,
+            'skipped_deactivated': self.skipped_deactivated,
             'errors': self.errors,
         }
 
@@ -68,6 +72,11 @@ def sync_slack_users() -> SyncResult:
         # Skip members without email (can't match)
         if not email:
             result.skipped_no_email += 1
+            continue
+
+        # Skip deactivated Slack users (email starts with "deactivateduser")
+        if email.lower().startswith('deactivateduser'):
+            result.skipped_deactivated += 1
             continue
 
         # Find or create SlackUser record
@@ -260,3 +269,71 @@ def unlink_user_from_slack(user_id: int) -> bool:
         db.session.commit()
 
     return True
+
+
+def import_slack_user(slack_user_id: int) -> dict:
+    """
+    Import an unmatched SlackUser as a new User with legacy season membership.
+
+    Creates a User record from SlackUser data, assigns them to the legacy season
+    with ACTIVE status, and links them to the SlackUser.
+
+    Returns dict with 'success' bool and 'message' or 'user_id'.
+    """
+    slack_user = SlackUser.query.get(slack_user_id)
+    if not slack_user:
+        return {'success': False, 'message': 'SlackUser not found'}
+
+    # Check if already linked
+    if slack_user.user:
+        return {'success': False, 'message': 'SlackUser already linked to a User'}
+
+    # Check if email already exists in Users table
+    existing_user = User.query.filter(db.func.lower(User.email) == slack_user.email.lower()).first()
+    if existing_user:
+        return {'success': False, 'message': f'User with email {slack_user.email} already exists'}
+
+    # Parse name - split on first space, fallback to full string
+    full_name = slack_user.full_name or slack_user.display_name or 'Unknown'
+    name_parts = full_name.split(' ', 1)
+    first_name = name_parts[0]
+    last_name = name_parts[1] if len(name_parts) > 1 else ''
+
+    # Get or create legacy season
+    legacy_season = Season.query.filter_by(name='Former Members (Legacy)').first()
+    if not legacy_season:
+        legacy_season = Season(
+            name='Former Members (Legacy)',
+            season_type='legacy',
+            year=1900,
+            start_date=date(1900, 1, 1),
+            end_date=date(1900, 12, 31)
+        )
+        db.session.add(legacy_season)
+        db.session.flush()
+
+    # Create User
+    user = User(
+        first_name=first_name,
+        last_name=last_name,
+        email=slack_user.email,
+        phone=slack_user.phone,
+        status=UserStatus.ALUMNI,
+        slack_user_id=slack_user.id,
+    )
+    db.session.add(user)
+    db.session.flush()
+
+    # Create UserSeason for legacy season
+    user_season = UserSeason(
+        user_id=user.id,
+        season_id=legacy_season.id,
+        registration_type='returning',
+        registration_date=date(1900, 1, 1),
+        status=UserSeasonStatus.ACTIVE
+    )
+    db.session.add(user_season)
+    db.session.commit()
+
+    current_app.logger.info(f"Imported SlackUser {slack_user.slack_uid} as User {user.id} ({user.email})")
+    return {'success': True, 'user_id': user.id, 'message': f'Created user {user.full_name}'}
