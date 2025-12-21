@@ -135,8 +135,9 @@ async function loadSlackOnly() {
                     {title: "Full Name", field: "full_name", minWidth: 150},
                     {title: "Actions", formatter: function(cell) {
                         const id = cell.getData().id;
-                        return `<button class="button button-small" onclick="showLinkSlackModal(${id})">Link to User</button>`;
-                    }, width: 130, hozAlign: "center", headerSort: false}
+                        return `<button class="button button-small" onclick="showLinkSlackModal(${id})">Link</button>` +
+                               ` <button class="button button-small button-secondary" onclick="importSlackUser(${id})">Import</button>`;
+                    }, width: 180, hozAlign: "center", headerSort: false}
                 ]
             });
         }
@@ -360,6 +361,36 @@ async function deleteUser(userId) {
         loadSlackOnly();
     } catch (e) {
         showToast('Failed to delete: ' + e.message, 'error');
+    }
+}
+
+async function importSlackUser(slackUserId) {
+    const slackUser = slackOnlyData.find(u => u.id === slackUserId);
+    if (!slackUser) return;
+
+    if (!confirm(`Import "${slackUser.display_name || slackUser.full_name}" (${slackUser.email}) as a new user with legacy season membership?`)) {
+        return;
+    }
+
+    try {
+        const resp = await fetch('/admin/slack/import', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({slack_user_id: slackUserId})
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+
+        showToast(data.message || 'User imported successfully', 'success');
+        loadStatus();
+        loadUsers();
+        loadSlackOnly();
+    } catch (e) {
+        showToast('Failed to import: ' + e.message, 'error');
     }
 }
 

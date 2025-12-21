@@ -3,7 +3,7 @@ from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
-from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack
+from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user
 from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
 import csv
@@ -878,3 +878,21 @@ def slack_delete_user():
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/slack/import', methods=['POST'])
+@admin_required
+def slack_import_user():
+    """Import a SlackUser as a new User with legacy season membership."""
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    slack_user_id = request.json.get('slack_user_id')
+    if not slack_user_id:
+        return jsonify({'error': 'slack_user_id is required'}), 400
+
+    result = import_slack_user(slack_user_id)
+    if result['success']:
+        return jsonify(result)
+    else:
+        return jsonify({'error': result['message']}), 400
