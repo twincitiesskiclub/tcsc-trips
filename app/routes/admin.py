@@ -3,6 +3,7 @@ from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
+from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack
 from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
 import csv
@@ -746,3 +747,134 @@ def delete_user(user_id):
         db.session.rollback()
         flash_error(f'Error deleting user: {str(e)}')
         return redirect(url_for('admin.edit_user', user_id=user_id))
+
+
+# Slack Sync Routes
+@admin.route('/admin/slack')
+@admin_required
+def get_admin_slack():
+    """Render Slack sync dashboard."""
+    return render_template('admin/slack_sync.html')
+
+
+@admin.route('/admin/slack/sync', methods=['POST'])
+@admin_required
+def sync_slack():
+    """Trigger a full Slack user sync."""
+    try:
+        result = sync_slack_users()
+        if result.errors:
+            flash_error(f'Sync completed with errors: {", ".join(result.errors)}')
+        else:
+            flash_success(
+                f'Sync complete! Created: {result.slack_users_created}, '
+                f'Updated: {result.slack_users_updated}, '
+                f'Matched: {result.users_matched}'
+            )
+        return jsonify(result.to_dict())
+    except Exception as e:
+        flash_error(f'Sync failed: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/slack/status')
+@admin_required
+def slack_status():
+    """Get current Slack sync status and statistics."""
+    try:
+        status = get_sync_status()
+        return jsonify(status)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/slack/unmatched')
+@admin_required
+def slack_unmatched():
+    """Get unmatched Slack users and database users."""
+    try:
+        return jsonify({
+            'unmatched_slack_users': get_unmatched_slack_users(),
+            'unmatched_db_users': get_unmatched_db_users(),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/slack/users')
+@admin_required
+def slack_users():
+    """Get all users with their Slack correlation status."""
+    try:
+        return jsonify({
+            'users': get_all_users_with_slack_status(),
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/slack/link', methods=['POST'])
+@admin_required
+def slack_link():
+    """Manually link a User to a SlackUser."""
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    user_id = request.json.get('user_id')
+    slack_user_id = request.json.get('slack_user_id')
+
+    if not user_id or not slack_user_id:
+        return jsonify({'error': 'user_id and slack_user_id are required'}), 400
+
+    if link_user_to_slack(user_id, slack_user_id):
+        return jsonify({'success': True})
+    else:
+        return jsonify({'error': 'Failed to link - user or slack_user not found, or already linked'}), 400
+
+
+@admin.route('/admin/slack/unlink', methods=['POST'])
+@admin_required
+def slack_unlink():
+    """Remove Slack association from a User."""
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    user_id = request.json.get('user_id')
+
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    if unlink_user_from_slack(user_id):
+        return jsonify({'success': True})
+    else:
+        return jsonify({'error': 'Failed to unlink - user not found'}), 400
+
+
+@admin.route('/admin/slack/delete-user', methods=['POST'])
+@admin_required
+def slack_delete_user():
+    """Delete a User (JSON API version for Slack sync page)."""
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    user_id = request.json.get('user_id')
+    if not user_id:
+        return jsonify({'error': 'user_id is required'}), 400
+
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    try:
+        name = user.full_name
+        # Delete UserSeason records for this user
+        UserSeason.query.filter_by(user_id=user_id).delete()
+        # Set user_id to NULL on Payment records (preserve for audit trail)
+        Payment.query.filter_by(user_id=user_id).update({'user_id': None})
+        # Delete the user
+        db.session.delete(user)
+        db.session.commit()
+        return jsonify({'success': True, 'message': f'User "{name}" deleted'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
