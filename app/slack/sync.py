@@ -17,6 +17,7 @@ class SyncResult:
     unmatched_db_users: int = 0
     skipped_bots: int = 0
     skipped_no_email: int = 0
+    skipped_deactivated: int = 0
     errors: list = None
 
     def __post_init__(self):
@@ -32,6 +33,7 @@ class SyncResult:
             'unmatched_db_users': self.unmatched_db_users,
             'skipped_bots': self.skipped_bots,
             'skipped_no_email': self.skipped_no_email,
+            'skipped_deactivated': self.skipped_deactivated,
             'errors': self.errors,
         }
 
@@ -68,6 +70,11 @@ def sync_slack_users() -> SyncResult:
         # Skip members without email (can't match)
         if not email:
             result.skipped_no_email += 1
+            continue
+
+        # Skip deactivated Slack users (email starts with "deactivateduser")
+        if email.lower().startswith('deactivateduser'):
+            result.skipped_deactivated += 1
             continue
 
         # Find or create SlackUser record
