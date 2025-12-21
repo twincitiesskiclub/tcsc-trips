@@ -222,6 +222,10 @@
         <h1 class="page-title">Slack User Sync</h1>
         <div class="header-actions">
             <span class="sync-status" id="sync-status"></span>
+            <button class="sync-btn" onclick="openMessageModal()">
+                <span>&#x2709;</span>
+                <span>Send Message</span>
+            </button>
             <button class="sync-btn" id="sync-btn" onclick="runSync()">
                 <span id="sync-icon">&#x21bb;</span>
                 <span id="sync-text">Sync from Slack</span>
@@ -293,6 +297,60 @@
         <div class="modal-footer">
             <button class="button button-secondary" onclick="closeLinkModal()">Cancel</button>
             <button class="button" onclick="confirmLink()">Link</button>
+        </div>
+    </div>
+</div>
+
+<!-- Send Message Modal -->
+<div id="message-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeMessageModal()"></div>
+    <div class="modal-content" style="max-width: 600px;">
+        <div class="modal-header">
+            <h2>Send Slack Message</h2>
+            <button class="modal-close" onclick="closeMessageModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <!-- User Selection -->
+            <div class="form-group">
+                <label>Select Recipients:</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                    <button type="button" class="button button-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="selectAllUsers()">Select All</button>
+                    <button type="button" class="button button-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="deselectAllUsers()">Deselect All</button>
+                    <input type="text" id="user-search" placeholder="Filter users..." style="flex: 1; padding: 4px 8px; font-size: 12px; border: 1px solid var(--g-b); border-radius: var(--r);">
+                </div>
+                <div id="user-checkboxes" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--g-b); border-radius: var(--r); padding: 8px;"></div>
+                <div style="margin-top: 8px; font-size: 13px; color: var(--g-m);">
+                    <span id="selected-count">0</span> user(s) selected
+                </div>
+            </div>
+
+            <!-- Message Mode -->
+            <div class="form-group">
+                <label>Message Mode:</label>
+                <div style="display: flex; gap: 16px; margin-top: 4px;">
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="message-mode" value="individual" checked>
+                        <span>Individual DMs</span>
+                    </label>
+                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                        <input type="radio" name="message-mode" value="mpdm">
+                        <span>Group DM (MPDM)</span>
+                    </label>
+                </div>
+                <div style="font-size: 12px; color: var(--g-m); margin-top: 4px;">
+                    Individual: Each user gets a separate DM. Group: All users in one conversation.
+                </div>
+            </div>
+
+            <!-- Message Content -->
+            <div class="form-group">
+                <label for="message-text">Message:</label>
+                <textarea id="message-text" rows="5" style="width: 100%; padding: 10px 12px; font: 14px var(--f); border: 1px solid var(--g-b); border-radius: var(--r); resize: vertical;" placeholder="Enter your message..."></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="button button-secondary" onclick="closeMessageModal()">Cancel</button>
+            <button class="button" id="send-message-btn" onclick="sendMessage()">Send Message</button>
         </div>
     </div>
 </div>
