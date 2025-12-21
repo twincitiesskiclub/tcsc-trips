@@ -582,7 +582,7 @@ def get_users_data():
             'created_at': user.created_at.isoformat() if user.created_at else '',
             'trip_count': user_payment_stats['trips'],
             'total_paid': user_payment_stats['total'] / 100,  # Convert cents to dollars
-            'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in user.tags],
+            'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name, 'emoji': t.emoji, 'gradient': t.gradient} for t in user.tags],
         })
 
     # Get all available tags for the tag assignment modal
@@ -592,7 +592,7 @@ def get_users_data():
         'users': users_data,
         'current_season': {'id': current_season.id, 'name': current_season.name} if current_season else None,
         'seasons': [{'id': s.id, 'name': s.name} for s in all_seasons],
-        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in all_tags]
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name, 'emoji': t.emoji, 'gradient': t.gradient} for t in all_tags]
     })
 
 
@@ -1013,6 +1013,8 @@ def get_tags_data():
             'name': t.name,
             'display_name': t.display_name,
             'description': t.description,
+            'emoji': t.emoji,
+            'gradient': t.gradient,
             'user_count': len(t.users)
         } for t in tags]
     })
@@ -1026,7 +1028,7 @@ def get_user_tags(user_id):
     return jsonify({
         'user_id': user.id,
         'user_name': user.full_name,
-        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in user.tags]
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name, 'emoji': t.emoji, 'gradient': t.gradient} for t in user.tags]
     })
 
 
@@ -1064,5 +1066,126 @@ def update_user_tags(user_id):
     return jsonify({
         'success': True,
         'user_id': user.id,
-        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in user.tags]
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name, 'emoji': t.emoji, 'gradient': t.gradient} for t in user.tags]
+    })
+
+
+@admin.route('/admin/roles')
+@admin_required
+def roles():
+    """Role/tag management page."""
+    return render_template('admin/roles.html')
+
+
+@admin.route('/admin/tags/create', methods=['POST'])
+@admin_required
+def create_tag():
+    """Create a new tag."""
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    name = request.json.get('name', '').strip().upper().replace(' ', '_')
+    display_name = request.json.get('display_name', '').strip()
+    emoji = request.json.get('emoji', '').strip()
+    gradient = request.json.get('gradient', '').strip()
+    description = request.json.get('description', '').strip()
+
+    if not name or not display_name:
+        return jsonify({'error': 'Name and display_name are required'}), 400
+
+    # Check for duplicate name
+    if Tag.query.filter_by(name=name).first():
+        return jsonify({'error': f'Tag with name {name} already exists'}), 400
+
+    tag = Tag(
+        name=name,
+        display_name=display_name,
+        emoji=emoji or None,
+        gradient=gradient or None,
+        description=description or None
+    )
+    db.session.add(tag)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'tag': {
+            'id': tag.id,
+            'name': tag.name,
+            'display_name': tag.display_name,
+            'emoji': tag.emoji,
+            'gradient': tag.gradient,
+            'description': tag.description,
+            'user_count': 0
+        }
+    })
+
+
+@admin.route('/admin/tags/<int:tag_id>/edit', methods=['POST'])
+@admin_required
+def edit_tag(tag_id):
+    """Update a tag."""
+    tag = Tag.query.get_or_404(tag_id)
+
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    # Update fields if provided
+    if 'name' in request.json:
+        new_name = request.json['name'].strip().upper().replace(' ', '_')
+        # Check for duplicate if name changed
+        if new_name != tag.name:
+            if Tag.query.filter_by(name=new_name).first():
+                return jsonify({'error': f'Tag with name {new_name} already exists'}), 400
+            tag.name = new_name
+
+    if 'display_name' in request.json and request.json['display_name']:
+        tag.display_name = request.json['display_name'].strip()
+
+    if 'emoji' in request.json:
+        val = request.json['emoji']
+        tag.emoji = val.strip() if val else None
+
+    if 'gradient' in request.json:
+        val = request.json['gradient']
+        tag.gradient = val.strip() if val else None
+
+    if 'description' in request.json:
+        val = request.json['description']
+        tag.description = val.strip() if val else None
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'tag': {
+            'id': tag.id,
+            'name': tag.name,
+            'display_name': tag.display_name,
+            'emoji': tag.emoji,
+            'gradient': tag.gradient,
+            'description': tag.description,
+            'user_count': len(tag.users)
+        }
+    })
+
+
+@admin.route('/admin/tags/<int:tag_id>/delete', methods=['POST'])
+@admin_required
+def delete_tag(tag_id):
+    """Delete a tag (only if no users are assigned)."""
+    tag = Tag.query.get_or_404(tag_id)
+
+    if tag.users:
+        return jsonify({
+            'error': f'Cannot delete tag "{tag.display_name}" - {len(tag.users)} user(s) are assigned to it'
+        }), 400
+
+    tag_name = tag.display_name
+    db.session.delete(tag)
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'message': f'Tag "{tag_name}" deleted successfully'
     })
