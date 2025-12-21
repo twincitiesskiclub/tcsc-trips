@@ -12,6 +12,7 @@ from app.slack.client import (
     get_latest_messages_by_user
 )
 from app.constants import UserStatus, UserSeasonStatus
+import time
 
 
 # Slack custom profile field IDs
@@ -20,6 +21,20 @@ SLACK_FIELD_BIRTHDAY = 'Xf046PG944PN'
 SLACK_FIELD_FRESH_TRACKS = 'Xf060ZSJDR1D'
 SLACK_FIELD_ROLES = 'Xf0A4S7SPUER'
 FRESH_TRACKS_CHANNEL = 'fresh-tracks'
+
+# Cache for Fresh Tracks messages (reused across batches)
+_fresh_tracks_cache = {
+    'data': {},
+    'timestamp': 0,
+    'ttl': 300  # 5 minutes
+}
+
+
+def clear_fresh_tracks_cache():
+    """Clear the Fresh Tracks cache to force a refresh on next sync."""
+    global _fresh_tracks_cache
+    _fresh_tracks_cache['data'] = {}
+    _fresh_tracks_cache['timestamp'] = 0
 
 
 @dataclass
@@ -408,14 +423,22 @@ def sync_profiles_to_slack(batch_size: int = 10, offset: int = 0) -> ProfileSync
 
     result.remaining = max(0, total_users - offset - len(users))
 
-    # Only fetch fresh tracks on first batch (offset=0) to save time
-    fresh_tracks_messages = {}
-    if offset == 0:
+    # Get Fresh Tracks messages from cache or fetch if stale
+    global _fresh_tracks_cache
+    now = time.time()
+
+    if now - _fresh_tracks_cache['timestamp'] > _fresh_tracks_cache['ttl']:
+        # Cache is stale, fetch fresh data
         fresh_tracks_channel_id = get_channel_id_by_name(FRESH_TRACKS_CHANNEL)
         if fresh_tracks_channel_id:
             current_app.logger.info(f"Fetching #{FRESH_TRACKS_CHANNEL} message history...")
-            fresh_tracks_messages = get_latest_messages_by_user(fresh_tracks_channel_id)
-            current_app.logger.info(f"Found posts from {len(fresh_tracks_messages)} users")
+            _fresh_tracks_cache['data'] = get_latest_messages_by_user(fresh_tracks_channel_id)
+            _fresh_tracks_cache['timestamp'] = now
+            current_app.logger.info(f"Found posts from {len(_fresh_tracks_cache['data'])} users")
+    else:
+        current_app.logger.info(f"Using cached Fresh Tracks data ({len(_fresh_tracks_cache['data'])} users)")
+
+    fresh_tracks_messages = _fresh_tracks_cache['data']
 
     for user in users:
         slack_user = user.slack_user
