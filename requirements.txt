@@ -23,5 +23,4 @@ psycopg2-binary==2.9.10
 slack-sdk
 APScheduler>=3.10.0
 paramiko>=3.0.0
-rapidfuzz>=3.0.0
 PyYAML>=6.0
