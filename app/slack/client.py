@@ -331,3 +331,267 @@ def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dic
     except SlackApiError as e:
         current_app.logger.error(f"Slack API error fetching channel history {channel_id}: {e}")
         return {}
+
+
+# =============================================================================
+# Channel Sync Operations (for Slack channel membership management)
+# =============================================================================
+
+
+def get_team_id() -> str:
+    """Get the Slack workspace team ID.
+
+    Required for admin API operations that need team_id parameter.
+
+    Returns:
+        The team ID string (e.g., 'T02J2AVLSCT')
+
+    Raises:
+        SlackApiError: If API call fails
+    """
+    client = get_slack_client()
+    try:
+        response = client.team_info()
+        return response['team']['id']
+    except SlackApiError as e:
+        current_app.logger.error(f"Slack API error fetching team info: {e}")
+        raise
+
+
+def get_channel_maps() -> tuple[dict[str, str], dict[str, dict]]:
+    """Get channel name-to-ID and ID-to-properties mappings.
+
+    Returns a tuple of:
+    - channel_name_to_id: Dict mapping channel name -> channel ID
+    - channel_id_to_properties: Dict mapping channel ID -> channel properties
+      (includes is_public, is_private, name, etc.)
+
+    Fetches both public and private channels.
+    Handles pagination automatically.
+    """
+    client = get_slack_client()
+    channel_name_to_id = {}
+    channel_id_to_properties = {}
+    cursor = None
+
+    try:
+        while True:
+            response = client.conversations_list(
+                cursor=cursor,
+                limit=200,
+                types='public_channel,private_channel'
+            )
+
+            for channel in response.get('channels', []):
+                name = channel.get('name')
+                channel_id = channel.get('id')
+
+                if name and channel_id:
+                    channel_name_to_id[name] = channel_id
+
+                    # Store properties including public/private status
+                    channel_id_to_properties[channel_id] = {
+                        'name': name,
+                        'id': channel_id,
+                        'is_private': channel.get('is_private', False),
+                        'is_public': not channel.get('is_private', False),
+                        'is_channel': channel.get('is_channel', True),
+                        'is_archived': channel.get('is_archived', False),
+                        'num_members': channel.get('num_members', 0),
+                    }
+
+            cursor = response.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+
+        current_app.logger.info(
+            f"Fetched {len(channel_name_to_id)} channels from Slack"
+        )
+        return channel_name_to_id, channel_id_to_properties
+
+    except SlackApiError as e:
+        current_app.logger.error(f"Slack API error fetching channels: {e}")
+        raise
+
+
+def get_user_channels(user_id: str) -> set[str]:
+    """Get all channel IDs a user is a member of.
+
+    Args:
+        user_id: Slack user ID
+
+    Returns:
+        Set of channel IDs the user belongs to
+
+    Handles pagination automatically.
+    """
+    client = get_slack_client()
+    channel_ids = set()
+    cursor = None
+
+    try:
+        while True:
+            response = client.users_conversations(
+                user=user_id,
+                cursor=cursor,
+                limit=200,
+                types='public_channel,private_channel'
+            )
+
+            for channel in response.get('channels', []):
+                if channel.get('id'):
+                    channel_ids.add(channel['id'])
+
+            cursor = response.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+
+        return channel_ids
+
+    except SlackApiError as e:
+        current_app.logger.error(f"Slack API error fetching channels for user {user_id}: {e}")
+        raise
+
+
+def add_user_to_channel(
+    user_id: str,
+    channel_id: str,
+    email: str = '',
+    dry_run: bool = False
+) -> bool:
+    """Add a user to a channel.
+
+    Args:
+        user_id: Slack user ID
+        channel_id: Slack channel ID
+        email: User email (for logging)
+        dry_run: If True, only log what would be done
+
+    Returns:
+        True if user was added or already in channel, False on error
+    """
+    if dry_run:
+        user_str = f"{email} ({user_id})" if email else user_id
+        current_app.logger.info(f"[DRY RUN] Would add {user_str} to channel {channel_id}")
+        return True
+
+    client = get_slack_client()
+
+    try:
+        client.conversations_invite(channel=channel_id, users=user_id)
+        user_str = f"{email} ({user_id})" if email else user_id
+        current_app.logger.info(f"Added {user_str} to channel {channel_id}")
+        return True
+
+    except SlackApiError as e:
+        error = e.response.get('error', '')
+        user_str = f"{email} ({user_id})" if email else user_id
+
+        if error == 'already_in_channel':
+            current_app.logger.debug(f"{user_str} already in channel {channel_id}")
+            return True
+        elif error == 'is_archived':
+            current_app.logger.warning(f"Cannot add {user_str} to archived channel {channel_id}")
+            return False
+        elif error == 'channel_not_found':
+            current_app.logger.error(f"Channel {channel_id} not found when adding {user_str}")
+            return False
+        else:
+            current_app.logger.error(f"Error adding {user_str} to channel {channel_id}: {error}")
+            raise
+
+
+def remove_user_from_channel(
+    user_id: str,
+    channel_id: str,
+    email: str = '',
+    dry_run: bool = False
+) -> bool:
+    """Remove a user from a channel.
+
+    Args:
+        user_id: Slack user ID
+        channel_id: Slack channel ID
+        email: User email (for logging)
+        dry_run: If True, only log what would be done
+
+    Returns:
+        True if user was removed or not in channel, False on error
+    """
+    if dry_run:
+        user_str = f"{email} ({user_id})" if email else user_id
+        current_app.logger.info(f"[DRY RUN] Would remove {user_str} from channel {channel_id}")
+        return True
+
+    client = get_slack_client()
+
+    try:
+        client.conversations_kick(channel=channel_id, user=user_id)
+        user_str = f"{email} ({user_id})" if email else user_id
+        current_app.logger.info(f"Removed {user_str} from channel {channel_id}")
+        return True
+
+    except SlackApiError as e:
+        error = e.response.get('error', '')
+        user_str = f"{email} ({user_id})" if email else user_id
+
+        if error == 'not_in_channel':
+            current_app.logger.debug(f"{user_str} not in channel {channel_id}, no action needed")
+            return True
+        elif error == 'cant_kick_from_general':
+            current_app.logger.warning(f"Cannot remove {user_str} from #general channel")
+            return False
+        elif error == 'channel_not_found':
+            current_app.logger.error(f"Channel {channel_id} not found when removing {user_str}")
+            return False
+        elif error in ('restricted_action', 'user_is_restricted'):
+            # Can't kick restricted users via this API - they're managed via admin APIs
+            current_app.logger.debug(
+                f"Cannot kick restricted user {user_str} from {channel_id} via conversations.kick"
+            )
+            return False
+        else:
+            current_app.logger.error(f"Error removing {user_str} from channel {channel_id}: {error}")
+            raise
+
+
+def fetch_all_slack_users() -> list[dict]:
+    """Fetch all workspace members with full Slack user objects.
+
+    Unlike fetch_workspace_members() which returns a simplified dict,
+    this returns the raw Slack user objects with all fields including:
+    - is_admin, is_owner, is_bot, is_restricted, is_ultra_restricted
+    - deleted (deactivated status)
+    - profile with email
+
+    Used for channel sync where we need to process ALL Slack users,
+    not just those matched to database records.
+
+    Returns:
+        List of raw Slack user dicts
+    """
+    client = get_slack_client()
+    users = []
+    cursor = None
+
+    try:
+        while True:
+            response = client.users_list(cursor=cursor, limit=200)
+
+            for user in response.get('members', []):
+                # Skip Slackbot
+                if user.get('id') == 'USLACKBOT':
+                    continue
+
+                users.append(user)
+
+            cursor = response.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+
+        current_app.logger.info(f"Fetched {len(users)} Slack users")
+        return users
+
+    except SlackApiError as e:
+        current_app.logger.error(f"Slack API error fetching users: {e}")
+        raise

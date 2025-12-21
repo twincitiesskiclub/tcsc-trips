@@ -13,6 +13,7 @@ from .routes.payments import payments
 from .routes.registration import registration
 from .routes.socials import socials
 from .routes.trips import trips
+from .scheduler import init_scheduler
 
 
 def create_app(environment=None):
@@ -42,6 +43,9 @@ def create_app(environment=None):
 
     with app.app_context():
         db.create_all()
+
+    # Initialize background scheduler for channel sync jobs
+    init_scheduler(app)
 
     return app
 
