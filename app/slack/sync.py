@@ -214,6 +214,8 @@ def link_user_to_slack(user_id: int, slack_user_id: int) -> bool:
     """
     Manually link a User to a SlackUser.
 
+    Also updates the User's email to match the Slack email (Slack is authoritative).
+
     Returns True if successful, False if user/slack_user not found or already linked.
     """
     user = User.query.get(user_id)
@@ -230,6 +232,12 @@ def link_user_to_slack(user_id: int, slack_user_id: int) -> bool:
         return False
 
     user.slack_user_id = slack_user_id
+
+    # Update email to match Slack (Slack email is authoritative)
+    if slack_user.email and user.email != slack_user.email:
+        current_app.logger.info(f"Updating User email from {user.email} to {slack_user.email}")
+        user.email = slack_user.email
+
     db.session.commit()
 
     current_app.logger.info(f"Manually linked User {user.email} to SlackUser {slack_user.slack_uid}")
