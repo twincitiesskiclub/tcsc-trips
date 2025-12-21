@@ -16,9 +16,12 @@ document.addEventListener('DOMContentLoaded', function() {
     loadSlackOnly();
 });
 
-// Close modal on Escape key
+// Close modals on Escape key
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeLinkModal();
+    if (e.key === 'Escape') {
+        closeLinkModal();
+        closeMessageModal();
+    }
 });
 
 async function loadStatus() {
@@ -414,4 +417,142 @@ function showToast(message, type = 'info') {
         toast.classList.remove('show');
         setTimeout(() => toast.remove(), 300);
     }, 4000);
+}
+
+// ============================================
+// Send Message Modal Functions
+// ============================================
+
+function openMessageModal() {
+    const container = document.getElementById('user-checkboxes');
+    container.innerHTML = '';
+
+    // Get users with Slack links
+    const linkedUsers = allUsersData.filter(u => u.slack_matched);
+
+    if (linkedUsers.length === 0) {
+        container.innerHTML = '<p style="color: var(--g-m); margin: 0;">No users linked to Slack.</p>';
+        document.getElementById('message-modal').style.display = 'flex';
+        updateSelectedCount();
+        return;
+    }
+
+    // Create checkbox for each linked user
+    linkedUsers.forEach(user => {
+        const label = document.createElement('label');
+        label.className = 'user-checkbox-item';
+        label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;';
+        label.innerHTML = `
+            <input type="checkbox" class="user-checkbox" value="${user.id}" data-name="${user.full_name}">
+            <span>${user.full_name}</span>
+            <span style="color: var(--g-m); font-size: 12px;">(${user.email})</span>
+        `;
+        container.appendChild(label);
+    });
+
+    // Setup search filter
+    const searchInput = document.getElementById('user-search');
+    searchInput.value = '';
+    searchInput.oninput = function() {
+        const query = this.value.toLowerCase();
+        container.querySelectorAll('.user-checkbox-item').forEach(item => {
+            const name = item.querySelector('.user-checkbox').dataset.name.toLowerCase();
+            const email = item.textContent.toLowerCase();
+            item.style.display = (name.includes(query) || email.includes(query)) ? 'flex' : 'none';
+        });
+    };
+
+    // Setup checkbox change listeners
+    container.querySelectorAll('.user-checkbox').forEach(cb => {
+        cb.addEventListener('change', updateSelectedCount);
+    });
+
+    // Clear message textarea
+    document.getElementById('message-text').value = '';
+
+    // Reset mode to individual
+    document.querySelector('input[name="message-mode"][value="individual"]').checked = true;
+
+    updateSelectedCount();
+    document.getElementById('message-modal').style.display = 'flex';
+}
+
+function closeMessageModal() {
+    document.getElementById('message-modal').style.display = 'none';
+}
+
+function selectAllUsers() {
+    const container = document.getElementById('user-checkboxes');
+    container.querySelectorAll('.user-checkbox-item').forEach(item => {
+        if (item.style.display !== 'none') {
+            item.querySelector('.user-checkbox').checked = true;
+        }
+    });
+    updateSelectedCount();
+}
+
+function deselectAllUsers() {
+    document.querySelectorAll('.user-checkbox').forEach(cb => {
+        cb.checked = false;
+    });
+    updateSelectedCount();
+}
+
+function updateSelectedCount() {
+    const count = document.querySelectorAll('.user-checkbox:checked').length;
+    document.getElementById('selected-count').textContent = count;
+}
+
+async function sendMessage() {
+    const selectedCheckboxes = document.querySelectorAll('.user-checkbox:checked');
+    const userIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
+    const message = document.getElementById('message-text').value.trim();
+    const mode = document.querySelector('input[name="message-mode"]:checked').value;
+
+    // Validation
+    if (userIds.length === 0) {
+        showToast('Please select at least one recipient', 'error');
+        return;
+    }
+    if (!message) {
+        showToast('Please enter a message', 'error');
+        return;
+    }
+
+    const btn = document.getElementById('send-message-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+
+    try {
+        const resp = await fetch('/admin/slack/send-message', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                user_ids: userIds,
+                message: message,
+                mode: mode
+            })
+        });
+
+        const data = await resp.json();
+
+        if (!resp.ok) {
+            throw new Error(data.error || `HTTP ${resp.status}`);
+        }
+
+        if (data.success) {
+            showToast(`Message sent to ${data.sent} user(s)`, 'success');
+            closeMessageModal();
+        } else {
+            const errorMsg = data.errors && data.errors.length > 0
+                ? data.errors.join('; ')
+                : 'Some messages failed to send';
+            showToast(`Sent: ${data.sent}, Failed: ${data.failed}. ${errorMsg}`, 'error');
+        }
+    } catch (e) {
+        showToast('Failed to send: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Send Message';
+    }
 }

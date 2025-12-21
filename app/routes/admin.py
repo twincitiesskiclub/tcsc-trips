@@ -4,6 +4,7 @@ from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user
+from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
 from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
 import csv
@@ -896,3 +897,97 @@ def slack_import_user():
         return jsonify(result)
     else:
         return jsonify({'error': result['message']}), 400
+
+
+@admin.route('/admin/slack/send-message', methods=['POST'])
+@admin_required
+def slack_send_message():
+    """Send Slack message to one or more users.
+
+    Request body:
+    {
+        "user_ids": [1, 2, 3],    # Database user IDs
+        "message": "Hello!",
+        "mode": "individual" | "mpdm"
+    }
+
+    Returns:
+    {
+        "success": true,
+        "sent": 3,
+        "failed": 0,
+        "errors": []
+    }
+    """
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    user_ids = request.json.get('user_ids', [])
+    message = request.json.get('message', '').strip()
+    mode = request.json.get('mode', 'individual')
+
+    if not user_ids:
+        return jsonify({'error': 'user_ids is required'}), 400
+    if not message:
+        return jsonify({'error': 'message is required'}), 400
+    if mode not in ('individual', 'mpdm'):
+        return jsonify({'error': 'mode must be "individual" or "mpdm"'}), 400
+
+    # Get users and their Slack UIDs
+    users = User.query.filter(User.id.in_(user_ids)).all()
+    if not users:
+        return jsonify({'error': 'No users found'}), 404
+
+    # Build list of slack_uids, tracking errors for unlinked users
+    slack_uids = []
+    errors = []
+    for user in users:
+        if not user.slack_user:
+            errors.append(f'{user.full_name}: not linked to Slack')
+        else:
+            slack_uids.append(user.slack_user.slack_uid)
+
+    if not slack_uids:
+        return jsonify({
+            'success': False,
+            'sent': 0,
+            'failed': len(errors),
+            'errors': errors
+        })
+
+    sent = 0
+    failed = len(errors)  # Start with unlinked user count
+
+    if mode == 'mpdm':
+        # Open group conversation and send single message
+        conv_result = open_conversation(slack_uids)
+        if not conv_result['success']:
+            return jsonify({
+                'success': False,
+                'sent': 0,
+                'failed': len(slack_uids) + failed,
+                'errors': errors + [f'Failed to open conversation: {conv_result.get("error")}']
+            })
+
+        msg_result = send_message_to_channel(conv_result['channel_id'], message)
+        if msg_result['success']:
+            sent = len(slack_uids)
+        else:
+            failed += len(slack_uids)
+            errors.append(f'Failed to send message: {msg_result.get("error")}')
+    else:
+        # Send individual DMs
+        for uid in slack_uids:
+            result = send_direct_message(uid, message)
+            if result['success']:
+                sent += 1
+            else:
+                failed += 1
+                errors.append(f'Failed to DM {uid}: {result.get("error")}')
+
+    return jsonify({
+        'success': failed == 0,
+        'sent': sent,
+        'failed': failed,
+        'errors': errors
+    })

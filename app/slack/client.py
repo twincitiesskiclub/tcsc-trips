@@ -102,3 +102,82 @@ def get_user_by_email(email: str) -> dict | None:
             return None
         current_app.logger.error(f"Slack API error looking up {email}: {e}")
         raise
+
+
+def send_direct_message(slack_uid: str, text: str) -> dict:
+    """
+    Send a direct message to a single Slack user.
+
+    Args:
+        slack_uid: Slack user ID (e.g., U12345ABC)
+        text: Message text to send
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+    """
+    client = get_slack_client()
+
+    try:
+        client.chat_postMessage(channel=slack_uid, text=text)
+        return {'success': True}
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Slack API error sending DM to {slack_uid}: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def open_conversation(user_ids: list[str]) -> dict:
+    """
+    Open or retrieve a conversation (DM or MPDM).
+
+    For a single user, opens a 1:1 DM.
+    For multiple users, opens a multi-party DM (MPDM).
+
+    Args:
+        user_ids: List of Slack user IDs to include in conversation
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - channel_id: str (only if success=True)
+        - error: str (only if success=False)
+    """
+    if not user_ids:
+        return {'success': False, 'error': 'No user IDs provided'}
+
+    client = get_slack_client()
+
+    try:
+        response = client.conversations_open(users=','.join(user_ids))
+        channel_id = response.get('channel', {}).get('id')
+        return {'success': True, 'channel_id': channel_id}
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Slack API error opening conversation: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def send_message_to_channel(channel_id: str, text: str) -> dict:
+    """
+    Send a message to a channel or conversation.
+
+    Args:
+        channel_id: Slack channel/conversation ID
+        text: Message text to send
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+    """
+    client = get_slack_client()
+
+    try:
+        client.chat_postMessage(channel=channel_id, text=text)
+        return {'success': True}
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Slack API error sending to {channel_id}: {error_msg}")
+        return {'success': False, 'error': error_msg}
