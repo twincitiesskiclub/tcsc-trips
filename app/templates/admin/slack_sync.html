@@ -47,8 +47,8 @@
     margin-top: 4px;
 }
 
-/* Sync Button */
-.sync-btn {
+/* Action Buttons */
+.action-btn {
     background: var(--p);
     color: white;
     border: none;
@@ -56,28 +56,52 @@
     border-radius: var(--r);
     font: 500 14px var(--f);
     cursor: pointer;
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: 8px;
-    transition: opacity 0.2s;
+    transition: all 0.2s ease;
+    white-space: nowrap;
 }
 
-.sync-btn:hover {
+.action-btn:hover:not(:disabled) {
     opacity: 0.9;
+    transform: translateY(-1px);
 }
 
-.sync-btn:disabled {
+.action-btn:disabled {
     opacity: 0.6;
     cursor: not-allowed;
+    transform: none;
 }
 
-.sync-btn .spinning {
-    animation: spin 1s linear infinite;
+.action-btn.secondary {
+    background: #e8e9ec;
+    color: #4a5568;
 }
 
-@keyframes spin {
-    from { transform: rotate(0deg); }
-    to { transform: rotate(360deg); }
+.action-btn.info {
+    background: #3b82f6;
+}
+
+/* Loading state for buttons */
+.action-btn.loading {
+    pointer-events: none;
+}
+
+.action-btn.loading .btn-icon {
+    display: none;
+}
+
+.action-btn.loading .btn-text::after {
+    content: '...';
+    animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
 }
 
 .sync-status {
@@ -318,14 +342,17 @@
     <div class="page-header">
         <h1 class="page-title">Slack User Sync</h1>
         <div class="header-actions">
-            <span class="sync-status" id="sync-status"></span>
-            <button class="sync-btn" onclick="openMessageModal()">
-                <span>&#x2709;</span>
-                <span>Send Message</span>
+            <button class="action-btn secondary" id="message-btn" onclick="openMessageModal()">
+                <span class="btn-icon">✉</span>
+                <span class="btn-text">Send Message</span>
             </button>
-            <button class="sync-btn" id="sync-btn" onclick="runSync()">
-                <span id="sync-icon">&#x21bb;</span>
-                <span id="sync-text">Sync from Slack</span>
+            <button class="action-btn" id="sync-btn" onclick="runSync()">
+                <span class="btn-icon">↓</span>
+                <span class="btn-text">Sync from Slack</span>
+            </button>
+            <button class="action-btn info" id="profile-sync-btn" onclick="runProfileSync()">
+                <span class="btn-icon">↑</span>
+                <span class="btn-text">Sync to Slack</span>
             </button>
         </div>
     </div>

@@ -5,8 +5,21 @@ from flask import current_app
 from datetime import date
 
 from app.models import db, SlackUser, User, Season, UserSeason
-from app.slack.client import fetch_workspace_members
+from app.slack.client import (
+    fetch_workspace_members,
+    update_user_profile,
+    get_channel_id_by_name,
+    get_user_latest_message_in_channel
+)
 from app.constants import UserStatus, UserSeasonStatus
+
+
+# Slack custom profile field IDs
+SLACK_FIELD_SKI_TECHNIQUE = 'Xf047ANVLC56'
+SLACK_FIELD_BIRTHDAY = 'Xf046PG944PN'
+SLACK_FIELD_FRESH_TRACKS = 'Xf060ZSJDR1D'
+SLACK_FIELD_ROLES = 'Xf0A4S7SPUER'
+FRESH_TRACKS_CHANNEL = 'fresh-tracks'
 
 
 @dataclass
@@ -337,3 +350,113 @@ def import_slack_user(slack_user_id: int) -> dict:
 
     current_app.logger.info(f"Imported SlackUser {slack_user.slack_uid} as User {user.id} ({user.email})")
     return {'success': True, 'user_id': user.id, 'message': f'Created user {user.full_name}'}
+
+
+@dataclass
+class ProfileSyncResult:
+    """Result of syncing profile data TO Slack."""
+    users_updated: int = 0
+    users_skipped: int = 0  # No Slack link or no data to sync
+    errors: list = None
+
+    def __post_init__(self):
+        if self.errors is None:
+            self.errors = []
+
+    def to_dict(self):
+        return {
+            'users_updated': self.users_updated,
+            'users_skipped': self.users_skipped,
+            'errors': self.errors,
+        }
+
+
+def sync_profiles_to_slack() -> ProfileSyncResult:
+    """
+    Sync user profile data TO Slack custom profile fields.
+
+    For each linked user:
+    1. Build profile fields from DB (technique, birthday, roles)
+    2. Search #fresh-tracks for user's latest post
+    3. Update Slack profile via API
+
+    Returns:
+        ProfileSyncResult with update statistics
+    """
+    result = ProfileSyncResult()
+
+    # Get all users with Slack links
+    users = User.query.filter(User.slack_user_id.isnot(None)).all()
+
+    if not users:
+        return result
+
+    # Look up #fresh-tracks channel ID once for all users
+    fresh_tracks_channel_id = get_channel_id_by_name(FRESH_TRACKS_CHANNEL)
+    if not fresh_tracks_channel_id:
+        current_app.logger.warning(f"Could not find #{FRESH_TRACKS_CHANNEL} channel")
+
+    for user in users:
+        slack_user = user.slack_user
+        if not slack_user:
+            result.users_skipped += 1
+            continue
+
+        slack_uid = slack_user.slack_uid
+
+        try:
+            # Build profile fields
+            fields = {}
+
+            # Preferred Ski Technique
+            if user.preferred_technique:
+                fields[SLACK_FIELD_SKI_TECHNIQUE] = {
+                    'value': user.preferred_technique,
+                    'alt': user.preferred_technique
+                }
+
+            # Birthday (format: YYYY-MM-DD for Slack date field)
+            if user.date_of_birth:
+                fields[SLACK_FIELD_BIRTHDAY] = {
+                    'value': user.date_of_birth.strftime('%Y-%m-%d'),
+                    'alt': user.date_of_birth.strftime('%B %d')
+                }
+
+            # Roles (comma-separated display names)
+            if user.tags:
+                role_names = ', '.join(tag.display_name for tag in user.tags)
+                fields[SLACK_FIELD_ROLES] = {
+                    'value': role_names,
+                    'alt': ''
+                }
+
+            # Fresh Tracks Post (search #fresh-tracks channel)
+            if fresh_tracks_channel_id:
+                message = get_user_latest_message_in_channel(
+                    fresh_tracks_channel_id,
+                    slack_uid
+                )
+                if message and message.get('permalink'):
+                    fields[SLACK_FIELD_FRESH_TRACKS] = {
+                        'value': message['permalink'],
+                        'alt': 'Fresh Tracks Post'
+                    }
+
+            # Skip if no fields to update
+            if not fields:
+                result.users_skipped += 1
+                continue
+
+            # Update Slack profile
+            update_result = update_user_profile(slack_uid, fields)
+            if update_result.get('success'):
+                result.users_updated += 1
+                current_app.logger.info(f"Updated Slack profile for {user.email}")
+            else:
+                result.errors.append(f"{user.email}: {update_result.get('error', 'Unknown error')}")
+
+        except Exception as e:
+            result.errors.append(f"{user.email}: {str(e)}")
+            current_app.logger.error(f"Error syncing profile for {user.email}: {e}")
+
+    return result

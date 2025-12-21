@@ -3,7 +3,7 @@ from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent, Tag, UserTag
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
-from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user
+from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
 from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
@@ -769,17 +769,19 @@ def sync_slack():
     """Trigger a full Slack user sync."""
     try:
         result = sync_slack_users()
-        if result.errors:
-            flash_error(f'Sync completed with errors: {", ".join(result.errors)}')
-        else:
-            flash_success(
-                f'Sync complete! Created: {result.slack_users_created}, '
-                f'Updated: {result.slack_users_updated}, '
-                f'Matched: {result.users_matched}'
-            )
         return jsonify(result.to_dict())
     except Exception as e:
-        flash_error(f'Sync failed: {str(e)}')
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/slack/sync-profiles', methods=['POST'])
+@admin_required
+def sync_profiles():
+    """Push profile data to Slack for all linked users."""
+    try:
+        result = sync_profiles_to_slack()
+        return jsonify(result.to_dict())
+    except Exception as e:
         return jsonify({'error': str(e)}), 500
 
 
