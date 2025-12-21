@@ -357,6 +357,8 @@ class ProfileSyncResult:
     """Result of syncing profile data TO Slack."""
     users_updated: int = 0
     users_skipped: int = 0  # No Slack link or no data to sync
+    remaining: int = 0  # Users left to process (for batching)
+    total: int = 0  # Total users to process
     errors: list = None
 
     def __post_init__(self):
@@ -367,13 +369,22 @@ class ProfileSyncResult:
         return {
             'users_updated': self.users_updated,
             'users_skipped': self.users_skipped,
+            'remaining': self.remaining,
+            'total': self.total,
             'errors': self.errors,
         }
 
 
-def sync_profiles_to_slack() -> ProfileSyncResult:
+def sync_profiles_to_slack(batch_size: int = 10, offset: int = 0) -> ProfileSyncResult:
     """
     Sync user profile data TO Slack custom profile fields.
+
+    Processes users in batches to avoid timeout. Call repeatedly with
+    increasing offset until remaining=0.
+
+    Args:
+        batch_size: Number of users to process per call (default 10)
+        offset: Starting offset for pagination (default 0)
 
     For each linked user:
     1. Build profile fields from DB (technique, birthday, roles)
@@ -381,25 +392,30 @@ def sync_profiles_to_slack() -> ProfileSyncResult:
     3. Update Slack profile via API
 
     Returns:
-        ProfileSyncResult with update statistics
+        ProfileSyncResult with update statistics and remaining count
     """
     result = ProfileSyncResult()
 
-    # Get all users with Slack links
-    users = User.query.filter(User.slack_user_id.isnot(None)).all()
+    # Get total count and batch of users
+    total_users = User.query.filter(User.slack_user_id.isnot(None)).count()
+    users = User.query.filter(User.slack_user_id.isnot(None)).offset(offset).limit(batch_size).all()
+
+    result.total = total_users
 
     if not users:
+        result.remaining = 0
         return result
 
-    # Fetch #fresh-tracks messages ONCE upfront (much faster than per-user search)
+    result.remaining = max(0, total_users - offset - len(users))
+
+    # Only fetch fresh tracks on first batch (offset=0) to save time
     fresh_tracks_messages = {}
-    fresh_tracks_channel_id = get_channel_id_by_name(FRESH_TRACKS_CHANNEL)
-    if fresh_tracks_channel_id:
-        current_app.logger.info(f"Fetching #{FRESH_TRACKS_CHANNEL} message history...")
-        fresh_tracks_messages = get_latest_messages_by_user(fresh_tracks_channel_id)
-        current_app.logger.info(f"Found posts from {len(fresh_tracks_messages)} users")
-    else:
-        current_app.logger.warning(f"Could not find #{FRESH_TRACKS_CHANNEL} channel")
+    if offset == 0:
+        fresh_tracks_channel_id = get_channel_id_by_name(FRESH_TRACKS_CHANNEL)
+        if fresh_tracks_channel_id:
+            current_app.logger.info(f"Fetching #{FRESH_TRACKS_CHANNEL} message history...")
+            fresh_tracks_messages = get_latest_messages_by_user(fresh_tracks_channel_id)
+            current_app.logger.info(f"Found posts from {len(fresh_tracks_messages)} users")
 
     for user in users:
         slack_user = user.slack_user
