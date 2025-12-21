@@ -9,7 +9,7 @@ from app.slack.client import (
     fetch_workspace_members,
     update_user_profile,
     get_channel_id_by_name,
-    get_user_latest_message_in_channel
+    get_latest_messages_by_user
 )
 from app.constants import UserStatus, UserSeasonStatus
 
@@ -377,7 +377,7 @@ def sync_profiles_to_slack() -> ProfileSyncResult:
 
     For each linked user:
     1. Build profile fields from DB (technique, birthday, roles)
-    2. Search #fresh-tracks for user's latest post
+    2. Look up #fresh-tracks post from pre-fetched map
     3. Update Slack profile via API
 
     Returns:
@@ -391,9 +391,14 @@ def sync_profiles_to_slack() -> ProfileSyncResult:
     if not users:
         return result
 
-    # Look up #fresh-tracks channel ID once for all users
+    # Fetch #fresh-tracks messages ONCE upfront (much faster than per-user search)
+    fresh_tracks_messages = {}
     fresh_tracks_channel_id = get_channel_id_by_name(FRESH_TRACKS_CHANNEL)
-    if not fresh_tracks_channel_id:
+    if fresh_tracks_channel_id:
+        current_app.logger.info(f"Fetching #{FRESH_TRACKS_CHANNEL} message history...")
+        fresh_tracks_messages = get_latest_messages_by_user(fresh_tracks_channel_id)
+        current_app.logger.info(f"Found posts from {len(fresh_tracks_messages)} users")
+    else:
         current_app.logger.warning(f"Could not find #{FRESH_TRACKS_CHANNEL} channel")
 
     for user in users:
@@ -430,17 +435,13 @@ def sync_profiles_to_slack() -> ProfileSyncResult:
                     'alt': ''
                 }
 
-            # Fresh Tracks Post (search #fresh-tracks channel)
-            if fresh_tracks_channel_id:
-                message = get_user_latest_message_in_channel(
-                    fresh_tracks_channel_id,
-                    slack_uid
-                )
-                if message and message.get('permalink'):
-                    fields[SLACK_FIELD_FRESH_TRACKS] = {
-                        'value': message['permalink'],
-                        'alt': 'Fresh Tracks Post'
-                    }
+            # Fresh Tracks Post (look up from pre-fetched map)
+            message = fresh_tracks_messages.get(slack_uid)
+            if message and message.get('permalink'):
+                fields[SLACK_FIELD_FRESH_TRACKS] = {
+                    'value': message['permalink'],
+                    'alt': 'Fresh Tracks Post'
+                }
 
             # Skip if no fields to update
             if not fields:
