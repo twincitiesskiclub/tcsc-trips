@@ -175,14 +175,9 @@ function setUserFilter(filter, btn) {
 
 async function runSync() {
     const btn = document.getElementById('sync-btn');
-    const icon = document.getElementById('sync-icon');
-    const text = document.getElementById('sync-text');
-    const status = document.getElementById('sync-status');
 
     btn.disabled = true;
-    icon.classList.add('spinning');
-    text.textContent = 'Syncing...';
-    status.textContent = '';
+    btn.classList.add('loading');
 
     try {
         const resp = await fetch('/admin/slack/sync', {method: 'POST'});
@@ -193,10 +188,15 @@ async function runSync() {
 
         if (data.error) {
             showToast('Sync error: ' + data.error, 'error');
-            status.textContent = 'Error: ' + data.error;
+        } else if (data.errors && data.errors.length > 0) {
+            showToast(`Sync completed with ${data.errors.length} error(s)`, 'info');
         } else {
-            showToast(`Sync complete! Created: ${data.slack_users_created}, Updated: ${data.slack_users_updated}, Matched: ${data.users_matched}`, 'success');
-            status.textContent = `Created: ${data.slack_users_created}, Updated: ${data.slack_users_updated}, Matched: ${data.users_matched}`;
+            const parts = [];
+            if (data.slack_users_created > 0) parts.push(`${data.slack_users_created} created`);
+            if (data.slack_users_updated > 0) parts.push(`${data.slack_users_updated} updated`);
+            if (data.users_matched > 0) parts.push(`${data.users_matched} matched`);
+            const msg = parts.length > 0 ? parts.join(', ') : 'No changes';
+            showToast(msg, 'success');
         }
 
         // Reload data
@@ -205,11 +205,40 @@ async function runSync() {
         loadSlackOnly();
     } catch (e) {
         showToast('Sync failed: ' + e.message, 'error');
-        status.textContent = 'Sync failed: ' + e.message;
     } finally {
         btn.disabled = false;
-        icon.classList.remove('spinning');
-        text.textContent = 'Sync from Slack';
+        btn.classList.remove('loading');
+    }
+}
+
+async function runProfileSync() {
+    const btn = document.getElementById('profile-sync-btn');
+
+    btn.disabled = true;
+    btn.classList.add('loading');
+
+    try {
+        const resp = await fetch('/admin/slack/sync-profiles', {method: 'POST'});
+        if (!resp.ok && resp.status !== 200) {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+
+        if (data.error) {
+            showToast('Profile sync error: ' + data.error, 'error');
+        } else if (data.errors && data.errors.length > 0) {
+            showToast(`Profile sync completed with ${data.errors.length} error(s)`, 'info');
+        } else {
+            const msg = data.users_skipped > 0
+                ? `Updated ${data.users_updated}, skipped ${data.users_skipped}`
+                : `Updated ${data.users_updated} profile(s)`;
+            showToast(msg, 'success');
+        }
+    } catch (e) {
+        showToast('Profile sync failed: ' + e.message, 'error');
+    } finally {
+        btn.disabled = false;
+        btn.classList.remove('loading');
     }
 }
 
