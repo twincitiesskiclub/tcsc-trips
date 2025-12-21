@@ -39,7 +39,12 @@
           <h2>User Management</h2>
           <p>View, edit, and manage club members</p>
         </a>
-        
+
+        <a href="{{ url_for('admin.roles') }}" class="admin-menu-item">
+          <h2>Role Management</h2>
+          <p>Manage member roles and badges</p>
+        </a>
+
         <a href="{{ url_for('admin.get_admin_seasons') }}" class="admin-menu-item">
           <h2>Seasons Management</h2>
           <p>Create and manage club seasons</p>
