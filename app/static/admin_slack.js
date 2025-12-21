@@ -213,32 +213,72 @@ async function runSync() {
 
 async function runProfileSync() {
     const btn = document.getElementById('profile-sync-btn');
+    const btnText = btn.querySelector('.btn-text');
+    const originalText = btnText.textContent;
 
     btn.disabled = true;
     btn.classList.add('loading');
 
-    try {
-        const resp = await fetch('/admin/slack/sync-profiles', {method: 'POST'});
-        if (!resp.ok && resp.status !== 200) {
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
+    let totalUpdated = 0;
+    let totalSkipped = 0;
+    let totalErrors = [];
+    let offset = 0;
+    let totalUsers = 0;
+    const batchSize = 10;
 
-        if (data.error) {
-            showToast('Profile sync error: ' + data.error, 'error');
-        } else if (data.errors && data.errors.length > 0) {
-            showToast(`Profile sync completed with ${data.errors.length} error(s)`, 'info');
+    try {
+        // Loop until all users are processed
+        while (true) {
+            const progress = totalUsers > 0 ? `${offset}/${totalUsers}` : '...';
+            btnText.textContent = `Syncing ${progress}`;
+
+            const resp = await fetch('/admin/slack/sync-profiles', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({batch_size: batchSize, offset: offset})
+            });
+
+            if (!resp.ok) {
+                throw new Error(`HTTP ${resp.status}`);
+            }
+
+            const data = await resp.json();
+
+            if (data.error) {
+                throw new Error(data.error);
+            }
+
+            // Get total from first response
+            if (data.total && totalUsers === 0) {
+                totalUsers = data.total;
+            }
+
+            totalUpdated += data.users_updated || 0;
+            totalSkipped += data.users_skipped || 0;
+            if (data.errors) {
+                totalErrors = totalErrors.concat(data.errors);
+            }
+
+            // Check if we're done
+            if (data.remaining === 0) {
+                break;
+            }
+
+            offset += batchSize;
+        }
+
+        // Show final result
+        if (totalErrors.length > 0) {
+            showToast(`Sync done with ${totalErrors.length} error(s). Updated: ${totalUpdated}`, 'info');
         } else {
-            const msg = data.users_skipped > 0
-                ? `Updated ${data.users_updated}, skipped ${data.users_skipped}`
-                : `Updated ${data.users_updated} profile(s)`;
-            showToast(msg, 'success');
+            showToast(`Updated ${totalUpdated} profile(s)`, 'success');
         }
     } catch (e) {
         showToast('Profile sync failed: ' + e.message, 'error');
     } finally {
         btn.disabled = false;
         btn.classList.remove('loading');
+        btnText.textContent = originalText;
     }
 }
 
