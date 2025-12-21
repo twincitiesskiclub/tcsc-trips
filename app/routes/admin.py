@@ -5,6 +5,10 @@ from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, Soc
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
+from ..slack.channel_sync import run_channel_sync, load_channel_config
+from ..slack.admin_api import validate_admin_credentials
+from ..integrations.expertvoice import sync_expertvoice
+from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
 from datetime import datetime, timedelta
 import csv
@@ -1198,3 +1202,133 @@ def delete_tag(tag_id):
         'success': True,
         'message': f'Tag "{tag_name}" deleted successfully'
     })
+
+
+# =============================================================================
+# Channel Sync Endpoints
+# =============================================================================
+
+@admin.route('/admin/channel-sync')
+@admin_required
+def channel_sync_dashboard():
+    """Render channel sync dashboard."""
+    return render_template('admin/channel_sync.html')
+
+
+@admin.route('/admin/channel-sync/status')
+@admin_required
+def channel_sync_status():
+    """Get channel sync status including scheduler info and credential validation."""
+    try:
+        # Load config to check dry_run mode
+        config = load_channel_config()
+        dry_run = config.get('dry_run', True)
+
+        # Validate admin credentials
+        creds_valid, creds_error = validate_admin_credentials()
+
+        # Get scheduler status
+        scheduler_status = get_scheduler_status()
+
+        return jsonify({
+            'config': {
+                'dry_run': dry_run,
+                'channels': {
+                    'full_member': len(config.get('channels', {}).get('full_member', [])),
+                    'multi_channel_guest': len(config.get('channels', {}).get('multi_channel_guest', [])),
+                    'single_channel_guest': len(config.get('channels', {}).get('single_channel_guest', [])),
+                },
+                'exception_tags': config.get('exception_tags', []),
+            },
+            'credentials': {
+                'valid': creds_valid,
+                'error': creds_error,
+            },
+            'scheduler': scheduler_status,
+        })
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/channel-sync/run', methods=['POST'])
+@admin_required
+def run_channel_sync_manual():
+    """Manually trigger a channel sync.
+
+    Request body:
+    {
+        "dry_run": true/false,  # Optional - override config
+        "include_expertvoice": true/false  # Optional - also run ExpertVoice sync
+    }
+
+    Returns sync result statistics.
+    """
+    try:
+        data = request.get_json() or {}
+        dry_run = data.get('dry_run')  # None means use config
+        include_expertvoice = data.get('include_expertvoice', False)
+
+        # Run Slack channel sync
+        sync_result = run_channel_sync(dry_run=dry_run)
+
+        result = {
+            'success': len(sync_result.errors) == 0,
+            'dry_run': sync_result.dry_run,
+            'slack_sync': {
+                'total_processed': sync_result.total_processed,
+                'reactivated_users': sync_result.reactivated_users,
+                'role_changes': sync_result.role_changes,
+                'channel_adds': sync_result.channel_adds,
+                'channel_removals': sync_result.channel_removals,
+                'invites_sent': sync_result.invites_sent,
+                'users_skipped': sync_result.users_skipped,
+                'errors': sync_result.errors[:10],  # Limit errors in response
+                'error_count': len(sync_result.errors),
+            }
+        }
+
+        # Optionally run ExpertVoice sync
+        if include_expertvoice:
+            ev_result = sync_expertvoice(dry_run=dry_run)
+            result['expertvoice_sync'] = {
+                'members_synced': ev_result.members_synced,
+                'active_members': ev_result.active_members,
+                'alumni_members': ev_result.alumni_members,
+                'uploaded': ev_result.uploaded,
+                'errors': ev_result.errors,
+            }
+
+        return jsonify(result)
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@admin.route('/admin/channel-sync/expertvoice', methods=['POST'])
+@admin_required
+def run_expertvoice_sync():
+    """Manually trigger ExpertVoice sync only.
+
+    Request body:
+    {
+        "dry_run": true/false  # Optional - override config
+    }
+    """
+    try:
+        data = request.get_json() or {}
+        dry_run = data.get('dry_run')
+
+        result = sync_expertvoice(dry_run=dry_run)
+
+        return jsonify({
+            'success': len(result.errors) == 0,
+            'dry_run': result.dry_run,
+            'members_synced': result.members_synced,
+            'active_members': result.active_members,
+            'alumni_members': result.alumni_members,
+            'uploaded': result.uploaded,
+            'errors': result.errors,
+        })
+
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500

@@ -1,0 +1,660 @@
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.page-header .page-title {
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Stats Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: white;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 16px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--p);
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--g-m);
+    margin-top: 4px;
+}
+
+.stat-card.warning .stat-value {
+    color: #d97706;
+}
+
+.stat-card.success .stat-value {
+    color: #059669;
+}
+
+.stat-card.error .stat-value {
+    color: #dc2626;
+}
+
+/* Status Badges */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.status-badge.valid {
+    background: #d1fae5;
+    color: #059669;
+}
+
+.status-badge.invalid {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+.status-badge.dry-run {
+    background: #fef3c7;
+    color: #d97706;
+}
+
+.status-badge.live {
+    background: #dbeafe;
+    color: #2563eb;
+}
+
+/* Action Buttons */
+.action-btn {
+    background: var(--p);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.action-btn.secondary {
+    background: #e8e9ec;
+    color: #4a5568;
+}
+
+.action-btn.warning {
+    background: #f59e0b;
+}
+
+.action-btn.success {
+    background: #10b981;
+}
+
+/* Loading state for buttons */
+.action-btn.loading {
+    pointer-events: none;
+}
+
+.action-btn.loading .btn-icon {
+    display: none;
+}
+
+.action-btn.loading .btn-text::after {
+    content: '...';
+    animation: dots 1.2s steps(4, end) infinite;
+}
+
+@keyframes dots {
+    0%, 20% { content: ''; }
+    40% { content: '.'; }
+    60% { content: '..'; }
+    80%, 100% { content: '...'; }
+}
+
+/* Section */
+.section {
+    background: white;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--p);
+    margin: 0;
+}
+
+/* Info Grid */
+.info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+}
+
+.info-item {
+    padding: 12px;
+    background: #f9fafb;
+    border-radius: var(--r);
+}
+
+.info-label {
+    font-size: 12px;
+    color: var(--g-m);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.info-value {
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--p);
+}
+
+/* Channel List */
+.channel-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 8px;
+}
+
+.channel-tag {
+    background: #e2e8f0;
+    color: #475569;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: monospace;
+}
+
+/* Log Output */
+.log-output {
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 16px;
+    border-radius: var(--r);
+    font-family: monospace;
+    font-size: 13px;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-output .log-info {
+    color: #60a5fa;
+}
+
+.log-output .log-success {
+    color: #34d399;
+}
+
+.log-output .log-warning {
+    color: #fbbf24;
+}
+
+.log-output .log-error {
+    color: #f87171;
+}
+
+/* Results Table */
+.results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+}
+
+.results-table th,
+.results-table td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--g-b);
+}
+
+.results-table th {
+    background: #f9fafb;
+    font-weight: 600;
+    font-size: 13px;
+    color: var(--g-m);
+}
+
+.results-table td {
+    font-size: 14px;
+}
+
+/* Toast Notifications */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    z-index: 2000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-success {
+    background: var(--s);
+    color: var(--p);
+}
+
+.toast-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.toast-info {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="users-grid-container">
+    <!-- Header with title and sync buttons -->
+    <div class="page-header">
+        <h1 class="page-title">Channel Sync</h1>
+        <div class="header-actions">
+            <button class="action-btn secondary" id="dry-run-btn" onclick="runSync(true)">
+                <span class="btn-icon">🔍</span>
+                <span class="btn-text">Dry Run</span>
+            </button>
+            <button class="action-btn warning" id="live-run-btn" onclick="runSync(false)">
+                <span class="btn-icon">⚡</span>
+                <span class="btn-text">Live Run</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="stats-grid">
+        <div class="stat-card" id="scheduler-card">
+            <div class="stat-value" id="stat-scheduler">-</div>
+            <div class="stat-label">Scheduler</div>
+        </div>
+        <div class="stat-card" id="creds-card">
+            <div class="stat-value" id="stat-creds">-</div>
+            <div class="stat-label">Admin API</div>
+        </div>
+        <div class="stat-card" id="mode-card">
+            <div class="stat-value" id="stat-mode">-</div>
+            <div class="stat-label">Mode</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-next-run">-</div>
+            <div class="stat-label">Next Run</div>
+        </div>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">Configuration</h3>
+            <button class="action-btn secondary" onclick="loadStatus()">
+                <span class="btn-icon">↻</span>
+                <span class="btn-text">Refresh</span>
+            </button>
+        </div>
+        <div class="info-grid">
+            <div class="info-item">
+                <div class="info-label">Full Member Channels</div>
+                <div class="info-value" id="config-full-member">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Multi-Channel Guest</div>
+                <div class="info-value" id="config-mcg">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Single-Channel Guest</div>
+                <div class="info-value" id="config-scg">-</div>
+            </div>
+            <div class="info-item">
+                <div class="info-label">Exception Tags</div>
+                <div class="info-value" id="config-tags">-</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ExpertVoice Section -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">ExpertVoice Sync</h3>
+            <div class="header-actions">
+                <button class="action-btn secondary" id="ev-dry-run-btn" onclick="runExpertVoice(true)">
+                    <span class="btn-icon">🔍</span>
+                    <span class="btn-text">Dry Run</span>
+                </button>
+                <button class="action-btn success" id="ev-live-btn" onclick="runExpertVoice(false)">
+                    <span class="btn-icon">📤</span>
+                    <span class="btn-text">Upload</span>
+                </button>
+            </div>
+        </div>
+        <p style="color: var(--g-m); font-size: 14px; margin: 0;">
+            Syncs eligible members (ACTIVE + 1-season ALUMNI) to ExpertVoice via SFTP for pro deals access.
+        </p>
+    </div>
+
+    <!-- Results Section -->
+    <div class="section" id="results-section" style="display: none;">
+        <div class="section-header">
+            <h3 class="section-title">Last Sync Results</h3>
+            <span class="status-badge" id="results-mode">-</span>
+        </div>
+        <div id="results-content"></div>
+    </div>
+
+    <!-- Log Output -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">Activity Log</h3>
+            <button class="action-btn secondary" onclick="clearLog()">
+                <span class="btn-icon">🗑</span>
+                <span class="btn-text">Clear</span>
+            </button>
+        </div>
+        <div class="log-output" id="log-output">Waiting for activity...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Log helper
+function log(message, level = 'info') {
+    const logEl = document.getElementById('log-output');
+    const timestamp = new Date().toLocaleTimeString();
+    const levelClass = `log-${level}`;
+    logEl.innerHTML += `<span class="${levelClass}">[${timestamp}] ${message}</span>\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById('log-output').innerHTML = '';
+}
+
+// Toast notifications
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast-notification toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => toast.classList.add('show'));
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Load status
+async function loadStatus() {
+    try {
+        log('Loading status...');
+        const response = await fetch('/admin/channel-sync/status');
+        const data = await response.json();
+
+        if (data.error) {
+            log(`Error: ${data.error}`, 'error');
+            showToast(data.error, 'error');
+            return;
+        }
+
+        // Update scheduler status
+        const schedulerCard = document.getElementById('scheduler-card');
+        const schedulerStat = document.getElementById('stat-scheduler');
+        if (data.scheduler.running) {
+            schedulerStat.textContent = '✓ Running';
+            schedulerCard.classList.add('success');
+            schedulerCard.classList.remove('error');
+        } else {
+            schedulerStat.textContent = '✗ Stopped';
+            schedulerCard.classList.add('error');
+            schedulerCard.classList.remove('success');
+        }
+
+        // Update next run time
+        if (data.scheduler.jobs && data.scheduler.jobs.length > 0) {
+            const nextRun = new Date(data.scheduler.jobs[0].next_run);
+            document.getElementById('stat-next-run').textContent = nextRun.toLocaleString();
+        } else {
+            document.getElementById('stat-next-run').textContent = 'Not scheduled';
+        }
+
+        // Update credentials status
+        const credsCard = document.getElementById('creds-card');
+        const credsStat = document.getElementById('stat-creds');
+        if (data.credentials.valid) {
+            credsStat.textContent = '✓ Valid';
+            credsCard.classList.add('success');
+            credsCard.classList.remove('error');
+        } else {
+            credsStat.textContent = '✗ Invalid';
+            credsCard.classList.add('error');
+            credsCard.classList.remove('success');
+            log(`Credential error: ${data.credentials.error}`, 'error');
+        }
+
+        // Update mode
+        const modeCard = document.getElementById('mode-card');
+        const modeStat = document.getElementById('stat-mode');
+        if (data.config.dry_run) {
+            modeStat.textContent = 'Dry Run';
+            modeCard.classList.add('warning');
+            modeCard.classList.remove('success');
+        } else {
+            modeStat.textContent = 'LIVE';
+            modeCard.classList.add('success');
+            modeCard.classList.remove('warning');
+        }
+
+        // Update config info
+        document.getElementById('config-full-member').textContent =
+            `${data.config.channels.full_member} channels`;
+        document.getElementById('config-mcg').textContent =
+            `${data.config.channels.multi_channel_guest} channels`;
+        document.getElementById('config-scg').textContent =
+            `${data.config.channels.single_channel_guest} channels`;
+        document.getElementById('config-tags').textContent =
+            data.config.exception_tags.join(', ') || 'None';
+
+        log('Status loaded successfully', 'success');
+
+    } catch (error) {
+        log(`Failed to load status: ${error.message}`, 'error');
+        showToast('Failed to load status', 'error');
+    }
+}
+
+// Run channel sync
+async function runSync(dryRun) {
+    const btn = dryRun ? document.getElementById('dry-run-btn') : document.getElementById('live-run-btn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    const modeText = dryRun ? 'DRY RUN' : 'LIVE';
+    log(`Starting ${modeText} channel sync...`, 'info');
+
+    try {
+        const response = await fetch('/admin/channel-sync/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dry_run: dryRun })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            log(`Error: ${data.error}`, 'error');
+            showToast(data.error, 'error');
+            return;
+        }
+
+        // Display results
+        displayResults(data, 'slack');
+
+        // Log summary
+        const s = data.slack_sync;
+        log(`${modeText} complete:`, 'success');
+        log(`  Processed: ${s.total_processed} users`);
+        log(`  Role changes: ${s.role_changes}`);
+        log(`  Channel adds: ${s.channel_adds}`);
+        log(`  Channel removals: ${s.channel_removals}`);
+        log(`  Invites sent: ${s.invites_sent}`);
+        log(`  Skipped: ${s.users_skipped}`);
+
+        if (s.error_count > 0) {
+            log(`  Errors: ${s.error_count}`, 'warning');
+            s.errors.forEach(err => log(`    - ${err}`, 'error'));
+        }
+
+        showToast(`${modeText} sync complete`, 'success');
+
+    } catch (error) {
+        log(`Failed: ${error.message}`, 'error');
+        showToast('Sync failed', 'error');
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+// Run ExpertVoice sync
+async function runExpertVoice(dryRun) {
+    const btn = dryRun ? document.getElementById('ev-dry-run-btn') : document.getElementById('ev-live-btn');
+    btn.classList.add('loading');
+    btn.disabled = true;
+
+    const modeText = dryRun ? 'DRY RUN' : 'LIVE';
+    log(`Starting ExpertVoice ${modeText}...`, 'info');
+
+    try {
+        const response = await fetch('/admin/channel-sync/expertvoice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ dry_run: dryRun })
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+            log(`Error: ${data.error}`, 'error');
+            showToast(data.error, 'error');
+            return;
+        }
+
+        // Log summary
+        log(`ExpertVoice ${modeText} complete:`, 'success');
+        log(`  Members synced: ${data.members_synced}`);
+        log(`  Active: ${data.active_members}`);
+        log(`  Alumni: ${data.alumni_members}`);
+        log(`  Uploaded: ${data.uploaded ? 'Yes' : 'No (dry run)'}`);
+
+        if (data.errors && data.errors.length > 0) {
+            data.errors.forEach(err => log(`  Error: ${err}`, 'error'));
+        }
+
+        showToast(`ExpertVoice ${modeText} complete`, 'success');
+
+    } catch (error) {
+        log(`Failed: ${error.message}`, 'error');
+        showToast('ExpertVoice sync failed', 'error');
+    } finally {
+        btn.classList.remove('loading');
+        btn.disabled = false;
+    }
+}
+
+// Display results
+function displayResults(data, type) {
+    const section = document.getElementById('results-section');
+    const content = document.getElementById('results-content');
+    const badge = document.getElementById('results-mode');
+
+    section.style.display = 'block';
+    badge.textContent = data.dry_run ? 'Dry Run' : 'Live';
+    badge.className = `status-badge ${data.dry_run ? 'dry-run' : 'live'}`;
+
+    if (type === 'slack' && data.slack_sync) {
+        const s = data.slack_sync;
+        content.innerHTML = `
+            <table class="results-table">
+                <tr><th>Metric</th><th>Value</th></tr>
+                <tr><td>Users Processed</td><td>${s.total_processed}</td></tr>
+                <tr><td>Reactivated Users</td><td>${s.reactivated_users}</td></tr>
+                <tr><td>Role Changes</td><td>${s.role_changes}</td></tr>
+                <tr><td>Channel Adds</td><td>${s.channel_adds}</td></tr>
+                <tr><td>Channel Removals</td><td>${s.channel_removals}</td></tr>
+                <tr><td>Invites Sent</td><td>${s.invites_sent}</td></tr>
+                <tr><td>Users Skipped</td><td>${s.users_skipped}</td></tr>
+                <tr><td>Errors</td><td>${s.error_count}</td></tr>
+            </table>
+        `;
+    }
+}
+
+// Load status on page load
+document.addEventListener('DOMContentLoaded', loadStatus);
+</script>
+{% endblock %}

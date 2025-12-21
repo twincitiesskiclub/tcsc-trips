@@ -1,0 +1,73 @@
+# Slack Channel Sync Configuration
+# This config controls the automated channel membership sync job
+
+# Safety: Set to false only after validating dry-run logs
+dry_run: true  # DEFAULT: true - logs actions without making changes
+
+# Slack workspace settings
+slack:
+  workspace_domain: "twincitiesskiclub"
+  base_url: "https://twincitiesskiclub.slack.com/api/"
+
+# Channel configuration by membership tier
+# Maps User.get_slack_tier() return values to channel lists
+channels:
+  # ACTIVE users (seasons_since_active = 0) - full workspace access
+  full_member:
+    - "announcements-adventures"
+    - "announcements-practices"
+    - "announcements-tcsc"
+    - "chat"
+    - "fresh-tracks"
+    - "gear-recs-swap"
+    - "races-information"
+    - "volunteer-and-job-opportunities"
+    - "extra-training-fun"
+    - "meme"
+    - "photos-videos"
+    - "race-waxing"
+
+  # ALUMNI (seasons_since_active = 1) - multi-channel guest
+  # Same as full_member minus exclusive announcement channels
+  multi_channel_guest:
+    - "announcements-tcsc"
+    - "chat"
+    - "fresh-tracks"
+    - "gear-recs-swap"
+    - "races-information"
+    - "volunteer-and-job-opportunities"
+    - "extra-training-fun"
+    - "meme"
+    - "photos-videos"
+    - "race-waxing"
+
+  # ALUMNI (seasons_since_active >= 2) - single-channel guest
+  single_channel_guest:
+    - "announcements-tcsc"
+
+# Channels exclusive to full members (auto-calculated: full_member - multi_channel_guest)
+# Used for removal logic when downgrading from full_member
+exclusive_channels:
+  - "announcements-adventures"
+  - "announcements-practices"
+
+# Tags that mark users as exceptions (skipped by automation)
+# These users retain their current Slack status regardless of DB status
+exception_tags:
+  - "BOARD_MEMBER"
+  - "COACH"
+  - "ADMIN"
+  - "LEAD"
+
+# Welcome message for new member invitations
+invitation_message: "Welcome to the Twin Cities Ski Club Slack!"
+
+# ExpertVoice SFTP configuration
+# Members with ACTIVE status or ALUMNI (1 season) get ExpertVoice access
+expertvoice:
+  enabled: true
+  sftp:
+    host: "sftp.expertvoice.com"
+    port: 22
+    path: "/incoming/"
+    filename: "twincitiesskiclub.memberauth.csv"
