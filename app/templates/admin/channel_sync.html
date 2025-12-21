@@ -527,57 +527,114 @@ async function loadStatus() {
     }
 }
 
-// Run channel sync
+// Run channel sync (now runs in background)
 async function runSync(dryRun) {
     const btn = dryRun ? document.getElementById('dry-run-btn') : document.getElementById('live-run-btn');
     btn.classList.add('loading');
     btn.disabled = true;
 
+    // Disable both buttons during sync
+    document.getElementById('dry-run-btn').disabled = true;
+    document.getElementById('live-run-btn').disabled = true;
+
     const modeText = dryRun ? 'DRY RUN' : 'LIVE';
     log(`Starting ${modeText} channel sync...`, 'info');
 
     try {
+        // Start the sync (returns immediately)
         const response = await fetch('/admin/channel-sync/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ dry_run: dryRun })
         });
 
-        const data = await response.json();
+        const startData = await response.json();
 
-        if (data.error) {
-            log(`Error: ${data.error}`, 'error');
-            showToast(data.error, 'error');
+        if (startData.status === 'already_running') {
+            log('A sync is already in progress...', 'warning');
+            showToast('Sync already running', 'warning');
+        } else if (startData.status === 'started') {
+            log('Sync started in background, polling for results...', 'info');
+        } else if (startData.error) {
+            log(`Error: ${startData.error}`, 'error');
+            showToast(startData.error, 'error');
             return;
         }
 
-        // Display results
-        displayResults(data, 'slack');
-
-        // Log summary
-        const s = data.slack_sync;
-        log(`${modeText} complete:`, 'success');
-        log(`  Processed: ${s.total_processed} users`);
-        log(`  Role changes: ${s.role_changes}`);
-        log(`  Channel adds: ${s.channel_adds}`);
-        log(`  Channel removals: ${s.channel_removals}`);
-        log(`  Invites sent: ${s.invites_sent}`);
-        log(`  Skipped: ${s.users_skipped}`);
-
-        if (s.error_count > 0) {
-            log(`  Errors: ${s.error_count}`, 'warning');
-            s.errors.forEach(err => log(`    - ${err}`, 'error'));
-        }
-
-        showToast(`${modeText} sync complete`, 'success');
+        // Poll for results
+        await pollForResults(modeText);
 
     } catch (error) {
         log(`Failed: ${error.message}`, 'error');
         showToast('Sync failed', 'error');
     } finally {
         btn.classList.remove('loading');
-        btn.disabled = false;
+        document.getElementById('dry-run-btn').disabled = false;
+        document.getElementById('live-run-btn').disabled = false;
     }
+}
+
+// Poll for sync results
+async function pollForResults(modeText) {
+    const maxAttempts = 120; // 2 minutes max (120 * 1 second)
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+        attempts++;
+
+        try {
+            const response = await fetch('/admin/channel-sync/result');
+            const data = await response.json();
+
+            if (data.status === 'running') {
+                if (attempts % 5 === 0) {
+                    log(`Still running... (${attempts}s)`, 'info');
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
+
+            if (data.status === 'error') {
+                log(`Sync failed: ${data.error}`, 'error');
+                showToast('Sync failed', 'error');
+                return;
+            }
+
+            if (data.status === 'completed') {
+                // Display results
+                displayResults(data, 'slack');
+
+                // Log summary
+                const s = data.slack_sync;
+                log(`${modeText} complete:`, 'success');
+                log(`  Processed: ${s.total_processed} users`);
+                log(`  Role changes: ${s.role_changes}`);
+                log(`  Channel adds: ${s.channel_adds}`);
+                log(`  Channel removals: ${s.channel_removals}`);
+                log(`  Invites sent: ${s.invites_sent}`);
+                log(`  Skipped: ${s.users_skipped}`);
+
+                if (s.error_count > 0) {
+                    log(`  Errors: ${s.error_count}`, 'warning');
+                    s.errors.forEach(err => log(`    - ${err}`, 'error'));
+                }
+
+                showToast(`${modeText} sync complete`, 'success');
+                return;
+            }
+
+            // Unexpected status
+            log(`Unexpected status: ${data.status}`, 'warning');
+            return;
+
+        } catch (error) {
+            log(`Polling error: ${error.message}`, 'error');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+
+    log('Sync timed out after 2 minutes', 'error');
+    showToast('Sync timed out', 'error');
 }
 
 // Run ExpertVoice sync
