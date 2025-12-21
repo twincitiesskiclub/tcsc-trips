@@ -777,9 +777,16 @@ def sync_slack():
 @admin.route('/admin/slack/sync-profiles', methods=['POST'])
 @admin_required
 def sync_profiles():
-    """Push profile data to Slack for all linked users."""
+    """Push profile data to Slack for linked users (batched).
+
+    Accepts JSON body with optional batch_size and offset parameters.
+    Call repeatedly until remaining=0.
+    """
     try:
-        result = sync_profiles_to_slack()
+        data = request.get_json() or {}
+        batch_size = data.get('batch_size', 10)
+        offset = data.get('offset', 0)
+        result = sync_profiles_to_slack(batch_size=batch_size, offset=offset)
         return jsonify(result.to_dict())
     except Exception as e:
         return jsonify({'error': str(e)}), 500
