@@ -258,6 +258,8 @@ def get_user_latest_message_in_channel(channel_id: str, user_id: str) -> dict | 
     """
     Find the most recent message from a user in a channel.
 
+    DEPRECATED: Use get_latest_messages_by_user() for batch lookups.
+
     Args:
         channel_id: Slack channel ID
         user_id: Slack user ID to search for
@@ -265,14 +267,28 @@ def get_user_latest_message_in_channel(channel_id: str, user_id: str) -> dict | 
     Returns:
         Dict with 'permalink' and 'text' if found, None otherwise
     """
+    messages_map = get_latest_messages_by_user(channel_id, max_messages=500)
+    return messages_map.get(user_id)
+
+
+def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dict[str, dict]:
+    """
+    Fetch channel history once and build a map of each user's latest message.
+
+    Args:
+        channel_id: Slack channel ID
+        max_messages: Maximum messages to scan (default 500)
+
+    Returns:
+        Dict mapping user_id -> {'permalink': str, 'text': str}
+        Only includes users who have posted in the scanned range.
+    """
     client = get_slack_client()
+    user_messages = {}  # user_id -> {permalink, text, ts}
 
     try:
-        # Search through channel history for messages from this user
-        # Limit to recent messages (last 1000) for performance
         cursor = None
         messages_checked = 0
-        max_messages = 1000
 
         while messages_checked < max_messages:
             response = client.conversations_history(
@@ -283,27 +299,40 @@ def get_user_latest_message_in_channel(channel_id: str, user_id: str) -> dict | 
 
             for message in response.get('messages', []):
                 messages_checked += 1
-                # Check if message is from the target user
-                if message.get('user') == user_id:
-                    # Get permalink for this message
-                    try:
-                        permalink_response = client.chat_getPermalink(
-                            channel=channel_id,
-                            message_ts=message.get('ts')
-                        )
-                        return {
-                            'permalink': permalink_response.get('permalink'),
-                            'text': message.get('text', '')[:100]  # First 100 chars
-                        }
-                    except SlackApiError:
-                        # If we can't get permalink, return None
-                        return None
+                user_id = message.get('user')
+
+                # Skip if no user (bot messages, etc.) or already have this user's latest
+                if not user_id or user_id in user_messages:
+                    continue
+
+                # Store this as the user's latest message (first one we see is most recent)
+                user_messages[user_id] = {
+                    'ts': message.get('ts'),
+                    'text': message.get('text', '')[:100]
+                }
 
             cursor = response.get('response_metadata', {}).get('next_cursor')
             if not cursor:
                 break
 
-        return None
+        # Now fetch permalinks for all found messages (batch this if needed)
+        for user_id, msg_data in user_messages.items():
+            try:
+                permalink_response = client.chat_getPermalink(
+                    channel=channel_id,
+                    message_ts=msg_data['ts']
+                )
+                msg_data['permalink'] = permalink_response.get('permalink')
+            except SlackApiError:
+                msg_data['permalink'] = None
+
+        # Clean up - remove ts, keep only permalink and text
+        return {
+            user_id: {'permalink': data.get('permalink'), 'text': data.get('text')}
+            for user_id, data in user_messages.items()
+            if data.get('permalink')  # Only include if we got a permalink
+        }
+
     except SlackApiError as e:
-        current_app.logger.error(f"Slack API error searching channel {channel_id}: {e}")
-        return None
+        current_app.logger.error(f"Slack API error fetching channel history {channel_id}: {e}")
+        return {}
