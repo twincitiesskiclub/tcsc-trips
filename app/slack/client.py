@@ -13,6 +13,14 @@ def get_slack_client() -> WebClient:
     return WebClient(token=token)
 
 
+def get_slack_user_client() -> WebClient:
+    """Get configured Slack WebClient using user token (for admin operations)."""
+    token = os.environ.get('SLACK_USER_TOKEN')
+    if not token:
+        raise ValueError("SLACK_USER_TOKEN not configured")
+    return WebClient(token=token)
+
+
 def fetch_workspace_members() -> list[dict]:
     """
     Fetch all workspace members via Slack users.list API.
@@ -181,3 +189,121 @@ def send_message_to_channel(channel_id: str, text: str) -> dict:
         error_msg = e.response.get('error', str(e))
         current_app.logger.error(f"Slack API error sending to {channel_id}: {error_msg}")
         return {'success': False, 'error': error_msg}
+
+
+def update_user_profile(slack_uid: str, fields: dict) -> dict:
+    """
+    Update custom profile fields for a Slack user.
+
+    Args:
+        slack_uid: Slack user ID (e.g., U12345ABC)
+        fields: Dict of {field_id: value} for custom profile fields
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+
+    Note: Requires users.profile:write scope on the USER token (not bot token).
+    """
+    client = get_slack_user_client()
+
+    try:
+        # Build profile payload with custom fields
+        profile = {'fields': fields}
+        client.users_profile_set(user=slack_uid, profile=profile)
+        return {'success': True}
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Slack API error updating profile for {slack_uid}: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def get_channel_id_by_name(channel_name: str) -> str | None:
+    """
+    Look up a channel ID by its name.
+
+    Args:
+        channel_name: Channel name without the # prefix
+
+    Returns:
+        Channel ID string or None if not found
+    """
+    client = get_slack_client()
+    cursor = None
+
+    try:
+        while True:
+            response = client.conversations_list(
+                cursor=cursor,
+                limit=200,
+                types='public_channel,private_channel'
+            )
+
+            for channel in response.get('channels', []):
+                if channel.get('name') == channel_name:
+                    return channel.get('id')
+
+            cursor = response.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+
+        return None
+    except SlackApiError as e:
+        current_app.logger.error(f"Slack API error looking up channel {channel_name}: {e}")
+        return None
+
+
+def get_user_latest_message_in_channel(channel_id: str, user_id: str) -> dict | None:
+    """
+    Find the most recent message from a user in a channel.
+
+    Args:
+        channel_id: Slack channel ID
+        user_id: Slack user ID to search for
+
+    Returns:
+        Dict with 'permalink' and 'text' if found, None otherwise
+    """
+    client = get_slack_client()
+
+    try:
+        # Search through channel history for messages from this user
+        # Limit to recent messages (last 1000) for performance
+        cursor = None
+        messages_checked = 0
+        max_messages = 1000
+
+        while messages_checked < max_messages:
+            response = client.conversations_history(
+                channel=channel_id,
+                cursor=cursor,
+                limit=100
+            )
+
+            for message in response.get('messages', []):
+                messages_checked += 1
+                # Check if message is from the target user
+                if message.get('user') == user_id:
+                    # Get permalink for this message
+                    try:
+                        permalink_response = client.chat_getPermalink(
+                            channel=channel_id,
+                            message_ts=message.get('ts')
+                        )
+                        return {
+                            'permalink': permalink_response.get('permalink'),
+                            'text': message.get('text', '')[:100]  # First 100 chars
+                        }
+                    except SlackApiError:
+                        # If we can't get permalink, return None
+                        return None
+
+            cursor = response.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+
+        return None
+    except SlackApiError as e:
+        current_app.logger.error(f"Slack API error searching channel {channel_id}: {e}")
+        return None
