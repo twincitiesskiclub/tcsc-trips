@@ -1250,10 +1250,67 @@ def channel_sync_status():
         return jsonify({'error': str(e)}), 500
 
 
+# Module-level storage for background sync status
+_sync_status = {
+    'running': False,
+    'result': None,
+    'error': None,
+    'started_at': None,
+    'completed_at': None,
+}
+
+
+def _run_sync_background(app, dry_run, include_expertvoice):
+    """Run sync in background thread with app context."""
+    global _sync_status
+    from datetime import datetime
+
+    with app.app_context():
+        try:
+            sync_result = run_channel_sync(dry_run=dry_run)
+
+            result = {
+                'success': len(sync_result.errors) == 0,
+                'dry_run': sync_result.dry_run,
+                'slack_sync': {
+                    'total_processed': sync_result.total_processed,
+                    'reactivated_users': sync_result.reactivated_users,
+                    'role_changes': sync_result.role_changes,
+                    'channel_adds': sync_result.channel_adds,
+                    'channel_removals': sync_result.channel_removals,
+                    'invites_sent': sync_result.invites_sent,
+                    'users_skipped': sync_result.users_skipped,
+                    'errors': sync_result.errors[:10],
+                    'error_count': len(sync_result.errors),
+                }
+            }
+
+            if include_expertvoice:
+                ev_result = sync_expertvoice(dry_run=dry_run)
+                result['expertvoice_sync'] = {
+                    'members_synced': ev_result.members_synced,
+                    'active_members': ev_result.active_members,
+                    'alumni_members': ev_result.alumni_members,
+                    'uploaded': ev_result.uploaded,
+                    'errors': ev_result.errors,
+                }
+
+            _sync_status['result'] = result
+            _sync_status['error'] = None
+
+        except Exception as e:
+            _sync_status['error'] = str(e)
+            _sync_status['result'] = None
+
+        finally:
+            _sync_status['running'] = False
+            _sync_status['completed_at'] = datetime.utcnow().isoformat()
+
+
 @admin.route('/admin/channel-sync/run', methods=['POST'])
 @admin_required
 def run_channel_sync_manual():
-    """Manually trigger a channel sync.
+    """Manually trigger a channel sync (runs in background).
 
     Request body:
     {
@@ -1261,47 +1318,81 @@ def run_channel_sync_manual():
         "include_expertvoice": true/false  # Optional - also run ExpertVoice sync
     }
 
-    Returns sync result statistics.
+    Returns immediately. Poll /admin/channel-sync/result for status.
     """
-    try:
-        data = request.get_json() or {}
-        dry_run = data.get('dry_run')  # None means use config
-        include_expertvoice = data.get('include_expertvoice', False)
+    import threading
+    from flask import current_app
+    from datetime import datetime
 
-        # Run Slack channel sync
-        sync_result = run_channel_sync(dry_run=dry_run)
+    global _sync_status
 
-        result = {
-            'success': len(sync_result.errors) == 0,
-            'dry_run': sync_result.dry_run,
-            'slack_sync': {
-                'total_processed': sync_result.total_processed,
-                'reactivated_users': sync_result.reactivated_users,
-                'role_changes': sync_result.role_changes,
-                'channel_adds': sync_result.channel_adds,
-                'channel_removals': sync_result.channel_removals,
-                'invites_sent': sync_result.invites_sent,
-                'users_skipped': sync_result.users_skipped,
-                'errors': sync_result.errors[:10],  # Limit errors in response
-                'error_count': len(sync_result.errors),
-            }
-        }
+    # Check if already running
+    if _sync_status['running']:
+        return jsonify({
+            'status': 'already_running',
+            'started_at': _sync_status['started_at'],
+            'message': 'A sync is already in progress. Poll /admin/channel-sync/result for status.'
+        }), 409
 
-        # Optionally run ExpertVoice sync
-        if include_expertvoice:
-            ev_result = sync_expertvoice(dry_run=dry_run)
-            result['expertvoice_sync'] = {
-                'members_synced': ev_result.members_synced,
-                'active_members': ev_result.active_members,
-                'alumni_members': ev_result.alumni_members,
-                'uploaded': ev_result.uploaded,
-                'errors': ev_result.errors,
-            }
+    data = request.get_json() or {}
+    dry_run = data.get('dry_run')
+    include_expertvoice = data.get('include_expertvoice', False)
 
-        return jsonify(result)
+    # Mark as running
+    _sync_status['running'] = True
+    _sync_status['result'] = None
+    _sync_status['error'] = None
+    _sync_status['started_at'] = datetime.utcnow().isoformat()
+    _sync_status['completed_at'] = None
 
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
+    # Start background thread
+    app = current_app._get_current_object()
+    thread = threading.Thread(
+        target=_run_sync_background,
+        args=(app, dry_run, include_expertvoice)
+    )
+    thread.daemon = True
+    thread.start()
+
+    return jsonify({
+        'status': 'started',
+        'started_at': _sync_status['started_at'],
+        'message': 'Sync started in background. Poll /admin/channel-sync/result for status.'
+    })
+
+
+@admin.route('/admin/channel-sync/result')
+@admin_required
+def get_channel_sync_result():
+    """Get the result of the background channel sync."""
+    global _sync_status
+
+    if _sync_status['running']:
+        return jsonify({
+            'status': 'running',
+            'started_at': _sync_status['started_at'],
+        })
+
+    if _sync_status['error']:
+        return jsonify({
+            'status': 'error',
+            'error': _sync_status['error'],
+            'started_at': _sync_status['started_at'],
+            'completed_at': _sync_status['completed_at'],
+        })
+
+    if _sync_status['result']:
+        return jsonify({
+            'status': 'completed',
+            'started_at': _sync_status['started_at'],
+            'completed_at': _sync_status['completed_at'],
+            **_sync_status['result']
+        })
+
+    return jsonify({
+        'status': 'idle',
+        'message': 'No sync has been run yet.'
+    })
 
 
 @admin.route('/admin/channel-sync/expertvoice', methods=['POST'])
