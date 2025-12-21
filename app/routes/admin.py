@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, Response, session
 from sqlalchemy import func
 from ..auth import admin_required
-from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent
+from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent, Tag, UserTag
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
@@ -582,12 +582,17 @@ def get_users_data():
             'created_at': user.created_at.isoformat() if user.created_at else '',
             'trip_count': user_payment_stats['trips'],
             'total_paid': user_payment_stats['total'] / 100,  # Convert cents to dollars
+            'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in user.tags],
         })
+
+    # Get all available tags for the tag assignment modal
+    all_tags = Tag.query.order_by(Tag.display_name).all()
 
     return jsonify({
         'users': users_data,
         'current_season': {'id': current_season.id, 'name': current_season.name} if current_season else None,
-        'seasons': [{'id': s.id, 'name': s.name} for s in all_seasons]
+        'seasons': [{'id': s.id, 'name': s.name} for s in all_seasons],
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in all_tags]
     })
 
 
@@ -990,4 +995,74 @@ def slack_send_message():
         'sent': sent,
         'failed': failed,
         'errors': errors
+    })
+
+
+# =============================================================================
+# Tag Management Endpoints
+# =============================================================================
+
+@admin.route('/admin/tags/data')
+@admin_required
+def get_tags_data():
+    """Return all tags as JSON."""
+    tags = Tag.query.order_by(Tag.display_name).all()
+    return jsonify({
+        'tags': [{
+            'id': t.id,
+            'name': t.name,
+            'display_name': t.display_name,
+            'description': t.description,
+            'user_count': len(t.users)
+        } for t in tags]
+    })
+
+
+@admin.route('/admin/users/<int:user_id>/tags', methods=['GET'])
+@admin_required
+def get_user_tags(user_id):
+    """Get a user's current tags."""
+    user = User.query.get_or_404(user_id)
+    return jsonify({
+        'user_id': user.id,
+        'user_name': user.full_name,
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in user.tags]
+    })
+
+
+@admin.route('/admin/users/<int:user_id>/tags', methods=['POST'])
+@admin_required
+def update_user_tags(user_id):
+    """Update a user's tags.
+
+    Request body:
+    {
+        "tag_ids": [1, 2, 3]  # List of tag IDs to assign (replaces all existing)
+    }
+
+    Returns:
+    {
+        "success": true,
+        "user_id": 1,
+        "tags": [{"id": 1, "name": "PRESIDENT", "display_name": "President"}, ...]
+    }
+    """
+    user = User.query.get_or_404(user_id)
+
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    tag_ids = request.json.get('tag_ids', [])
+
+    # Get the tags
+    new_tags = Tag.query.filter(Tag.id.in_(tag_ids)).all() if tag_ids else []
+
+    # Replace user's tags
+    user.tags = new_tags
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'user_id': user.id,
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name} for t in user.tags]
     })

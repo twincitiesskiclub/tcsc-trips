@@ -1,9 +1,70 @@
 let usersTable;
 let usersData = [];
 let allSeasons = [];
+let allTags = [];
 let currentSeason = null;
 let selectedSeasonId = null;
 let currentView = 'all';
+let currentEditUserId = null;
+
+// Tag emojis for compact display
+const TAG_EMOJIS = {
+    // Leadership
+    'PRESIDENT': '👑',
+    'VICE_PRESIDENT': '⭐',
+    'TREASURER': '💰',
+    'SECRETARY': '📝',
+    'AUDITOR': '🔍',
+    'BOARD_MEMBER': '🏛️',
+    'FRIEND_OF_BOARD': '🤝',
+
+    // Coaching
+    'HEAD_COACH': '🎿',
+    'ASSISTANT_COACH': '⛷️',
+    'PRACTICES_DIRECTOR': '📋',
+    'PRACTICES_LEAD': '🏁',
+    'WAX_MANAGER': '✨',
+
+    // Activities
+    'TRIP_LEAD': '🧭',
+    'ADVENTURES': '🏔️',
+    'SOCIAL': '🎉',
+    'SOCIAL_COMMITTEE': '🎊',
+    'MARKETING': '📣',
+    'APPAREL': '👕',
+};
+
+// Tag color gradients - grouped by category for visual distinction
+const TAG_GRADIENTS = {
+    // Leadership (deep blue to purple)
+    'PRESIDENT': 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+    'VICE_PRESIDENT': 'linear-gradient(135deg, #5e60ce 0%, #6930c3 100%)',
+    'TREASURER': 'linear-gradient(135deg, #4c6ef5 0%, #7048e8 100%)',
+    'SECRETARY': 'linear-gradient(135deg, #5c7cfa 0%, #845ef7 100%)',
+    'AUDITOR': 'linear-gradient(135deg, #748ffc 0%, #9775fa 100%)',
+    'BOARD_MEMBER': 'linear-gradient(135deg, #4263eb 0%, #5f3dc4 100%)',
+    'FRIEND_OF_BOARD': 'linear-gradient(135deg, #91a7ff 0%, #b197fc 100%)',
+
+    // Coaching (green to teal)
+    'HEAD_COACH': 'linear-gradient(135deg, #0ca678 0%, #12b886 100%)',
+    'ASSISTANT_COACH': 'linear-gradient(135deg, #20c997 0%, #38d9a9 100%)',
+    'PRACTICES_DIRECTOR': 'linear-gradient(135deg, #099268 0%, #0ca678 100%)',
+    'PRACTICES_LEAD': 'linear-gradient(135deg, #12b886 0%, #20c997 100%)',
+    'WAX_MANAGER': 'linear-gradient(135deg, #38d9a9 0%, #63e6be 100%)',
+
+    // Trip/Adventure (orange to red)
+    'TRIP_LEAD': 'linear-gradient(135deg, #f76707 0%, #fd7e14 100%)',
+    'ADVENTURES': 'linear-gradient(135deg, #e8590c 0%, #f76707 100%)',
+
+    // Social/Marketing (pink to coral)
+    'SOCIAL': 'linear-gradient(135deg, #e64980 0%, #f06595 100%)',
+    'SOCIAL_COMMITTEE': 'linear-gradient(135deg, #d6336c 0%, #e64980 100%)',
+    'MARKETING': 'linear-gradient(135deg, #f06595 0%, #faa2c1 100%)',
+    'APPAREL': 'linear-gradient(135deg, #f783ac 0%, #fcc2d7 100%)',
+};
+
+// Default gradient for unknown tags
+const DEFAULT_GRADIENT = 'linear-gradient(135deg, #868e96 0%, #adb5bd 100%)';
 
 // Helper function to generate status badge HTML
 function getStatusBadge(status) {
@@ -22,12 +83,36 @@ function getStatusBadge(status) {
     return `<span class="${classes[status] || 'status-badge'}">${labels[status] || status}</span>`;
 }
 
+// Helper function to render tag emojis for table cells
+function getTagEmojis(tags) {
+    if (!tags || tags.length === 0) {
+        return '<span class="tag-empty">—</span>';
+    }
+    return tags.map(tag => {
+        const emoji = TAG_EMOJIS[tag.name] || '🏷️';
+        const gradient = TAG_GRADIENTS[tag.name] || DEFAULT_GRADIENT;
+        return `<span class="tag-emoji" data-tooltip="${tag.display_name}" data-gradient="${gradient}">${emoji}</span>`;
+    }).join('');
+}
+
+// Helper function to render full tag badges (for modals)
+function getTagBadges(tags) {
+    if (!tags || tags.length === 0) {
+        return '<span class="tag-empty">—</span>';
+    }
+    return tags.map(tag => {
+        const gradient = TAG_GRADIENTS[tag.name] || DEFAULT_GRADIENT;
+        return `<span class="tag-badge" style="background: ${gradient};" title="${tag.display_name}">${tag.display_name}</span>`;
+    }).join(' ');
+}
+
 document.addEventListener('DOMContentLoaded', async () => {
     // Fetch user data from API
     const response = await fetch('/admin/users/data');
     const data = await response.json();
     usersData = data.users;
     allSeasons = data.seasons;
+    allTags = data.tags || [];
     currentSeason = data.current_season;
 
     // Initialize Tabulator
@@ -50,6 +135,13 @@ document.addEventListener('DOMContentLoaded', async () => {
                  const id = cell.getRow().getData().id;
                  return `<a href="/admin/users/${id}">${cell.getValue()}</a>`;
              }
+            },
+            {title: "Roles", field: "tags", minWidth: 80, frozen: true,
+             formatter: function(cell) {
+                 const tags = cell.getValue();
+                 return `<div class="tags-cell-compact">${getTagEmojis(tags)}</div>`;
+             },
+             headerSort: false
             },
 
             // Scrollable columns
@@ -112,6 +204,37 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     updateMemberCount(usersData.length);
+
+    // Populate role filter grid
+    const roleGrid = document.getElementById('role-filter-grid');
+    if (roleGrid && allTags.length > 0) {
+        let html = '';
+        allTags.forEach(tag => {
+            const emoji = TAG_EMOJIS[tag.name] || '🏷️';
+            html += `
+                <label class="role-toggle" data-tooltip="${tag.display_name}" data-role="${tag.name}">
+                    ${emoji}
+                </label>`;
+        });
+        roleGrid.innerHTML = html;
+
+        // Add click handlers
+        roleGrid.querySelectorAll('.role-toggle').forEach(toggle => {
+            toggle.addEventListener('click', () => {
+                toggle.classList.toggle('selected');
+                applyFilters();
+                updateRoleFilterLabel();
+            });
+        });
+    }
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        const dropdown = document.getElementById('role-filter-dropdown');
+        if (dropdown && !dropdown.contains(e.target)) {
+            document.getElementById('role-filter-menu').classList.remove('show');
+        }
+    });
 
     // View button handlers
     document.querySelectorAll('.view-btn').forEach(btn => {
@@ -186,9 +309,44 @@ function applyGlobalView() {
     applyFilters();
 }
 
+function getSelectedRoles() {
+    const selected = document.querySelectorAll('#role-filter-grid .role-toggle.selected');
+    return Array.from(selected).map(el => el.dataset.role);
+}
+
+function toggleRoleDropdown() {
+    document.getElementById('role-filter-menu').classList.toggle('show');
+}
+
+function updateRoleFilterLabel() {
+    const selected = getSelectedRoles();
+    const label = document.getElementById('role-filter-label');
+    const btn = document.getElementById('role-filter-btn');
+
+    if (selected.length === 0) {
+        label.innerHTML = 'Roles';
+        btn.classList.remove('has-selection');
+    } else {
+        // Show emojis of selected roles (up to 4)
+        const emojis = selected.slice(0, 4).map(name => TAG_EMOJIS[name] || '🏷️').join('');
+        const extra = selected.length > 4 ? `<span class="role-filter-count">+${selected.length - 4}</span>` : '';
+        label.innerHTML = emojis + extra;
+        btn.classList.add('has-selection');
+    }
+}
+
+function clearAllRoles() {
+    document.querySelectorAll('#role-filter-grid .role-toggle').forEach(toggle => {
+        toggle.classList.remove('selected');
+    });
+    applyFilters();
+    updateRoleFilterLabel();
+}
+
 function applyFilters() {
     const searchVal = document.getElementById('users-search').value.toLowerCase();
     const statusVal = document.getElementById('status-filter').value;
+    const selectedRoles = getSelectedRoles();
     const seasonVal = document.getElementById('season-filter').value;
 
     usersTable.setFilter(function(data) {
@@ -219,6 +377,13 @@ function applyFilters() {
         // Status filter
         const matchesStatus = !statusVal || data.status === statusVal;
 
+        // Role filter (user must have at least one of the selected roles)
+        let matchesRole = true;
+        if (selectedRoles.length > 0) {
+            const userTagNames = (data.tags || []).map(t => t.name);
+            matchesRole = selectedRoles.some(role => userTagNames.includes(role));
+        }
+
         // Season status filter (within selected view)
         let matchesSeason = true;
         if (seasonVal) {
@@ -231,7 +396,7 @@ function applyFilters() {
             }
         }
 
-        return matchesSearch && matchesStatus && matchesSeason;
+        return matchesSearch && matchesStatus && matchesRole && matchesSeason;
     });
 
     // Update member count after filtering
@@ -249,9 +414,24 @@ function openEditModal(userId) {
     const user = usersData.find(u => u.id === userId);
     if (!user) return;
 
+    currentEditUserId = userId;
     document.getElementById('modal-title').textContent = `Edit: ${user.full_name}`;
     document.getElementById('view-details-link').href = `/admin/users/${userId}`;
     document.getElementById('edit-user-form').action = `/admin/users/${userId}/edit`;
+
+    // Build tag checkboxes HTML
+    const userTagIds = new Set((user.tags || []).map(t => t.id));
+    let tagsHtml = '<div class="edit-modal-tags">';
+    for (const tag of allTags) {
+        const checked = userTagIds.has(tag.id) ? 'checked' : '';
+        const gradient = TAG_GRADIENTS[tag.name] || DEFAULT_GRADIENT;
+        tagsHtml += `
+            <label class="tag-checkbox-inline">
+                <input type="checkbox" name="tag_ids" value="${tag.id}" ${checked}>
+                <span class="tag-badge-small" style="background: ${gradient};">${tag.display_name}</span>
+            </label>`;
+    }
+    tagsHtml += '</div>';
 
     // Build form fields (status is read-only, derived from season registration)
     const statusBadge = getStatusBadge(user.status);
@@ -271,6 +451,10 @@ function openEditModal(userId) {
             <label>Phone</label>
             <input type="tel" name="phone" value="${user.phone || ''}" placeholder="Optional">
         </div>
+        <div class="form-group">
+            <label>Roles</label>
+            ${tagsHtml}
+        </div>
     `;
 
     document.getElementById('edit-modal').style.display = 'flex';
@@ -278,9 +462,190 @@ function openEditModal(userId) {
 
 function closeModal() {
     document.getElementById('edit-modal').style.display = 'none';
+    currentEditUserId = null;
 }
+
+// Handle edit form submission - save tags via AJAX first
+document.addEventListener('DOMContentLoaded', () => {
+    const editForm = document.getElementById('edit-user-form');
+    if (editForm) {
+        editForm.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            if (!currentEditUserId) {
+                editForm.submit();
+                return;
+            }
+
+            // Collect checked tag IDs
+            const checkboxes = editForm.querySelectorAll('input[name="tag_ids"]:checked');
+            const tagIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+            try {
+                // Save tags via AJAX
+                const response = await fetch(`/admin/users/${currentEditUserId}/tags`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tag_ids: tagIds })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // Update local data
+                    const user = usersData.find(u => u.id === currentEditUserId);
+                    if (user) {
+                        user.tags = result.tags;
+                    }
+                }
+            } catch (error) {
+                console.error('Error saving tags:', error);
+            }
+
+            // Now submit the form normally for email/phone updates
+            // Remove tag checkboxes before submitting to avoid confusion
+            checkboxes.forEach(cb => cb.disabled = true);
+            editForm.submit();
+        });
+    }
+});
 
 // Close modal on Escape key
 document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeModal();
+    if (e.key === 'Escape') {
+        closeModal();
+        closeTagModal();
+    }
 });
+
+// =============================================================================
+// Tag Management
+// =============================================================================
+
+let currentTagUserId = null;
+
+function openTagModal(userId) {
+    const user = usersData.find(u => u.id === userId);
+    if (!user) return;
+
+    currentTagUserId = userId;
+    document.getElementById('tag-modal-title').textContent = `Tags: ${user.full_name}`;
+
+    // Build checkbox list for all tags
+    const userTagIds = new Set((user.tags || []).map(t => t.id));
+    const tagsContainer = document.getElementById('tag-checkboxes');
+
+    // Group tags by category
+    const categories = {
+        'Leadership': ['PRESIDENT', 'VICE_PRESIDENT', 'TREASURER', 'SECRETARY', 'AUDITOR', 'BOARD_MEMBER', 'FRIEND_OF_BOARD'],
+        'Coaching': ['HEAD_COACH', 'ASSISTANT_COACH', 'PRACTICES_DIRECTOR', 'PRACTICES_LEAD', 'WAX_MANAGER'],
+        'Activities': ['TRIP_LEAD', 'ADVENTURES', 'SOCIAL', 'SOCIAL_COMMITTEE', 'MARKETING', 'APPAREL']
+    };
+
+    let html = '';
+    for (const [category, tagNames] of Object.entries(categories)) {
+        const categoryTags = allTags.filter(t => tagNames.includes(t.name));
+        if (categoryTags.length === 0) continue;
+
+        html += `<div class="tag-category">
+            <div class="tag-category-label">${category}</div>
+            <div class="tag-category-items">`;
+
+        for (const tag of categoryTags) {
+            const checked = userTagIds.has(tag.id) ? 'checked' : '';
+            const gradient = TAG_GRADIENTS[tag.name] || DEFAULT_GRADIENT;
+            html += `
+                <label class="tag-checkbox-item">
+                    <input type="checkbox" value="${tag.id}" ${checked}>
+                    <span class="tag-badge-small" style="background: ${gradient};">${tag.display_name}</span>
+                </label>`;
+        }
+
+        html += '</div></div>';
+    }
+
+    // Handle any tags not in categories
+    const categorizedNames = Object.values(categories).flat();
+    const otherTags = allTags.filter(t => !categorizedNames.includes(t.name));
+    if (otherTags.length > 0) {
+        html += `<div class="tag-category">
+            <div class="tag-category-label">Other</div>
+            <div class="tag-category-items">`;
+        for (const tag of otherTags) {
+            const checked = userTagIds.has(tag.id) ? 'checked' : '';
+            const gradient = TAG_GRADIENTS[tag.name] || DEFAULT_GRADIENT;
+            html += `
+                <label class="tag-checkbox-item">
+                    <input type="checkbox" value="${tag.id}" ${checked}>
+                    <span class="tag-badge-small" style="background: ${gradient};">${tag.display_name}</span>
+                </label>`;
+        }
+        html += '</div></div>';
+    }
+
+    tagsContainer.innerHTML = html;
+    document.getElementById('tag-modal').style.display = 'flex';
+}
+
+function closeTagModal() {
+    document.getElementById('tag-modal').style.display = 'none';
+    currentTagUserId = null;
+}
+
+async function saveUserTags() {
+    if (!currentTagUserId) return;
+
+    // Collect checked tag IDs
+    const checkboxes = document.querySelectorAll('#tag-checkboxes input[type="checkbox"]:checked');
+    const tagIds = Array.from(checkboxes).map(cb => parseInt(cb.value));
+
+    try {
+        const response = await fetch(`/admin/users/${currentTagUserId}/tags`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ tag_ids: tagIds })
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            // Update local data
+            const user = usersData.find(u => u.id === currentTagUserId);
+            if (user) {
+                user.tags = result.tags;
+            }
+
+            // Refresh the table to show updated tags
+            usersTable.replaceData(usersData);
+            applyFilters();
+
+            closeTagModal();
+            showToast('Tags updated successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to update tags', 'error');
+        }
+    } catch (error) {
+        console.error('Error saving tags:', error);
+        showToast('Failed to save tags', 'error');
+    }
+}
+
+function showToast(message, type = 'info') {
+    // Remove any existing toast
+    const existingToast = document.querySelector('.toast-notification');
+    if (existingToast) existingToast.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast-notification toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    // Trigger show animation
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    // Auto-hide after 3 seconds
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
