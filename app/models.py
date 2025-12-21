@@ -152,8 +152,7 @@ class User(db.Model):
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     # Relationships
-    roles = db.relationship('Role', secondary='user_roles', backref='users')
-    committees = db.relationship('Committee', secondary='user_committees', backref='users')
+    tags = db.relationship('Tag', secondary='user_tags', backref='users')
     status_changes = db.relationship('StatusChange', backref='user')
     payments = db.relationship('Payment', backref='user', lazy=True)
     user_seasons = db.relationship('UserSeason', backref='user', lazy=True)
@@ -326,49 +325,30 @@ class UserSeason(db.Model):
     )
 
 
-class Role(db.Model):
-    __tablename__ = 'roles'
+class Tag(db.Model):
+    """Predefined tags for user roles/designations (board member, coach, lead, etc.)"""
+    __tablename__ = 'tags'
 
     id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(50), unique=True, nullable=False)
+    name = db.Column(db.String(50), unique=True, nullable=False)  # e.g., 'BOARD_MEMBER'
+    display_name = db.Column(db.String(100), nullable=False)      # e.g., 'Board Member'
     description = db.Column(db.Text)
-
-    def __repr__(self):
-        return f'<Role {self.name}>'
-
-
-class UserRole(db.Model):
-    __tablename__ = 'user_roles'
-
-    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
-    role_id = db.Column(db.Integer, db.ForeignKey('roles.id'), primary_key=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     def __repr__(self):
-        return f'<UserRole user={self.user_id} role={self.role_id}>'
+        return f'<Tag {self.name}>'
 
 
-class Committee(db.Model):
-    __tablename__ = 'committees'
-
-    id = db.Column(db.Integer, primary_key=True)
-    name = db.Column(db.String(100), unique=True, nullable=False)
-    description = db.Column(db.Text)
-
-    def __repr__(self):
-        return f'<Committee {self.name}>'
-
-
-class UserCommittee(db.Model):
-    __tablename__ = 'user_committees'
+class UserTag(db.Model):
+    """Junction table linking users to tags"""
+    __tablename__ = 'user_tags'
 
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), primary_key=True)
-    committee_id = db.Column(db.Integer, db.ForeignKey('committees.id'), primary_key=True)
-    role = db.Column(db.String(50))
+    tag_id = db.Column(db.Integer, db.ForeignKey('tags.id'), primary_key=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     def __repr__(self):
-        return f'<UserCommittee user={self.user_id} committee={self.committee_id}>'
+        return f'<UserTag user={self.user_id} tag={self.tag_id}>'
 
 
 class StatusChange(db.Model):
