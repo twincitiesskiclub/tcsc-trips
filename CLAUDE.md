@@ -26,6 +26,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 3. Configure environment:
    - Copy `.env.example` to `.env`
    - Fill in Stripe API keys and Google OAuth credentials
+   - Optional: `SLACK_WEBHOOK_URL` for payment notifications
+   - Optional: `GOOGLE_PLACES_API_KEY` for address autocomplete
 
 4. Run the development server:
    ```bash
@@ -68,7 +70,7 @@ This provides a webhook signing secret (`whsec_...`) to set as `STRIPE_WEBHOOK_S
 ### Helper Scripts
 - `scripts/dev.sh` - **Recommended** dev startup (PostgreSQL + Stripe + Flask)
 - `scripts/migrate_to_postgres.py` - Migrate data from SQLite to PostgreSQL
-- `scripts/seed_former_members.py` - Import CSV of former members (sets status='inactive')
+- `scripts/seed_former_members.py` - Import CSV of former members (sets status='ALUMNI')
 - `scripts/seed_former_member_season.py` - Create legacy season linking inactive users
 
 ## Architecture Overview
@@ -79,8 +81,9 @@ This is a Flask web application for the Twin Cities Ski Club (TCSC) trip and mem
 **Core Components:**
 - **Flask Application Factory:** `app/__init__.py` creates and configures the Flask app
 - **Route Blueprints:** Organized in `app/routes/` directory:
-  - `main.py` - Homepage and public trip listings
-  - `trips.py` - Individual trip registration pages  
+  - `main.py` - Homepage and public trip/event listings
+  - `trips.py` - Individual trip registration pages
+  - `socials.py` - Social event registration (pickleball, etc.)
   - `payments.py` - Payment processing (Stripe integration)
   - `admin.py` - Admin dashboard and management
   - `auth.py` - Google OAuth authentication
@@ -88,10 +91,11 @@ This is a Flask web application for the Twin Cities Ski Club (TCSC) trip and mem
 
 **Database Models (`app/models.py`):**
 - **Trip:** Ski trip details, pricing, capacity, signup windows
-- **Payment:** Stripe payment intents, amounts, statuses, payment type (trip or season)
-- **User:** Member profiles with extensive personal information
-- **Season:** Membership seasons with registration windows
-- **UserSeason:** Many-to-many relationship between users and seasons
+- **SocialEvent:** Social activities with simplified single-price payment (immediate capture)
+- **Payment:** Stripe payment intents with `payment_type` (season/trip/social_event)
+- **User:** Member profiles with `seasons_since_active` for Slack tier calculation
+- **Season:** Membership seasons with `is_current` flag (only one active at a time)
+- **UserSeason:** Many-to-many with expanded status for lottery tracking
 
 ### Authentication & Security
 - **Admin Access:** Restricted to `@twincitiesskiclub.org` email addresses via Google OAuth
@@ -134,6 +138,29 @@ The admin dashboard (`/admin`) provides:
 - **Google OAuth:** Admin authentication via Authlib
 - **Flask-Migrate:** Database schema versioning with Alembic
 - **SQLAlchemy:** ORM with PostgreSQL (production) and SQLite (optional local)
+- **Slack Webhooks:** Payment notifications to club Slack channel
+- **Slack API:** User sync and correlation (`SLACK_BOT_TOKEN`)
+- **Google Places API:** Address autocomplete on registration forms
+
+### Slack User Sync
+Correlates database users with Slack workspace members for future automation.
+
+**Module:** `app/slack/`
+- `client.py` - Slack WebClient wrapper, fetches workspace members
+- `sync.py` - Sync service: upserts SlackUser records, auto-matches by email
+
+**Models:**
+- `SlackUser` - Stores Slack profile data (slack_uid, email, display_name, etc.)
+- `User.slack_user_id` - FK linking User to SlackUser
+
+**Admin Endpoints:**
+- `GET /admin/slack` - Sync dashboard UI
+- `POST /admin/slack/sync` - Trigger full sync from Slack API
+- `GET /admin/slack/status` - Get sync statistics
+- `GET /admin/slack/unmatched` - List unmatched users on both sides
+- `POST /admin/slack/link` - Manually link User to SlackUser
+- `POST /admin/slack/unlink` - Remove Slack association
+- `POST /admin/slack/delete-user` - Delete user (JSON API)
 
 ## Configuration
 
@@ -155,6 +182,12 @@ Check `.env.example` for complete list. Critical variables include:
 - **Admin Interface:** Manage trips, seasons, users, and payment captures
 - **Lottery System:** New members go into lottery; payment holds allow selective acceptance
 
+### Social Events System
+- **SocialEvent model:** Mirrors trips but with simplified single-price tier
+- **Immediate capture:** Uses `capture_method='automatic'` (no lottery/holds)
+- **Homepage display:** Appears alongside trips with "Social Event" badge
+- **Admin CRUD:** Full management at `/admin/social-events`
+
 ### Season Management
 - **Registration Windows:** Separate periods for returning vs new members
 - **Member Status Tracking:** Users can be PENDING_LOTTERY, ACTIVE, or DROPPED per season
@@ -162,18 +195,40 @@ Check `.env.example` for complete list. Critical variables include:
 - **API Endpoint:** `POST /api/is_returning_member` - Frontend can check member status by email
 
 ### Status Fields (Two Levels)
-- **User.status** (global): `pending`, `active`, `inactive`, `dropped`
-- **UserSeason.status** (per-season): `PENDING_LOTTERY`, `ACTIVE`, `DROPPED`
+- **User.status** (global, derived): `PENDING`, `ACTIVE`, `ALUMNI`, `DROPPED`
+  - Computed via `User.derived_status` property based on current season's UserSeason
+  - Synced via `User.sync_status()` method
+- **UserSeason.status** (per-season):
+  - `PENDING_LOTTERY` - Awaiting lottery
+  - `ACTIVE` - Accepted member
+  - `DROPPED_LOTTERY` - Lost lottery (gets priority next time)
+  - `DROPPED_VOLUNTARY` - Withdrew by choice
+  - `DROPPED_CAUSE` - Removed for cause
+
+### Current Season
+- **Season.is_current** flag designates the active season (only one at a time)
+- **Season.get_current()** class method returns the current season
+- **Admin "Activate Season"** action syncs all user statuses when season changes
 
 ### Data Conventions
 - **Prices:** Stored in cents (e.g., $50.00 = 5000), converted from dollars on form input
 - **Timestamps:** UTC in database, displayed in US Central (America/Chicago)
 - **Member type:** Derived property (`User.is_returning`), not stored as a column
 
+### Slack Tier Logic
+Used for determining member access level in club Slack workspace:
+
+| User.status | seasons_since_active | Slack Tier |
+|-------------|---------------------|------------|
+| ACTIVE | 0 | full_member |
+| ALUMNI | 1 | multi_channel_guest |
+| ALUMNI | 2+ | single_channel_guest |
+| PENDING/DROPPED | — | None |
+
 ## Important Files
 - **Product Specification:** `.cursor/rules/tcsc_registration_spec.mdc` contains detailed business requirements
 - **Contributing Guide:** `CONTRIBUTING.md` explains User/UserSeason model and member type logic
-- **Constants:** `app/constants.py` - Status enums (`UserStatus`, `UserSeasonStatus`), `StripeEvent` types, `PaymentType`
-- **Admin JS:** `app/static/admin_users.js`, `app/static/admin_payments.js` - Tabulator grid implementations
+- **Constants:** `app/constants.py` - Status enums (`UserStatus`, `UserSeasonStatus`), `StripeEvent` types, `PaymentType`, `MemberType`
+- **Admin JS:** `app/static/admin_users.js`, `app/static/admin_payments.js`, `app/static/admin_slack.js` - Tabulator grid implementations
 - **Static Assets:** CSS organized in modular structure under `app/static/css/styles/`
 - **Templates:** Jinja2 templates in `app/templates/` with admin-specific subdirectory

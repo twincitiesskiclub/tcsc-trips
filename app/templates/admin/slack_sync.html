@@ -1,0 +1,303 @@
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.page-header .page-title {
+    margin: 0;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+/* Stats Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: white;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 16px;
+    text-align: center;
+}
+
+.stat-value {
+    font-size: 28px;
+    font-weight: 600;
+    color: var(--p);
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--g-m);
+    margin-top: 4px;
+}
+
+/* Sync Button */
+.sync-btn {
+    background: var(--p);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    transition: opacity 0.2s;
+}
+
+.sync-btn:hover {
+    opacity: 0.9;
+}
+
+.sync-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+.sync-btn .spinning {
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.sync-status {
+    font-size: 13px;
+    color: var(--g-m);
+}
+
+/* Section Header with Filters */
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin: 24px 0 12px 0;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--p);
+    margin: 0;
+}
+
+/* Filter Button Group - matching users.html pattern */
+.btn-group {
+    display: inline-flex;
+    align-items: stretch;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+}
+
+.btn-group .filter-btn {
+    all: unset;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    border-right: 1px solid #d0d5dd;
+    background: transparent;
+    cursor: pointer;
+    font: 500 13px var(--f);
+    color: #344054;
+    transition: background 0.15s ease;
+    white-space: nowrap;
+}
+
+.btn-group .filter-btn:last-child {
+    border-right: none;
+}
+
+.btn-group .filter-btn:hover {
+    background: #f9fafb;
+}
+
+.btn-group .filter-btn.active {
+    background: var(--p);
+    color: white;
+}
+
+.section {
+    margin-bottom: 32px;
+}
+
+/* Tabulator overrides - matching users.html pattern */
+.tabulator {
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    font-family: var(--f);
+}
+
+.tabulator .tabulator-header {
+    background: var(--p);
+    color: white;
+    border-bottom: none;
+}
+
+.tabulator .tabulator-header .tabulator-col {
+    background: var(--p);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
+    background: rgba(255,255,255,0.1);
+}
+
+.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
+    padding: 10px 8px;
+}
+
+.tabulator-row.tabulator-row-even {
+    background: #f9f9f9;
+}
+
+.tabulator-row:hover {
+    background: #f0f0f0;
+}
+
+.tabulator-cell {
+    padding: 8px;
+}
+
+/* Toast Notifications */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    z-index: 2000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-success {
+    background: var(--s);
+    color: var(--p);
+}
+
+.toast-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.toast-info {
+    background: var(--status-info-bg);
+    color: var(--status-info-text);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="users-grid-container">
+    <!-- Header with title and sync button -->
+    <div class="page-header">
+        <h1 class="page-title">Slack User Sync</h1>
+        <div class="header-actions">
+            <span class="sync-status" id="sync-status"></span>
+            <button class="sync-btn" id="sync-btn" onclick="runSync()">
+                <span id="sync-icon">&#x21bb;</span>
+                <span id="sync-text">Sync from Slack</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats-grid">
+        <div class="stat-card">
+            <div class="stat-value" id="stat-slack-users">-</div>
+            <div class="stat-label">Slack Users</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-db-users">-</div>
+            <div class="stat-label">Database Users</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-matched">-</div>
+            <div class="stat-label">Matched</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-unmatched-slack">-</div>
+            <div class="stat-label">Slack Only</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-unmatched-db">-</div>
+            <div class="stat-label">DB Only</div>
+        </div>
+    </div>
+
+    <!-- Database Users with filter -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">Database Users</h3>
+            <div class="btn-group">
+                <button class="filter-btn active" data-filter="all" onclick="setUserFilter('all', this)">All</button>
+                <button class="filter-btn" data-filter="matched" onclick="setUserFilter('matched', this)">Matched</button>
+                <button class="filter-btn" data-filter="unmatched" onclick="setUserFilter('unmatched', this)">Unmatched</button>
+            </div>
+        </div>
+        <div id="users-table"></div>
+    </div>
+
+    <!-- Slack Only Users -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">Slack Users Without Database Match</h3>
+        </div>
+        <div id="slack-only-table"></div>
+    </div>
+</div>
+
+<!-- Link Modal - using existing modal pattern from _admin.css -->
+<div id="link-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeLinkModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="link-modal-title">Link User</h2>
+            <button class="modal-close" onclick="closeLinkModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <p id="link-modal-description"></p>
+            <div class="form-group">
+                <label for="link-select">Select Match:</label>
+                <select id="link-select"></select>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button class="button button-secondary" onclick="closeLinkModal()">Cancel</button>
+            <button class="button" onclick="confirmLink()">Link</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_slack.js') }}"></script>
+{% endblock %}
