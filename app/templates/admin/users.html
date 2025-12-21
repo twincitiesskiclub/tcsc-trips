@@ -157,6 +157,164 @@
     border-color: #98a2b3;
 }
 
+/* Role Filter Dropdown - matches .users-toolbar select styling */
+.role-filter-dropdown {
+    position: relative;
+}
+
+.role-filter-btn {
+    height: 32px;
+    padding: 0 28px 0 10px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center;
+    font: 400 13px var(--f);
+    color: #344054;
+    cursor: pointer;
+    appearance: none;
+    -webkit-appearance: none;
+    /* Override global button styles */
+    display: inline-block;
+    width: auto;
+    margin-top: 0;
+}
+
+.role-filter-btn:hover {
+    border-color: #98a2b3;
+}
+
+.role-filter-btn:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+.role-filter-btn.has-selection {
+    border-color: var(--p);
+    background-color: rgba(28,44,68,0.03);
+}
+
+.role-filter-menu {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    margin-top: 4px;
+    background: white;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    z-index: 1000;
+    padding: 12px;
+    width: 320px;
+}
+
+.role-filter-menu.show {
+    display: block;
+}
+
+.role-filter-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.role-filter-header span {
+    font: 600 12px var(--f);
+    color: var(--g-m);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.role-filter-header button {
+    padding: 4px 8px;
+    border: none;
+    background: none;
+    font: 500 12px var(--f);
+    color: var(--p);
+    cursor: pointer;
+}
+
+.role-filter-header button:hover {
+    text-decoration: underline;
+}
+
+.role-filter-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+}
+
+.role-toggle {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    border: 2px solid #e4e7ec;
+    border-radius: 8px;
+    background: white;
+    font-size: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    position: relative;
+}
+
+.role-toggle:hover {
+    border-color: #98a2b3;
+    background: #f9fafb;
+    transform: scale(1.05);
+}
+
+.role-toggle.selected {
+    border-color: var(--p);
+    background: rgba(28,44,68,0.08);
+    box-shadow: 0 0 0 2px rgba(28,44,68,0.1);
+}
+
+.role-toggle input {
+    position: absolute;
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* Tooltip for role toggles */
+.role-toggle::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-6px);
+    padding: 5px 8px;
+    background: var(--p);
+    color: white;
+    font-size: 11px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-radius: 4px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.15s, visibility 0.15s;
+    pointer-events: none;
+    z-index: 10;
+}
+
+.role-toggle:hover::after {
+    opacity: 1;
+    visibility: visible;
+}
+
+.role-filter-count {
+    background: var(--p);
+    color: white;
+    font-size: 11px;
+    font-weight: 600;
+    padding: 2px 6px;
+    border-radius: 10px;
+}
+
 /* Page Title */
 .page-title {
     margin: 0 0 12px 0;
@@ -211,6 +369,241 @@
 .tabulator-cell a:hover {
     text-decoration: underline;
 }
+
+/* Tag Badges */
+.tag-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    margin: 2px 3px 2px 0;
+    white-space: nowrap;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.tag-badge-small {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    color: white;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
+}
+
+.tag-empty {
+    color: var(--g-l);
+    font-size: 13px;
+}
+
+/* Compact emoji display for table cells */
+.tags-cell-compact {
+    display: flex;
+    gap: 2px;
+    padding: 4px 0;
+    align-items: center;
+    overflow: visible;
+}
+
+/* Allow tooltip overflow in Tabulator */
+.tabulator-cell:has(.tags-cell-compact),
+.tabulator-cell:has(.tag-emoji) {
+    overflow: visible !important;
+}
+
+.tabulator-row,
+.tabulator-tableholder {
+    overflow: visible !important;
+}
+
+.tag-emoji {
+    font-size: 16px;
+    cursor: help;
+    transition: transform 0.15s;
+    position: relative;
+    display: inline-block;
+}
+
+.tag-emoji:hover {
+    transform: scale(1.2);
+    z-index: 1000;
+}
+
+/* Custom tooltip */
+.tag-emoji::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(-4px);
+    padding: 6px 10px;
+    background: var(--p);
+    color: white;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    border-radius: 6px;
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+    pointer-events: none;
+    z-index: 1001;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+}
+
+/* Tooltip arrow */
+.tag-emoji::before {
+    content: '';
+    position: absolute;
+    bottom: 100%;
+    left: 50%;
+    transform: translateX(-50%) translateY(2px);
+    border: 5px solid transparent;
+    border-top-color: var(--p);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.2s, visibility 0.2s;
+    pointer-events: none;
+    z-index: 1001;
+}
+
+.tag-emoji:hover::after,
+.tag-emoji:hover::before {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Full badge display (kept for modals) */
+.tags-cell {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px;
+    cursor: pointer;
+    padding: 4px 0;
+    min-height: 24px;
+    align-items: center;
+}
+
+.tags-cell:hover {
+    background: rgba(0,0,0,0.03);
+    border-radius: 4px;
+}
+
+/* Tag Modal */
+.tag-category {
+    margin-bottom: 16px;
+}
+
+.tag-category:last-child {
+    margin-bottom: 0;
+}
+
+.tag-category-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--g-m);
+    margin-bottom: 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--g-b);
+}
+
+.tag-category-items {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.tag-checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    padding: 4px 6px;
+    border-radius: 6px;
+    transition: background 0.15s;
+}
+
+.tag-checkbox-item:hover {
+    background: rgba(0,0,0,0.04);
+}
+
+.tag-checkbox-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--p);
+}
+
+/* Inline tag checkboxes for edit modal */
+.edit-modal-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0;
+}
+
+.tag-checkbox-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 4px;
+    transition: background 0.15s;
+}
+
+.tag-checkbox-inline:hover {
+    background: rgba(0,0,0,0.04);
+}
+
+.tag-checkbox-inline input[type="checkbox"] {
+    width: 14px;
+    height: 14px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--p);
+}
+
+/* Toast Notifications */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    z-index: 2000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-success {
+    background: var(--s);
+    color: var(--p);
+}
+
+.toast-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.toast-info {
+    background: var(--status-info-bg);
+    color: var(--status-info-text);
+}
 </style>
 {% endblock %}
 
@@ -240,6 +633,20 @@
             <option value="ALUMNI">Alumni</option>
             <option value="DROPPED">Dropped</option>
         </select>
+        <div class="role-filter-dropdown" id="role-filter-dropdown">
+            <button type="button" class="role-filter-btn" id="role-filter-btn" onclick="toggleRoleDropdown()">
+                <span id="role-filter-label">Roles</span>
+            </button>
+            <div class="role-filter-menu" id="role-filter-menu">
+                <div class="role-filter-header">
+                    <span>Filter by Role</span>
+                    <button type="button" onclick="clearAllRoles()">Clear all</button>
+                </div>
+                <div class="role-filter-grid" id="role-filter-grid">
+                    <!-- Populated by JS -->
+                </div>
+            </div>
+        </div>
         <select id="season-filter">
             <option value="">Season Status</option>
             <option value="ACTIVE">Active</option>
@@ -277,6 +684,24 @@
             <button type="button" class="button button-secondary" onclick="closeModal()">Cancel</button>
             <a href="#" class="button button-secondary" id="view-details-link">View Details</a>
             <button type="submit" form="edit-user-form" class="button">Save Changes</button>
+        </div>
+    </div>
+</div>
+
+<!-- Tag Assignment Modal -->
+<div id="tag-modal" class="modal" style="display: none;">
+    <div class="modal-overlay" onclick="closeTagModal()"></div>
+    <div class="modal-content" style="max-width: 550px;">
+        <div class="modal-header">
+            <h2 id="tag-modal-title">Assign Tags</h2>
+            <button class="modal-close" onclick="closeTagModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="tag-checkboxes"></div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="button button-secondary" onclick="closeTagModal()">Cancel</button>
+            <button type="button" class="button" onclick="saveUserTags()">Save Tags</button>
         </div>
     </div>
 </div>
