@@ -333,6 +333,8 @@ class Tag(db.Model):
     name = db.Column(db.String(50), unique=True, nullable=False)  # e.g., 'BOARD_MEMBER'
     display_name = db.Column(db.String(100), nullable=False)      # e.g., 'Board Member'
     description = db.Column(db.Text)
+    emoji = db.Column(db.String(10))  # Single emoji character for compact display
+    gradient = db.Column(db.String(200))  # CSS gradient string for badge styling
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
 
     def __repr__(self):

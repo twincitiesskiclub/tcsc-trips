@@ -1,0 +1,381 @@
+{% extends 'admin/admin_base.html' %}
+{% block title %}Role Management{% endblock %}
+{% block extra_css %}
+<style>
+/* Roles Grid Container */
+.roles-grid-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+}
+
+/* Toolbar */
+.roles-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.roles-toolbar .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 16px;
+    margin-top: 0;
+    width: auto;
+}
+
+/* Role Count Badge */
+.role-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #f2f4f7;
+    border-radius: 6px;
+    font: 500 13px var(--f);
+    color: #344054;
+    margin-left: auto;
+}
+
+.role-count strong {
+    color: var(--p);
+}
+
+/* Tabulator Customizations */
+#roles-table {
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+#roles-table .tabulator-header {
+    background: #f9fafb;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+#roles-table .tabulator-col-title {
+    font: 600 13px var(--f);
+    color: #344054;
+}
+
+#roles-table .tabulator-cell {
+    font: 400 14px var(--f);
+    color: #1d2939;
+    border-right: none;
+}
+
+#roles-table .tabulator-row:hover {
+    background: #f9fafb;
+}
+
+/* Emoji preview in grid */
+.role-emoji-preview {
+    font-size: 20px;
+    text-align: center;
+}
+
+/* Gradient preview in grid */
+.gradient-preview {
+    display: inline-block;
+    width: 100px;
+    height: 24px;
+    border-radius: 4px;
+    vertical-align: middle;
+}
+
+/* User count badge */
+.user-count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: #f2f4f7;
+    border-radius: 12px;
+    font: 500 12px var(--f);
+    color: #344054;
+}
+
+.user-count-badge.has-users {
+    background: var(--s);
+    color: var(--p);
+}
+
+/* Action buttons */
+.role-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+}
+
+.role-actions .button {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+    margin-top: 0;
+    width: auto;
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    background: var(--p);
+    color: white;
+    font: 500 14px var(--f);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.toast.error {
+    background: #dc2626;
+}
+
+.toast.success {
+    background: #16a34a;
+}
+
+/* Inline editor styling */
+.tabulator-edit-box {
+    padding: 4px 8px;
+    border: 2px solid var(--p) !important;
+    border-radius: 4px;
+    font: 400 14px var(--f);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Role Management</h1>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="roles-grid-container">
+    <div class="roles-toolbar">
+        <button class="button" onclick="addNewRole()">Add New Role</button>
+        <div class="role-count">
+            <span>Total:</span>
+            <strong id="role-count">0</strong>
+            <span>roles</span>
+        </div>
+    </div>
+
+    <div id="roles-table"></div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let rolesTable;
+let rolesData = [];
+
+const DEFAULT_GRADIENT = 'linear-gradient(135deg, #868e96 0%, #adb5bd 100%)';
+
+document.addEventListener('DOMContentLoaded', async () => {
+    // Fetch roles data
+    const response = await fetch('/admin/tags/data');
+    const data = await response.json();
+    rolesData = data.tags;
+
+    document.getElementById('role-count').textContent = rolesData.length;
+
+    // Initialize Tabulator with inline editing
+    rolesTable = new Tabulator("#roles-table", {
+        data: rolesData,
+        layout: "fitColumns",
+        height: "calc(100vh - 320px)",
+
+        columns: [
+            {
+                title: "Emoji",
+                field: "emoji",
+                width: 70,
+                hozAlign: "center",
+                editor: "input",
+                formatter: function(cell) {
+                    const emoji = cell.getValue() || '';
+                    return `<span class="role-emoji-preview">${emoji || '—'}</span>`;
+                },
+                cellEdited: function(cell) {
+                    saveRole(cell.getRow().getData());
+                }
+            },
+            {
+                title: "Name",
+                field: "name",
+                minWidth: 140,
+                editor: "input",
+                validator: "required",
+                cellEdited: function(cell) {
+                    saveRole(cell.getRow().getData());
+                }
+            },
+            {
+                title: "Display Name",
+                field: "display_name",
+                minWidth: 140,
+                editor: "input",
+                validator: "required",
+                cellEdited: function(cell) {
+                    saveRole(cell.getRow().getData());
+                }
+            },
+            {
+                title: "Gradient",
+                field: "gradient",
+                minWidth: 200,
+                editor: "input",
+                formatter: function(cell) {
+                    const gradient = cell.getValue() || DEFAULT_GRADIENT;
+                    return `<span class="gradient-preview" style="background: ${gradient};" title="${gradient}"></span>`;
+                },
+                cellEdited: function(cell) {
+                    saveRole(cell.getRow().getData());
+                }
+            },
+            {
+                title: "Users",
+                field: "user_count",
+                width: 80,
+                hozAlign: "center",
+                formatter: function(cell) {
+                    const count = cell.getValue() || 0;
+                    const cls = count > 0 ? 'user-count-badge has-users' : 'user-count-badge';
+                    return `<span class="${cls}">${count}</span>`;
+                }
+            },
+            {
+                title: "Actions",
+                width: 100,
+                hozAlign: "center",
+                formatter: function(cell) {
+                    const data = cell.getRow().getData();
+                    const canDelete = !data.user_count || data.user_count === 0;
+                    const deleteBtn = canDelete
+                        ? `<button class="button button-small button-danger" onclick="deleteRole(${data.id}, '${data.display_name}')">Delete</button>`
+                        : `<button class="button button-small button-secondary" disabled title="Cannot delete - has users">Delete</button>`;
+                    return `<div class="role-actions">${deleteBtn}</div>`;
+                },
+                headerSort: false
+            }
+        ]
+    });
+});
+
+async function saveRole(data) {
+    // If no ID, this is a new role
+    const url = data.id ? `/admin/tags/${data.id}/edit` : '/admin/tags/create';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: data.name,
+                display_name: data.display_name,
+                emoji: data.emoji,
+                gradient: data.gradient,
+                description: data.description
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            // Update local data with returned tag (especially for new tags getting their ID)
+            if (result.tag) {
+                const idx = rolesData.findIndex(r => r.id === data.id || (!r.id && r.name === data.name));
+                if (idx >= 0) {
+                    rolesData[idx] = result.tag;
+                    rolesTable.updateData([result.tag]);
+                }
+            }
+            showToast('Role saved successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to save role', 'error');
+            // Reload data to reset
+            refreshData();
+        }
+    } catch (err) {
+        showToast('Error saving role: ' + err.message, 'error');
+        refreshData();
+    }
+}
+
+async function deleteRole(id, name) {
+    if (!confirm(`Delete role "${name}"?\n\nThis cannot be undone.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/tags/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message, 'success');
+            refreshData();
+        } else {
+            showToast(result.error || 'Failed to delete role', 'error');
+        }
+    } catch (err) {
+        showToast('Error deleting role: ' + err.message, 'error');
+    }
+}
+
+function addNewRole() {
+    // Add a new empty row at the top
+    const newRole = {
+        id: null,
+        name: 'NEW_ROLE',
+        display_name: 'New Role',
+        emoji: '',
+        gradient: '',
+        user_count: 0
+    };
+    rolesTable.addRow(newRole, true);
+
+    // Focus the name cell for editing
+    setTimeout(() => {
+        const rows = rolesTable.getRows();
+        if (rows.length > 0) {
+            rows[0].getCell('name').edit();
+        }
+    }, 100);
+}
+
+async function refreshData() {
+    const response = await fetch('/admin/tags/data');
+    const data = await response.json();
+    rolesData = data.tags;
+    rolesTable.setData(rolesData);
+    document.getElementById('role-count').textContent = rolesData.length;
+}
+
+function showToast(message, type = 'info') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}
