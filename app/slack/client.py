@@ -275,6 +275,9 @@ def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dic
     """
     Fetch channel history once and build a map of each user's latest message.
 
+    Constructs permalinks directly instead of making N API calls.
+    Permalink format: https://{workspace}.slack.com/archives/{channel}/p{timestamp}
+
     Args:
         channel_id: Slack channel ID
         max_messages: Maximum messages to scan (default 500)
@@ -284,7 +287,10 @@ def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dic
         Only includes users who have posted in the scanned range.
     """
     client = get_slack_client()
-    user_messages = {}  # user_id -> {permalink, text, ts}
+    user_messages = {}
+
+    # Get workspace domain for constructing permalinks (avoids N API calls)
+    workspace_domain = os.environ.get('SLACK_WORKSPACE_DOMAIN', 'twincitiesskiclub')
 
     try:
         cursor = None
@@ -300,14 +306,18 @@ def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dic
             for message in response.get('messages', []):
                 messages_checked += 1
                 user_id = message.get('user')
+                ts = message.get('ts')
 
                 # Skip if no user (bot messages, etc.) or already have this user's latest
                 if not user_id or user_id in user_messages:
                     continue
 
-                # Store this as the user's latest message (first one we see is most recent)
+                # Construct permalink directly (no API call needed)
+                # Format: remove dot from timestamp "1234567890.123456" -> "p1234567890123456"
+                permalink = f"https://{workspace_domain}.slack.com/archives/{channel_id}/p{ts.replace('.', '')}"
+
                 user_messages[user_id] = {
-                    'ts': message.get('ts'),
+                    'permalink': permalink,
                     'text': message.get('text', '')[:100]
                 }
 
@@ -315,23 +325,8 @@ def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dic
             if not cursor:
                 break
 
-        # Now fetch permalinks for all found messages (batch this if needed)
-        for user_id, msg_data in user_messages.items():
-            try:
-                permalink_response = client.chat_getPermalink(
-                    channel=channel_id,
-                    message_ts=msg_data['ts']
-                )
-                msg_data['permalink'] = permalink_response.get('permalink')
-            except SlackApiError:
-                msg_data['permalink'] = None
-
-        # Clean up - remove ts, keep only permalink and text
-        return {
-            user_id: {'permalink': data.get('permalink'), 'text': data.get('text')}
-            for user_id, data in user_messages.items()
-            if data.get('permalink')  # Only include if we got a permalink
-        }
+        current_app.logger.info(f"Found {len(user_messages)} users with posts in #{channel_id}")
+        return user_messages
 
     except SlackApiError as e:
         current_app.logger.error(f"Slack API error fetching channel history {channel_id}: {e}")
