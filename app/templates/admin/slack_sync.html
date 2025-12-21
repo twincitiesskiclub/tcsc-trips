@@ -212,6 +212,103 @@
     background: var(--status-info-bg);
     color: var(--status-info-text);
 }
+
+/* Message Modal Styles */
+.recipient-controls {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    align-items: center;
+}
+
+.recipient-controls .button-small {
+    flex-shrink: 0;
+}
+
+.recipient-search {
+    flex: 1;
+}
+
+.recipient-list {
+    max-height: 280px;
+    overflow-y: auto;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 8px 12px;
+    background: #fafafa;
+}
+
+.recipient-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 4px;
+    cursor: pointer;
+    border-bottom: 1px solid var(--g-b);
+    transition: background 0.15s ease;
+}
+
+.recipient-item:last-child {
+    border-bottom: none;
+}
+
+.recipient-item:hover {
+    background: white;
+}
+
+.recipient-item input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--p);
+    flex-shrink: 0;
+}
+
+.recipient-item .recipient-name {
+    font-weight: 500;
+    color: var(--p);
+}
+
+.recipient-item .recipient-email {
+    color: var(--g-m);
+    font-size: 13px;
+}
+
+.selected-count {
+    margin-top: 10px;
+    font-size: 13px;
+    color: var(--g-m);
+}
+
+.mode-options {
+    display: flex;
+    gap: 24px;
+    margin-top: 8px;
+}
+
+.mode-option {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    color: var(--p);
+}
+
+.mode-option input[type="radio"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
+    accent-color: var(--p);
+}
+
+.mode-hint {
+    font-size: 12px;
+    color: var(--g-m);
+    margin-top: 8px;
+}
 </style>
 {% endblock %}
 
@@ -313,13 +410,13 @@
             <!-- User Selection -->
             <div class="form-group">
                 <label>Select Recipients:</label>
-                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                    <button type="button" class="button button-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="selectAllUsers()">Select All</button>
-                    <button type="button" class="button button-secondary" style="padding: 4px 10px; font-size: 12px;" onclick="deselectAllUsers()">Deselect All</button>
-                    <input type="text" id="user-search" placeholder="Filter users..." style="flex: 1; padding: 4px 8px; font-size: 12px; border: 1px solid var(--g-b); border-radius: var(--r);">
+                <div class="recipient-controls">
+                    <button type="button" class="button button-secondary button-small" onclick="selectAllUsers()">Select All</button>
+                    <button type="button" class="button button-secondary button-small" onclick="deselectAllUsers()">Deselect All</button>
+                    <input type="text" id="user-search" class="recipient-search" placeholder="Filter users...">
                 </div>
-                <div id="user-checkboxes" style="max-height: 200px; overflow-y: auto; border: 1px solid var(--g-b); border-radius: var(--r); padding: 8px;"></div>
-                <div style="margin-top: 8px; font-size: 13px; color: var(--g-m);">
+                <div id="user-checkboxes" class="recipient-list"></div>
+                <div class="selected-count">
                     <span id="selected-count">0</span> user(s) selected
                 </div>
             </div>
@@ -327,17 +424,17 @@
             <!-- Message Mode -->
             <div class="form-group">
                 <label>Message Mode:</label>
-                <div style="display: flex; gap: 16px; margin-top: 4px;">
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                <div class="mode-options">
+                    <label class="mode-option">
                         <input type="radio" name="message-mode" value="individual" checked>
                         <span>Individual DMs</span>
                     </label>
-                    <label style="display: flex; align-items: center; gap: 6px; cursor: pointer;">
+                    <label class="mode-option">
                         <input type="radio" name="message-mode" value="mpdm">
                         <span>Group DM (MPDM)</span>
                     </label>
                 </div>
-                <div style="font-size: 12px; color: var(--g-m); margin-top: 4px;">
+                <div class="mode-hint">
                     Individual: Each user gets a separate DM. Group: All users in one conversation.
                 </div>
             </div>
@@ -345,7 +442,7 @@
             <!-- Message Content -->
             <div class="form-group">
                 <label for="message-text">Message:</label>
-                <textarea id="message-text" rows="5" style="width: 100%; padding: 10px 12px; font: 14px var(--f); border: 1px solid var(--g-b); border-radius: var(--r); resize: vertical;" placeholder="Enter your message..."></textarea>
+                <textarea id="message-text" rows="6" placeholder="Enter your message..."></textarea>
             </div>
         </div>
         <div class="modal-footer">

@@ -427,11 +427,13 @@ function openMessageModal() {
     const container = document.getElementById('user-checkboxes');
     container.innerHTML = '';
 
-    // Get users with Slack links
-    const linkedUsers = allUsersData.filter(u => u.slack_matched);
+    // Get users with Slack links, sorted by name
+    const linkedUsers = allUsersData
+        .filter(u => u.slack_matched)
+        .sort((a, b) => a.full_name.localeCompare(b.full_name));
 
     if (linkedUsers.length === 0) {
-        container.innerHTML = '<p style="color: var(--g-m); margin: 0;">No users linked to Slack.</p>';
+        container.innerHTML = '<p class="mode-hint" style="margin: 8px 0;">No users linked to Slack. Sync and link users first.</p>';
         document.getElementById('message-modal').style.display = 'flex';
         updateSelectedCount();
         return;
@@ -440,12 +442,11 @@ function openMessageModal() {
     // Create checkbox for each linked user
     linkedUsers.forEach(user => {
         const label = document.createElement('label');
-        label.className = 'user-checkbox-item';
-        label.style.cssText = 'display: flex; align-items: center; gap: 8px; padding: 4px 0; cursor: pointer;';
+        label.className = 'recipient-item';
         label.innerHTML = `
             <input type="checkbox" class="user-checkbox" value="${user.id}" data-name="${user.full_name}">
-            <span>${user.full_name}</span>
-            <span style="color: var(--g-m); font-size: 12px;">(${user.email})</span>
+            <span class="recipient-name">${user.full_name}</span>
+            <span class="recipient-email">${user.email}</span>
         `;
         container.appendChild(label);
     });
@@ -455,10 +456,10 @@ function openMessageModal() {
     searchInput.value = '';
     searchInput.oninput = function() {
         const query = this.value.toLowerCase();
-        container.querySelectorAll('.user-checkbox-item').forEach(item => {
+        container.querySelectorAll('.recipient-item').forEach(item => {
             const name = item.querySelector('.user-checkbox').dataset.name.toLowerCase();
             const email = item.textContent.toLowerCase();
-            item.style.display = (name.includes(query) || email.includes(query)) ? 'flex' : 'none';
+            item.style.display = (name.includes(query) || email.includes(query)) ? '' : 'none';
         });
     };
 
@@ -483,7 +484,7 @@ function closeMessageModal() {
 
 function selectAllUsers() {
     const container = document.getElementById('user-checkboxes');
-    container.querySelectorAll('.user-checkbox-item').forEach(item => {
+    container.querySelectorAll('.recipient-item').forEach(item => {
         if (item.style.display !== 'none') {
             item.querySelector('.user-checkbox').checked = true;
         }
