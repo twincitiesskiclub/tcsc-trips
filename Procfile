@@ -1,2 +1,2 @@
 release: ./scripts/release.sh
-web: gunicorn "app:create_app()"
+web: gunicorn --timeout 120 "app:create_app()"
