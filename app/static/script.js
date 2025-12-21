@@ -327,6 +327,125 @@ document.addEventListener('DOMContentLoaded', () => {
     let isSubmitting = false;
     let idempotencyKey = null;
 
+    // --- Form State Persistence with localStorage ---
+    const STORAGE_KEY = `tcsc-registration-${registrationForm.dataset.seasonId}`;
+    const FIELDS_TO_SAVE = [
+      'email', 'status', 'firstName', 'lastName', 'pronouns', 'dob',
+      'phone', 'address', 'tshirtSize', 'technique', 'experience',
+      'emergencyName', 'emergencyRelation', 'emergencyPhone', 'emergencyEmail', 'name'
+    ];
+
+    function saveFormState() {
+      const formData = {};
+      FIELDS_TO_SAVE.forEach(fieldName => {
+        const field = registrationForm.querySelector(`[name="${fieldName}"]`);
+        if (field) {
+          if (field.type === 'radio') {
+            const checked = registrationForm.querySelector(`[name="${fieldName}"]:checked`);
+            if (checked) formData[fieldName] = checked.value;
+          } else {
+            formData[fieldName] = field.value;
+          }
+        }
+      });
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+      } catch (e) {
+        // localStorage might be full or disabled - silently fail
+      }
+    }
+
+    function restoreFormState() {
+      try {
+        const saved = localStorage.getItem(STORAGE_KEY);
+        if (!saved) return;
+        const formData = JSON.parse(saved);
+        FIELDS_TO_SAVE.forEach(fieldName => {
+          if (formData[fieldName] === undefined) return;
+          const field = registrationForm.querySelector(`[name="${fieldName}"]`);
+          if (field) {
+            if (field.type === 'radio') {
+              const radio = registrationForm.querySelector(`[name="${fieldName}"][value="${formData[fieldName]}"]`);
+              if (radio) radio.checked = true;
+            } else {
+              field.value = formData[fieldName];
+            }
+          }
+        });
+      } catch (e) {
+        // Invalid JSON or other error - silently fail
+      }
+    }
+
+    function clearFormState() {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch (e) {
+        // silently fail
+      }
+    }
+
+    // Debounce helper to avoid excessive localStorage writes
+    let saveTimeout = null;
+    function debouncedSave() {
+      if (saveTimeout) clearTimeout(saveTimeout);
+      saveTimeout = setTimeout(saveFormState, 500);
+    }
+
+    // Attach save listeners to all form inputs
+    registrationForm.querySelectorAll('input, select').forEach(input => {
+      input.addEventListener('input', debouncedSave);
+      input.addEventListener('change', debouncedSave);
+    });
+
+    // Restore form state on page load
+    restoreFormState();
+    // --- End Form State Persistence ---
+
+    // --- Google Places Address Autocomplete (Classic API) ---
+    async function initAddressAutocomplete() {
+      try {
+        // Fetch API key from backend
+        const response = await fetch('/get-google-places-key');
+        const { apiKey } = await response.json();
+        if (!apiKey) return; // Skip if no API key configured
+
+        const addressInput = document.getElementById('address');
+        if (!addressInput) return;
+
+        // Define the callback function globally before loading the script
+        window.initGooglePlaces = function() {
+          const autocomplete = new google.maps.places.Autocomplete(addressInput, {
+            componentRestrictions: { country: 'us' },
+            types: ['address'],
+            fields: ['formatted_address']
+          });
+
+          // Handle place selection
+          autocomplete.addListener('place_changed', () => {
+            const place = autocomplete.getPlace();
+            if (place.formatted_address) {
+              addressInput.value = place.formatted_address;
+              debouncedSave();
+            }
+          });
+        };
+
+        // Load Google Maps script with callback
+        const script = document.createElement('script');
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGooglePlaces`;
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      } catch (e) {
+        console.warn('Failed to initialize address autocomplete:', e);
+      }
+    }
+
+    // Initialize address autocomplete
+    initAddressAutocomplete();
+    // --- End Address Autocomplete ---
+
     async function fetchStripeKey() {
       const response = await fetch('/get-stripe-key');
       return response.json();
@@ -422,6 +541,9 @@ document.addEventListener('DOMContentLoaded', () => {
         paymentIntentInput.name = 'payment_intent_id';
         paymentIntentInput.value = result.paymentIntent.id;
         registrationForm.appendChild(paymentIntentInput);
+
+        // Clear saved form state before submitting
+        clearFormState();
 
         registrationForm.submit();
       } catch (err) {

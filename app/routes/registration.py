@@ -133,13 +133,8 @@ def season_register(season_id):
             if existing_payment and not existing_payment.user_id:
                 existing_payment.user_id = user.id
 
-            # Determine member_type from backend only
-            is_returning = user.is_returning
-            client_claimed_status = form['status']
-            if client_claimed_status == 'returning_former' and not is_returning:
-                flash_error('You have no active past membership; register as New.')
-                return redirect(url_for('registration.season_register', season_id=season_id))
-            member_type = 'returning' if is_returning else 'new'
+            # Determine member_type from backend (already validated above)
+            member_type = 'returning' if user.is_returning else 'new'
 
             # Find or create UserSeason for this user and season
             # Note: Webhook may have already created this record. We check first to avoid
