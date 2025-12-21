@@ -4,6 +4,7 @@ from flask import current_app
 
 from app.models import db, SlackUser, User
 from app.slack.client import fetch_workspace_members
+from app.constants import UserStatus
 
 
 @dataclass
@@ -100,8 +101,12 @@ def sync_slack_users() -> SyncResult:
 
         # Try to auto-match to User by email if not already linked
         # Use case-insensitive email matching
+        # Exclude DROPPED users - they lost lottery and won't have Slack access
         if not slack_user.user:
-            user = User.query.filter(db.func.lower(User.email) == email.lower()).first()
+            user = User.query.filter(
+                db.func.lower(User.email) == email.lower(),
+                User.status != UserStatus.DROPPED
+            ).first()
             if user and not user.slack_user_id:
                 user.slack_user_id = slack_user.id
                 result.users_matched += 1
@@ -109,20 +114,33 @@ def sync_slack_users() -> SyncResult:
 
     db.session.commit()
 
-    # Calculate unmatched counts
+    # Calculate unmatched counts (exclude DROPPED users from DB count)
     result.unmatched_slack_users = SlackUser.query.outerjoin(User).filter(User.id.is_(None)).count()
-    result.unmatched_db_users = User.query.filter(User.slack_user_id.is_(None)).count()
+    result.unmatched_db_users = User.query.filter(
+        User.slack_user_id.is_(None),
+        User.status != UserStatus.DROPPED
+    ).count()
 
     return result
 
 
 def get_sync_status() -> dict:
-    """Get current sync status and statistics."""
+    """Get current sync status and statistics.
+
+    Excludes DROPPED users from DB counts since they won't have Slack access.
+    """
     total_slack_users = SlackUser.query.count()
-    total_db_users = User.query.count()
-    matched_users = User.query.filter(User.slack_user_id.isnot(None)).count()
+    # Exclude DROPPED users from all DB-side counts
+    total_db_users = User.query.filter(User.status != UserStatus.DROPPED).count()
+    matched_users = User.query.filter(
+        User.slack_user_id.isnot(None),
+        User.status != UserStatus.DROPPED
+    ).count()
     unmatched_slack = SlackUser.query.outerjoin(User).filter(User.id.is_(None)).count()
-    unmatched_db = User.query.filter(User.slack_user_id.is_(None)).count()
+    unmatched_db = User.query.filter(
+        User.slack_user_id.is_(None),
+        User.status != UserStatus.DROPPED
+    ).count()
 
     return {
         'total_slack_users': total_slack_users,
@@ -149,8 +167,14 @@ def get_unmatched_slack_users() -> list[dict]:
 
 
 def get_unmatched_db_users() -> list[dict]:
-    """Get User records not linked to any SlackUser."""
-    users = User.query.filter(User.slack_user_id.is_(None)).all()
+    """Get User records not linked to any SlackUser.
+
+    Excludes DROPPED users since they won't have Slack access.
+    """
+    users = User.query.filter(
+        User.slack_user_id.is_(None),
+        User.status != UserStatus.DROPPED
+    ).all()
     return [
         {
             'id': u.id,
@@ -165,8 +189,11 @@ def get_unmatched_db_users() -> list[dict]:
 
 
 def get_all_users_with_slack_status() -> list[dict]:
-    """Get all User records with their Slack correlation status."""
-    users = User.query.outerjoin(SlackUser).all()
+    """Get all User records with their Slack correlation status.
+
+    Excludes DROPPED users since they won't have Slack access.
+    """
+    users = User.query.filter(User.status != UserStatus.DROPPED).outerjoin(SlackUser).all()
     return [
         {
             'id': u.id,
