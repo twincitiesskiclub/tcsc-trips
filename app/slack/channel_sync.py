@@ -319,13 +319,15 @@ def sync_single_user(
 
     db_info = ""
     if db_user:
-        status_val = db_user.status.value if db_user.status else None
-        derived_val = db_user.derived_status.value if db_user.derived_status else None
+        # Handle both enum and string status values
+        status_val = db_user.status.value if hasattr(db_user.status, 'value') else db_user.status
+        derived_val = db_user.derived_status.value if hasattr(db_user.derived_status, 'value') else db_user.derived_status
         db_info = (f"DB: status={status_val}, "
                    f"seasons_since_active={db_user.seasons_since_active}, "
                    f"derived={derived_val}")
         if user_season:
-            db_info += f", user_season={user_season.status.value}"
+            us_status = user_season.status.value if hasattr(user_season.status, 'value') else user_season.status
+            db_info += f", user_season={us_status}"
     else:
         db_info = "DB: user not found"
 
@@ -485,7 +487,7 @@ def invite_new_members(
         db_user = User.get_by_email(email)
         db_info = ""
         if db_user:
-            status_val = db_user.status.value if db_user.status else None
+            status_val = db_user.status.value if hasattr(db_user.status, 'value') else db_user.status
             db_info = f"DB: status={status_val}, seasons_since_active={db_user.seasons_since_active}"
         result.traces.append(f"INVITE: {email} | {db_info}")
 
