@@ -14,6 +14,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadStatus();
     loadUsers();
     loadSlackOnly();
+    loadChannelSyncStatus();
 });
 
 // Close modals on Escape key
@@ -624,5 +625,53 @@ async function sendMessage() {
     } finally {
         btn.disabled = false;
         btn.textContent = 'Send Message';
+    }
+}
+
+// ============================================
+// Channel Sync Status
+// ============================================
+
+async function loadChannelSyncStatus() {
+    const card = document.getElementById('channel-sync-card');
+    const stat = document.getElementById('stat-channel-sync');
+
+    if (!card || !stat) return;
+
+    try {
+        const resp = await fetch('/admin/channel-sync/status');
+        if (!resp.ok) {
+            throw new Error(`HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+
+        if (data.error) {
+            stat.textContent = '⚠️';
+            card.classList.add('status-error');
+            card.title = data.error;
+            return;
+        }
+
+        // Show status based on scheduler and credentials
+        const schedulerOk = data.scheduler?.running;
+        const credsOk = data.credentials?.valid;
+
+        if (schedulerOk && credsOk) {
+            stat.textContent = '✓ Ready';
+            card.classList.add('status-ok');
+            card.title = 'Channel sync is configured and running';
+        } else if (credsOk) {
+            stat.textContent = '⏸ Idle';
+            card.classList.add('status-warning');
+            card.title = 'Scheduler not running';
+        } else {
+            stat.textContent = '✗ Config';
+            card.classList.add('status-error');
+            card.title = 'Admin API credentials invalid';
+        }
+    } catch (e) {
+        console.error('Failed to load channel sync status:', e);
+        stat.textContent = '—';
+        card.title = 'Could not load status';
     }
 }
