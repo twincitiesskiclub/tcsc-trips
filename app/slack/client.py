@@ -2,23 +2,34 @@
 import os
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
+from slack_sdk.http_retry.builtin_handlers import RateLimitErrorRetryHandler
 from flask import current_app
+
+# Configure rate limit retry handler for all Slack API calls
+# Automatically handles 429 errors by reading Retry-After header
+_rate_limit_handler = RateLimitErrorRetryHandler(max_retry_count=3)
 
 
 def get_slack_client() -> WebClient:
-    """Get configured Slack WebClient using bot token."""
+    """Get configured Slack WebClient using bot token.
+
+    Includes automatic rate limit handling with retry.
+    """
     token = os.environ.get('SLACK_BOT_TOKEN')
     if not token:
         raise ValueError("SLACK_BOT_TOKEN not configured")
-    return WebClient(token=token)
+    return WebClient(token=token, retry_handlers=[_rate_limit_handler])
 
 
 def get_slack_user_client() -> WebClient:
-    """Get configured Slack WebClient using user token (for admin operations)."""
+    """Get configured Slack WebClient using user token (for admin operations).
+
+    Includes automatic rate limit handling with retry.
+    """
     token = os.environ.get('SLACK_USER_TOKEN')
     if not token:
         raise ValueError("SLACK_USER_TOKEN not configured")
-    return WebClient(token=token)
+    return WebClient(token=token, retry_handlers=[_rate_limit_handler])
 
 
 def fetch_workspace_members() -> list[dict]:
