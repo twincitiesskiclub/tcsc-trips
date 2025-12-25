@@ -663,7 +663,10 @@ def edit_user(user_id):
         form_type = request.form.get('form_type', 'quick')
         if form_type == 'quick':
             user.email = request.form.get('email')
-            user.status = request.form.get('status')
+            # Only update status if explicitly provided (not None/empty)
+            new_status = request.form.get('status')
+            if new_status:
+                user.status = new_status
             try:
                 db.session.commit()
                 flash_success('User email/status updated!')
