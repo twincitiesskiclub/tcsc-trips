@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from flask import current_app
 
-from app.models import User, Tag, db
+from app.models import User, Tag, Season, UserSeason, db
 from app.constants import UserStatus
 from app.slack.client import (
     get_team_id,
@@ -52,6 +52,7 @@ class ChannelSyncResult:
     invites_sent: int = 0
     users_skipped: int = 0
     errors: list = field(default_factory=list)
+    traces: list = field(default_factory=list)  # Debug traces for actions
     dry_run: bool = True
 
     def to_dict(self) -> dict:
@@ -65,6 +66,7 @@ class ChannelSyncResult:
             'invites_sent': self.invites_sent,
             'users_skipped': self.users_skipped,
             'errors': self.errors,
+            'traces': self.traces,
             'dry_run': self.dry_run,
         }
 
@@ -260,6 +262,22 @@ def needs_role_change(slack_user: dict, target_tier: str) -> bool:
         return not is_ultra_restricted
 
 
+def get_current_slack_role(slack_user: dict) -> str:
+    """Get readable role name from Slack user flags.
+
+    Args:
+        slack_user: Raw Slack user dict
+
+    Returns:
+        Role string: 'scg', 'mcg', or 'full_member'
+    """
+    if slack_user.get('is_ultra_restricted'):
+        return 'scg'
+    elif slack_user.get('is_restricted'):
+        return 'mcg'
+    return 'full_member'
+
+
 def sync_single_user(
     slack_user: dict,
     target_tier: str,
@@ -292,9 +310,33 @@ def sync_single_user(
 
     target_role = get_role_for_tier(target_tier)
 
+    # Build DB state info for tracing
+    db_user = User.get_by_email(email) if email else None
+    current_season = Season.get_current()
+    user_season = None
+    if db_user and current_season:
+        user_season = UserSeason.get_for_user_season(db_user.id, current_season.id)
+
+    db_info = ""
+    if db_user:
+        status_val = db_user.status.value if db_user.status else None
+        derived_val = db_user.derived_status.value if db_user.derived_status else None
+        db_info = (f"DB: status={status_val}, "
+                   f"seasons_since_active={db_user.seasons_since_active}, "
+                   f"derived={derived_val}")
+        if user_season:
+            db_info += f", user_season={user_season.status.value}"
+    else:
+        db_info = "DB: user not found"
+
+    current_role = get_current_slack_role(slack_user)
+
     try:
         # Handle deactivated users - reactivate with correct role
         if slack_user.get('deleted'):
+            result.traces.append(
+                f"REACTIVATE: {email} | deactivated→{target_tier} | {db_info}"
+            )
             current_app.logger.info(f"Reactivating deactivated user {user_str} as {target_tier}")
             change_user_role(
                 user_id=user_id,
@@ -320,6 +362,9 @@ def sync_single_user(
         role_change_needed = needs_role_change(slack_user, target_tier)
 
         if role_change_needed:
+            result.traces.append(
+                f"ROLE_CHANGE: {email} | {current_role}→{target_tier} | {db_info}"
+            )
             current_app.logger.info(f"Changing {user_str} to {target_tier}")
 
             # For MCG/SCG, role change also sets channels
@@ -352,6 +397,9 @@ def sync_single_user(
         if target_tier == 'full_member':
             # Add user to target channels they're not in
             channels_to_add = target_channel_ids - current_channels
+            if channels_to_add:
+                add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
+                result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
             for channel_id in channels_to_add:
                 if add_user_to_channel(user_id, channel_id, email, dry_run):
                     result.channel_adds += 1
@@ -359,6 +407,14 @@ def sync_single_user(
             # Remove from channels not in target list
             # BUT preserve public channels full members joined manually
             channels_to_remove = current_channels - target_channel_ids
+            # Filter out public channels for trace (they won't actually be removed)
+            private_to_remove = [
+                cid for cid in channels_to_remove
+                if not channel_id_to_properties.get(cid, {}).get('is_public', False)
+            ]
+            if private_to_remove:
+                remove_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in private_to_remove]
+                result.traces.append(f"CHANNEL_REMOVE: {email} | -{remove_names} | {db_info}")
             for channel_id in channels_to_remove:
                 channel_props = channel_id_to_properties.get(channel_id, {})
                 if channel_props.get('is_public', False):
@@ -425,6 +481,14 @@ def invite_new_members(
     current_app.logger.info(f"Inviting {len(to_invite)} new members to Slack")
 
     for email in to_invite:
+        # Build trace with DB state
+        db_user = User.get_by_email(email)
+        db_info = ""
+        if db_user:
+            status_val = db_user.status.value if db_user.status else None
+            db_info = f"DB: status={status_val}, seasons_since_active={db_user.seasons_since_active}"
+        result.traces.append(f"INVITE: {email} | {db_info}")
+
         try:
             invite_user_by_email(
                 email=email,
