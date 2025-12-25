@@ -47,6 +47,40 @@
     margin-top: 4px;
 }
 
+/* Clickable stat card link */
+.stat-card-link {
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: 1px solid var(--g-b);
+}
+
+.stat-card-link:hover {
+    border-color: var(--p);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.stat-card-link .stat-label {
+    color: var(--p);
+    font-weight: 500;
+}
+
+.stat-card-link.status-ok {
+    border-color: #d1fae5;
+    background: #f0fdf4;
+}
+
+.stat-card-link.status-warning {
+    border-color: #fef3c7;
+    background: #fffbeb;
+}
+
+.stat-card-link.status-error {
+    border-color: #fee2e2;
+    background: #fef2f2;
+}
+
 /* Action Buttons */
 .action-btn {
     background: var(--p);
@@ -379,6 +413,10 @@
             <div class="stat-value" id="stat-unmatched-db">-</div>
             <div class="stat-label">DB Only</div>
         </div>
+        <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="stat-card stat-card-link" id="channel-sync-card">
+            <div class="stat-value" id="stat-channel-sync">-</div>
+            <div class="stat-label">Channel Sync →</div>
+        </a>
     </div>
 
     <!-- Database Users with filter -->
