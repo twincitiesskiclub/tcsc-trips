@@ -1282,6 +1282,7 @@ def _run_sync_background(app, dry_run, include_expertvoice):
                     'users_skipped': sync_result.users_skipped,
                     'errors': sync_result.errors[:10],
                     'error_count': len(sync_result.errors),
+                    'traces': sync_result.traces,
                 }
             }
 
