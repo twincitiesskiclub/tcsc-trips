@@ -259,13 +259,8 @@ def capture_payment(payment_id):
 
         db.session.commit()
 
-        # Send Slack notification for successful capture
-        send_payment_notification(
-            name=payment.name,
-            amount_cents=payment.amount,
-            email=payment.email,
-            payment_intent_id=payment.payment_intent_id
-        )
+        # Slack notification will be sent by the webhook handler
+        # when Stripe fires payment_intent.succeeded event
 
         return json_success({
             'payment': {
