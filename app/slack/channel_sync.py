@@ -11,9 +11,11 @@ The sync also handles:
 - Reactivating deactivated users
 - Inviting new members not yet in Slack
 - Preserving full members' manually-joined public channels
-- Exception users (admins, board members, coaches)
+- Exception users (admins, board members, exempt)
+- Skipping deactivated Slack placeholder accounts
 """
 import os
+import re
 import yaml
 from dataclasses import dataclass, field
 from typing import Optional
@@ -38,6 +40,14 @@ from app.slack.admin_api import (
     validate_admin_credentials,
     CookieExpiredError,
     AdminAPIError,
+)
+
+# Pattern for deactivated Slack user placeholder emails
+# These are system-generated emails for users who have been deactivated
+# Format: deactivateduser{digits}-{workspace}@slack-corp.com
+DEACTIVATED_EMAIL_PATTERN = re.compile(
+    r'^deactivateduser\d+-.*@slack-corp\.com$',
+    re.IGNORECASE
 )
 
 
@@ -582,6 +592,13 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
         for slack_user in slack_users:
             email = slack_user.get('profile', {}).get('email', '').lower()
             user_id = slack_user['id']
+
+            # Skip deactivated Slack placeholder accounts
+            # These have system-generated emails like deactivateduser123-workspace@slack-corp.com
+            if email and DEACTIVATED_EMAIL_PATTERN.match(email):
+                current_app.logger.debug(f"Skipping deactivated placeholder {user_id}")
+                result.users_skipped += 1
+                continue
 
             # Skip exception users
             if is_slack_exception_user(slack_user, exception_emails):

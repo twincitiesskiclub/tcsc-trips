@@ -53,11 +53,11 @@ exclusive_channels:
 
 # Tags that mark users as exceptions (skipped by automation)
 # These users retain their current Slack status regardless of DB status
+# Note: HEAD_COACH and ASSISTANT_COACH are NOT exceptions - they get full_member tier override
 exception_tags:
   - "BOARD_MEMBER"
-  - "COACH"
   - "ADMIN"
-  - "LEAD"
+  - "EXEMPT"
 
 # Welcome message for new member invitations
 invitation_message: "Welcome to the Twin Cities Ski Club Slack!"
