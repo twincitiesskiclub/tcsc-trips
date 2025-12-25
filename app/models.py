@@ -225,7 +225,23 @@ class User(db.Model):
         self.status = new_status
 
     def get_slack_tier(self):
-        """Determine Slack membership tier based on status and activity."""
+        """Determine Slack membership tier based on status and activity.
+
+        Override rules (checked first):
+        - HEAD_COACH or ASSISTANT_COACH tags -> always full_member
+
+        Standard rules:
+        - ACTIVE status -> full_member
+        - ALUMNI with seasons_since_active == 1 -> multi_channel_guest
+        - ALUMNI with seasons_since_active >= 2 -> single_channel_guest
+        - PENDING or DROPPED -> None (no Slack automation)
+        """
+        # Check for full_member override tags (coaches always get full access)
+        full_member_tags = {'HEAD_COACH', 'ASSISTANT_COACH'}
+        if any(tag.name in full_member_tags for tag in self.tags):
+            return 'full_member'
+
+        # Standard tier logic based on status
         if self.status == UserStatus.ACTIVE:
             return 'full_member'
         elif self.status == UserStatus.ALUMNI:
