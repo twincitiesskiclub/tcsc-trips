@@ -181,7 +181,8 @@ class User(db.Model):
         """Compute status from UserSeason history. Source of truth."""
         current_season = Season.get_current()
         if not current_season:
-            return self.status  # fallback to cached
+            # Fallback to cached status, but never return None
+            return self.status if self.status else UserStatus.ALUMNI
 
         user_season = UserSeason.get_for_user_season(self.id, current_season.id)
         if not user_season:
@@ -202,12 +203,19 @@ class User(db.Model):
         Called when activating a new season to update all users' statuses.
         """
         new_status = self.derived_status
+        # Safeguard: never set status to None (use ALUMNI as fallback)
+        if not new_status:
+            new_status = UserStatus.ALUMNI
+
+        # Handle current status being None (legacy data)
+        current_status = self.status if self.status else UserStatus.ALUMNI
+
         if new_status == UserStatus.ACTIVE:
             self.seasons_since_active = 0
-        elif self.status == UserStatus.ACTIVE and new_status == UserStatus.ALUMNI:
+        elif current_status == UserStatus.ACTIVE and new_status == UserStatus.ALUMNI:
             # Was active, now alumni - start counter at 1
             self.seasons_since_active = 1
-        elif self.status == UserStatus.ALUMNI and new_status == UserStatus.ALUMNI:
+        elif current_status == UserStatus.ALUMNI and new_status == UserStatus.ALUMNI:
             # Still alumni - increment counter (cap at 2 for long-term alumni)
             if self.seasons_since_active < 2:
                 self.seasons_since_active += 1
