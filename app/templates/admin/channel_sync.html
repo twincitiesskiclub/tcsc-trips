@@ -695,7 +695,7 @@ function displayResults(data, type) {
 
     if (type === 'slack' && data.slack_sync) {
         const s = data.slack_sync;
-        content.innerHTML = `
+        let html = `
             <table class="results-table">
                 <tr><th>Metric</th><th>Value</th></tr>
                 <tr><td>Users Processed</td><td>${s.total_processed}</td></tr>
@@ -708,6 +708,27 @@ function displayResults(data, type) {
                 <tr><td>Errors</td><td>${s.error_count}</td></tr>
             </table>
         `;
+
+        // Display action traces if any
+        if (s.traces && s.traces.length > 0) {
+            html += `
+                <h4 style="margin-top: 20px; margin-bottom: 12px; color: var(--p);">
+                    Action Traces (${s.traces.length})
+                </h4>
+                <div class="log-output" style="max-height: 400px;">`;
+            s.traces.forEach(trace => {
+                // Color-code by action type
+                let levelClass = 'log-info';
+                if (trace.startsWith('ROLE_CHANGE:')) levelClass = 'log-warning';
+                else if (trace.startsWith('REACTIVATE:')) levelClass = 'log-success';
+                else if (trace.startsWith('INVITE:')) levelClass = 'log-success';
+                else if (trace.startsWith('CHANNEL_REMOVE:')) levelClass = 'log-error';
+                html += `<span class="${levelClass}">${trace}</span>\n`;
+            });
+            html += '</div>';
+        }
+
+        content.innerHTML = html;
     }
 }
 
