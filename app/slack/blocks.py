@@ -234,15 +234,13 @@ def build_practice_announcement_blocks(
     leads = []
     if practice.leads:
         for lead in practice.leads:
-            if not lead.person:
-                continue
-            if lead.person.slack_user_id:
-                mention = f"<@{lead.person.slack_user_id}>"
+            if lead.slack_user_id:
+                mention = f"<@{lead.slack_user_id}>"
             else:
-                mention = lead.person.short_name or "Unknown"
-            if lead.role == LeadRole.COACH.value:
+                mention = lead.display_name or "Unknown"
+            if lead.role == LeadRole.COACH:
                 coaches.append(mention)
-            elif lead.role in (LeadRole.LEAD.value, LeadRole.ASSIST.value):
+            elif lead.role in (LeadRole.LEAD, LeadRole.ASSIST):
                 leads.append(mention)
 
     coach_lead_parts = []
@@ -570,11 +568,10 @@ def build_weekly_summary_blocks(practices: list[PracticeInfo]) -> list[dict]:
         if practice.leads:
             lead_names = []
             for lead in practice.leads:
-                if not lead.person:
-                    continue
-                name = lead.person.short_name or "Unknown"
-                if lead.person.slack_user_id:
-                    name = f"<@{lead.person.slack_user_id}>"
+                if lead.slack_user_id:
+                    name = f"<@{lead.slack_user_id}>"
+                else:
+                    name = lead.display_name or "Unknown"
                 lead_names.append(name)
             if lead_names:
                 practice_text += f"Leaders: {', '.join(lead_names)}"

@@ -13,7 +13,8 @@ from app.practices.interfaces import (
     WeatherConditions,
     TrailCondition,
     DaylightInfo,
-    ThresholdViolation
+    ThresholdViolation,
+    EventConflict
 )
 from app.practices.models import Practice
 
@@ -192,6 +193,27 @@ def check_trail_thresholds(
             message="Only partial trail access available"
         ))
 
+    # Snow depth check (per SKIPPER_THRESHOLDS.md: minimum 4" groomed snow)
+    min_snow_depth = thresholds.get('min_snow_depth_inches', 4.0)
+    if trail.snow_depth_inches is not None:
+        if trail.snow_depth_inches < min_snow_depth:
+            violations.append(ThresholdViolation(
+                threshold_name='min_snow_depth',
+                threshold_value=min_snow_depth,
+                actual_value=trail.snow_depth_inches,
+                severity='critical',
+                message=f"Snow depth ({trail.snow_depth_inches}″) below minimum safe threshold ({min_snow_depth}″)"
+            ))
+        elif trail.snow_depth_inches < min_snow_depth * 1.25:
+            # Warning if snow depth is marginal (within 25% of minimum)
+            violations.append(ThresholdViolation(
+                threshold_name='marginal_snow_depth',
+                threshold_value=min_snow_depth,
+                actual_value=trail.snow_depth_inches,
+                severity='warning',
+                message=f"Snow depth ({trail.snow_depth_inches}″) is marginal for safe skiing"
+            ))
+
     logger.info(f"Trail check found {len(violations)} violations")
     return violations
 
@@ -231,7 +253,9 @@ def check_lead_availability(practice: Practice, config: dict) -> list[ThresholdV
     if not confirmed_leads:
         # Check if we're within confirmation deadline
         deadline_hours = thresholds.get('lead_confirmation_deadline_hours', 24)
-        time_until_practice = (practice.date - datetime.utcnow()).total_seconds() / 3600
+        # Ensure both datetimes are naive UTC for comparison
+        practice_dt = practice.date.replace(tzinfo=None) if practice.date.tzinfo else practice.date
+        time_until_practice = (practice_dt - datetime.utcnow()).total_seconds() / 3600
 
         if time_until_practice <= deadline_hours:
             violations.append(ThresholdViolation(
@@ -273,7 +297,10 @@ def check_daylight(
     violations = []
 
     # Check if practice is after dark but not marked as dark practice
-    if practice.date >= daylight.civil_twilight_end:
+    # Ensure both datetimes are naive UTC for comparison
+    practice_dt = practice.date.replace(tzinfo=None) if practice.date.tzinfo else practice.date
+    twilight_end = daylight.civil_twilight_end.replace(tzinfo=None) if daylight.civil_twilight_end.tzinfo else daylight.civil_twilight_end
+    if practice_dt >= twilight_end:
         if not practice.is_dark_practice:
             violations.append(ThresholdViolation(
                 threshold_name='requires_lights',
@@ -290,4 +317,98 @@ def check_daylight(
         logger.info("Dark practice scheduled - assuming location has adequate lighting")
 
     logger.info(f"Daylight check found {len(violations)} violations")
+    return violations
+
+
+def check_event_conflicts(
+    conflicts: list[EventConflict],
+    config: dict
+) -> list[ThresholdViolation]:
+    """
+    Check if any event conflicts affect practice.
+
+    Args:
+        conflicts: List of event conflicts for the practice date/location
+        config: Threshold configuration from skipper.yaml
+
+    Returns:
+        List of ThresholdViolation objects
+    """
+    violations = []
+
+    for conflict in conflicts:
+        if not conflict.affects_practice:
+            continue
+
+        # Races at the practice location are critical
+        if conflict.event_type == 'race':
+            violations.append(ThresholdViolation(
+                threshold_name='event_conflict',
+                threshold_value=0.0,
+                actual_value=1.0,
+                severity='critical',
+                message=f"Event conflict: {conflict.name} at {conflict.location or 'venue'} ({conflict.source})"
+            ))
+        else:
+            # Other conflicts (venue closures, etc.) are warnings
+            violations.append(ThresholdViolation(
+                threshold_name='event_conflict',
+                threshold_value=0.0,
+                actual_value=1.0,
+                severity='warning',
+                message=f"Event conflict: {conflict.name} - {conflict.notes or 'Check venue availability'}"
+            ))
+
+    logger.info(f"Event conflict check found {len(violations)} violations")
+    return violations
+
+
+def check_air_quality(
+    aqi: int,
+    category: str,
+    config: dict
+) -> list[ThresholdViolation]:
+    """
+    Check air quality against safety thresholds.
+
+    AQI Levels (per SKIPPER_THRESHOLDS.md):
+    - 0-50: Good - Practice as normal
+    - 51-100: Moderate - Practice as normal
+    - 101-150: Unhealthy for Sensitive Groups - Alert, optional participation
+    - 151-200: Unhealthy - Cancel outdoor practice
+    - 201+: Very Unhealthy/Hazardous - Cancel
+
+    Args:
+        aqi: Air Quality Index value
+        category: AQI category name
+        config: Threshold configuration from skipper.yaml
+
+    Returns:
+        List of ThresholdViolation objects
+    """
+    violations = []
+    thresholds = config.get('thresholds', {}).get('air_quality', {})
+
+    # Get thresholds from config or use spec defaults
+    cancel_threshold = thresholds.get('cancel_aqi', 151)
+    warning_threshold = thresholds.get('warning_aqi', 101)
+
+    if aqi >= cancel_threshold:
+        violations.append(ThresholdViolation(
+            threshold_name='max_aqi',
+            threshold_value=float(cancel_threshold),
+            actual_value=float(aqi),
+            severity='critical',
+            message=f"Air quality ({aqi} - {category}) exceeds safe threshold for outdoor exercise"
+        ))
+    elif aqi >= warning_threshold:
+        violations.append(ThresholdViolation(
+            threshold_name='aqi_sensitive',
+            threshold_value=float(warning_threshold),
+            actual_value=float(aqi),
+            severity='warning',
+            message=f"Air quality ({aqi} - {category}) may affect sensitive individuals"
+        ))
+
+    logger.info(f"AQI check found {len(violations)} violations")
     return violations

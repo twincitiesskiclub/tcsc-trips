@@ -111,8 +111,8 @@ def run_weekly_summary() -> dict:
 
             # Get lead info
             if practice.leads:
-                leads = [lead.person.short_name for lead in practice.leads if lead.role == 'lead']
-                coaches = [lead.person.short_name for lead in practice.leads if lead.role == 'coach']
+                leads = [lead.display_name for lead in practice.leads if lead.role == 'lead']
+                coaches = [lead.display_name for lead in practice.leads if lead.role == 'coach']
 
                 practice_info['leads'] = leads
                 practice_info['coaches'] = coaches

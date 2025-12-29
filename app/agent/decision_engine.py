@@ -6,6 +6,7 @@ runs threshold checks, and produces PracticeEvaluation results.
 """
 
 import logging
+import os
 import yaml
 from datetime import datetime
 from typing import Optional
@@ -20,21 +21,52 @@ from app.practices.models import Practice
 from app.integrations.weather import get_weather_for_location
 from app.integrations.trail_conditions import get_trail_conditions
 from app.integrations.daylight import get_daylight_info
+from app.integrations.event_conflicts import get_event_conflicts
+from app.integrations.air_quality import get_air_quality
 from app.agent.thresholds import (
     check_weather_thresholds,
     check_trail_thresholds,
     check_lead_availability,
-    check_daylight
+    check_daylight,
+    check_event_conflicts,
+    check_air_quality
 )
 
 logger = logging.getLogger(__name__)
 
+# Module-level config cache
+_config_cache: Optional[dict] = None
+_config_mtime: Optional[float] = None
 
-def load_skipper_config() -> dict:
-    """Load Skipper configuration from YAML file."""
+
+def load_skipper_config(force_reload: bool = False) -> dict:
+    """Load Skipper configuration from YAML file with caching.
+
+    Args:
+        force_reload: If True, bypass cache and reload from disk
+
+    Returns:
+        Configuration dictionary
+    """
+    global _config_cache, _config_mtime
+
+    # Get absolute path to config file
+    base_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    config_path = os.path.join(base_dir, 'config', 'skipper.yaml')
+
     try:
-        with open('config/skipper.yaml', 'r') as f:
-            return yaml.safe_load(f)
+        # Check if file has been modified since last load
+        current_mtime = os.path.getmtime(config_path)
+
+        if not force_reload and _config_cache is not None and _config_mtime == current_mtime:
+            return _config_cache
+
+        with open(config_path, 'r') as f:
+            _config_cache = yaml.safe_load(f)
+            _config_mtime = current_mtime
+            logger.debug(f"Loaded skipper config from {config_path}")
+            return _config_cache
+
     except Exception as e:
         logger.error(f"Failed to load skipper.yaml: {e}")
         # Return minimal default config
@@ -141,6 +173,40 @@ def evaluate_practice(practice: Practice) -> PracticeEvaluation:
     if daylight:
         daylight_violations = check_daylight(practice, daylight, config)
         all_violations.extend(daylight_violations)
+
+    # Event conflict checks
+    try:
+        location_name = practice.location.name if practice.location else None
+        conflicts = get_event_conflicts(practice.date, location_name)
+        evaluation.event_conflicts = conflicts
+
+        if conflicts:
+            logger.info(f"Found {len(conflicts)} event conflicts")
+            conflict_violations = check_event_conflicts(conflicts, config)
+            all_violations.extend(conflict_violations)
+    except Exception as e:
+        logger.error(f"Failed to check event conflicts: {e}")
+        # Continue evaluation without event conflict data
+
+    # Air quality checks
+    if practice.location and practice.location.latitude and practice.location.longitude:
+        try:
+            aqi_info = get_air_quality(
+                lat=practice.location.latitude,
+                lon=practice.location.longitude
+            )
+            if aqi_info:
+                evaluation.air_quality = {
+                    'aqi': aqi_info.aqi,
+                    'category': aqi_info.category,
+                    'pollutant': aqi_info.pollutant
+                }
+                logger.info(f"AQI: {aqi_info.aqi} ({aqi_info.category})")
+                aqi_violations = check_air_quality(aqi_info.aqi, aqi_info.category, config)
+                all_violations.extend(aqi_violations)
+        except Exception as e:
+            logger.error(f"Failed to check air quality: {e}")
+            # Continue evaluation without AQI data
 
     # Update evaluation with violations
     evaluation.violations = all_violations

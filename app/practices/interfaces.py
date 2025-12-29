@@ -325,6 +325,7 @@ class PracticeEvaluation:
     weather: Optional[WeatherConditions] = None
     trail_conditions: Optional[TrailCondition] = None
     event_conflicts: list[EventConflict] = field(default_factory=list)
+    air_quality: Optional[dict] = None  # AirQualityInfo from air_quality.py
 
     # Lead/coach status
     has_confirmed_lead: bool = False

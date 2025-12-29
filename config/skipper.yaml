@@ -36,6 +36,10 @@ thresholds:
     require_confirmed_lead: true
     lead_confirmation_deadline_hours: 24
 
+  air_quality:
+    cancel_aqi: 151   # Unhealthy (per SKIPPER_THRESHOLDS.md)
+    warning_aqi: 101  # Unhealthy for Sensitive Groups
+
 apis:
   nws:
     user_agent: "TCSC (contact@twincitiesskiclub.org)"

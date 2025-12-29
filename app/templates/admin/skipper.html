@@ -412,10 +412,13 @@ async function loadConfig() {
 
 function renderConfig(config) {
     const container = document.getElementById('config-display');
+    const thresholds = config.thresholds || {};
+    const weatherThresholds = thresholds.weather || {};
+    const leadThresholds = thresholds.lead || {};
 
     let html = '<h3 style="margin-top: 0; margin-bottom: 12px; font-size: 14px; color: var(--g-m);">Weather Thresholds</h3>';
     html += '<div class="config-grid">';
-    for (const [key, value] of Object.entries(config.weather_thresholds)) {
+    for (const [key, value] of Object.entries(weatherThresholds)) {
         html += `
             <div class="config-item">
                 <div class="config-label">${key.replace(/_/g, ' ')}</div>
@@ -426,11 +429,12 @@ function renderConfig(config) {
 
     html += '<h3 style="margin-top: 20px; margin-bottom: 12px; font-size: 14px; color: var(--g-m);">Lead Requirements</h3>';
     html += '<div class="config-grid">';
-    for (const [key, value] of Object.entries(config.lead_requirements)) {
+    for (const [key, value] of Object.entries(leadThresholds)) {
+        const displayValue = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value;
         html += `
             <div class="config-item">
                 <div class="config-label">${key.replace(/_/g, ' ')}</div>
-                <div class="config-value">${value ? 'Yes' : 'No'}</div>
+                <div class="config-value">${displayValue}</div>
             </div>`;
     }
     html += '</div>';

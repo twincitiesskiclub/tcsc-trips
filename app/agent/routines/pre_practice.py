@@ -91,23 +91,24 @@ def run_48h_check() -> dict:
                 if coaches:
                     logger.info(f"Nudging {len(coaches)} coach(es) for workout")
                     practice_result['coaches_to_nudge'] = [
-                        lead.person.short_name for lead in coaches
+                        lead.display_name for lead in coaches
                     ]
 
                     if not dry_run:
                         # Send Slack DM to coaches
                         for coach in coaches:
-                            if coach.person.slack_user_id:
+                            slack_uid = coach.user.slack_user.slack_uid if coach.user and coach.user.slack_user else None
+                            if slack_uid:
                                 try:
-                                    result = send_workout_reminder(practice, coach.person.slack_user_id)
+                                    result = send_workout_reminder(practice, slack_uid)
                                     if result['success']:
                                         results['nudges_sent'] += 1
                                     else:
-                                        logger.warning(f"Failed to send reminder to {coach.person.short_name}: {result.get('error')}")
+                                        logger.warning(f"Failed to send reminder to {coach.display_name}: {result.get('error')}")
                                 except Exception as e:
-                                    logger.error(f"Error sending reminder to {coach.person.short_name}: {e}", exc_info=True)
+                                    logger.error(f"Error sending reminder to {coach.display_name}: {e}", exc_info=True)
                             else:
-                                logger.warning(f"Coach {coach.person.short_name} has no Slack user ID")
+                                logger.warning(f"Coach {coach.display_name} has no Slack user ID")
                     else:
                         logger.info(f"[DRY RUN] Would nudge coaches: {practice_result['coaches_to_nudge']}")
                         results['nudges_sent'] += len(coaches)
@@ -203,23 +204,24 @@ def run_24h_check() -> dict:
                 leads = [lead for lead in practice.leads if lead.role == 'lead']
                 if leads:
                     practice_result['leads_to_contact'] = [
-                        lead.person.short_name for lead in leads
+                        lead.display_name for lead in leads
                     ]
 
                     if not dry_run:
                         # Send Slack DM to leads
                         for lead in leads:
-                            if lead.person.slack_user_id:
+                            slack_uid = lead.user.slack_user.slack_uid if lead.user and lead.user.slack_user else None
+                            if slack_uid:
                                 try:
-                                    result = send_lead_availability_request(practice, lead.person.slack_user_id)
+                                    result = send_lead_availability_request(practice, slack_uid)
                                     if result['success']:
-                                        logger.info(f"Sent confirmation request to {lead.person.short_name}")
+                                        logger.info(f"Sent confirmation request to {lead.display_name}")
                                     else:
-                                        logger.warning(f"Failed to send confirmation to {lead.person.short_name}: {result.get('error')}")
+                                        logger.warning(f"Failed to send confirmation to {lead.display_name}: {result.get('error')}")
                                 except Exception as e:
-                                    logger.error(f"Error sending confirmation to {lead.person.short_name}: {e}", exc_info=True)
+                                    logger.error(f"Error sending confirmation to {lead.display_name}: {e}", exc_info=True)
                             else:
-                                logger.warning(f"Lead {lead.person.short_name} has no Slack user ID")
+                                logger.warning(f"Lead {lead.display_name} has no Slack user ID")
                     else:
                         logger.info(f"[DRY RUN] Would contact leads: {practice_result['leads_to_contact']}")
 
