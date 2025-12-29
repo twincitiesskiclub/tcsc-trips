@@ -15,7 +15,7 @@ schedule:
 
 escalation:
   channel: "#practices-team"  # Where cancellation proposals go
-  announcement_channel: "#practices"  # Where announcements go
+  announcement_channel: "#announcements-practices"  # Where announcements go
   timeout_minutes: 120  # 2 hours to respond
   default_decision: "keep"  # fail-open if no response
 

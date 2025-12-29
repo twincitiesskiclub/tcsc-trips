@@ -11,7 +11,7 @@ practices:
 
 slack:
   # Channel for practice announcements
-  announcement_channel: "#practices"
+  announcement_channel: "#announcements-practices"
 
   # Channel for lead/coach coordination
   team_channel: "#practices-team"
