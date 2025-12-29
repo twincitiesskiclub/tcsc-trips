@@ -10,7 +10,7 @@ from ..practices.models import (
     practice_types_junction
 )
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
-from ..errors import flash_error, flash_success
+from sqlalchemy.orm import joinedload
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
 
@@ -33,7 +33,13 @@ def practices_calendar():
 @admin_required
 def practices_data():
     """Return all practices as JSON for Tabulator grid."""
-    practices = Practice.query.order_by(Practice.date.desc()).all()
+    # Eager load relationships to avoid N+1 queries
+    practices = Practice.query.options(
+        joinedload(Practice.location),
+        joinedload(Practice.activities),
+        joinedload(Practice.practice_types),
+        joinedload(Practice.leads).joinedload(PracticeLead.user)
+    ).order_by(Practice.date.desc()).all()
 
     practices_data = []
     for practice in practices:
@@ -48,17 +54,27 @@ def practices_data():
 
         # Build leads list (role='lead')
         leads = [{
-            'id': lead.user_id,
+            'id': lead.id,
+            'user_id': lead.user_id,
             'name': lead.display_name,
             'confirmed': lead.confirmed
         } for lead in practice.leads if lead.role == 'lead']
 
         # Build coaches list (role='coach')
         coaches = [{
-            'id': lead.user_id,
+            'id': lead.id,
+            'user_id': lead.user_id,
             'name': lead.display_name,
             'confirmed': lead.confirmed
         } for lead in practice.leads if lead.role == 'coach']
+
+        # Build assists list (role='assist')
+        assists = [{
+            'id': lead.id,
+            'user_id': lead.user_id,
+            'name': lead.display_name,
+            'confirmed': lead.confirmed
+        } for lead in practice.leads if lead.role == 'assist']
 
         practices_data.append({
             'id': practice.id,
@@ -73,6 +89,7 @@ def practices_data():
             'is_dark_practice': practice.is_dark_practice,
             'leads': leads,
             'coaches': coaches,
+            'assists': assists,
             'cancellation_reason': practice.cancellation_reason or '',
             'warmup_description': practice.warmup_description or '',
             'workout_description': practice.workout_description or '',
@@ -94,9 +111,17 @@ def practice_detail(practice_id):
 @admin_required
 def create_practice():
     """Create a new practice."""
-    try:
-        data = request.get_json()
+    data = request.get_json()
+    if not data:
+        return jsonify({'error': 'JSON body required'}), 400
 
+    # Validate required fields
+    if not data.get('date'):
+        return jsonify({'error': 'Date is required'}), 400
+    if not data.get('location_id'):
+        return jsonify({'error': 'Location is required'}), 400
+
+    try:
         # Parse date
         date = datetime.fromisoformat(data['date'])
 
@@ -148,6 +173,16 @@ def create_practice():
                     role='lead'
                 )
                 db.session.add(lead)
+
+        # Add assists
+        if data.get('assist_ids'):
+            for user_id in data['assist_ids']:
+                assist = PracticeLead(
+                    practice_id=practice.id,
+                    user_id=user_id,
+                    role='assist'
+                )
+                db.session.add(assist)
 
         db.session.commit()
 
@@ -216,9 +251,9 @@ def edit_practice(practice_id):
                 ).all()
                 practice.practice_types = types
 
-        # Update coaches and leads if provided (now using user_id)
-        if 'coach_ids' in data or 'lead_ids' in data:
-            # Remove existing leads/coaches
+        # Update coaches, leads, and assistants if provided (now using user_id)
+        if 'coach_ids' in data or 'lead_ids' in data or 'assist_ids' in data:
+            # Remove existing leads/coaches/assistants
             PracticeLead.query.filter_by(practice_id=practice.id).delete()
 
             # Add coaches
@@ -240,6 +275,16 @@ def edit_practice(practice_id):
                         role='lead'
                     )
                     db.session.add(lead)
+
+            # Add assists
+            if data.get('assist_ids'):
+                for user_id in data['assist_ids']:
+                    assist = PracticeLead(
+                        practice_id=practice.id,
+                        user_id=user_id,
+                        role='assist'
+                    )
+                    db.session.add(assist)
 
         db.session.commit()
 
@@ -363,14 +408,18 @@ def activities_data():
 @admin_practices_bp.route('/people/data')
 @admin_required
 def people_data():
-    """Return coaches and leads from Users with appropriate tags."""
+    """Return coaches, leads, and assistants from Users with appropriate tags."""
     # Get coach tags (HEAD_COACH, ASSISTANT_COACH)
     coach_tags = Tag.query.filter(Tag.name.in_(['HEAD_COACH', 'ASSISTANT_COACH'])).all()
     coach_tag_ids = [t.id for t in coach_tags]
 
-    # Get lead tag (PRACTICE_LEAD)
-    lead_tags = Tag.query.filter(Tag.name.in_(['PRACTICE_LEAD'])).all()
+    # Get lead tag (PRACTICES_LEAD)
+    lead_tags = Tag.query.filter(Tag.name.in_(['PRACTICES_LEAD'])).all()
     lead_tag_ids = [t.id for t in lead_tags]
+
+    # Get assistant tag (PRACTICES_LEAD can also be assistants, or any active member)
+    # For assistants, we include all users with PRACTICES_LEAD tag since they can assist
+    # as well as coaches who might help as assistants
 
     # Query users with coach tags
     coaches = User.query.filter(
@@ -382,6 +431,15 @@ def people_data():
         User.tags.any(Tag.id.in_(lead_tag_ids))
     ).order_by(User.first_name).all()
 
+    # Assists can be any coach or lead (combined pool)
+    assist_ids = set()
+    assists = []
+    for u in coaches + leads:
+        if u.id not in assist_ids:
+            assist_ids.add(u.id)
+            assists.append(u)
+    assists.sort(key=lambda u: u.first_name)
+
     return jsonify({
         'coaches': [{
             'id': u.id,
@@ -390,7 +448,11 @@ def people_data():
         'leads': [{
             'id': u.id,
             'name': f"{u.first_name} {u.last_name}",
-        } for u in leads]
+        } for u in leads],
+        'assists': [{
+            'id': u.id,
+            'name': f"{u.first_name} {u.last_name}",
+        } for u in assists]
     })
 
 
@@ -856,3 +918,133 @@ def statuses_data():
         'rsvp_status': [{'value': s.value, 'name': s.name} for s in RSVPStatus],
         'cancellation_status': [{'value': s.value, 'name': s.name} for s in CancellationStatus],
     })
+
+
+# ============================================================================
+# RSVP Management
+# ============================================================================
+
+@admin_practices_bp.route('/<int:practice_id>/rsvps')
+@admin_required
+def practice_rsvps(practice_id):
+    """Return RSVPs for a practice."""
+    from ..practices.models import PracticeRSVP
+
+    practice = Practice.query.get_or_404(practice_id)
+    rsvps = PracticeRSVP.query.filter_by(practice_id=practice_id).all()
+
+    return jsonify({
+        'rsvps': [{
+            'id': rsvp.id,
+            'user_id': rsvp.user_id,
+            'user_name': f"{rsvp.user.first_name} {rsvp.user.last_name}" if rsvp.user else 'Unknown',
+            'status': rsvp.status,
+            'notes': rsvp.notes,
+            'responded_at': rsvp.responded_at.isoformat() if rsvp.responded_at else None
+        } for rsvp in rsvps],
+        'summary': {
+            'going': len([r for r in rsvps if r.status == RSVPStatus.GOING.value]),
+            'not_going': len([r for r in rsvps if r.status == RSVPStatus.NOT_GOING.value]),
+            'maybe': len([r for r in rsvps if r.status == RSVPStatus.MAYBE.value])
+        }
+    })
+
+
+# ============================================================================
+# Lead Confirmation Management
+# ============================================================================
+
+@admin_practices_bp.route('/<int:practice_id>/leads/<int:lead_id>/toggle-confirm', methods=['POST'])
+@admin_required
+def toggle_lead_confirmation(practice_id, lead_id):
+    """Toggle the confirmation status of a practice lead."""
+    lead = PracticeLead.query.filter_by(
+        id=lead_id,
+        practice_id=practice_id
+    ).first_or_404()
+
+    try:
+        lead.confirmed = not lead.confirmed
+        lead.confirmed_at = datetime.utcnow() if lead.confirmed else None
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'confirmed': lead.confirmed,
+            'confirmed_at': lead.confirmed_at.isoformat() if lead.confirmed_at else None,
+            'message': f"Lead {'confirmed' if lead.confirmed else 'unconfirmed'} successfully"
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500
+
+
+@admin_practices_bp.route('/<int:practice_id>/leads/data')
+@admin_required
+def practice_leads_data(practice_id):
+    """Return all leads/coaches/assistants for a practice with confirmation status."""
+    practice = Practice.query.get_or_404(practice_id)
+
+    leads_data = []
+    for lead in practice.leads:
+        leads_data.append({
+            'id': lead.id,
+            'user_id': lead.user_id,
+            'name': lead.display_name,
+            'role': lead.role,
+            'confirmed': lead.confirmed,
+            'confirmed_at': lead.confirmed_at.isoformat() if lead.confirmed_at else None
+        })
+
+    return jsonify({'leads': leads_data})
+
+
+# ============================================================================
+# Skipper Evaluation (Inline Display)
+# ============================================================================
+
+@admin_practices_bp.route('/<int:practice_id>/evaluation')
+@admin_required
+def practice_evaluation(practice_id):
+    """Get Skipper evaluation for a practice."""
+    from ..agent.decision_engine import evaluate_practice
+
+    practice = Practice.query.get_or_404(practice_id)
+
+    try:
+        evaluation = evaluate_practice(practice)
+
+        return jsonify({
+            'success': True,
+            'evaluation': {
+                'is_go': evaluation.is_go,
+                'confidence': evaluation.confidence,
+                'has_confirmed_lead': evaluation.has_confirmed_lead,
+                'has_posted_workout': evaluation.has_posted_workout,
+                'weather': {
+                    'temperature_f': evaluation.weather.temperature_f if evaluation.weather else None,
+                    'feels_like_f': evaluation.weather.feels_like_f if evaluation.weather else None,
+                    'wind_speed_mph': evaluation.weather.wind_speed_mph if evaluation.weather else None,
+                    'conditions_summary': evaluation.weather.conditions_summary if evaluation.weather else None,
+                    'precipitation_chance': evaluation.weather.precipitation_chance if evaluation.weather else None,
+                } if evaluation.weather else None,
+                'trail_conditions': {
+                    'ski_quality': evaluation.trail_conditions.ski_quality if evaluation.trail_conditions else None,
+                    'trails_open': evaluation.trail_conditions.trails_open if evaluation.trail_conditions else None,
+                    'groomed': evaluation.trail_conditions.groomed if evaluation.trail_conditions else None,
+                } if evaluation.trail_conditions else None,
+                'air_quality': evaluation.air_quality,
+                'violations': [{
+                    'threshold_name': v.threshold_name,
+                    'severity': v.severity,
+                    'message': v.message
+                } for v in evaluation.violations]
+            }
+        })
+
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500

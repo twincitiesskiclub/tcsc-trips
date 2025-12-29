@@ -5,6 +5,7 @@ let activitiesData = [];
 let typesData = [];
 let coachesData = [];  // Users with HEAD_COACH or ASSISTANT_COACH tags
 let leadsData = [];    // Users with PRACTICES_LEAD tag
+let assistsData = [];  // Combined pool of coaches and leads who can assist
 let currentEditPracticeId = null;
 let currentCancelPracticeId = null;
 
@@ -26,9 +27,11 @@ document.addEventListener('DOMContentLoaded', async () => {
 async function loadPractices() {
     try {
         const response = await fetch('/admin/practices/data');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         practicesData = data.practices || [];
-        console.log('Loaded practices:', practicesData.length);
     } catch (error) {
         console.error('Error loading practices:', error);
         showToast('Failed to load practices', 'error');
@@ -38,46 +41,62 @@ async function loadPractices() {
 async function loadLocations() {
     try {
         const response = await fetch('/admin/practices/locations/data');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         locationsData = data.locations;
     } catch (error) {
         console.error('Error loading locations:', error);
+        showToast('Failed to load locations', 'error');
     }
 }
 
 async function loadActivities() {
     try {
         const response = await fetch('/admin/practices/activities/data');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         activitiesData = data.activities;
     } catch (error) {
         console.error('Error loading activities:', error);
+        showToast('Failed to load activities', 'error');
     }
 }
 
 async function loadTypes() {
     try {
         const response = await fetch('/admin/practices/types/data');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         typesData = data.types;
     } catch (error) {
         console.error('Error loading types:', error);
+        showToast('Failed to load practice types', 'error');
     }
 }
 
 async function loadPeople() {
     try {
         const response = await fetch('/admin/practices/people/data');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
         const data = await response.json();
         coachesData = data.coaches || [];
         leadsData = data.leads || [];
+        assistsData = data.assists || [];
     } catch (error) {
         console.error('Error loading people:', error);
+        showToast('Failed to load coaches/leads', 'error');
     }
 }
 
 function initTable() {
-    console.log('Initializing table with', practicesData.length, 'practices');
     practicesTable = new Tabulator("#practices-table", {
         data: practicesData,
         layout: "fitDataStretch",
@@ -124,6 +143,7 @@ function initTable() {
                  const classes = {
                      'scheduled': 'status-scheduled',
                      'confirmed': 'status-confirmed',
+                     'in_progress': 'status-in-progress',
                      'cancelled': 'status-cancelled',
                      'completed': 'status-completed'
                  };
@@ -142,6 +162,13 @@ function initTable() {
                  const coaches = cell.getValue();
                  if (!coaches || !Array.isArray(coaches) || coaches.length === 0) return '—';
                  return coaches.map(c => (c.name || 'Unknown') + (c.confirmed ? ' ✓' : '')).join(', ');
+             }
+            },
+            {title: "Assists", field: "assists", minWidth: 100,
+             formatter: function(cell) {
+                 const assists = cell.getValue();
+                 if (!assists || !Array.isArray(assists) || assists.length === 0) return '—';
+                 return assists.map(a => (a.name || 'Unknown') + (a.confirmed ? ' ✓' : '')).join(', ');
              }
             },
             {title: "🍺", field: "has_social", width: 40,
@@ -353,6 +380,26 @@ function populateEditForm(practice = null) {
     if (leadsData.length === 0) {
         leadsContainer.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No leads defined (add PRACTICES_LEAD tag)</span>';
     }
+
+    // Populate assists as clickable pills (combined pool of coaches and leads)
+    const assistsContainer = document.getElementById('edit-assists');
+    if (assistsContainer) {
+        assistsContainer.innerHTML = '';
+        const practiceAssists = (practice && practice.assists) || [];
+        const practiceAssistIds = practiceAssists.map(a => a.user_id);
+        for (const assist of assistsData) {
+            const isSelected = practiceAssistIds.includes(assist.id);
+            const label = document.createElement('label');
+            label.className = isSelected ? 'selected' : '';
+            label.dataset.value = assist.id;
+            label.textContent = assist.name;
+            label.onclick = () => label.classList.toggle('selected');
+            assistsContainer.appendChild(label);
+        }
+        if (assistsData.length === 0) {
+            assistsContainer.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No assists available</span>';
+        }
+    }
 }
 
 function closeEditModal() {
@@ -385,7 +432,11 @@ async function savePractice() {
     const selectedLeads = document.querySelectorAll('#edit-leads label.selected');
     const leadIds = Array.from(selectedLeads).map(label => parseInt(label.dataset.value));
 
-    if (!date || !locationId) {
+    // Collect selected assists (from pill selections)
+    const selectedAssists = document.querySelectorAll('#edit-assists label.selected');
+    const assistIds = Array.from(selectedAssists).map(label => parseInt(label.dataset.value));
+
+    if (!date || isNaN(locationId) || !locationId) {
         showToast('Date and Location are required', 'error');
         return;
     }
@@ -397,6 +448,7 @@ async function savePractice() {
         type_ids: typeIds,
         coach_ids: coachIds,
         lead_ids: leadIds,
+        assist_ids: assistIds,
         warmup_description: warmup,
         workout_description: workout,
         cooldown_description: cooldown,
