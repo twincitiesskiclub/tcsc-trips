@@ -1,0 +1,868 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}{{ 'Edit Practice' if practice else 'New Practice' }}{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Practice Edit Form Styles */
+.practice-form-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 24px;
+    max-width: 900px;
+}
+
+.form-section {
+    margin-bottom: 28px;
+    padding-bottom: 28px;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.form-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.form-section-title {
+    font: 600 16px var(--f);
+    color: var(--p);
+    margin: 0 0 16px 0;
+}
+
+.form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font: 500 13px var(--f);
+    color: #344054;
+}
+
+.form-group input[type="text"],
+.form-group input[type="datetime-local"],
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    font: 400 14px var(--f);
+    color: #1d2939;
+    background: white;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-group textarea {
+    min-height: 100px;
+    resize: vertical;
+}
+
+/* Checkbox Groups */
+.checkbox-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+}
+
+.checkbox-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.checkbox-item input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.checkbox-item label {
+    margin-bottom: 0;
+    font: 400 14px var(--f);
+    color: #344054;
+    cursor: pointer;
+}
+
+/* Single Checkboxes */
+.checkbox-single {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+}
+
+.checkbox-single input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    cursor: pointer;
+}
+
+.checkbox-single label {
+    margin-bottom: 0;
+    font: 400 14px var(--f);
+    color: #344054;
+    cursor: pointer;
+}
+
+/* Form Actions */
+.form-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 28px;
+    padding-top: 20px;
+    border-top: 1px solid #e4e7ec;
+}
+
+/* Validation Error */
+.error-message {
+    color: #dc2626;
+    font-size: 13px;
+    margin-top: 4px;
+}
+
+.form-group.has-error input,
+.form-group.has-error select,
+.form-group.has-error textarea {
+    border-color: #dc2626;
+}
+
+/* Loading State */
+.form-loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+/* Toast */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    background: var(--p);
+    color: white;
+    font: 500 14px var(--f);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.toast.error {
+    background: #dc2626;
+}
+
+.toast.success {
+    background: #16a34a;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+}
+
+.status-confirmed {
+    background: #10b981;
+}
+
+.status-cancelled {
+    background: #ef4444;
+}
+
+/* Toggle switch */
+.toggle {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.toggle input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    background: #d1d5db;
+    border-radius: 11px;
+    transition: background 0.2s;
+}
+
+.toggle-slider:before {
+    content: '';
+    position: absolute;
+    width: 18px;
+    height: 18px;
+    left: 2px;
+    top: 2px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+}
+
+.toggle input:checked + .toggle-slider {
+    background: #10b981;
+}
+
+.toggle input:checked + .toggle-slider:before {
+    transform: translateX(18px);
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>{{ 'Edit Practice' if practice else 'New Practice' }}</h1>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin_practices.practices_list') }}" class="button button-secondary">Back to Practices</a>
+    </div>
+</div>
+
+<div class="practice-form-container">
+    <form id="practice-form" method="POST" action="{{ url_for('admin_practices.edit_practice', practice_id=practice.id) if practice else url_for('admin_practices.create_practice') }}">
+
+        <!-- Basic Information -->
+        <div class="form-section">
+            <h2 class="form-section-title">Basic Information</h2>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="date">Date & Time *</label>
+                    <input type="datetime-local" id="date" name="date"
+                           value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}" required>
+                </div>
+
+                <div class="form-group">
+                    <label for="location_id">Location *</label>
+                    <select id="location_id" name="location_id" required>
+                        <option value="">Select a location...</option>
+                    </select>
+                </div>
+            </div>
+
+            {% if practice %}
+            <div class="form-group">
+                <label for="status">Status</label>
+                <select id="status" name="status">
+                    <option value="scheduled" {% if practice.status == 'scheduled' %}selected{% endif %}>Scheduled</option>
+                    <option value="confirmed" {% if practice.status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+                    <option value="in_progress" {% if practice.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                    <option value="cancelled" {% if practice.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+                    <option value="completed" {% if practice.status == 'completed' %}selected{% endif %}>Completed</option>
+                </select>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Practice Details -->
+        <div class="form-section">
+            <h2 class="form-section-title">Practice Details</h2>
+
+            <div class="form-group">
+                <label>Activities</label>
+                <div id="activities-checkboxes" class="checkbox-grid">
+                    <!-- Populated via JavaScript -->
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Practice Types</label>
+                <div id="types-checkboxes" class="checkbox-grid">
+                    <!-- Populated via JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Coaches & Leads -->
+        <div class="form-section">
+            <h2 class="form-section-title">Coaches & Leads</h2>
+
+            <div class="form-group">
+                <label>Coaches</label>
+                <div id="coaches-checkboxes" class="checkbox-grid">
+                    <!-- Populated via JavaScript -->
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label>Leads</label>
+                <div id="leads-checkboxes" class="checkbox-grid">
+                    <!-- Populated via JavaScript -->
+                </div>
+            </div>
+        </div>
+
+        <!-- Workout Descriptions -->
+        <div class="form-section">
+            <h2 class="form-section-title">Workout Plan</h2>
+
+            <div class="form-group">
+                <label for="warmup_description">Warmup Description</label>
+                <textarea id="warmup_description" name="warmup_description"
+                          placeholder="Describe the warmup routine...">{{ practice.warmup_description if practice else '' }}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="workout_description">Workout Description</label>
+                <textarea id="workout_description" name="workout_description"
+                          placeholder="Describe the main workout...">{{ practice.workout_description if practice else '' }}</textarea>
+            </div>
+
+            <div class="form-group">
+                <label for="cooldown_description">Cooldown Description</label>
+                <textarea id="cooldown_description" name="cooldown_description"
+                          placeholder="Describe the cooldown routine...">{{ practice.cooldown_description if practice else '' }}</textarea>
+            </div>
+        </div>
+
+        <!-- Additional Options -->
+        <div class="form-section">
+            <h2 class="form-section-title">Additional Options</h2>
+
+            <div class="checkbox-single">
+                <input type="checkbox" id="has_social" name="has_social"
+                       {% if practice and practice.has_social %}checked{% endif %}>
+                <label for="has_social">Has Post-Practice Social</label>
+            </div>
+
+            <div class="checkbox-single">
+                <input type="checkbox" id="is_dark_practice" name="is_dark_practice"
+                       {% if practice and practice.is_dark_practice %}checked{% endif %}>
+                <label for="is_dark_practice">Dark Practice (lights required)</label>
+            </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="form-actions">
+            <button type="submit" class="button">{{ 'Save Changes' if practice else 'Create Practice' }}</button>
+            <a href="{{ url_for('admin_practices.practices_list') }}" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+{% if practice %}
+<!-- Skipper Evaluation Section -->
+<div class="practice-form-container" style="margin-top: 24px;">
+    <div class="form-section">
+        <h2 class="form-section-title">Skipper Evaluation</h2>
+        <p style="color: #6b7280; font-size: 13px; margin-bottom: 16px;">
+            AI-powered safety assessment for this practice
+        </p>
+        <div id="evaluation-container">
+            <button type="button" class="button button-secondary" onclick="loadEvaluation()">
+                Load Evaluation
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- RSVPs Section -->
+<div class="practice-form-container" style="margin-top: 24px;">
+    <div class="form-section">
+        <h2 class="form-section-title">RSVPs</h2>
+        <div id="rsvps-container">
+            <div id="rsvp-summary" style="margin-bottom: 12px;"></div>
+            <div id="rsvp-list"></div>
+        </div>
+    </div>
+</div>
+
+<!-- Lead Confirmations Section -->
+<div class="practice-form-container" style="margin-top: 24px;">
+    <div class="form-section">
+        <h2 class="form-section-title">Lead Confirmations</h2>
+        <p style="color: #6b7280; font-size: 13px; margin-bottom: 16px;">
+            Click the toggle to confirm or unconfirm a lead
+        </p>
+        <div id="lead-confirmations-container">
+            <p style="color: #9ca3af;">Loading...</p>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let locations = [];
+let activities = [];
+let types = [];
+let coachesData = [];
+let leadsData = [];
+const practiceId = {{ practice.id if practice else 'null' }};
+const practiceActivities = {{ (practice.activities | map(attribute='id') | list) | tojson if practice else '[]' }};
+const practiceTypes = {{ (practice.practice_types | map(attribute='id') | list) | tojson if practice else '[]' }};
+const practiceCoaches = {{ (practice.leads | selectattr('role', 'equalto', 'coach') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
+const practiceLeads = {{ (practice.leads | selectattr('role', 'equalto', 'lead') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadFormData();
+    populateForm();
+});
+
+async function loadFormData() {
+    try {
+        // Load locations
+        const locationsResp = await fetch('/admin/practices/locations/data');
+        const locationsData = await locationsResp.json();
+        locations = locationsData.locations;
+
+        // Load activities
+        const activitiesResp = await fetch('/admin/practices/activities/data');
+        const activitiesData = await activitiesResp.json();
+        activities = activitiesData.activities;
+
+        // Load types
+        const typesResp = await fetch('/admin/practices/types/data');
+        const typesData = await typesResp.json();
+        types = typesData.types;
+
+        // Load coaches and leads (users with appropriate tags)
+        const peopleResp = await fetch('/admin/practices/people/data');
+        const peopleData = await peopleResp.json();
+        coachesData = peopleData.coaches || [];
+        leadsData = peopleData.leads || [];
+    } catch (err) {
+        console.error('Error loading form data:', err);
+        showToast('Error loading form data', 'error');
+    }
+}
+
+function populateForm() {
+    // Populate locations dropdown
+    const locationSelect = document.getElementById('location_id');
+    locations.forEach(loc => {
+        const option = document.createElement('option');
+        option.value = loc.id;
+        option.textContent = loc.name + (loc.spot ? ` — ${loc.spot}` : '');
+        {% if practice %}
+        if (loc.id === {{ practice.location_id }}) {
+            option.selected = true;
+        }
+        {% endif %}
+        locationSelect.appendChild(option);
+    });
+
+    // Populate activities checkboxes
+    const activitiesContainer = document.getElementById('activities-checkboxes');
+    activities.forEach(activity => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `activity_${activity.id}`;
+        checkbox.name = 'activity_ids';
+        checkbox.value = activity.id;
+        if (practiceActivities.includes(activity.id)) {
+            checkbox.checked = true;
+        }
+
+        const label = document.createElement('label');
+        label.htmlFor = `activity_${activity.id}`;
+        label.textContent = activity.name;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        activitiesContainer.appendChild(div);
+    });
+
+    // Populate types checkboxes
+    const typesContainer = document.getElementById('types-checkboxes');
+    types.forEach(type => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `type_${type.id}`;
+        checkbox.name = 'type_ids';
+        checkbox.value = type.id;
+        if (practiceTypes.includes(type.id)) {
+            checkbox.checked = true;
+        }
+
+        const label = document.createElement('label');
+        label.htmlFor = `type_${type.id}`;
+        label.textContent = type.name;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        typesContainer.appendChild(div);
+    });
+
+    // Populate coaches checkboxes
+    const coachesContainer = document.getElementById('coaches-checkboxes');
+    coachesData.forEach(coach => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `coach_${coach.id}`;
+        checkbox.name = 'coach_ids';
+        checkbox.value = coach.id;
+        if (practiceCoaches.includes(coach.id)) {
+            checkbox.checked = true;
+        }
+
+        const label = document.createElement('label');
+        label.htmlFor = `coach_${coach.id}`;
+        label.textContent = coach.name;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        coachesContainer.appendChild(div);
+    });
+
+    // Populate leads checkboxes
+    const leadsContainer = document.getElementById('leads-checkboxes');
+    leadsData.forEach(lead => {
+        const div = document.createElement('div');
+        div.className = 'checkbox-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.id = `lead_${lead.id}`;
+        checkbox.name = 'lead_ids';
+        checkbox.value = lead.id;
+        if (practiceLeads.includes(lead.id)) {
+            checkbox.checked = true;
+        }
+
+        const label = document.createElement('label');
+        label.htmlFor = `lead_${lead.id}`;
+        label.textContent = lead.name;
+
+        div.appendChild(checkbox);
+        div.appendChild(label);
+        leadsContainer.appendChild(div);
+    });
+}
+
+// Handle form submission
+document.getElementById('practice-form').addEventListener('submit', async (e) => {
+    e.preventDefault();
+
+    const form = e.target;
+    const formData = new FormData(form);
+
+    // Collect checked activities, types, coaches, and leads
+    const activityIds = Array.from(form.querySelectorAll('input[name="activity_ids"]:checked'))
+        .map(cb => parseInt(cb.value));
+    const typeIds = Array.from(form.querySelectorAll('input[name="type_ids"]:checked'))
+        .map(cb => parseInt(cb.value));
+    const coachIds = Array.from(form.querySelectorAll('input[name="coach_ids"]:checked'))
+        .map(cb => parseInt(cb.value));
+    const leadIds = Array.from(form.querySelectorAll('input[name="lead_ids"]:checked'))
+        .map(cb => parseInt(cb.value));
+
+    // Build JSON payload
+    const data = {
+        date: formData.get('date'),
+        location_id: parseInt(formData.get('location_id')),
+        warmup_description: formData.get('warmup_description') || null,
+        workout_description: formData.get('workout_description') || null,
+        cooldown_description: formData.get('cooldown_description') || null,
+        has_social: formData.get('has_social') === 'on',
+        is_dark_practice: formData.get('is_dark_practice') === 'on',
+        activity_ids: activityIds,
+        type_ids: typeIds,
+        coach_ids: coachIds,
+        lead_ids: leadIds
+    };
+
+    if (practiceId) {
+        data.status = formData.get('status');
+    }
+
+    // Show loading state
+    form.classList.add('form-loading');
+
+    try {
+        const response = await fetch(form.action, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message || 'Practice saved successfully', 'success');
+            setTimeout(() => {
+                window.location.href = '/admin/practices';
+            }, 1000);
+        } else {
+            showToast(result.error || 'Failed to save practice', 'error');
+            form.classList.remove('form-loading');
+        }
+    } catch (err) {
+        console.error('Error saving practice:', err);
+        showToast('Error saving practice: ' + err.message, 'error');
+        form.classList.remove('form-loading');
+    }
+});
+
+function showToast(message, type = 'info') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+
+{% if practice %}
+// Load RSVPs on page load
+document.addEventListener('DOMContentLoaded', () => {
+    loadRSVPs();
+    loadLeadConfirmations();
+});
+
+async function loadEvaluation() {
+    const container = document.getElementById('evaluation-container');
+    container.innerHTML = '<p style="color: #9ca3af;">Loading evaluation...</p>';
+
+    try {
+        const response = await fetch('/admin/practices/{{ practice.id }}/evaluation');
+        const data = await response.json();
+
+        if (!data.success) {
+            container.innerHTML = `<p style="color: #ef4444;">Error: ${data.error}</p>`;
+            return;
+        }
+
+        const eval_ = data.evaluation;
+        let html = `
+            <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 16px;">
+                <span class="status-badge ${eval_.is_go ? 'status-confirmed' : 'status-cancelled'}">
+                    ${eval_.is_go ? 'GO' : 'NO-GO'}
+                </span>
+                <span style="color: #6b7280; font-size: 13px;">
+                    Confidence: ${Math.round(eval_.confidence * 100)}%
+                </span>
+            </div>
+        `;
+
+        // Weather conditions
+        if (eval_.weather) {
+            html += `
+                <div style="margin-bottom: 12px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                    <strong>Weather:</strong> ${eval_.weather.conditions_summary || 'N/A'}<br>
+                    Temperature: ${eval_.weather.temperature_f?.toFixed(1) || 'N/A'}°F
+                    (feels like ${eval_.weather.feels_like_f?.toFixed(1) || 'N/A'}°F)<br>
+                    Wind: ${eval_.weather.wind_speed_mph?.toFixed(1) || 'N/A'} mph<br>
+                    Precipitation: ${eval_.weather.precipitation_chance || 0}%
+                </div>
+            `;
+        }
+
+        // Trail conditions
+        if (eval_.trail_conditions) {
+            html += `
+                <div style="margin-bottom: 12px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                    <strong>Trail Conditions:</strong><br>
+                    Quality: ${eval_.trail_conditions.ski_quality || 'N/A'}<br>
+                    Trails Open: ${eval_.trail_conditions.trails_open || 'N/A'}<br>
+                    Groomed: ${eval_.trail_conditions.groomed ? 'Yes' : 'No'}
+                </div>
+            `;
+        }
+
+        // Air quality
+        if (eval_.air_quality) {
+            html += `
+                <div style="margin-bottom: 12px; padding: 12px; background: #f9fafb; border-radius: 6px;">
+                    <strong>Air Quality:</strong> AQI ${eval_.air_quality.aqi} (${eval_.air_quality.category})
+                </div>
+            `;
+        }
+
+        // Lead/workout status
+        html += `
+            <div style="margin-bottom: 12px;">
+                <span style="margin-right: 16px;">
+                    Lead Confirmed: ${eval_.has_confirmed_lead ? '✓' : '✗'}
+                </span>
+                <span>
+                    Workout Posted: ${eval_.has_posted_workout ? '✓' : '✗'}
+                </span>
+            </div>
+        `;
+
+        // Violations
+        if (eval_.violations && eval_.violations.length > 0) {
+            html += '<div style="margin-top: 16px;"><strong>Violations:</strong></div>';
+            for (const v of eval_.violations) {
+                const color = v.severity === 'critical' ? '#ef4444' : '#f59e0b';
+                html += `
+                    <div style="padding: 8px 12px; margin-top: 8px; background: ${color}15; border-left: 3px solid ${color}; border-radius: 4px;">
+                        <strong style="color: ${color};">${v.severity.toUpperCase()}</strong>: ${v.message}
+                    </div>
+                `;
+            }
+        } else {
+            html += '<div style="color: #10b981; margin-top: 12px;">No violations detected ✓</div>';
+        }
+
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = `<p style="color: #ef4444;">Error loading evaluation: ${err.message}</p>`;
+    }
+}
+
+async function loadRSVPs() {
+    const summaryEl = document.getElementById('rsvp-summary');
+    const listEl = document.getElementById('rsvp-list');
+
+    try {
+        const response = await fetch('/admin/practices/{{ practice.id }}/rsvps');
+        const data = await response.json();
+
+        const { rsvps, summary } = data;
+
+        // Summary badges
+        summaryEl.innerHTML = `
+            <span style="padding: 4px 10px; border-radius: 12px; background: #10b981; color: white; font-size: 12px; margin-right: 8px;">
+                Going: ${summary.going}
+            </span>
+            <span style="padding: 4px 10px; border-radius: 12px; background: #ef4444; color: white; font-size: 12px; margin-right: 8px;">
+                Not Going: ${summary.not_going}
+            </span>
+            <span style="padding: 4px 10px; border-radius: 12px; background: #6b7280; color: white; font-size: 12px;">
+                Maybe: ${summary.maybe}
+            </span>
+        `;
+
+        // RSVP list
+        if (rsvps.length === 0) {
+            listEl.innerHTML = '<p style="color: #9ca3af; font-size: 13px;">No RSVPs yet</p>';
+        } else {
+            let html = '<div style="margin-top: 12px;">';
+            for (const rsvp of rsvps) {
+                const statusColors = {
+                    'going': '#10b981',
+                    'not_going': '#ef4444',
+                    'maybe': '#6b7280'
+                };
+                const color = statusColors[rsvp.status] || '#6b7280';
+                html += `
+                    <div style="display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid #e5e7eb;">
+                        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${color};"></span>
+                        <span style="flex: 1;">${rsvp.user_name}</span>
+                        <span style="color: ${color}; font-size: 13px;">${rsvp.status}</span>
+                    </div>
+                `;
+            }
+            html += '</div>';
+            listEl.innerHTML = html;
+        }
+    } catch (err) {
+        listEl.innerHTML = `<p style="color: #ef4444;">Error loading RSVPs: ${err.message}</p>`;
+    }
+}
+
+async function loadLeadConfirmations() {
+    const container = document.getElementById('lead-confirmations-container');
+
+    try {
+        const response = await fetch('/admin/practices/{{ practice.id }}/leads/data');
+        const data = await response.json();
+
+        const leads = data.leads;
+
+        if (leads.length === 0) {
+            container.innerHTML = '<p style="color: #9ca3af; font-size: 13px;">No leads/coaches/assists assigned</p>';
+            return;
+        }
+
+        let html = '';
+        for (const lead of leads) {
+            const roleLabel = lead.role === 'coach' ? 'Coach' : lead.role === 'lead' ? 'Lead' : 'Assist';
+            html += `
+                <div style="display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid #e5e7eb;">
+                    <span style="flex: 1;">
+                        <strong>${lead.name}</strong>
+                        <span style="color: #6b7280; font-size: 12px; margin-left: 8px;">(${roleLabel})</span>
+                    </span>
+                    <label class="toggle" style="margin: 0;">
+                        <input type="checkbox" ${lead.confirmed ? 'checked' : ''} onchange="toggleLeadConfirmation(${lead.id}, this.checked)">
+                        <span class="toggle-slider"></span>
+                    </label>
+                    <span style="width: 70px; text-align: right; font-size: 12px; color: ${lead.confirmed ? '#10b981' : '#9ca3af'};">
+                        ${lead.confirmed ? 'Confirmed' : 'Pending'}
+                    </span>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+    } catch (err) {
+        container.innerHTML = `<p style="color: #ef4444;">Error loading leads: ${err.message}</p>`;
+    }
+}
+
+async function toggleLeadConfirmation(leadId, confirmed) {
+    try {
+        const response = await fetch(`/admin/practices/{{ practice.id }}/leads/${leadId}/toggle-confirm`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToast(result.message, 'success');
+            loadLeadConfirmations(); // Refresh the list
+        } else {
+            showToast(result.error || 'Failed to toggle confirmation', 'error');
+            loadLeadConfirmations(); // Revert UI
+        }
+    } catch (err) {
+        showToast('Error: ' + err.message, 'error');
+        loadLeadConfirmations(); // Revert UI
+    }
+}
+{% endif %}
+</script>
+{% endblock %}
