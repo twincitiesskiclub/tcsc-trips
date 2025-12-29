@@ -299,6 +299,10 @@ def get_weather_forecast(lat: float, lon: float, target_datetime: datetime) -> W
     # Get grid coordinates (cached)
     grid_info = _get_grid_coordinates(lat, lon)
 
+    # Validate required grid coordinates
+    if not grid_info.get('gridId') or grid_info.get('gridX') is None or grid_info.get('gridY') is None:
+        raise ValueError(f"Could not determine NWS grid coordinates for ({lat},{lon})")
+
     # Get hourly forecast
     periods = _get_hourly_forecast(
         grid_info['gridId'],

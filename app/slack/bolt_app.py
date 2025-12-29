@@ -106,6 +106,9 @@ if _bot_token:
         with get_app_context():
             result = _process_rsvp(practice_id, status, user_id, user_name)
 
+        # Get channel ID safely - may not exist for actions from certain contexts
+        channel_id = body.get("channel", {}).get("id")
+
         if result.get("success"):
             if result.get("toggled_off"):
                 # User clicked same status again - they're no longer RSVP'd
@@ -114,17 +117,19 @@ if _bot_token:
                 # User is now RSVP'd
                 message = ":white_check_mark: You're going! See you there."
 
-            client.chat_postEphemeral(
-                channel=body["channel"]["id"],
-                user=user_id,
-                text=message
-            )
+            if channel_id:
+                client.chat_postEphemeral(
+                    channel=channel_id,
+                    user=user_id,
+                    text=message
+                )
         else:
-            client.chat_postEphemeral(
-                channel=body["channel"]["id"],
-                user=user_id,
-                text=f":warning: {result.get('error', 'Could not record RSVP')}"
-            )
+            if channel_id:
+                client.chat_postEphemeral(
+                    channel=channel_id,
+                    user=user_id,
+                    text=f":warning: {result.get('error', 'Could not record RSVP')}"
+                )
 
     @bolt_app.action("home_rsvp")
     def handle_home_rsvp_action(ack, body, action, client, logger):
@@ -184,11 +189,13 @@ if _bot_token:
             result = _process_cancellation_decision(proposal_id, approved, user_id, user_name)
 
         decision_text = "approved" if approved else "rejected"
-        client.chat_postEphemeral(
-            channel=body["channel"]["id"],
-            user=user_id,
-            text=f"Decision recorded. Cancellation {decision_text}."
-        )
+        channel_id = body.get("channel", {}).get("id")
+        if channel_id:
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text=f"Decision recorded. Cancellation {decision_text}."
+            )
 
     @bolt_app.action("lead_confirm")
     @bolt_app.action("lead_need_sub")

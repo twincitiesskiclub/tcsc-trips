@@ -100,10 +100,11 @@ def _handle_practice_command(user_id: str) -> dict:
         if practice.leads:
             lead_names = []
             for lead in practice.leads:
-                if lead.person:
-                    name = lead.person.short_name or 'Unknown'
-                    if lead.person.slack_user_id:
-                        name = f"<@{lead.person.slack_user_id}>"
+                if lead.user:
+                    name = lead.user.first_name or 'Unknown'
+                    # Get Slack UID from the linked SlackUser if available
+                    if lead.user.slack_user and lead.user.slack_user.slack_uid:
+                        name = f"<@{lead.user.slack_user.slack_uid}>"
                     lead_names.append(name)
             if lead_names:
                 practice_line += f"\n  Leaders: {', '.join(lead_names)}"

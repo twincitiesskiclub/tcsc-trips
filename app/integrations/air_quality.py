@@ -136,7 +136,7 @@ def get_air_quality(lat: float, lon: float) -> Optional[AirQualityInfo]:
 
         aqi_info = AirQualityInfo(
             aqi=worst.get('AQI', 0),
-            category=worst.get('Category', {}).get('Name', 'Unknown'),
+            category=(worst.get('Category') or {}).get('Name', 'Unknown'),
             pollutant=worst.get('ParameterName', 'Unknown'),
             reporting_area=worst.get('ReportingArea', 'Unknown'),
             date_observed=datetime.utcnow()

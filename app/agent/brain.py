@@ -115,6 +115,10 @@ Write a clear, concise summary for club members:"""
             messages=[{"role": "user", "content": prompt}]
         )
 
+        if not response.content:
+            logger.error("Empty response from Claude API")
+            return _fallback_evaluation_summary(evaluation)
+
         summary = response.content[0].text.strip()
         logger.info("Generated evaluation summary via Claude")
         return summary
@@ -203,6 +207,10 @@ Write a cancellation message for Slack (use friendly but professional tone):"""
             max_tokens=500,
             messages=[{"role": "user", "content": prompt}]
         )
+
+        if not response.content:
+            logger.error("Empty response from Claude API")
+            return _fallback_cancellation_message(practice, evaluation)
 
         message = response.content[0].text.strip()
         logger.info("Generated cancellation message via Claude")

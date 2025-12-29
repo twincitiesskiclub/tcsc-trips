@@ -17,11 +17,17 @@ depends_on = None
 
 
 def upgrade():
+    # Get the current database dialect
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+
     # Add CHECK constraint to practice_leads table
-    with op.batch_alter_table('practice_leads', schema=None) as batch_op:
-        batch_op.create_check_constraint(
-            'lead_must_have_person_or_user',
-            'person_id IS NOT NULL OR user_id IS NOT NULL'
+    # Note: SQLite doesn't support adding CHECK constraints to existing tables,
+    # so we only add it for PostgreSQL
+    if dialect == 'postgresql':
+        op.execute(
+            'ALTER TABLE practice_leads ADD CONSTRAINT lead_must_have_person_or_user '
+            'CHECK (person_id IS NOT NULL OR user_id IS NOT NULL)'
         )
 
     # Create performance indexes
@@ -38,6 +44,10 @@ def downgrade():
     op.drop_index('ix_practice_leads_user_id', table_name='practice_leads')
     op.drop_index('ix_practices_status', table_name='practices')
 
-    # Remove CHECK constraint
-    with op.batch_alter_table('practice_leads', schema=None) as batch_op:
-        batch_op.drop_constraint('lead_must_have_person_or_user', type_='check')
+    # Remove CHECK constraint (PostgreSQL only)
+    bind = op.get_bind()
+    dialect = bind.dialect.name
+    if dialect == 'postgresql':
+        op.execute(
+            'ALTER TABLE practice_leads DROP CONSTRAINT lead_must_have_person_or_user'
+        )

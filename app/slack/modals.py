@@ -4,6 +4,50 @@ from typing import Optional
 from app.practices.interfaces import PracticeInfo
 
 
+def _build_practice_flags_element(practice: PracticeInfo) -> dict:
+    """Build checkboxes element for practice flags, properly handling initial_options.
+
+    Args:
+        practice: Practice information
+
+    Returns:
+        Checkboxes element dict with initial_options only if there are selected options
+    """
+    element = {
+        "type": "checkboxes",
+        "action_id": "practice_flags",
+        "options": [
+            {
+                "text": {"type": "plain_text", "text": "🌙 Dark practice (headlamp required)"},
+                "value": "is_dark_practice"
+            },
+            {
+                "text": {"type": "plain_text", "text": "🍕 Social afterwards"},
+                "value": "has_social"
+            }
+        ]
+    }
+
+    # Build initial options list - only include if there are selected options
+    initial_options = []
+    if practice.is_dark_practice:
+        initial_options.append({
+            "text": {"type": "plain_text", "text": "🌙 Dark practice (headlamp required)"},
+            "value": "is_dark_practice"
+        })
+    if practice.has_social:
+        initial_options.append({
+            "text": {"type": "plain_text", "text": "🍕 Social afterwards"},
+            "value": "has_social"
+        })
+
+    # Only add initial_options key if there are selected options (Slack rejects null/empty)
+    if initial_options:
+        element["initial_options"] = initial_options
+
+    return element
+
+
 def build_practice_edit_modal(practice: PracticeInfo) -> dict:
     """Build modal for editing practice details.
 
@@ -38,9 +82,9 @@ def build_practice_edit_modal(practice: PracticeInfo) -> dict:
                     "text": "Date"
                 },
                 "element": {
-                    "type": "datetimepicker",
+                    "type": "datepicker",
                     "action_id": "practice_date",
-                    "initial_date_time": int(practice.date.timestamp())
+                    "initial_date": practice.date.strftime('%Y-%m-%d')
                 }
             },
             {
@@ -497,25 +541,7 @@ def build_practice_edit_full_modal(practice: PracticeInfo, locations: list = Non
                     "type": "plain_text",
                     "text": "Options"
                 },
-                "element": {
-                    "type": "checkboxes",
-                    "action_id": "practice_flags",
-                    "options": [
-                        {
-                            "text": {"type": "plain_text", "text": "🌙 Dark practice (headlamp required)"},
-                            "value": "is_dark_practice"
-                        },
-                        {
-                            "text": {"type": "plain_text", "text": "🍕 Social afterwards"},
-                            "value": "has_social"
-                        }
-                    ],
-                    "initial_options": [
-                        opt for opt in [
-                            {"text": {"type": "plain_text", "text": "🌙 Dark practice (headlamp required)"}, "value": "is_dark_practice"} if practice.is_dark_practice else None,
-                            {"text": {"type": "plain_text", "text": "🍕 Social afterwards"}, "value": "has_social"} if practice.has_social else None
-                        ] if opt is not None
-                    ] or None
+                "element": _build_practice_flags_element(practice)
                 }
             }
         ]

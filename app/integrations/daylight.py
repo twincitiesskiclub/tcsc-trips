@@ -101,9 +101,14 @@ def is_after_dark(lat: float, lon: float, practice_datetime: datetime) -> bool:
 
         # Compare practice time to civil twilight end
         # If practice starts after dusk, it's a dark practice
-        # Normalize practice_datetime to naive UTC for comparison
-        practice_naive = practice_datetime.replace(tzinfo=None) if practice_datetime.tzinfo else practice_datetime
-        is_dark = practice_naive >= daylight_info.civil_twilight_end
+        # Convert practice_datetime to naive UTC for comparison
+        if practice_datetime.tzinfo:
+            # Convert to UTC first, then strip tzinfo
+            practice_utc = practice_datetime.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            # Assume naive datetime is already in UTC
+            practice_utc = practice_datetime
+        is_dark = practice_utc >= daylight_info.civil_twilight_end
 
         logger.info(f"Practice {'is' if is_dark else 'is not'} after dark "
                    f"(dusk at {daylight_info.civil_twilight_end.strftime('%H:%M')})")
@@ -134,9 +139,14 @@ def is_during_twilight(lat: float, lon: float, practice_datetime: datetime) -> b
         daylight_info = get_daylight_info(lat, lon, practice_datetime)
 
         # Check if time is between sunset and dusk
-        # Normalize practice_datetime to naive UTC for comparison
-        practice_naive = practice_datetime.replace(tzinfo=None) if practice_datetime.tzinfo else practice_datetime
-        in_twilight = (daylight_info.sunset <= practice_naive <
+        # Convert practice_datetime to naive UTC for comparison
+        if practice_datetime.tzinfo:
+            # Convert to UTC first, then strip tzinfo
+            practice_utc = practice_datetime.astimezone(timezone.utc).replace(tzinfo=None)
+        else:
+            # Assume naive datetime is already in UTC
+            practice_utc = practice_datetime
+        in_twilight = (daylight_info.sunset <= practice_utc <
                       daylight_info.civil_twilight_end)
 
         return in_twilight

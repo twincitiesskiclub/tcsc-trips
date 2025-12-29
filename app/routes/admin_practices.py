@@ -205,6 +205,8 @@ def edit_practice(practice_id):
 
     try:
         data = request.get_json()
+        if not data:
+            return jsonify({'error': 'JSON body required'}), 400
 
         # Update fields if provided
         if 'date' in data:
@@ -325,7 +327,7 @@ def cancel_practice(practice_id):
     practice = Practice.query.get_or_404(practice_id)
 
     try:
-        data = request.get_json()
+        data = request.get_json() or {}
 
         practice.status = PracticeStatus.CANCELLED.value
         practice.cancellation_reason = data.get('reason', 'Cancelled by admin')

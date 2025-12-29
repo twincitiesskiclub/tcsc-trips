@@ -349,7 +349,7 @@ function populateEditForm(practice = null) {
     const coachesContainer = document.getElementById('edit-coaches');
     coachesContainer.innerHTML = '';
     const practiceCoaches = (practice && practice.coaches) || [];
-    const practiceCoachIds = practiceCoaches.map(c => c.id);
+    const practiceCoachIds = practiceCoaches.map(c => c.user_id);
     for (const coach of coachesData) {
         const isSelected = practiceCoachIds.includes(coach.id);
         const label = document.createElement('label');
@@ -367,7 +367,7 @@ function populateEditForm(practice = null) {
     const leadsContainer = document.getElementById('edit-leads');
     leadsContainer.innerHTML = '';
     const practiceLeads = (practice && practice.leads) || [];
-    const practiceLeadIds = practiceLeads.map(l => l.id);
+    const practiceLeadIds = practiceLeads.map(l => l.user_id);
     for (const lead of leadsData) {
         const isSelected = practiceLeadIds.includes(lead.id);
         const label = document.createElement('label');

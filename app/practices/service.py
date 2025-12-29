@@ -146,11 +146,18 @@ def convert_practice_to_info(practice: Practice) -> PracticeInfo:
                 f"could not be converted (user_id={lead.user_id})"
             )
 
+    # Safe enum conversion with fallback
+    try:
+        practice_status = PracticeStatus(practice.status) if practice.status else PracticeStatus.SCHEDULED
+    except (ValueError, KeyError):
+        logger.warning(f"Invalid practice status '{practice.status}' for practice id={practice.id}, defaulting to SCHEDULED")
+        practice_status = PracticeStatus.SCHEDULED
+
     return PracticeInfo(
         id=practice.id,
         date=practice.date,
         day_of_week=practice.day_of_week,
-        status=PracticeStatus(practice.status),
+        status=practice_status,
         location=convert_practice_location_to_info(practice.location),
         activities=[convert_activity_to_info(a) for a in practice.activities],
         practice_types=[convert_type_to_info(t) for t in practice.practice_types],
@@ -178,11 +185,18 @@ def convert_cancellation_to_proposal(request: CancellationRequest) -> Cancellati
         # For now, leave as None
         pass
 
+    # Safe enum conversion with fallback
+    try:
+        cancellation_status = CancellationStatus(request.status) if request.status else CancellationStatus.PENDING
+    except (ValueError, KeyError):
+        logger.warning(f"Invalid cancellation status '{request.status}' for request id={request.id}, defaulting to PENDING")
+        cancellation_status = CancellationStatus.PENDING
+
     return CancellationProposal(
         id=request.id,
         practice_id=request.practice_id,
         proposed_at=request.proposed_at,
-        status=CancellationStatus(request.status),
+        status=cancellation_status,
         reason_type=request.reason_type,
         reason_summary=request.reason_summary,
         evaluation=evaluation,
