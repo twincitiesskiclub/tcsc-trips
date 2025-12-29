@@ -1,0 +1,467 @@
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+/* Skipper Dashboard Styles */
+.skipper-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+}
+
+.page-title {
+    margin: 0 0 20px 0;
+    font-size: 20px;
+    color: var(--p);
+}
+
+.dashboard-section {
+    margin-bottom: 30px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid var(--p);
+}
+
+.section-header h2 {
+    margin: 0;
+    font-size: 16px;
+    color: var(--p);
+}
+
+.section-header .button-secondary {
+    height: 28px;
+    padding: 0 12px;
+    font-size: 12px;
+}
+
+/* Pending Proposals */
+.proposals-empty {
+    padding: 40px;
+    text-align: center;
+    color: var(--g-m);
+    font-style: italic;
+    background: #f9fafb;
+    border-radius: 6px;
+}
+
+.proposal-card {
+    background: white;
+    border: 1px solid #d0d5dd;
+    border-radius: 8px;
+    padding: 16px;
+    margin-bottom: 12px;
+}
+
+.proposal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: start;
+    margin-bottom: 12px;
+}
+
+.proposal-title {
+    font-weight: 600;
+    font-size: 14px;
+    color: var(--p);
+}
+
+.proposal-meta {
+    font-size: 12px;
+    color: var(--g-m);
+}
+
+.proposal-reason {
+    padding: 12px;
+    background: #fef3c7;
+    border-left: 3px solid #f59e0b;
+    border-radius: 4px;
+    margin-bottom: 12px;
+}
+
+.proposal-reason-type {
+    font-weight: 600;
+    font-size: 11px;
+    text-transform: uppercase;
+    color: #92400e;
+    margin-bottom: 4px;
+}
+
+.proposal-reason-text {
+    font-size: 13px;
+    color: #78350f;
+}
+
+.proposal-actions {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+}
+
+.proposal-actions .button {
+    height: 32px;
+    padding: 0 16px;
+    font-size: 13px;
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+}
+
+.status-pending {
+    background: #f59e0b;
+}
+
+.status-approved {
+    background: #10b981;
+}
+
+.status-rejected {
+    background: #6b7280;
+}
+
+.status-expired {
+    background: #ef4444;
+}
+
+/* Config Display */
+.config-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 12px;
+}
+
+.config-item {
+    padding: 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+}
+
+.config-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    color: var(--g-m);
+    margin-bottom: 4px;
+}
+
+.config-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--p);
+}
+
+/* Tabulator */
+.tabulator {
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    margin-top: 12px;
+}
+
+.tabulator .tabulator-header {
+    background: var(--p);
+    color: white;
+}
+
+.tabulator .tabulator-header .tabulator-col {
+    background: var(--p);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.tabulator-row.tabulator-row-even {
+    background: #f9f9f9;
+}
+
+.tabulator-row:hover {
+    background: #f0f0f0;
+}
+
+/* Toast */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 6px;
+    background: #10b981;
+    color: white;
+    font-weight: 500;
+    z-index: 2000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-error {
+    background: #ef4444;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="skipper-container">
+    <h1 class="page-title">Skipper Dashboard</h1>
+
+    <!-- Pending Proposals Section -->
+    <div class="dashboard-section">
+        <div class="section-header">
+            <h2>Pending Cancellation Proposals</h2>
+        </div>
+        <div id="pending-proposals">
+            <div class="proposals-empty">No pending proposals</div>
+        </div>
+    </div>
+
+    <!-- Recent Decisions Section -->
+    <div class="dashboard-section">
+        <div class="section-header">
+            <h2>Recent Decisions</h2>
+        </div>
+        <div id="decisions-table"></div>
+    </div>
+
+    <!-- Configuration Section -->
+    <div class="dashboard-section">
+        <div class="section-header">
+            <h2>Skipper Configuration</h2>
+            <button class="button-secondary" onclick="refreshConfig()">Refresh</button>
+        </div>
+        <div id="config-display">
+            <p style="color: var(--g-m); font-style: italic;">Loading configuration...</p>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+let proposalsData = [];
+let decisionsTable;
+
+// Load proposals on page load
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadProposals();
+    await loadConfig();
+    initDecisionsTable();
+});
+
+async function loadProposals() {
+    try {
+        const response = await fetch('/admin/skipper/data');
+        const data = await response.json();
+        proposalsData = data.proposals;
+
+        renderPendingProposals();
+        renderDecisionsTable();
+    } catch (error) {
+        console.error('Error loading proposals:', error);
+        showToast('Failed to load proposals', 'error');
+    }
+}
+
+function renderPendingProposals() {
+    const container = document.getElementById('pending-proposals');
+    const pending = proposalsData.filter(p => p.status === 'pending');
+
+    if (pending.length === 0) {
+        container.innerHTML = '<div class="proposals-empty">No pending proposals</div>';
+        return;
+    }
+
+    let html = '';
+    for (const proposal of pending) {
+        const practiceDate = new Date(proposal.practice_date).toLocaleString();
+        const proposedDate = new Date(proposal.proposed_at).toLocaleString();
+
+        html += `
+            <div class="proposal-card">
+                <div class="proposal-header">
+                    <div>
+                        <div class="proposal-title">${proposal.practice_location} - ${practiceDate}</div>
+                        <div class="proposal-meta">Proposed: ${proposedDate}</div>
+                    </div>
+                    <span class="status-badge status-${proposal.status}">${proposal.status}</span>
+                </div>
+                <div class="proposal-reason">
+                    <div class="proposal-reason-type">${proposal.reason_type.replace('_', ' ')}</div>
+                    <div class="proposal-reason-text">${proposal.reason_summary}</div>
+                </div>
+                <div class="proposal-actions">
+                    <button class="button button-secondary" onclick="rejectProposal(${proposal.id})">Reject</button>
+                    <button class="button" onclick="approveProposal(${proposal.id})">Approve Cancellation</button>
+                </div>
+            </div>`;
+    }
+
+    container.innerHTML = html;
+}
+
+function initDecisionsTable() {
+    decisionsTable = new Tabulator("#decisions-table", {
+        data: proposalsData.filter(p => p.status !== 'pending'),
+        layout: "fitDataStretch",
+        height: "300px",
+        columns: [
+            {title: "Practice", field: "practice_location", minWidth: 120},
+            {title: "Date", field: "practice_date", minWidth: 150,
+             formatter: (cell) => new Date(cell.getValue()).toLocaleString()
+            },
+            {title: "Status", field: "status", minWidth: 100,
+             formatter: (cell) => {
+                 const val = cell.getValue();
+                 return `<span class="status-badge status-${val}">${val}</span>`;
+             }
+            },
+            {title: "Reason", field: "reason_type", minWidth: 120},
+            {title: "Decided By", field: "decided_by", minWidth: 120},
+            {title: "Decided At", field: "decided_at", minWidth: 150,
+             formatter: (cell) => {
+                 const val = cell.getValue();
+                 return val ? new Date(val).toLocaleString() : '—';
+             }
+            },
+        ],
+        initialSort: [{column: "decided_at", dir: "desc"}],
+    });
+}
+
+function renderDecisionsTable() {
+    if (decisionsTable) {
+        decisionsTable.setData(proposalsData.filter(p => p.status !== 'pending'));
+    }
+}
+
+async function approveProposal(proposalId) {
+    const notes = prompt('Optional decision notes:');
+    if (notes === null) return; // Cancelled
+
+    try {
+        const response = await fetch(`/admin/skipper/approve/${proposalId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({notes})
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToast(result.message, 'success');
+            await loadProposals();
+        } else {
+            showToast(result.error || 'Failed to approve', 'error');
+        }
+    } catch (error) {
+        console.error('Error approving proposal:', error);
+        showToast('Failed to approve proposal', 'error');
+    }
+}
+
+async function rejectProposal(proposalId) {
+    const notes = prompt('Optional decision notes:');
+    if (notes === null) return; // Cancelled
+
+    try {
+        const response = await fetch(`/admin/skipper/reject/${proposalId}`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({notes})
+        });
+
+        const result = await response.json();
+
+        if (result.success) {
+            showToast(result.message, 'success');
+            await loadProposals();
+        } else {
+            showToast(result.error || 'Failed to reject', 'error');
+        }
+    } catch (error) {
+        console.error('Error rejecting proposal:', error);
+        showToast('Failed to reject proposal', 'error');
+    }
+}
+
+async function loadConfig() {
+    try {
+        const response = await fetch('/admin/skipper/config');
+        const result = await response.json();
+
+        if (result.success) {
+            renderConfig(result.config);
+        }
+    } catch (error) {
+        console.error('Error loading config:', error);
+    }
+}
+
+function renderConfig(config) {
+    const container = document.getElementById('config-display');
+    const thresholds = config.thresholds || {};
+    const weatherThresholds = thresholds.weather || {};
+    const leadThresholds = thresholds.lead || {};
+
+    let html = '<h3 style="margin-top: 0; margin-bottom: 12px; font-size: 14px; color: var(--g-m);">Weather Thresholds</h3>';
+    html += '<div class="config-grid">';
+    for (const [key, value] of Object.entries(weatherThresholds)) {
+        html += `
+            <div class="config-item">
+                <div class="config-label">${key.replace(/_/g, ' ')}</div>
+                <div class="config-value">${value}</div>
+            </div>`;
+    }
+    html += '</div>';
+
+    html += '<h3 style="margin-top: 20px; margin-bottom: 12px; font-size: 14px; color: var(--g-m);">Lead Requirements</h3>';
+    html += '<div class="config-grid">';
+    for (const [key, value] of Object.entries(leadThresholds)) {
+        const displayValue = typeof value === 'boolean' ? (value ? 'Yes' : 'No') : value;
+        html += `
+            <div class="config-item">
+                <div class="config-label">${key.replace(/_/g, ' ')}</div>
+                <div class="config-value">${displayValue}</div>
+            </div>`;
+    }
+    html += '</div>';
+
+    container.innerHTML = html;
+}
+
+async function refreshConfig() {
+    await loadConfig();
+    showToast('Configuration refreshed', 'success');
+}
+
+function showToast(message, type = 'success') {
+    const existing = document.querySelector('.toast-notification');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast-notification ${type === 'error' ? 'toast-error' : ''}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.classList.add('show'), 10);
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+</script>
+{% endblock %}

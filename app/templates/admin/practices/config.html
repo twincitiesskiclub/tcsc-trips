@@ -1,0 +1,1073 @@
+{% extends 'admin/admin_base.html' %}
+{% block title %}Practices Configuration{% endblock %}
+
+{% block extra_css %}
+<style>
+/* Config Container */
+.config-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+}
+
+/* Tab Navigation */
+.config-tabs {
+    display: flex;
+    gap: 0;
+    border-bottom: 2px solid #e4e7ec;
+    margin-bottom: 20px;
+}
+
+.config-tab {
+    padding: 12px 24px;
+    font: 500 14px var(--f);
+    color: #667085;
+    background: transparent;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.config-tab:hover {
+    color: var(--p);
+}
+
+.config-tab.active {
+    color: var(--p);
+    border-bottom-color: var(--p);
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+}
+
+/* Toolbar */
+.config-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+}
+
+.config-toolbar .button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 36px;
+    padding: 0 16px;
+    margin-top: 0;
+    width: auto;
+}
+
+/* Item Count Badge */
+.item-count {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    background: #f2f4f7;
+    border-radius: 6px;
+    font: 500 13px var(--f);
+    color: #344054;
+    margin-left: auto;
+}
+
+.item-count strong {
+    color: var(--p);
+}
+
+/* Tabulator Customizations */
+.config-table {
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.config-table .tabulator-header {
+    background: #f9fafb;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.config-table .tabulator-col-title {
+    font: 600 13px var(--f);
+    color: #344054;
+}
+
+.config-table .tabulator-cell {
+    font: 400 14px var(--f);
+    color: #1d2939;
+    border-right: none;
+}
+
+.config-table .tabulator-row:hover {
+    background: #f9fafb;
+}
+
+/* Count badge */
+.count-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 8px;
+    background: #f2f4f7;
+    border-radius: 12px;
+    font: 500 12px var(--f);
+    color: #344054;
+}
+
+.count-badge.has-items {
+    background: var(--s);
+    color: var(--p);
+}
+
+/* Action buttons */
+.table-actions {
+    display: flex;
+    gap: 6px;
+    justify-content: center;
+}
+
+.table-actions .button {
+    height: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+    margin-top: 0;
+    width: auto;
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    background: var(--p);
+    color: white;
+    font: 500 14px var(--f);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.toast.error {
+    background: #dc2626;
+}
+
+.toast.success {
+    background: #16a34a;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Inline editor styling */
+.tabulator-edit-box {
+    padding: 4px 8px;
+    border: 2px solid var(--p) !important;
+    border-radius: 4px;
+    font: 400 14px var(--f);
+}
+
+/* Status Reference Tab */
+.status-reference-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+}
+
+.status-group {
+    background: #f9fafb;
+    border-radius: 8px;
+    padding: 16px;
+}
+
+.status-group h3 {
+    font: 600 14px var(--f);
+    color: #344054;
+    margin: 0 0 12px 0;
+    padding-bottom: 8px;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.status-item {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 0;
+    border-bottom: 1px solid #e4e7ec;
+}
+
+.status-item:last-child {
+    border-bottom: none;
+}
+
+.status-item code {
+    background: #e4e7ec;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font: 500 12px monospace;
+    color: #344054;
+}
+
+.status-item span {
+    font: 400 13px var(--f);
+    color: #667085;
+}
+
+/* JSON array display */
+.json-array-display {
+    font: 400 13px var(--f);
+    color: #667085;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Practices Configuration</h1>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin_practices.practices_list') }}" class="button button-secondary">Back to Practices</a>
+    </div>
+</div>
+
+<div class="config-container">
+    <!-- Tab Navigation -->
+    <div class="config-tabs">
+        <button class="config-tab active" data-tab="locations">Locations</button>
+        <button class="config-tab" data-tab="activities">Activities</button>
+        <button class="config-tab" data-tab="types">Types</button>
+        <button class="config-tab" data-tab="social-locations">Social Locations</button>
+        <button class="config-tab" data-tab="status-reference">Status Reference</button>
+    </div>
+
+    <!-- Tab Content: Locations -->
+    <div id="locations-tab" class="tab-content active">
+        <div class="config-toolbar">
+            <button class="button" onclick="addNewLocation()">Add Location</button>
+            <div class="item-count">
+                <span>Total:</span>
+                <strong id="location-count">0</strong>
+                <span>locations</span>
+            </div>
+        </div>
+        <div id="locations-table" class="config-table"></div>
+    </div>
+
+    <!-- Tab Content: Activities -->
+    <div id="activities-tab" class="tab-content">
+        <div class="config-toolbar">
+            <button class="button" onclick="addNewActivity()">Add Activity</button>
+            <div class="item-count">
+                <span>Total:</span>
+                <strong id="activity-count">0</strong>
+                <span>activities</span>
+            </div>
+        </div>
+        <div id="activities-table" class="config-table"></div>
+    </div>
+
+    <!-- Tab Content: Types -->
+    <div id="types-tab" class="tab-content">
+        <div class="config-toolbar">
+            <button class="button" onclick="addNewType()">Add Type</button>
+            <div class="item-count">
+                <span>Total:</span>
+                <strong id="type-count">0</strong>
+                <span>types</span>
+            </div>
+        </div>
+        <div id="types-table" class="config-table"></div>
+    </div>
+
+    <!-- Tab Content: Social Locations -->
+    <div id="social-locations-tab" class="tab-content">
+        <div class="config-toolbar">
+            <button class="button" onclick="addNewSocialLocation()">Add Social Location</button>
+            <div class="item-count">
+                <span>Total:</span>
+                <strong id="social-location-count">0</strong>
+                <span>social locations</span>
+            </div>
+        </div>
+        <div id="social-locations-table" class="config-table"></div>
+    </div>
+
+    <!-- Tab Content: Status Reference (Read-Only) -->
+    <div id="status-reference-tab" class="tab-content">
+        <div class="status-reference-grid">
+            <div class="status-group">
+                <h3>Practice Status</h3>
+                <div id="practice-status-list"></div>
+            </div>
+            <div class="status-group">
+                <h3>Lead Role</h3>
+                <div id="lead-role-list"></div>
+            </div>
+            <div class="status-group">
+                <h3>RSVP Status</h3>
+                <div id="rsvp-status-list"></div>
+            </div>
+            <div class="status-group">
+                <h3>Cancellation Status</h3>
+                <div id="cancellation-status-list"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// State
+let locationsTable, activitiesTable, typesTable, socialLocationsTable;
+let locationsData = [], activitiesData = [], typesData = [], socialLocationsData = [];
+let statusData = {};
+
+// Initialize on DOM ready
+document.addEventListener('DOMContentLoaded', async () => {
+    // Load all data in parallel
+    await Promise.all([
+        loadLocations(),
+        loadActivities(),
+        loadTypes(),
+        loadSocialLocations(),
+        loadStatuses()
+    ]);
+
+    initLocationsTable();
+    initActivitiesTable();
+    initTypesTable();
+    initSocialLocationsTable();
+    renderStatusReference();
+    attachTabListeners();
+});
+
+// ============================================================================
+// Tab Navigation
+// ============================================================================
+function attachTabListeners() {
+    document.querySelectorAll('.config-tab').forEach(tab => {
+        tab.addEventListener('click', () => {
+            // Remove active from all tabs and content
+            document.querySelectorAll('.config-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+
+            // Activate clicked tab
+            tab.classList.add('active');
+            document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+        });
+    });
+}
+
+// ============================================================================
+// Data Loading
+// ============================================================================
+async function loadLocations() {
+    const response = await fetch('/admin/practices/locations/data');
+    const data = await response.json();
+    locationsData = data.locations;
+    document.getElementById('location-count').textContent = locationsData.length;
+}
+
+async function loadActivities() {
+    const response = await fetch('/admin/practices/activities/data');
+    const data = await response.json();
+    activitiesData = data.activities;
+    document.getElementById('activity-count').textContent = activitiesData.length;
+}
+
+async function loadTypes() {
+    const response = await fetch('/admin/practices/types/data');
+    const data = await response.json();
+    typesData = data.types;
+    document.getElementById('type-count').textContent = typesData.length;
+}
+
+async function loadSocialLocations() {
+    const response = await fetch('/admin/practices/social-locations/data');
+    const data = await response.json();
+    socialLocationsData = data.social_locations;
+    document.getElementById('social-location-count').textContent = socialLocationsData.length;
+}
+
+async function loadStatuses() {
+    const response = await fetch('/admin/practices/statuses/data');
+    statusData = await response.json();
+}
+
+// ============================================================================
+// Locations Tab
+// ============================================================================
+function initLocationsTable() {
+    locationsTable = new Tabulator("#locations-table", {
+        data: locationsData,
+        layout: "fitColumns",
+        height: "calc(100vh - 380px)",
+        columns: [
+            {
+                title: "Name",
+                field: "name",
+                minWidth: 140,
+                editor: "input",
+                validator: "required",
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Spot",
+                field: "spot",
+                minWidth: 120,
+                editor: "input",
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Address",
+                field: "address",
+                minWidth: 180,
+                editor: "input",
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Lat",
+                field: "latitude",
+                width: 90,
+                editor: "number",
+                editorParams: { step: 0.0001 },
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Lng",
+                field: "longitude",
+                width: 90,
+                editor: "number",
+                editorParams: { step: 0.0001 },
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Parking Notes",
+                field: "parking_notes",
+                minWidth: 150,
+                editor: "input",
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Social Location",
+                field: "social_location_id",
+                minWidth: 140,
+                editor: "list",
+                editorParams: {
+                    values: getSocialLocationOptions()
+                },
+                formatter: (cell) => formatSocialLocation(cell.getValue()),
+                cellEdited: (cell) => saveLocation(cell.getRow().getData())
+            },
+            {
+                title: "Practices",
+                field: "practice_count",
+                width: 90,
+                hozAlign: "center",
+                formatter: (cell) => formatCount(cell.getValue())
+            },
+            {
+                title: "Actions",
+                width: 100,
+                hozAlign: "center",
+                headerSort: false,
+                formatter: (cell) => formatDeleteButton(cell, 'Location', 'practice_count')
+            }
+        ]
+    });
+}
+
+function getSocialLocationOptions() {
+    const options = { '': '— None —' };
+    socialLocationsData.forEach(sl => {
+        options[sl.id] = sl.name;
+    });
+    return options;
+}
+
+function formatSocialLocation(id) {
+    if (!id) return '<span class="json-array-display">—</span>';
+    const sl = socialLocationsData.find(s => s.id === id);
+    return sl ? sl.name : '—';
+}
+
+async function saveLocation(data) {
+    const url = data.id ? `/admin/practices/locations/${data.id}/edit` : '/admin/practices/locations/create';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: data.name,
+                spot: data.spot,
+                address: data.address,
+                google_maps_url: data.google_maps_url,
+                latitude: data.latitude,
+                longitude: data.longitude,
+                parking_notes: data.parking_notes,
+                social_location_id: data.social_location_id || null
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            if (result.location) {
+                const idx = locationsData.findIndex(l => l.id === data.id || (!l.id && l.name === data.name));
+                if (idx >= 0) {
+                    locationsData[idx] = result.location;
+                    locationsTable.updateData([result.location]);
+                }
+            }
+            showToast('Location saved successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to save location', 'error');
+            refreshLocations();
+        }
+    } catch (err) {
+        showToast('Error saving location: ' + err.message, 'error');
+        refreshLocations();
+    }
+}
+
+async function deleteLocation(id, name) {
+    if (!confirm(`Delete location "${name}"?\n\nThis cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/admin/practices/locations/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message, 'success');
+            refreshLocations();
+        } else {
+            showToast(result.error || 'Failed to delete location', 'error');
+        }
+    } catch (err) {
+        showToast('Error deleting location: ' + err.message, 'error');
+    }
+}
+
+function addNewLocation() {
+    const newLoc = {
+        id: null,
+        name: 'New Location',
+        spot: '',
+        address: '',
+        latitude: null,
+        longitude: null,
+        parking_notes: '',
+        social_location_id: null,
+        practice_count: 0
+    };
+    locationsTable.addRow(newLoc, true);
+    setTimeout(() => {
+        const rows = locationsTable.getRows();
+        if (rows.length > 0) rows[0].getCell('name').edit();
+    }, 100);
+}
+
+async function refreshLocations() {
+    await loadLocations();
+    locationsTable.setData(locationsData);
+}
+
+// ============================================================================
+// Activities Tab
+// ============================================================================
+function initActivitiesTable() {
+    activitiesTable = new Tabulator("#activities-table", {
+        data: activitiesData,
+        layout: "fitColumns",
+        height: "calc(100vh - 380px)",
+        columns: [
+            {
+                title: "Name",
+                field: "name",
+                minWidth: 200,
+                editor: "input",
+                validator: "required",
+                cellEdited: (cell) => saveActivity(cell.getRow().getData())
+            },
+            {
+                title: "Gear Required (comma-separated)",
+                field: "gear_required",
+                minWidth: 300,
+                editor: "input",
+                formatter: (cell) => formatJsonArray(cell.getValue()),
+                cellEdited: (cell) => {
+                    const data = cell.getRow().getData();
+                    // Convert string to array
+                    const rawValue = cell.getValue();
+                    if (typeof rawValue === 'string') {
+                        data.gear_required = rawValue.split(',').map(s => s.trim()).filter(s => s);
+                    }
+                    saveActivity(data);
+                }
+            },
+            {
+                title: "Practices",
+                field: "practice_count",
+                width: 90,
+                hozAlign: "center",
+                formatter: (cell) => formatCount(cell.getValue())
+            },
+            {
+                title: "Actions",
+                width: 100,
+                hozAlign: "center",
+                headerSort: false,
+                formatter: (cell) => formatDeleteButton(cell, 'Activity', 'practice_count')
+            }
+        ]
+    });
+}
+
+async function saveActivity(data) {
+    const url = data.id ? `/admin/practices/activities/${data.id}/edit` : '/admin/practices/activities/create';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: data.name,
+                gear_required: data.gear_required
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            if (result.activity) {
+                const idx = activitiesData.findIndex(a => a.id === data.id || (!a.id && a.name === data.name));
+                if (idx >= 0) {
+                    activitiesData[idx] = result.activity;
+                    activitiesTable.updateData([result.activity]);
+                }
+            }
+            showToast('Activity saved successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to save activity', 'error');
+            refreshActivities();
+        }
+    } catch (err) {
+        showToast('Error saving activity: ' + err.message, 'error');
+        refreshActivities();
+    }
+}
+
+async function deleteActivity(id, name) {
+    if (!confirm(`Delete activity "${name}"?\n\nThis cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/admin/practices/activities/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message, 'success');
+            refreshActivities();
+        } else {
+            showToast(result.error || 'Failed to delete activity', 'error');
+        }
+    } catch (err) {
+        showToast('Error deleting activity: ' + err.message, 'error');
+    }
+}
+
+function addNewActivity() {
+    const newActivity = {
+        id: null,
+        name: 'New Activity',
+        gear_required: [],
+        practice_count: 0
+    };
+    activitiesTable.addRow(newActivity, true);
+    setTimeout(() => {
+        const rows = activitiesTable.getRows();
+        if (rows.length > 0) rows[0].getCell('name').edit();
+    }, 100);
+}
+
+async function refreshActivities() {
+    await loadActivities();
+    activitiesTable.setData(activitiesData);
+}
+
+// ============================================================================
+// Types Tab
+// ============================================================================
+function initTypesTable() {
+    typesTable = new Tabulator("#types-table", {
+        data: typesData,
+        layout: "fitColumns",
+        height: "calc(100vh - 380px)",
+        columns: [
+            {
+                title: "Name",
+                field: "name",
+                minWidth: 200,
+                editor: "input",
+                validator: "required",
+                cellEdited: (cell) => saveType(cell.getRow().getData())
+            },
+            {
+                title: "Fitness Goals (comma-separated)",
+                field: "fitness_goals",
+                minWidth: 300,
+                editor: "input",
+                formatter: (cell) => formatJsonArray(cell.getValue()),
+                cellEdited: (cell) => {
+                    const data = cell.getRow().getData();
+                    // Convert string to array
+                    const rawValue = cell.getValue();
+                    if (typeof rawValue === 'string') {
+                        data.fitness_goals = rawValue.split(',').map(s => s.trim()).filter(s => s);
+                    }
+                    saveType(data);
+                }
+            },
+            {
+                title: "Has Intervals",
+                field: "has_intervals",
+                width: 110,
+                hozAlign: "center",
+                editor: "tickCross",
+                formatter: "tickCross",
+                cellEdited: (cell) => saveType(cell.getRow().getData())
+            },
+            {
+                title: "Practices",
+                field: "practice_count",
+                width: 90,
+                hozAlign: "center",
+                formatter: (cell) => formatCount(cell.getValue())
+            },
+            {
+                title: "Actions",
+                width: 100,
+                hozAlign: "center",
+                headerSort: false,
+                formatter: (cell) => formatDeleteButton(cell, 'Type', 'practice_count')
+            }
+        ]
+    });
+}
+
+async function saveType(data) {
+    const url = data.id ? `/admin/practices/types/${data.id}/edit` : '/admin/practices/types/create';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: data.name,
+                fitness_goals: data.fitness_goals,
+                has_intervals: data.has_intervals
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            if (result.type) {
+                const idx = typesData.findIndex(t => t.id === data.id || (!t.id && t.name === data.name));
+                if (idx >= 0) {
+                    typesData[idx] = result.type;
+                    typesTable.updateData([result.type]);
+                }
+            }
+            showToast('Type saved successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to save type', 'error');
+            refreshTypes();
+        }
+    } catch (err) {
+        showToast('Error saving type: ' + err.message, 'error');
+        refreshTypes();
+    }
+}
+
+async function deleteType(id, name) {
+    if (!confirm(`Delete type "${name}"?\n\nThis cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/admin/practices/types/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message, 'success');
+            refreshTypes();
+        } else {
+            showToast(result.error || 'Failed to delete type', 'error');
+        }
+    } catch (err) {
+        showToast('Error deleting type: ' + err.message, 'error');
+    }
+}
+
+function addNewType() {
+    const newType = {
+        id: null,
+        name: 'New Type',
+        fitness_goals: [],
+        has_intervals: false,
+        practice_count: 0
+    };
+    typesTable.addRow(newType, true);
+    setTimeout(() => {
+        const rows = typesTable.getRows();
+        if (rows.length > 0) rows[0].getCell('name').edit();
+    }, 100);
+}
+
+async function refreshTypes() {
+    await loadTypes();
+    typesTable.setData(typesData);
+}
+
+// ============================================================================
+// Social Locations Tab
+// ============================================================================
+function initSocialLocationsTable() {
+    socialLocationsTable = new Tabulator("#social-locations-table", {
+        data: socialLocationsData,
+        layout: "fitColumns",
+        height: "calc(100vh - 380px)",
+        columns: [
+            {
+                title: "Name",
+                field: "name",
+                minWidth: 200,
+                editor: "input",
+                validator: "required",
+                cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
+            },
+            {
+                title: "Address",
+                field: "address",
+                minWidth: 250,
+                editor: "input",
+                cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
+            },
+            {
+                title: "Google Maps URL",
+                field: "google_maps_url",
+                minWidth: 200,
+                editor: "input",
+                formatter: (cell) => {
+                    const url = cell.getValue();
+                    if (!url) return '<span class="json-array-display">—</span>';
+                    return `<a href="${url}" target="_blank" style="color: var(--p);">View Map</a>`;
+                },
+                cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
+            },
+            {
+                title: "Linked Locations",
+                field: "practice_location_count",
+                width: 130,
+                hozAlign: "center",
+                formatter: (cell) => formatCount(cell.getValue())
+            },
+            {
+                title: "Actions",
+                width: 100,
+                hozAlign: "center",
+                headerSort: false,
+                formatter: (cell) => formatDeleteButton(cell, 'SocialLocation', 'practice_location_count')
+            }
+        ]
+    });
+}
+
+async function saveSocialLocation(data) {
+    const url = data.id ? `/admin/practices/social-locations/${data.id}/edit` : '/admin/practices/social-locations/create';
+
+    try {
+        const response = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: data.name,
+                address: data.address,
+                google_maps_url: data.google_maps_url
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            if (result.social_location) {
+                const idx = socialLocationsData.findIndex(s => s.id === data.id || (!s.id && s.name === data.name));
+                if (idx >= 0) {
+                    socialLocationsData[idx] = result.social_location;
+                    socialLocationsTable.updateData([result.social_location]);
+                }
+                // Also update the dropdown in locations table
+                if (locationsTable) {
+                    locationsTable.getColumns().forEach(col => {
+                        if (col.getField() === 'social_location_id') {
+                            col.updateDefinition({ editorParams: { values: getSocialLocationOptions() } });
+                        }
+                    });
+                }
+            }
+            showToast('Social location saved successfully', 'success');
+        } else {
+            showToast(result.error || 'Failed to save social location', 'error');
+            refreshSocialLocations();
+        }
+    } catch (err) {
+        showToast('Error saving social location: ' + err.message, 'error');
+        refreshSocialLocations();
+    }
+}
+
+async function deleteSocialLocation(id, name) {
+    if (!confirm(`Delete social location "${name}"?\n\nThis cannot be undone.`)) return;
+
+    try {
+        const response = await fetch(`/admin/practices/social-locations/${id}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message, 'success');
+            refreshSocialLocations();
+        } else {
+            showToast(result.error || 'Failed to delete social location', 'error');
+        }
+    } catch (err) {
+        showToast('Error deleting social location: ' + err.message, 'error');
+    }
+}
+
+function addNewSocialLocation() {
+    const newLoc = {
+        id: null,
+        name: 'New Social Location',
+        address: '',
+        google_maps_url: '',
+        practice_location_count: 0
+    };
+    socialLocationsTable.addRow(newLoc, true);
+    setTimeout(() => {
+        const rows = socialLocationsTable.getRows();
+        if (rows.length > 0) rows[0].getCell('name').edit();
+    }, 100);
+}
+
+async function refreshSocialLocations() {
+    await loadSocialLocations();
+    socialLocationsTable.setData(socialLocationsData);
+    // Update dropdown in locations table
+    if (locationsTable) {
+        locationsTable.getColumns().forEach(col => {
+            if (col.getField() === 'social_location_id') {
+                col.updateDefinition({ editorParams: { values: getSocialLocationOptions() } });
+            }
+        });
+    }
+}
+
+// ============================================================================
+// Status Reference Tab (Read-Only)
+// ============================================================================
+function renderStatusReference() {
+    renderStatusList('practice_status', 'practice-status-list');
+    renderStatusList('lead_role', 'lead-role-list');
+    renderStatusList('rsvp_status', 'rsvp-status-list');
+    renderStatusList('cancellation_status', 'cancellation-status-list');
+}
+
+function renderStatusList(key, elementId) {
+    const container = document.getElementById(elementId);
+    const items = statusData[key] || [];
+
+    if (items.length === 0) {
+        container.innerHTML = '<div class="status-item"><span>No statuses defined</span></div>';
+        return;
+    }
+
+    container.innerHTML = items.map(s =>
+        `<div class="status-item">
+            <code>${s.value}</code>
+            <span>${s.name}</span>
+        </div>`
+    ).join('');
+}
+
+// ============================================================================
+// Helpers
+// ============================================================================
+function formatJsonArray(val) {
+    if (!val || !Array.isArray(val) || val.length === 0) {
+        return '<span class="json-array-display">—</span>';
+    }
+    return `<span class="json-array-display">${val.join(', ')}</span>`;
+}
+
+function formatCount(count) {
+    const cls = count > 0 ? 'count-badge has-items' : 'count-badge';
+    return `<span class="${cls}">${count || 0}</span>`;
+}
+
+function formatDeleteButton(cell, entityType, countField) {
+    const data = cell.getRow().getData();
+    const count = data[countField] || 0;
+    const canDelete = count === 0;
+    const funcName = `delete${entityType}`;
+
+    if (canDelete) {
+        return `<div class="table-actions">
+            <button class="button button-small button-danger" onclick="${funcName}(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Delete</button>
+        </div>`;
+    }
+    return `<div class="table-actions">
+        <button class="button button-small button-secondary" disabled title="Cannot delete - has references">Delete</button>
+    </div>`;
+}
+
+function showToast(message, type = 'info') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}

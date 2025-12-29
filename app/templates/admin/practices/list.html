@@ -1,0 +1,613 @@
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+/* Practices Grid Styles */
+.practices-grid-container {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+}
+
+/* Toolbar */
+.practices-toolbar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.toolbar-control {
+    height: 32px;
+    padding: 0 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    background: white;
+    font: 400 13px var(--f);
+    color: #344054;
+}
+
+.toolbar-control:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+/* Page Title */
+.page-title {
+    margin: 0 0 12px 0;
+    font-size: 20px;
+    color: var(--p);
+}
+
+/* Tabulator overrides */
+.tabulator {
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+}
+
+.tabulator .tabulator-header {
+    background: var(--p);
+    color: white;
+}
+
+.tabulator .tabulator-header .tabulator-col {
+    background: var(--p);
+    border-right: 1px solid rgba(255,255,255,0.1);
+}
+
+.tabulator-row.tabulator-row-even {
+    background: #f9f9f9;
+}
+
+.tabulator-row:hover {
+    background: #f0f0f0;
+}
+
+.tabulator-cell {
+    padding: 8px;
+    vertical-align: middle;
+}
+
+/* Status badges */
+.status-badge {
+    display: inline-block;
+    padding: 3px 8px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    color: white;
+}
+
+.status-scheduled {
+    background: #3b82f6;
+}
+
+.status-confirmed {
+    background: #10b981;
+}
+
+.status-in-progress {
+    background: #f59e0b;
+}
+
+.status-cancelled {
+    background: #ef4444;
+}
+
+.status-completed {
+    background: #6b7280;
+}
+
+/* Action buttons - simple pill style */
+.action-btn {
+    padding: 4px 8px;
+    border: none;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity 0.15s;
+    white-space: nowrap;
+    color: white;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    line-height: 1;
+}
+
+.action-btn:hover {
+    opacity: 0.85;
+}
+
+/* Edit - blue */
+.action-btn-edit {
+    background: #3b82f6;
+}
+
+/* Cancel - gray */
+.action-btn-cancel {
+    background: #6b7280;
+}
+
+/* Delete - red */
+.action-btn-danger {
+    background: #ef4444;
+}
+
+/* Action buttons container */
+.action-buttons {
+    display: inline-flex;
+    gap: 4px;
+    vertical-align: middle;
+}
+
+/* Modal */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 600px;
+    width: 90%;
+    max-height: 90vh;
+    overflow-y: auto;
+    position: relative;
+    z-index: 1001;
+}
+
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.modal-header h2 {
+    margin: 0;
+    font-size: 18px;
+    color: var(--p);
+}
+
+.modal-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: #6b7280;
+    cursor: pointer;
+    padding: 0;
+    width: 32px;
+    height: 32px;
+}
+
+.modal-body {
+    margin-bottom: 20px;
+}
+
+.modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.form-group {
+    margin-bottom: 16px;
+}
+
+.form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-weight: 500;
+    font-size: 13px;
+    color: var(--p);
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #d0d5dd;
+    border-radius: 6px;
+    font: 400 14px var(--f);
+}
+
+.form-group textarea {
+    min-height: 80px;
+    resize: vertical;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+    outline: none;
+    border-color: var(--p);
+}
+
+/* Wide modal for edit form */
+.modal-content-wide {
+    max-width: 800px;
+}
+
+/* Form sections */
+.form-section {
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.form-section:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+}
+
+.form-section-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--p);
+    margin: 0 0 16px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+/* Two-column row */
+.form-row {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 12px;
+}
+
+.form-group-half {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Pill/tag selection for activities/types */
+.pill-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+
+.pill-grid label {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 12px;
+    font-size: 13px;
+    color: #374151;
+    background: #f3f4f6;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.pill-grid label:hover {
+    background: #e5e7eb;
+    border-color: #d1d5db;
+}
+
+.pill-grid input[type="checkbox"] {
+    display: none;
+}
+
+.pill-grid input[type="checkbox"]:checked + span {
+    /* This won't work with current structure, handled by JS */
+}
+
+.pill-grid label.selected {
+    background: var(--p);
+    color: white;
+    border-color: var(--p);
+}
+
+.pill-grid label.selected:hover {
+    background: #1e3a8a;
+    border-color: #1e3a8a;
+}
+
+/* Toggle switches */
+.toggle-group {
+    flex: 1;
+}
+
+.toggle {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    cursor: pointer;
+    padding: 8px 12px;
+    background: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.toggle:hover {
+    background: #f3f4f6;
+    border-color: #d1d5db;
+}
+
+.toggle input {
+    display: none;
+}
+
+.toggle-slider {
+    position: relative;
+    width: 44px;
+    height: 24px;
+    background: #d1d5db;
+    border-radius: 12px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+
+.toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+
+.toggle input:checked + .toggle-slider {
+    background: var(--p);
+}
+
+.toggle input:checked + .toggle-slider::after {
+    transform: translateX(20px);
+}
+
+.toggle-label {
+    font-size: 13px;
+    color: #374151;
+}
+
+/* Legacy checkbox group (for cancel modal) */
+.checkbox-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.checkbox-group input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+/* Responsive adjustments */
+@media (max-width: 700px) {
+    .modal-content-wide {
+        max-width: 95%;
+        margin: 10px;
+    }
+
+    .form-row {
+        flex-direction: column;
+        gap: 12px;
+    }
+
+    .pill-grid {
+        gap: 6px;
+    }
+
+    .pill-grid label {
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+}
+
+/* Better textarea styling in edit form */
+.form-section textarea {
+    font-family: inherit;
+    line-height: 1.5;
+    resize: vertical;
+}
+
+.form-section textarea:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 3px rgba(30, 64, 175, 0.1);
+}
+
+/* Toast */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 6px;
+    background: #10b981;
+    color: white;
+    font-weight: 500;
+    z-index: 2000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-error {
+    background: #ef4444;
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="admin-header">
+    <h1>Practice Management</h1>
+    <div class="admin-actions">
+        <a href="{{ url_for('admin_practices.practices_calendar') }}" class="button button-secondary">Calendar View</a>
+        <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="practices-grid-container">
+    <!-- Toolbar -->
+    <div class="practices-toolbar">
+        <input type="text" id="practices-search" class="toolbar-control" placeholder="Search..." style="width: 160px;">
+        <select id="status-filter" class="toolbar-control">
+            <option value="">All Status</option>
+            <option value="scheduled">Scheduled</option>
+            <option value="confirmed">Confirmed</option>
+            <option value="in_progress">In Progress</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="completed">Completed</option>
+        </select>
+        <select id="location-filter" class="toolbar-control">
+            <option value="">All Locations</option>
+        </select>
+        <button id="create-practice-btn" class="button">Create New Practice</button>
+    </div>
+
+    <div id="practices-table"></div>
+</div>
+
+<!-- Edit Modal -->
+<div id="edit-modal" class="modal">
+    <div class="modal-overlay" onclick="closeEditModal()"></div>
+    <div class="modal-content modal-content-wide">
+        <div class="modal-header">
+            <h2 id="modal-title">Edit Practice</h2>
+            <button class="modal-close" onclick="closeEditModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <!-- Section: When & Where -->
+            <div class="form-section">
+                <h3 class="form-section-title">When & Where</h3>
+                <div class="form-row">
+                    <div class="form-group form-group-half">
+                        <label for="edit-date">Date & Time</label>
+                        <input type="datetime-local" id="edit-date" required>
+                    </div>
+                    <div class="form-group form-group-half">
+                        <label for="edit-location">Location</label>
+                        <select id="edit-location" required></select>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="toggle-group">
+                        <label class="toggle">
+                            <input type="checkbox" id="edit-has-social">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Post-practice social 🍺</span>
+                        </label>
+                    </div>
+                    <div class="toggle-group">
+                        <label class="toggle">
+                            <input type="checkbox" id="edit-is-dark">
+                            <span class="toggle-slider"></span>
+                            <span class="toggle-label">Dark practice (lights needed) 🔦</span>
+                        </label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Section: Activity & Type -->
+            <div class="form-section">
+                <h3 class="form-section-title">Activity & Type</h3>
+                <div class="form-group">
+                    <label>Activities <span style="font-weight: normal; color: #9ca3af;">(click to select)</span></label>
+                    <div id="edit-activities" class="pill-grid"></div>
+                </div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label>Practice Types <span style="font-weight: normal; color: #9ca3af;">(click to select)</span></label>
+                    <div id="edit-types" class="pill-grid"></div>
+                </div>
+            </div>
+
+            <!-- Section: Coaches, Leads & Assists -->
+            <div class="form-section">
+                <h3 class="form-section-title">Coaches, Leads & Assists</h3>
+                <div class="form-group">
+                    <label>Coaches <span style="font-weight: normal; color: #9ca3af;">(click to select)</span></label>
+                    <div id="edit-coaches" class="pill-grid"></div>
+                </div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label>Leads <span style="font-weight: normal; color: #9ca3af;">(click to select)</span></label>
+                    <div id="edit-leads" class="pill-grid"></div>
+                </div>
+                <div class="form-group" style="margin-top: 16px;">
+                    <label>Assists <span style="font-weight: normal; color: #9ca3af;">(click to select)</span></label>
+                    <div id="edit-assists" class="pill-grid"></div>
+                </div>
+            </div>
+
+            <!-- Section: Workout Details -->
+            <div class="form-section">
+                <h3 class="form-section-title">Workout Details</h3>
+                <div class="form-group">
+                    <label for="edit-warmup">Warmup</label>
+                    <textarea id="edit-warmup" rows="3" placeholder="e.g., 15 min easy jog, dynamic stretches..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-workout">Main Workout</label>
+                    <textarea id="edit-workout" rows="5" placeholder="e.g., 4x5 min threshold intervals with 2 min rest..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label for="edit-cooldown">Cooldown</label>
+                    <textarea id="edit-cooldown" rows="3" placeholder="e.g., 10 min easy ski, static stretches..."></textarea>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="button button-secondary" onclick="closeEditModal()">Cancel</button>
+            <button type="button" class="button" onclick="savePractice()">Save Practice</button>
+        </div>
+    </div>
+</div>
+
+<!-- Cancel Modal -->
+<div id="cancel-modal" class="modal">
+    <div class="modal-overlay" onclick="closeCancelModal()"></div>
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2>Cancel Practice</h2>
+            <button class="modal-close" onclick="closeCancelModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div class="form-group">
+                <label>Cancellation Reason</label>
+                <textarea id="cancel-reason" placeholder="Why is this practice being cancelled?" required></textarea>
+            </div>
+        </div>
+        <div class="modal-footer">
+            <button type="button" class="button button-secondary" onclick="closeCancelModal()">Nevermind</button>
+            <button type="button" class="button action-btn-danger" onclick="confirmCancel()">Cancel Practice</button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_practices.js') }}"></script>
+{% endblock %}
