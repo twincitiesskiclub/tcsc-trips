@@ -64,6 +64,21 @@
           <h2>Slack Sync</h2>
           <p>Sync and link Slack users with members</p>
         </a>
+
+        <a href="{{ url_for('admin_practices.practices_list') }}" class="admin-menu-item">
+          <h2>Practice Management</h2>
+          <p>Create and manage practice sessions</p>
+        </a>
+
+        <a href="{{ url_for('admin_practices.practices_config') }}" class="admin-menu-item">
+          <h2>Practices Config</h2>
+          <p>Manage locations, activities, types, and social venues</p>
+        </a>
+
+        <a href="{{ url_for('admin_skipper.skipper_dashboard') }}" class="admin-menu-item">
+          <h2>Skipper Dashboard</h2>
+          <p>Monitor and approve practice cancellations</p>
+        </a>
       </div>
     </div>
   </body>

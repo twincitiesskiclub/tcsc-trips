@@ -1,0 +1,49 @@
+# Skipper Decision Engine Configuration
+# This config controls the AI-powered practice cancellation agent
+
+agent:
+  enabled: true
+  dry_run: true  # Set false for live operation
+
+schedule:
+  morning_check: "07:00"  # Check today's practices
+  pre_check_48h: "07:15"  # Nudge coaches for workouts
+  pre_check_24h: "07:30"  # Final lead confirmation
+  weekly_summary:
+    day: "sunday"
+    time: "18:00"
+
+escalation:
+  channel: "#practices-team"  # Where cancellation proposals go
+  announcement_channel: "#practices"  # Where announcements go
+  timeout_minutes: 120  # 2 hours to respond
+  default_decision: "keep"  # fail-open if no response
+
+thresholds:
+  weather:
+    min_temperature_f: -10  # Wind chill
+    max_temperature_f: 95   # Heat index
+    max_wind_speed_mph: 30
+    max_wind_gust_mph: 45
+    max_precipitation_chance: 70  # Percent
+    lightning_cancels: true
+
+  trails:
+    min_quality: "fair"  # excellent, good, fair, poor
+    require_groomed: false
+
+  lead:
+    require_confirmed_lead: true
+    lead_confirmation_deadline_hours: 24
+
+apis:
+  nws:
+    user_agent: "TCSC (contact@twincitiesskiclub.org)"
+    cache:
+      grid_ttl_hours: 24
+      forecast_ttl_minutes: 15
+
+  skinnyski:
+    cache:
+      report_ttl_hours: 2
+    rate_limit_seconds: 30

@@ -1,0 +1,25 @@
+# Practice Management Configuration
+# Default settings for practice sessions
+
+practices:
+  default_duration_minutes: 90
+  reminder_hours_before: 24
+  workout_due_hours_before: 48
+
+  # Default location if none specified
+  default_location: "Theodore Wirth"
+
+slack:
+  # Channel for practice announcements
+  announcement_channel: "#practices"
+
+  # Channel for lead/coach coordination
+  team_channel: "#practices-team"
+
+  # Whether to post workout details in announcement
+  include_workout_in_announcement: true
+
+rsvp:
+  enabled: true
+  # Close RSVPs this many hours before practice
+  close_hours_before: 2

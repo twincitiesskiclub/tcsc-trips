@@ -7,10 +7,13 @@ from .auth import init_oauth
 from .config import configure_database, load_stripe_config
 from .models import db, SocialEvent
 from .routes.admin import admin
+from .routes.admin_practices import admin_practices_bp
+from .routes.admin_skipper import admin_skipper_bp
 from .routes.auth import auth
 from .routes.main import main
 from .routes.payments import payments
 from .routes.registration import registration
+from .routes.slack_interactivity import slack_bp
 from .routes.socials import socials
 from .routes.trips import trips
 from .scheduler import init_scheduler
@@ -35,8 +38,11 @@ def create_app(environment=None):
     app.register_blueprint(socials)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
+    app.register_blueprint(admin_practices_bp)
+    app.register_blueprint(admin_skipper_bp)
     app.register_blueprint(auth)
     app.register_blueprint(registration)
+    app.register_blueprint(slack_bp)
 
     # Register template filters
     register_template_filters(app)
