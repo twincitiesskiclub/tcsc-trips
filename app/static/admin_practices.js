@@ -1,6 +1,7 @@
 let practicesTable;
 let practicesData = [];
 let locationsData = [];
+let socialLocationsData = [];  // Post-practice social venues
 let activitiesData = [];
 let typesData = [];
 let coachesData = [];  // Users with HEAD_COACH or ASSISTANT_COACH tags
@@ -14,6 +15,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await Promise.all([
         loadPractices(),
         loadLocations(),
+        loadSocialLocations(),
         loadActivities(),
         loadTypes(),
         loadPeople()
@@ -49,6 +51,20 @@ async function loadLocations() {
     } catch (error) {
         console.error('Error loading locations:', error);
         showToast('Failed to load locations', 'error');
+    }
+}
+
+async function loadSocialLocations() {
+    try {
+        const response = await fetch('/admin/practices/social-locations/data');
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        socialLocationsData = data.social_locations;
+    } catch (error) {
+        console.error('Error loading social locations:', error);
+        showToast('Failed to load social locations', 'error');
     }
 }
 
@@ -267,7 +283,7 @@ function openCreateModal() {
     document.getElementById('edit-warmup').value = '';
     document.getElementById('edit-workout').value = '';
     document.getElementById('edit-cooldown').value = '';
-    document.getElementById('edit-has-social').checked = false;
+    document.getElementById('edit-social-location').value = '';
     document.getElementById('edit-is-dark').checked = false;
 
     populateEditForm();
@@ -289,7 +305,6 @@ function openEditModal(practiceId) {
     document.getElementById('edit-warmup').value = practice.warmup_description || '';
     document.getElementById('edit-workout').value = practice.workout_description || '';
     document.getElementById('edit-cooldown').value = practice.cooldown_description || '';
-    document.getElementById('edit-has-social').checked = practice.has_social;
     document.getElementById('edit-is-dark').checked = practice.is_dark_practice;
 
     populateEditForm(practice);
@@ -309,6 +324,19 @@ function populateEditForm(practice = null) {
             option.selected = true;
         }
         locationSelect.appendChild(option);
+    }
+
+    // Populate social location dropdown
+    const socialLocationSelect = document.getElementById('edit-social-location');
+    socialLocationSelect.innerHTML = '<option value="">No Social</option>';
+    for (const sl of socialLocationsData) {
+        const option = document.createElement('option');
+        option.value = sl.id;
+        option.textContent = sl.name;
+        if (practice && practice.social_location_id === sl.id) {
+            option.selected = true;
+        }
+        socialLocationSelect.appendChild(option);
     }
 
     // Populate activities as clickable pills
@@ -410,10 +438,11 @@ function closeEditModal() {
 async function savePractice() {
     const date = document.getElementById('edit-date').value;
     const locationId = parseInt(document.getElementById('edit-location').value);
+    const socialLocationValue = document.getElementById('edit-social-location').value;
+    const socialLocationId = socialLocationValue ? parseInt(socialLocationValue) : null;
     const warmup = document.getElementById('edit-warmup').value;
     const workout = document.getElementById('edit-workout').value;
     const cooldown = document.getElementById('edit-cooldown').value;
-    const hasSocial = document.getElementById('edit-has-social').checked;
     const isDark = document.getElementById('edit-is-dark').checked;
 
     // Collect selected activities (from pill selections)
@@ -444,6 +473,7 @@ async function savePractice() {
     const payload = {
         date,
         location_id: locationId,
+        social_location_id: socialLocationId,
         activity_ids: activityIds,
         type_ids: typeIds,
         coach_ids: coachIds,
@@ -452,7 +482,6 @@ async function savePractice() {
         warmup_description: warmup,
         workout_description: workout,
         cooldown_description: cooldown,
-        has_social: hasSocial,
         is_dark_practice: isDark,
     };
 

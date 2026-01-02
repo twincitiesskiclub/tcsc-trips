@@ -47,13 +47,9 @@ class PracticeLocation(db.Model):
     latitude = db.Column(db.Float)
     longitude = db.Column(db.Float)
     parking_notes = db.Column(db.Text)
-    social_location_id = db.Column(db.Integer, db.ForeignKey('social_locations.id'))
     airtable_id = db.Column(db.String(50), unique=True)  # For migration reference
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
-
-    # Relationships
-    social_location = db.relationship('SocialLocation', backref='practice_locations')
 
     def __repr__(self):
         return f'<PracticeLocation {self.name}>'
@@ -128,6 +124,7 @@ class Practice(db.Model):
 
     # Location
     location_id = db.Column(db.Integer, db.ForeignKey('practice_locations.id'))
+    social_location_id = db.Column(db.Integer, db.ForeignKey('social_locations.id'))
 
     # Workout descriptions (from Airtable rich text)
     warmup_description = db.Column(db.Text)
@@ -135,7 +132,6 @@ class Practice(db.Model):
     cooldown_description = db.Column(db.Text)
 
     # Flags
-    has_social = db.Column(db.Boolean, default=False, nullable=False)
     is_dark_practice = db.Column(db.Boolean, default=False, nullable=False)
 
     # Slack integration
@@ -160,6 +156,7 @@ class Practice(db.Model):
 
     # Relationships
     location = db.relationship('PracticeLocation', backref='practices')
+    social_location = db.relationship('SocialLocation', backref='practices')
     activities = db.relationship(
         'PracticeActivity',
         secondary=practice_activities_junction,
@@ -177,6 +174,11 @@ class Practice(db.Model):
         backref='practice',
         cascade='all, delete-orphan'
     )
+
+    @property
+    def has_social(self):
+        """Derived from whether a social location is set."""
+        return self.social_location_id is not None
 
     def __repr__(self):
         return f'<Practice {self.date} {self.location.name if self.location else "No Location"}>'

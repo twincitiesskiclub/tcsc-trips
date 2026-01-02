@@ -75,7 +75,6 @@ class PracticeLocationInfo:
     latitude: Optional[float] = None     # For NWS weather API
     longitude: Optional[float] = None
     parking_notes: Optional[str] = None
-    social_location: Optional[SocialLocationInfo] = None
     airtable_id: Optional[str] = None    # For migration reference
 
 
@@ -134,6 +133,7 @@ class PracticeInfo:
 
     # Location
     location: Optional[PracticeLocationInfo] = None
+    social_location: Optional[SocialLocationInfo] = None
 
     # Activities and types (many-to-many)
     activities: list[PracticeActivityInfo] = field(default_factory=list)
