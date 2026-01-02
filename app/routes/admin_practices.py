@@ -532,9 +532,9 @@ def edit_social_location(loc_id):
             location.name = new_name
 
     if 'address' in request.json:
-        location.address = request.json['address'].strip() or None
+        location.address = (request.json['address'] or '').strip() or None
     if 'google_maps_url' in request.json:
-        location.google_maps_url = request.json['google_maps_url'].strip() or None
+        location.google_maps_url = (request.json['google_maps_url'] or '').strip() or None
 
     db.session.commit()
 
@@ -639,17 +639,17 @@ def edit_location(loc_id):
             location.name = new_name
 
     if 'spot' in request.json:
-        location.spot = request.json['spot'].strip() or None
+        location.spot = (request.json['spot'] or '').strip() or None
     if 'address' in request.json:
-        location.address = request.json['address'].strip() or None
+        location.address = (request.json['address'] or '').strip() or None
     if 'google_maps_url' in request.json:
-        location.google_maps_url = request.json['google_maps_url'].strip() or None
+        location.google_maps_url = (request.json['google_maps_url'] or '').strip() or None
     if 'latitude' in request.json:
         location.latitude = request.json['latitude']
     if 'longitude' in request.json:
         location.longitude = request.json['longitude']
     if 'parking_notes' in request.json:
-        location.parking_notes = request.json['parking_notes'].strip() or None
+        location.parking_notes = (request.json['parking_notes'] or '').strip() or None
     if 'social_location_id' in request.json:
         location.social_location_id = request.json['social_location_id']
 
