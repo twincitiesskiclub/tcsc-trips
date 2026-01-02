@@ -356,10 +356,16 @@
         <div class="form-section">
             <h2 class="form-section-title">Additional Options</h2>
 
-            <div class="checkbox-single">
-                <input type="checkbox" id="has_social" name="has_social"
-                       {% if practice and practice.has_social %}checked{% endif %}>
-                <label for="has_social">Has Post-Practice Social</label>
+            <div class="form-row" style="margin-bottom: 16px;">
+                <div class="form-group" style="flex: 1;">
+                    <label for="social_location_id">Post-Practice Social 🍺</label>
+                    <select id="social_location_id" name="social_location_id">
+                        <option value="">No Social</option>
+                        {% for sl in social_locations %}
+                        <option value="{{ sl.id }}" {% if practice and practice.social_location_id == sl.id %}selected{% endif %}>{{ sl.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
             </div>
 
             <div class="checkbox-single">
@@ -595,13 +601,14 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         .map(cb => parseInt(cb.value));
 
     // Build JSON payload
+    const socialLocationValue = formData.get('social_location_id');
     const data = {
         date: formData.get('date'),
         location_id: parseInt(formData.get('location_id')),
+        social_location_id: socialLocationValue ? parseInt(socialLocationValue) : null,
         warmup_description: formData.get('warmup_description') || null,
         workout_description: formData.get('workout_description') || null,
         cooldown_description: formData.get('cooldown_description') || null,
-        has_social: formData.get('has_social') === 'on',
         is_dark_practice: formData.get('is_dark_practice') === 'on',
         activity_ids: activityIds,
         type_ids: typeIds,

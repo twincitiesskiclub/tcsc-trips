@@ -57,7 +57,6 @@ def convert_practice_location_to_info(location: Optional[PracticeLocation]) -> O
         latitude=location.latitude,
         longitude=location.longitude,
         parking_notes=location.parking_notes,
-        social_location=convert_social_location_to_info(location.social_location),
         airtable_id=location.airtable_id
     )
 
@@ -159,6 +158,7 @@ def convert_practice_to_info(practice: Practice) -> PracticeInfo:
         day_of_week=practice.day_of_week,
         status=practice_status,
         location=convert_practice_location_to_info(practice.location),
+        social_location=convert_social_location_to_info(practice.social_location),
         activities=[convert_activity_to_info(a) for a in practice.activities],
         practice_types=[convert_type_to_info(t) for t in practice.practice_types],
         warmup_description=practice.warmup_description,

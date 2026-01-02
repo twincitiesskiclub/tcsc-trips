@@ -462,17 +462,6 @@ function initLocationsTable() {
                 cellEdited: (cell) => saveLocation(cell.getRow().getData())
             },
             {
-                title: "Social Location",
-                field: "social_location_id",
-                minWidth: 140,
-                editor: "list",
-                editorParams: {
-                    values: getSocialLocationOptions()
-                },
-                formatter: (cell) => formatSocialLocation(cell.getValue()),
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
                 title: "Practices",
                 field: "practice_count",
                 width: 90,
@@ -490,20 +479,6 @@ function initLocationsTable() {
     });
 }
 
-function getSocialLocationOptions() {
-    const options = { '': '— None —' };
-    socialLocationsData.forEach(sl => {
-        options[sl.id] = sl.name;
-    });
-    return options;
-}
-
-function formatSocialLocation(id) {
-    if (!id) return '<span class="json-array-display">—</span>';
-    const sl = socialLocationsData.find(s => s.id === id);
-    return sl ? sl.name : '—';
-}
-
 async function saveLocation(data) {
     const url = data.id ? `/admin/practices/locations/${data.id}/edit` : '/admin/practices/locations/create';
 
@@ -518,8 +493,7 @@ async function saveLocation(data) {
                 google_maps_url: data.google_maps_url,
                 latitude: data.latitude,
                 longitude: data.longitude,
-                parking_notes: data.parking_notes,
-                social_location_id: data.social_location_id || null
+                parking_notes: data.parking_notes
             })
         });
 
@@ -575,7 +549,6 @@ function addNewLocation() {
         latitude: null,
         longitude: null,
         parking_notes: '',
-        social_location_id: null,
         practice_count: 0
     };
     locationsTable.addRow(newLoc, true);
@@ -890,8 +863,8 @@ function initSocialLocationsTable() {
                 cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
             },
             {
-                title: "Linked Locations",
-                field: "practice_location_count",
+                title: "Linked Practices",
+                field: "practice_count",
                 width: 130,
                 hozAlign: "center",
                 formatter: (cell) => formatCount(cell.getValue())
@@ -901,7 +874,7 @@ function initSocialLocationsTable() {
                 width: 100,
                 hozAlign: "center",
                 headerSort: false,
-                formatter: (cell) => formatDeleteButton(cell, 'SocialLocation', 'practice_location_count')
+                formatter: (cell) => formatDeleteButton(cell, 'SocialLocation', 'practice_count')
             }
         ]
     });
@@ -929,14 +902,6 @@ async function saveSocialLocation(data) {
                 if (idx >= 0) {
                     socialLocationsData[idx] = result.social_location;
                     socialLocationsTable.updateData([result.social_location]);
-                }
-                // Also update the dropdown in locations table
-                if (locationsTable) {
-                    locationsTable.getColumns().forEach(col => {
-                        if (col.getField() === 'social_location_id') {
-                            col.updateDefinition({ editorParams: { values: getSocialLocationOptions() } });
-                        }
-                    });
                 }
             }
             showToast('Social location saved successfully', 'success');
@@ -978,7 +943,7 @@ function addNewSocialLocation() {
         name: 'New Social Location',
         address: '',
         google_maps_url: '',
-        practice_location_count: 0
+        practice_count: 0
     };
     socialLocationsTable.addRow(newLoc, true);
     setTimeout(() => {
@@ -990,14 +955,6 @@ function addNewSocialLocation() {
 async function refreshSocialLocations() {
     await loadSocialLocations();
     socialLocationsTable.setData(socialLocationsData);
-    // Update dropdown in locations table
-    if (locationsTable) {
-        locationsTable.getColumns().forEach(col => {
-            if (col.getField() === 'social_location_id') {
-                col.updateDefinition({ editorParams: { values: getSocialLocationOptions() } });
-            }
-        });
-    }
 }
 
 // ============================================================================
