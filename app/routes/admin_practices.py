@@ -36,6 +36,7 @@ def practices_data():
     # Eager load relationships to avoid N+1 queries
     practices = Practice.query.options(
         joinedload(Practice.location),
+        joinedload(Practice.social_location),
         joinedload(Practice.activities),
         joinedload(Practice.practice_types),
         joinedload(Practice.leads).joinedload(PracticeLead.user)
@@ -82,6 +83,8 @@ def practices_data():
             'day_of_week': practice.day_of_week,
             'location_name': location_name,
             'location_id': practice.location_id,
+            'social_location_id': practice.social_location_id,
+            'social_location_name': practice.social_location.name if practice.social_location else None,
             'activities': activities,
             'practice_types': practice_types,
             'status': practice.status,
@@ -104,7 +107,8 @@ def practices_data():
 def practice_detail(practice_id):
     """Display single practice detail."""
     practice = Practice.query.get_or_404(practice_id)
-    return render_template('admin/practices/detail.html', practice=practice)
+    social_locations = SocialLocation.query.order_by(SocialLocation.name).all()
+    return render_template('admin/practices/detail.html', practice=practice, social_locations=social_locations)
 
 
 @admin_practices_bp.route('/create', methods=['POST'])
@@ -130,11 +134,11 @@ def create_practice():
             date=date,
             day_of_week=date.strftime('%A'),
             location_id=data['location_id'],
+            social_location_id=data.get('social_location_id'),
             status=PracticeStatus.SCHEDULED.value,
             warmup_description=data.get('warmup_description'),
             workout_description=data.get('workout_description'),
             cooldown_description=data.get('cooldown_description'),
-            has_social=data.get('has_social', False),
             is_dark_practice=data.get('is_dark_practice', False),
         )
         db.session.add(practice)
@@ -226,8 +230,8 @@ def edit_practice(practice_id):
         if 'cooldown_description' in data:
             practice.cooldown_description = data['cooldown_description']
 
-        if 'has_social' in data:
-            practice.has_social = data['has_social']
+        if 'social_location_id' in data:
+            practice.social_location_id = data['social_location_id']
 
         if 'is_dark_practice' in data:
             practice.is_dark_practice = data['is_dark_practice']
@@ -367,8 +371,6 @@ def locations_data():
             'latitude': loc.latitude,
             'longitude': loc.longitude,
             'parking_notes': loc.parking_notes,
-            'social_location_id': loc.social_location_id,
-            'social_location_name': loc.social_location.name if loc.social_location else None,
             'practice_count': len(loc.practices)
         } for loc in locations]
     })
@@ -474,7 +476,7 @@ def social_locations_data():
             'name': loc.name,
             'address': loc.address,
             'google_maps_url': loc.google_maps_url,
-            'practice_location_count': len(loc.practice_locations)
+            'practice_count': len(loc.practices)
         } for loc in locations]
     })
 
@@ -509,7 +511,7 @@ def create_social_location():
             'name': location.name,
             'address': location.address,
             'google_maps_url': location.google_maps_url,
-            'practice_location_count': 0
+            'practice_count': 0
         }
     })
 
@@ -545,7 +547,7 @@ def edit_social_location(loc_id):
             'name': location.name,
             'address': location.address,
             'google_maps_url': location.google_maps_url,
-            'practice_location_count': len(location.practice_locations)
+            'practice_count': len(location.practices)
         }
     })
 
@@ -553,12 +555,12 @@ def edit_social_location(loc_id):
 @admin_practices_bp.route('/social-locations/<int:loc_id>/delete', methods=['POST'])
 @admin_required
 def delete_social_location(loc_id):
-    """Delete a social location (only if no practice locations reference it)."""
+    """Delete a social location (only if no practices reference it)."""
     location = SocialLocation.query.get_or_404(loc_id)
 
-    if location.practice_locations:
+    if location.practices:
         return jsonify({
-            'error': f'Cannot delete "{location.name}" - {len(location.practice_locations)} practice location(s) reference it'
+            'error': f'Cannot delete "{location.name}" - {len(location.practices)} practice(s) reference it'
         }), 400
 
     location_name = location.name
@@ -597,8 +599,7 @@ def create_location():
         google_maps_url=request.json.get('google_maps_url', '').strip() or None,
         latitude=request.json.get('latitude'),
         longitude=request.json.get('longitude'),
-        parking_notes=request.json.get('parking_notes', '').strip() or None,
-        social_location_id=request.json.get('social_location_id')
+        parking_notes=request.json.get('parking_notes', '').strip() or None
     )
     db.session.add(location)
     db.session.commit()
@@ -614,8 +615,6 @@ def create_location():
             'latitude': location.latitude,
             'longitude': location.longitude,
             'parking_notes': location.parking_notes,
-            'social_location_id': location.social_location_id,
-            'social_location_name': location.social_location.name if location.social_location else None,
             'practice_count': 0
         }
     })
@@ -650,8 +649,6 @@ def edit_location(loc_id):
         location.longitude = request.json['longitude']
     if 'parking_notes' in request.json:
         location.parking_notes = (request.json['parking_notes'] or '').strip() or None
-    if 'social_location_id' in request.json:
-        location.social_location_id = request.json['social_location_id']
 
     db.session.commit()
 
@@ -666,8 +663,6 @@ def edit_location(loc_id):
             'latitude': location.latitude,
             'longitude': location.longitude,
             'parking_notes': location.parking_notes,
-            'social_location_id': location.social_location_id,
-            'social_location_name': location.social_location.name if location.social_location else None,
             'practice_count': len(location.practices)
         }
     })
