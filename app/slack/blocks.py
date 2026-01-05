@@ -21,7 +21,8 @@ def build_practice_announcement_blocks(
 ) -> list[dict]:
     """Build Block Kit blocks for practice announcement.
 
-    Two-column layout with header, dividers, and context blocks.
+    Compact layout optimized to stay under Slack's ~10 block limit to avoid
+    "View full message" collapse. Target: 8-9 blocks max.
 
     Args:
         practice: Practice information
@@ -87,8 +88,6 @@ def build_practice_announcement_blocks(
         }]
     })
 
-    blocks.append({"type": "divider"})
-
     # ==========================================================================
     # WORKOUT SECTION (wide)
     # ==========================================================================
@@ -123,63 +122,55 @@ def build_practice_announcement_blocks(
         })
 
     # ==========================================================================
-    # WEATHER (context with alert first)
+    # WEATHER + TRAIL CONDITIONS (combined context line)
     # ==========================================================================
+    conditions_parts = []
+
     if weather:
-        weather_parts = []
-
-        # Alert first (if any)
-        if weather.alerts:
-            alert_text = weather.alerts[0].headline if weather.alerts else ""
-            weather_parts.append(f":warning: {alert_text}")
-
         # Temperature and conditions
-        temp_text = f":cloud: *{weather.temperature_f:.0f}°F*"
+        temp_text = f":thermometer: *{weather.temperature_f:.0f}°F*"
         if weather.feels_like_f and abs(weather.feels_like_f - weather.temperature_f) > 3:
-            temp_text += f" (feels like {weather.feels_like_f:.0f}°F)"
+            temp_text += f" (feels {weather.feels_like_f:.0f}°)"
         if weather.conditions_summary:
-            temp_text += f" • {weather.conditions_summary}"
-        weather_parts.append(temp_text)
+            temp_text += f" {weather.conditions_summary}"
+        conditions_parts.append(temp_text)
 
+        # Alert (if any)
+        if weather.alerts:
+            conditions_parts.append(f":warning: {weather.alerts[0].headline}")
+
+    if trail_conditions:
+        trail_text = f":ski: Trails: {trail_conditions.ski_quality.replace('_', ' ').title()}"
+        if trail_conditions.groomed:
+            trail_text += " (Groomed)"
+        if trail_conditions.report_url:
+            trail_text += f" <{trail_conditions.report_url}|Report>"
+        conditions_parts.append(trail_text)
+
+    if conditions_parts:
         blocks.append({
             "type": "context",
             "elements": [{
                 "type": "mrkdwn",
-                "text": " | ".join(weather_parts)
+                "text": " | ".join(conditions_parts)
             }]
         })
 
-    blocks.append({"type": "divider"})
-
     # ==========================================================================
-    # LOCATION / PARKING (two columns)
+    # LOCATION DETAILS: Address, Parking, Gear (combined section with fields)
     # ==========================================================================
-    location_parking_fields = [
-        {
-            "type": "mrkdwn",
-            "text": f"*:round_pushpin: Location*\n{full_location}"
-        }
-    ]
-    if practice.location and practice.location.parking_notes:
-        location_parking_fields.append({
-            "type": "mrkdwn",
-            "text": f"*:car: Parking*\n{practice.location.parking_notes}"
-        })
-
-    blocks.append({
-        "type": "section",
-        "fields": location_parking_fields
-    })
-
-    # ==========================================================================
-    # ADDRESS / GEAR (two columns as section fields)
-    # ==========================================================================
-    address_gear_fields = []
+    location_fields = []
 
     if practice.location and practice.location.address:
-        address_gear_fields.append({
+        location_fields.append({
             "type": "mrkdwn",
             "text": f"*:world_map: Address*\n{practice.location.address}"
+        })
+
+    if practice.location and practice.location.parking_notes:
+        location_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:car: Parking*\n{practice.location.parking_notes}"
         })
 
     # Build gear list
@@ -192,43 +183,21 @@ def build_practice_announcement_blocks(
                 else:
                     gear_items.append(activity.gear_required)
     if gear_items:
-        # Deduplicate gear items while preserving order
         seen = set()
-        unique_gear = []
-        for item in gear_items:
-            if item not in seen:
-                seen.add(item)
-                unique_gear.append(item)
-        address_gear_fields.append({
+        unique_gear = [x for x in gear_items if not (x in seen or seen.add(x))]
+        location_fields.append({
             "type": "mrkdwn",
             "text": f"*:school_satchel: Gear*\n{', '.join(unique_gear)}"
         })
 
-    if address_gear_fields:
+    if location_fields:
         blocks.append({
             "type": "section",
-            "fields": address_gear_fields
+            "fields": location_fields
         })
 
     # ==========================================================================
-    # TRAIL CONDITIONS (if available)
-    # ==========================================================================
-    if trail_conditions:
-        trail_text = f":ski: *Trails:* {trail_conditions.ski_quality.replace('_', ' ').title()}"
-        if trail_conditions.groomed:
-            trail_text += " | Groomed"
-            if trail_conditions.groomed_for:
-                trail_text += f" for {trail_conditions.groomed_for}"
-        if trail_conditions.report_url:
-            trail_text += f" | <{trail_conditions.report_url}|Report>"
-
-        blocks.append({
-            "type": "context",
-            "elements": [{"type": "mrkdwn", "text": trail_text}]
-        })
-
-    # ==========================================================================
-    # COACH / LEADS (context line at bottom)
+    # COACH / LEADS (context line)
     # ==========================================================================
     coaches = []
     leads = []
@@ -258,19 +227,9 @@ def build_practice_announcement_blocks(
             }]
         })
 
-    blocks.append({"type": "divider"})
-
     # ==========================================================================
-    # CALL TO ACTION + BUTTONS
+    # RSVP SECTION: CTA text + Buttons (combined)
     # ==========================================================================
-    blocks.append({
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": "Bop that :white_check_mark: so we'll know you'll be there!"
-        }
-    })
-
     # Build button elements
     button_elements = [
         {
@@ -285,7 +244,6 @@ def build_practice_announcement_blocks(
     if practice.location:
         maps_url = practice.location.google_maps_url
         if not maps_url:
-            # Generate from coordinates or address
             if practice.location.latitude and practice.location.longitude:
                 maps_url = f"https://www.google.com/maps?q={practice.location.latitude},{practice.location.longitude}"
             elif practice.location.address:
@@ -309,7 +267,7 @@ def build_practice_announcement_blocks(
         "type": "context",
         "elements": [{
             "type": "mrkdwn",
-            "text": f":white_check_mark: *{going_count} going* — _see thread for list_"
+            "text": f":white_check_mark: *{going_count} going* — _bop that button! see thread for list_"
         }]
     })
 
