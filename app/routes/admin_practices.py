@@ -1045,3 +1045,34 @@ def practice_evaluation(practice_id):
             'success': False,
             'error': str(e)
         }), 500
+
+
+# ============================================================================
+# Weekly Summary Trigger
+# ============================================================================
+
+@admin_practices_bp.route('/weekly-summary/trigger', methods=['POST'])
+@admin_required
+def trigger_weekly_summary():
+    """Manually trigger the weekly practice summary post."""
+    from flask import current_app
+    from ..agent.routines.weekly_summary import run_weekly_summary
+
+    try:
+        result = run_weekly_summary()
+
+        return jsonify({
+            'success': True,
+            'practice_count': result.get('practice_count', 0),
+            'week_start': result.get('week_start'),
+            'slack_posted': result.get('slack_posted', False),
+            'slack_error': result.get('slack_error'),
+            'dry_run': result.get('dry_run', False)
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error triggering weekly summary: {e}", exc_info=True)
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
