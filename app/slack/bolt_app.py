@@ -36,6 +36,9 @@ _flask_app = None  # Reference to Flask app for Socket Mode context
 # Only initialize Bolt if we have the required token
 # This allows the app to start without Slack credentials (e.g., for migrations)
 if _bot_token:
+    print(f"[BOLT] Initializing with bot token: {_bot_token[:20]}...")
+    print(f"[BOLT] Signing secret present: {bool(_signing_secret)}")
+
     from slack_bolt import App
     from slack_bolt.adapter.flask import SlackRequestHandler
 
@@ -47,6 +50,7 @@ if _bot_token:
         process_before_response=True
     )
     handler = SlackRequestHandler(bolt_app)
+    print("[BOLT] Slack Bolt app initialized (HTTP mode)")
     logger.info("Slack Bolt app initialized (HTTP mode)")
 
     # If we have an app token, also set up Socket Mode
@@ -583,6 +587,7 @@ if _bot_token:
         pass
 
 else:
+    print("[BOLT] SLACK_BOT_TOKEN not set - Bolt disabled")
     logger.warning("SLACK_BOT_TOKEN not set - Slack Bolt app disabled")
 
 
