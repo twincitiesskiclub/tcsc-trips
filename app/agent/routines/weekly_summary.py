@@ -35,17 +35,10 @@ def run_weekly_summary() -> dict:
     config = load_skipper_config()
     dry_run = config.get('agent', {}).get('dry_run', True)
 
-    # Get practices for upcoming week (Monday-Sunday)
+    # Get practices for the upcoming week (next 7 days from now)
+    # When run on Sunday evening, this captures Mon-Sun of the coming week
     now = datetime.utcnow()
-
-    # Find next Monday
-    days_until_monday = (7 - now.weekday()) % 7
-    if days_until_monday == 0:
-        days_until_monday = 7  # If today is Monday, get next Monday
-
-    week_start = (now + timedelta(days=days_until_monday)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
+    week_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = week_start + timedelta(days=7)
 
     practices = Practice.query.filter(
