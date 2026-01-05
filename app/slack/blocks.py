@@ -886,7 +886,7 @@ def build_app_home_blocks(
         })
 
         for practice in lead_practices:
-            date_str = practice.date.strftime('%A, %b %d')
+            date_str = practice.date.strftime('%A, %b %-d, %Y')
             time_str = practice.date.strftime('%I:%M %p').lstrip('0')
             location = practice.location.name if practice.location else "TBD"
 
@@ -956,8 +956,8 @@ def _build_practice_card(
     # Check if cancelled
     is_cancelled = practice.status == PracticeStatus.CANCELLED
 
-    # Date formatting
-    date_str = practice.date.strftime('%A, %b %d')
+    # Date formatting (include year for clarity)
+    date_str = practice.date.strftime('%A, %b %-d, %Y')
     time_str = practice.date.strftime('%I:%M %p').lstrip('0')
 
     # Location info
