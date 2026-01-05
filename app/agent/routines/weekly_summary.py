@@ -166,7 +166,14 @@ def run_weekly_summary() -> dict:
             if channel_id:
                 # Convert practices to PracticeInfo dataclasses for Block Kit
                 practice_infos = [convert_practice_to_info(p) for p in practices]
-                blocks = build_weekly_summary_blocks(practice_infos)
+
+                # Build weather_data dict keyed by practice ID
+                weather_data = {}
+                for p_result in results['practices']:
+                    if p_result.get('weather_outlook'):
+                        weather_data[p_result['id']] = p_result['weather_outlook']
+
+                blocks = build_weekly_summary_blocks(practice_infos, weather_data=weather_data)
 
                 client = get_slack_client()
                 response = client.chat_postMessage(
