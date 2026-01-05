@@ -292,6 +292,7 @@ def sync_single_user(
     slack_user: dict,
     target_tier: str,
     target_channel_ids: set[str],
+    full_member_channel_ids: set[str],
     channel_id_to_properties: dict[str, dict],
     team_id: str,
     dry_run: bool,
@@ -309,6 +310,7 @@ def sync_single_user(
         slack_user: Raw Slack user dict
         target_tier: Target tier string
         target_channel_ids: Set of target channel IDs for this tier
+        full_member_channel_ids: Set of all managed channel IDs (full_member tier)
         channel_id_to_properties: Map of channel ID -> properties
         team_id: Slack team ID
         dry_run: If True, only log what would be done
@@ -416,9 +418,10 @@ def sync_single_user(
                 if add_user_to_channel(user_id, channel_id, email, dry_run):
                     result.channel_adds += 1
 
-            # Remove from channels not in target list
-            # BUT preserve public channels full members joined manually
-            channels_to_remove = current_channels - target_channel_ids
+            # Remove from managed channels not in target list
+            # Only remove from channels in full_member config (managed channels)
+            # Preserve unmanaged channels (not in config) and public channels
+            channels_to_remove = (current_channels & full_member_channel_ids) - target_channel_ids
             # Filter out public channels for trace (they won't actually be removed)
             private_to_remove = [
                 cid for cid in channels_to_remove
@@ -622,6 +625,7 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
                 slack_user=slack_user,
                 target_tier=target_tier,
                 target_channel_ids=target_channel_ids,
+                full_member_channel_ids=tier_channel_ids['full_member'],
                 channel_id_to_properties=channel_id_to_properties,
                 team_id=team_id,
                 dry_run=dry_run,
