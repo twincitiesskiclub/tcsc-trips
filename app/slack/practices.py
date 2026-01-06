@@ -123,16 +123,20 @@ def post_practice_announcement(
         message_ts = response.get('ts')
         current_app.logger.info(f"Posted practice announcement for practice #{practice.id} (ts: {message_ts})")
 
-        # Save slack info to practice so we can post thread reply
+        # Save slack info to practice
         practice.slack_message_ts = message_ts
         practice.slack_channel_id = channel_id
         db.session.commit()
 
-        # Immediately post the going list thread reply
+        # Add pre-seeded checkmark emoji for RSVP
         try:
-            update_going_list_thread(practice)
+            client.reactions_add(
+                channel=channel_id,
+                timestamp=message_ts,
+                name="white_check_mark"
+            )
         except Exception as e:
-            current_app.logger.warning(f"Could not post initial going list thread: {e}")
+            current_app.logger.warning(f"Could not add checkmark reaction: {e}")
 
         # Create logging thread in #tcsc-logging
         try:

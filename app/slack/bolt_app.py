@@ -620,7 +620,7 @@ def _process_rsvp(practice_id: int, status: str, user_id: str, user_name: str) -
     from app.models import db, User
     from app.practices.models import Practice, PracticeRSVP
     from app.practices.interfaces import RSVPStatus
-    from app.slack.practices import update_practice_rsvp_counts, update_going_list_thread, log_rsvp_action
+    from app.slack.practices import update_practice_rsvp_counts, log_rsvp_action
 
     # Validate status
     valid_statuses = {RSVPStatus.GOING.value, RSVPStatus.NOT_GOING.value, RSVPStatus.MAYBE.value}
@@ -671,12 +671,6 @@ def _process_rsvp(practice_id: int, status: str, user_id: str, user_name: str) -
     except Exception as e:
         logger.warning(f"Could not update RSVP counts: {e}")
 
-    # Update the going list thread reply
-    try:
-        update_going_list_thread(practice)
-    except Exception as e:
-        logger.warning(f"Could not update going list thread: {e}")
-
     # Log RSVP action to #tcsc-logging
     try:
         log_action = 'removed' if toggled_off else 'going'
@@ -692,7 +686,7 @@ def _process_rsvp_with_notes(practice_id: int, status: str, user_id: str, notes:
     from app.models import db, User
     from app.practices.models import Practice, PracticeRSVP
     from app.practices.interfaces import RSVPStatus
-    from app.slack.practices import update_going_list_thread, update_practice_rsvp_counts, log_rsvp_action
+    from app.slack.practices import update_practice_rsvp_counts, log_rsvp_action
 
     # Validate status
     valid_statuses = {RSVPStatus.GOING.value, RSVPStatus.NOT_GOING.value, RSVPStatus.MAYBE.value}
@@ -739,13 +733,6 @@ def _process_rsvp_with_notes(practice_id: int, status: str, user_id: str, notes:
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning(f"Could not update RSVP counts: {e}")
-
-    # Update the going list thread reply
-    try:
-        update_going_list_thread(practice)
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Could not update going list thread: {e}")
 
     # Log RSVP action to #tcsc-logging
     try:
@@ -841,7 +828,7 @@ def _process_reaction_rsvp(channel: str, message_ts: str, status: str, user_id: 
     """Process emoji reaction as RSVP."""
     from app.models import db, User
     from app.practices.models import Practice, PracticeRSVP
-    from app.slack.practices import update_practice_rsvp_counts, update_going_list_thread
+    from app.slack.practices import update_practice_rsvp_counts
 
     practice = Practice.query.filter_by(
         slack_message_ts=message_ts,
@@ -883,12 +870,6 @@ def _process_reaction_rsvp(channel: str, message_ts: str, status: str, user_id: 
         update_practice_rsvp_counts(practice)
     except Exception as e:
         logger.warning(f"Could not update RSVP counts after reaction: {e}")
-
-    # Update the going list thread reply
-    try:
-        update_going_list_thread(practice)
-    except Exception as e:
-        logger.warning(f"Could not update going list thread after reaction: {e}")
 
     logger.info(f"RSVP via reaction: {user_id} -> {status} for practice #{practice.id}")
 

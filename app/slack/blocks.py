@@ -89,40 +89,7 @@ def build_practice_announcement_blocks(
     })
 
     # ==========================================================================
-    # WORKOUT SECTION (wide)
-    # ==========================================================================
-    if practice.workout_description:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*:nerd_face: Workout*\n{practice.workout_description}"
-            }
-        })
-
-    # ==========================================================================
-    # WARMUP / COOLDOWN (two columns)
-    # ==========================================================================
-    warmup_cooldown_fields = []
-    if practice.warmup_description:
-        warmup_cooldown_fields.append({
-            "type": "mrkdwn",
-            "text": f"*:fire: Warmup*\n{practice.warmup_description}"
-        })
-    if practice.cooldown_description:
-        warmup_cooldown_fields.append({
-            "type": "mrkdwn",
-            "text": f"*:ice_cube: Cooldown*\n{practice.cooldown_description}"
-        })
-
-    if warmup_cooldown_fields:
-        blocks.append({
-            "type": "section",
-            "fields": warmup_cooldown_fields
-        })
-
-    # ==========================================================================
-    # WEATHER + TRAIL CONDITIONS (combined context line)
+    # WEATHER + TRAIL CONDITIONS (combined context line, right under location)
     # ==========================================================================
     conditions_parts = []
 
@@ -154,6 +121,39 @@ def build_practice_announcement_blocks(
                 "type": "mrkdwn",
                 "text": " | ".join(conditions_parts)
             }]
+        })
+
+    # ==========================================================================
+    # WORKOUT SECTION (wide)
+    # ==========================================================================
+    if practice.workout_description:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*:nerd_face: Workout*\n{practice.workout_description}"
+            }
+        })
+
+    # ==========================================================================
+    # WARMUP / COOLDOWN (two columns)
+    # ==========================================================================
+    warmup_cooldown_fields = []
+    if practice.warmup_description:
+        warmup_cooldown_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:fire: Warmup*\n{practice.warmup_description}"
+        })
+    if practice.cooldown_description:
+        warmup_cooldown_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:ice_cube: Cooldown*\n{practice.cooldown_description}"
+        })
+
+    if warmup_cooldown_fields:
+        blocks.append({
+            "type": "section",
+            "fields": warmup_cooldown_fields
         })
 
     # ==========================================================================
@@ -228,46 +228,13 @@ def build_practice_announcement_blocks(
         })
 
     # ==========================================================================
-    # RSVP SECTION: CTA text + Buttons (combined)
+    # RSVP CTA: Encourage emoji reactions
     # ==========================================================================
-    # Build button elements
-    button_elements = [
-        {
-            "type": "button",
-            "text": {"type": "plain_text", "text": ":white_check_mark: Going", "emoji": True},
-            "action_id": "rsvp_going",
-            "value": str(practice.id)
-        }
-    ]
-
-    # Add Directions button if we have a map URL
-    if practice.location:
-        maps_url = practice.location.google_maps_url
-        if not maps_url:
-            if practice.location.latitude and practice.location.longitude:
-                maps_url = f"https://www.google.com/maps?q={practice.location.latitude},{practice.location.longitude}"
-            elif practice.location.address:
-                from urllib.parse import quote
-                maps_url = f"https://www.google.com/maps/search/?api=1&query={quote(practice.location.address)}"
-        if maps_url:
-            button_elements.append({
-                "type": "button",
-                "text": {"type": "plain_text", "text": ":round_pushpin: Directions", "emoji": True},
-                "url": maps_url
-            })
-
-    blocks.append({
-        "type": "actions",
-        "elements": button_elements
-    })
-
-    # Going count with thread link hint
-    going_count = rsvp_counts.get('going', 0) if rsvp_counts else 0
     blocks.append({
         "type": "context",
         "elements": [{
             "type": "mrkdwn",
-            "text": f":white_check_mark: *{going_count} going* — _bop that button! see thread for list_"
+            "text": "Bop that :white_check_mark: so we'll know you'll be there. If you're running late, drop a comment in the thread. <!channel>"
         }]
     })
 
