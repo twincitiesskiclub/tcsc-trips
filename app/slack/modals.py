@@ -542,7 +542,6 @@ def build_practice_edit_full_modal(practice: PracticeInfo, locations: list = Non
                     "text": "Options"
                 },
                 "element": _build_practice_flags_element(practice)
-                }
             }
         ]
     }
