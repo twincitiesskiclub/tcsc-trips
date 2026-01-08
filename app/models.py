@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from sqlalchemy import JSON  # Database-agnostic: uses JSONB on PostgreSQL, TEXT on SQLite
+from sqlalchemy import JSON  # Uses JSONB on PostgreSQL
 from sqlalchemy.sql import func
 
 from app.constants import UserStatus, UserSeasonStatus
