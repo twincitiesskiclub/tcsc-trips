@@ -13,40 +13,25 @@ def load_stripe_config():
 def configure_database(app, environment):
     """Configure the database based on environment.
 
-    Uses DATABASE_URL if present (PostgreSQL), otherwise falls back to SQLite.
+    Requires DATABASE_URL environment variable (PostgreSQL).
     """
-    # Check for DATABASE_URL first (PostgreSQL on Render)
     database_url = os.getenv('DATABASE_URL')
 
-    if database_url:
-        # Render provides postgres:// but SQLAlchemy requires postgresql://
-        if database_url.startswith('postgres://'):
-            database_url = database_url.replace('postgres://', 'postgresql://', 1)
+    if not database_url:
+        raise ValueError(
+            "DATABASE_URL environment variable is required. "
+            "Run ./scripts/dev.sh to start local PostgreSQL via Docker."
+        )
 
-        app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-        # PostgreSQL connection pooling settings
-        app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-            'pool_size': 5,
-            'pool_recycle': 300,
-            'pool_pre_ping': True,
-        }
-    else:
-        # Fall back to SQLite for local development
-        base_dir = os.path.abspath(os.path.dirname(__file__))
+    # Render provides postgres:// but SQLAlchemy requires postgresql://
+    if database_url.startswith('postgres://'):
+        database_url = database_url.replace('postgres://', 'postgresql://', 1)
 
-        db_paths = {
-            'production': '/var/lib/app.db',
-            'development': '/var/lib/app_dev.db',
-            'testing': os.path.join(base_dir, 'instance', 'test.db')
-        }
-
-        if environment not in db_paths:
-            raise ValueError(f"Invalid FLASK_ENV value: {environment}")
-
-        if environment == 'testing':
-            os.makedirs(os.path.join(base_dir, 'instance'), exist_ok=True)
-
-        db_path = db_paths[environment]
-        app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{db_path}'
-
+    app.config['SQLALCHEMY_DATABASE_URI'] = database_url
+    # PostgreSQL connection pooling settings
+    app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+        'pool_size': 5,
+        'pool_recycle': 300,
+        'pool_pre_ping': True,
+    }
     app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
