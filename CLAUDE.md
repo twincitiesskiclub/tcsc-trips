@@ -36,12 +36,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
    ```bash
    ./scripts/dev.sh              # PostgreSQL on port 5001 (default)
    ./scripts/dev.sh 5000         # PostgreSQL on port 5000
-   ./scripts/dev.sh --sqlite     # SQLite for quick testing (no Docker)
    ```
 
-   On first run with PostgreSQL, the script will:
+   On first run, the script will:
    - Pull and start a PostgreSQL 18 container (`tcsc-postgres`)
-   - Migrate data from `app.db` (if present) or create empty tables
+   - Run database migrations to create tables
 
 ### Managing Local PostgreSQL
 
@@ -64,7 +63,7 @@ stripe listen --forward-to localhost:5000/webhook
 This provides a webhook signing secret (`whsec_...`) to set as `STRIPE_WEBHOOK_SECRET`.
 
 ### Database Management
-- **Local Development:** PostgreSQL via Docker (default) or SQLite (`--sqlite` flag)
+- **Local Development:** PostgreSQL via Docker (started by `scripts/dev.sh`)
 - **Production:** PostgreSQL on Render (via `DATABASE_URL` env var)
 - **Create New Migration:** `flask db migrate -m "description"`
 - **Apply Migrations:** `flask db upgrade`
@@ -72,7 +71,6 @@ This provides a webhook signing secret (`whsec_...`) to set as `STRIPE_WEBHOOK_S
 
 ### Helper Scripts
 - `scripts/dev.sh` - **Recommended** dev startup (PostgreSQL + Stripe + Flask)
-- `scripts/migrate_to_postgres.py` - Migrate data from SQLite to PostgreSQL
 - `scripts/seed_former_members.py` - Import CSV of former members (sets status='ALUMNI')
 - `scripts/seed_former_member_season.py` - Create legacy season linking inactive users
 
@@ -156,7 +154,7 @@ The admin dashboard (`/admin`) provides:
 - **Stripe API:** Payment processing, webhooks, refunds
 - **Google OAuth:** Admin authentication via Authlib
 - **Flask-Migrate:** Database schema versioning with Alembic
-- **SQLAlchemy:** ORM with PostgreSQL (production) and SQLite (optional local)
+- **SQLAlchemy:** ORM with PostgreSQL
 - **Slack Webhooks:** Payment notifications to club Slack channel
 - **Slack API:** User sync, channel management, and automated role changes
 - **APScheduler:** Background job scheduling for automated syncs
@@ -382,7 +380,7 @@ Check `.env.example` for complete list. Critical variables include:
 **Core Application:**
 - `FLASK_SECRET_KEY` - Flask session security
 - `FLASK_ENV` - Environment (development/production/testing)
-- `DATABASE_URL` - PostgreSQL connection string (falls back to SQLite if not set)
+- `DATABASE_URL` - PostgreSQL connection string (required)
 
 **Payment Processing:**
 - `STRIPE_PUBLISHABLE_KEY` / `STRIPE_SECRET_KEY` - Stripe API keys
@@ -408,7 +406,7 @@ Check `.env.example` for complete list. Critical variables include:
 
 ### Deployment
 - **Production Server:** Configured for Gunicorn (see `Procfile`)
-- **Database:** PostgreSQL on Render via `DATABASE_URL` env var (falls back to SQLite if not set)
+- **Database:** PostgreSQL on Render via `DATABASE_URL` env var
 
 ## Business Logic Notes
 

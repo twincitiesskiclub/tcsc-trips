@@ -39,7 +39,7 @@ A Flask web application for the Twin Cities Ski Club (TCSC) trip registration an
 
    On first run, it will:
    - Pull and start a PostgreSQL 18 container
-   - Migrate data from `app.db` (if present) or create empty tables
+   - Run database migrations to create tables
 
 4. **Access the app:**
    - Public site: http://localhost:5001
@@ -52,7 +52,6 @@ A Flask web application for the Twin Cities Ski Club (TCSC) trip registration an
 ```bash
 ./scripts/dev.sh              # PostgreSQL on port 5001 (default)
 ./scripts/dev.sh 5000         # PostgreSQL on port 5000
-./scripts/dev.sh --sqlite     # SQLite for quick testing (no Docker needed)
 ```
 
 ### Managing Local PostgreSQL
