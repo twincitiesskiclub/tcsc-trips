@@ -248,6 +248,215 @@ def _get_day_suffix(day: int) -> str:
     return {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
 
 
+def build_combined_lift_blocks(
+    practices: list[PracticeInfo],
+    weather_data: Optional[dict] = None
+) -> list[dict]:
+    """Build Block Kit blocks for combined lift announcement (multiple days).
+
+    Follows the same structure as build_practice_announcement_blocks but
+    combines multiple practices (same workout) with different times/coaches.
+
+    Uses different checkmark emojis for each day's RSVP:
+    - Day 1: ✅ white_check_mark
+    - Day 2: ☑️ ballot_box_with_check
+
+    Args:
+        practices: List of lift practices to combine (should be 2)
+        weather_data: Optional dict mapping practice.id to WeatherConditions
+
+    Returns:
+        List of Slack Block Kit blocks
+    """
+    blocks = []
+    weather_data = weather_data or {}
+
+    if not practices:
+        return blocks
+
+    # Sort by date
+    sorted_practices = sorted(practices, key=lambda p: p.date)
+    first_practice = sorted_practices[0]
+
+    # Get location info (assume same for all lifts)
+    location = first_practice.location
+    location_name = location.name if location else "TBD"
+    location_spot = location.spot if location and location.spot else None
+    full_location = f"{location_name} - {location_spot}" if location_spot else location_name
+
+    # Build day list for header
+    days = [p.date.strftime('%a') for p in sorted_practices]
+    days_str = " + ".join(days)
+
+    # RSVP emoji mapping
+    rsvp_emojis = [":white_check_mark:", ":ballot_box_with_check:"]
+
+    # ==========================================================================
+    # HEADER: :weight_lifter: _TCSC Lift_ • Wed & Fri
+    # ==========================================================================
+    blocks.append({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": f":weight_lifter: _TCSC Lift_ • {days_str}",
+            "emoji": True
+        }
+    })
+
+    # ==========================================================================
+    # CONTEXT: Location | Practice Types
+    # ==========================================================================
+    context_parts = [f":round_pushpin: {full_location}"]
+    type_names = ", ".join([t.name for t in first_practice.practice_types]) if first_practice.practice_types else ""
+    if type_names:
+        context_parts.append(f":muscle: {type_names}")
+
+    blocks.append({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": " | ".join(context_parts)
+        }]
+    })
+
+    # ==========================================================================
+    # SCHEDULE: Show each day's date and time
+    # ==========================================================================
+    schedule_lines = []
+    for practice in sorted_practices:
+        day_name = practice.date.strftime('%A')
+        short_month = practice.date.strftime('%b')
+        day_num = practice.date.strftime('%-d')
+        day_suffix = _get_day_suffix(int(day_num))
+        time_str = practice.date.strftime('%I:%M %p').lstrip('0')
+
+        schedule_lines.append(f"*{day_name}, {short_month} {day_num}{day_suffix}* at {time_str}")
+
+    blocks.append({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": " • ".join(schedule_lines)
+        }]
+    })
+
+    # ==========================================================================
+    # WORKOUT SECTION (shared - use first practice's workout)
+    # ==========================================================================
+    if first_practice.workout_description:
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*:nerd_face: Workout*\n{first_practice.workout_description}"
+            }
+        })
+
+    # ==========================================================================
+    # WARMUP / COOLDOWN (two columns, shared)
+    # ==========================================================================
+    warmup_cooldown_fields = []
+    if first_practice.warmup_description:
+        warmup_cooldown_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:fire: Warmup*\n{first_practice.warmup_description}"
+        })
+    if first_practice.cooldown_description:
+        warmup_cooldown_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:ice_cube: Cooldown*\n{first_practice.cooldown_description}"
+        })
+
+    if warmup_cooldown_fields:
+        blocks.append({
+            "type": "section",
+            "fields": warmup_cooldown_fields
+        })
+
+    # ==========================================================================
+    # LOCATION DETAILS: Address, Parking (shared)
+    # ==========================================================================
+    location_fields = []
+
+    if location and location.address:
+        location_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:world_map: Address*\n{location.address}"
+        })
+
+    if location and location.parking_notes:
+        location_fields.append({
+            "type": "mrkdwn",
+            "text": f"*:car: Parking*\n{location.parking_notes}"
+        })
+
+    if location_fields:
+        blocks.append({
+            "type": "section",
+            "fields": location_fields
+        })
+
+    # ==========================================================================
+    # COACH / LEADS (per day if different)
+    # ==========================================================================
+    coach_lead_parts = []
+    for i, practice in enumerate(sorted_practices):
+        emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else ":white_check_mark:"
+        day_short = practice.date.strftime('%a')
+
+        coaches = []
+        leads = []
+        if practice.leads:
+            for lead in practice.leads:
+                if lead.slack_user_id:
+                    mention = f"<@{lead.slack_user_id}>"
+                else:
+                    mention = lead.display_name or "Unknown"
+                if lead.role == LeadRole.COACH:
+                    coaches.append(mention)
+                elif lead.role in (LeadRole.LEAD, LeadRole.ASSIST):
+                    leads.append(mention)
+
+        if coaches or leads:
+            day_coaches = f"{day_short}: "
+            parts = []
+            if coaches:
+                parts.append(f":male-teacher: {', '.join(coaches)}")
+            if leads:
+                parts.append(f":people_holding_hands: {', '.join(leads)}")
+            day_coaches += " ".join(parts)
+            coach_lead_parts.append(day_coaches)
+
+    if coach_lead_parts:
+        blocks.append({
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": " | ".join(coach_lead_parts)
+            }]
+        })
+
+    # ==========================================================================
+    # RSVP CTA
+    # ==========================================================================
+    rsvp_instructions = []
+    for i, practice in enumerate(sorted_practices):
+        emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else ":white_check_mark:"
+        day_short = practice.date.strftime('%a')
+        time_str = practice.date.strftime('%I:%M %p').lstrip('0')
+        rsvp_instructions.append(f"{emoji} {day_short} ({time_str})")
+
+    blocks.append({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": f"RSVP: {' | '.join(rsvp_instructions)} — so we know you'll be there! <!channel>"
+        }]
+    })
+
+    return blocks
+
+
 def build_cancellation_proposal_blocks(
     proposal: CancellationProposal,
     evaluation: Optional[PracticeEvaluation] = None
