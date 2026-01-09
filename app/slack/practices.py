@@ -1140,6 +1140,7 @@ def post_coach_weekly_summary(week_start: datetime) -> dict:
     """
     from datetime import timedelta
     from app.models import AppConfig, db
+    from app.practices.service import convert_practice_to_info
     from app.slack.blocks import build_coach_weekly_summary_blocks
 
     # Get expected practice days from config
