@@ -12,7 +12,9 @@ import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Union
+from typing import Any, Optional, Union
+
+import yaml
 
 from app.newsletter.interfaces import (
     GenerationResult,
@@ -44,7 +46,24 @@ except ImportError:
 # Default model configuration
 DEFAULT_MODEL = "claude-opus-4-5-20251101"
 DEFAULT_MAX_TOKENS = 4000
-DEFAULT_TEMPERATURE = 0.7
+DEFAULT_TEMPERATURE = 1.0  # Required for extended thinking
+
+
+def _load_generation_config() -> dict[str, Any]:
+    """Load generation config from newsletter.yaml.
+
+    Returns:
+        dict with generation settings (model, max_tokens, temperature, extended_thinking)
+    """
+    config_path = Path(__file__).parent.parent.parent / 'config' / 'newsletter.yaml'
+
+    try:
+        with open(config_path) as f:
+            config = yaml.safe_load(f) or {}
+        return config.get('newsletter', {}).get('generation', {})
+    except (FileNotFoundError, yaml.YAMLError) as e:
+        logger.warning(f"Could not load generation config: {e}")
+        return {}
 
 
 def get_anthropic_client():
@@ -397,18 +416,44 @@ This is the FINAL version for Sunday publication. Make it polished and publicati
 Double-check that all links are properly formatted and all names are attributed correctly."""
 
     try:
+        # Load generation config
+        gen_config = _load_generation_config()
+        model = gen_config.get('model', DEFAULT_MODEL)
+        max_tokens = gen_config.get('max_tokens', DEFAULT_MAX_TOKENS)
+        temperature = gen_config.get('temperature', DEFAULT_TEMPERATURE)
+
+        # Check for extended thinking config
+        thinking_config = gen_config.get('extended_thinking', {})
+        use_thinking = thinking_config.get('enabled', False)
+        thinking_budget = thinking_config.get('budget_tokens', 10000)
+
         logger.info("  Calling Claude API...")
+        if use_thinking:
+            logger.info(f"  Extended thinking enabled (budget: {thinking_budget} tokens)")
         start_time = time.time()
 
         client = get_anthropic_client()
-        response = client.messages.create(
-            model=DEFAULT_MODEL,
-            max_tokens=DEFAULT_MAX_TOKENS,
-            temperature=DEFAULT_TEMPERATURE,
-            messages=[
+
+        # Build API call parameters
+        api_params = {
+            'model': model,
+            'max_tokens': max_tokens,
+            'messages': [
                 {"role": "user", "content": f"{system_prompt}\n\n{user_message}"}
             ]
-        )
+        }
+
+        # Add extended thinking if enabled
+        if use_thinking:
+            api_params['temperature'] = 1  # Required for extended thinking
+            api_params['thinking'] = {
+                "type": "enabled",
+                "budget_tokens": thinking_budget
+            }
+        else:
+            api_params['temperature'] = temperature
+
+        response = client.messages.create(**api_params)
 
         elapsed = time.time() - start_time
 
@@ -420,7 +465,21 @@ Double-check that all links are properly formatted and all names are attributed 
                 error="Empty response from Claude API"
             )
 
-        raw_content = response.content[0].text
+        # Extract text content (skip thinking blocks)
+        raw_content = None
+        for block in response.content:
+            if hasattr(block, 'text'):
+                raw_content = block.text
+                break
+
+        if not raw_content:
+            logger.error("  ERROR: No text content in response")
+            logger.info("=" * 50)
+            return GenerationResult(
+                success=False,
+                error="No text content in Claude response"
+            )
+
         tokens_used = response.usage.input_tokens + response.usage.output_tokens
 
         logger.info(f"  Response received in {elapsed:.2f}s")
