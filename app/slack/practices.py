@@ -80,7 +80,8 @@ def _get_escalation_channel() -> Optional[str]:
 def post_practice_announcement(
     practice: Practice,
     weather: Optional[WeatherConditions] = None,
-    trail_conditions: Optional[TrailCondition] = None
+    trail_conditions: Optional[TrailCondition] = None,
+    channel_override: Optional[str] = None
 ) -> dict:
     """Post practice announcement to #practices channel.
 
@@ -91,6 +92,7 @@ def post_practice_announcement(
         practice: Practice SQLAlchemy model
         weather: Weather conditions (optional)
         trail_conditions: Trail conditions (optional)
+        channel_override: Optional channel name to override default (e.g., 'general')
 
     Returns:
         dict with keys:
@@ -99,7 +101,12 @@ def post_practice_announcement(
         - error: str (only if success=False)
     """
     client = get_slack_client()
-    channel_id = _get_announcement_channel()
+
+    # Determine channel - use override if provided
+    if channel_override:
+        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
+    else:
+        channel_id = _get_announcement_channel()
 
     if not channel_id:
         return {'success': False, 'error': 'Could not find announcement channel'}
@@ -798,13 +805,17 @@ COORD_CHANNEL_ID = "C02J4DGCFL2"  # #coord-practices-leads-assists (24h lead rem
 KJ_SLACK_ID = "U02K45N1JEV"
 
 
-def post_48h_workout_reminder(practices_needing_workout: list) -> dict:
+def post_48h_workout_reminder(
+    practices_needing_workout: list,
+    channel_override: Optional[str] = None
+) -> dict:
     """Post 48h workout reminder to #collab-coaches-practices.
 
     Tags @kj as a safety check before practices go live.
 
     Args:
         practices_needing_workout: List of Practice objects missing workouts
+        channel_override: Optional channel name to override default (e.g., 'general')
 
     Returns:
         dict with keys:
@@ -818,6 +829,12 @@ def post_48h_workout_reminder(practices_needing_workout: list) -> dict:
         return {'success': True, 'message_ts': None, 'skipped': True}
 
     client = get_slack_client()
+
+    # Determine channel - use override if provided
+    if channel_override:
+        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
+    else:
+        channel_id = COLLAB_CHANNEL_ID
 
     # Build message blocks
     blocks = []
@@ -861,7 +878,7 @@ def post_48h_workout_reminder(practices_needing_workout: list) -> dict:
 
     try:
         response = client.chat_postMessage(
-            channel=COLLAB_CHANNEL_ID,
+            channel=channel_id,
             blocks=blocks,
             text="48h Workout Check",
             unfurl_links=False,
@@ -869,12 +886,12 @@ def post_48h_workout_reminder(practices_needing_workout: list) -> dict:
         )
 
         message_ts = response.get('ts')
-        current_app.logger.info(f"Posted 48h workout reminder to #collab-coaches-practices (ts: {message_ts})")
+        current_app.logger.info(f"Posted 48h workout reminder (ts: {message_ts})")
 
         return {
             'success': True,
             'message_ts': message_ts,
-            'channel_id': COLLAB_CHANNEL_ID
+            'channel_id': channel_id
         }
 
     except SlackApiError as e:
@@ -883,13 +900,17 @@ def post_48h_workout_reminder(practices_needing_workout: list) -> dict:
         return {'success': False, 'error': error_msg}
 
 
-def post_24h_lead_confirmation(practices_needing_confirmation: list) -> dict:
+def post_24h_lead_confirmation(
+    practices_needing_confirmation: list,
+    channel_override: Optional[str] = None
+) -> dict:
     """Post 24h lead confirmation request to #coord-practices-leads-assists.
 
     Tags the assigned leads for each practice needing confirmation.
 
     Args:
         practices_needing_confirmation: List of tuples (Practice, lead_slack_ids)
+        channel_override: Optional channel name to override default (e.g., 'general')
 
     Returns:
         dict with keys:
@@ -903,6 +924,12 @@ def post_24h_lead_confirmation(practices_needing_confirmation: list) -> dict:
         return {'success': True, 'message_ts': None, 'skipped': True}
 
     client = get_slack_client()
+
+    # Determine channel - use override if provided
+    if channel_override:
+        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
+    else:
+        channel_id = COORD_CHANNEL_ID
 
     # Build message blocks
     blocks = []
@@ -970,7 +997,7 @@ def post_24h_lead_confirmation(practices_needing_confirmation: list) -> dict:
 
     try:
         response = client.chat_postMessage(
-            channel=COORD_CHANNEL_ID,
+            channel=channel_id,
             blocks=blocks,
             text="24h Lead Confirmation",
             unfurl_links=False,
@@ -978,12 +1005,12 @@ def post_24h_lead_confirmation(practices_needing_confirmation: list) -> dict:
         )
 
         message_ts = response.get('ts')
-        current_app.logger.info(f"Posted 24h lead confirmation to #coord-practices-leads-assists (ts: {message_ts})")
+        current_app.logger.info(f"Posted 24h lead confirmation (ts: {message_ts})")
 
         return {
             'success': True,
             'message_ts': message_ts,
-            'channel_id': COORD_CHANNEL_ID
+            'channel_id': channel_id
         }
 
     except SlackApiError as e:
@@ -992,7 +1019,10 @@ def post_24h_lead_confirmation(practices_needing_confirmation: list) -> dict:
         return {'success': False, 'error': error_msg}
 
 
-def post_daily_practice_recap(evaluations: list[dict]) -> dict:
+def post_daily_practice_recap(
+    evaluations: list[dict],
+    channel_override: Optional[str] = None
+) -> dict:
     """Post daily practice conditions recap to #practices-core.
 
     Called by morning_check routine at 7am when there are practices today.
@@ -1005,6 +1035,7 @@ def post_daily_practice_recap(evaluations: list[dict]) -> dict:
             - summary: str
             - is_go: bool
             - proposal_id: int (if cancellation proposed)
+        channel_override: Optional channel name to override default (e.g., 'general')
 
     Returns:
         dict with keys:
@@ -1016,6 +1047,12 @@ def post_daily_practice_recap(evaluations: list[dict]) -> dict:
 
     client = get_slack_client()
 
+    # Determine channel - use override if provided
+    if channel_override:
+        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
+    else:
+        channel_id = PRACTICES_CORE_CHANNEL_ID
+
     # Check if any proposals were created
     has_proposals = any(e.get('proposal_id') for e in evaluations)
 
@@ -1024,7 +1061,7 @@ def post_daily_practice_recap(evaluations: list[dict]) -> dict:
 
     try:
         response = client.chat_postMessage(
-            channel=PRACTICES_CORE_CHANNEL_ID,
+            channel=channel_id,
             blocks=blocks,
             text="Daily Practice Conditions Recap",
             unfurl_links=False,
@@ -1032,12 +1069,12 @@ def post_daily_practice_recap(evaluations: list[dict]) -> dict:
         )
 
         message_ts = response.get('ts')
-        current_app.logger.info(f"Posted daily practice recap to #practices-core (ts: {message_ts})")
+        current_app.logger.info(f"Posted daily practice recap (ts: {message_ts})")
 
         return {
             'success': True,
             'message_ts': message_ts,
-            'channel_id': PRACTICES_CORE_CHANNEL_ID
+            'channel_id': channel_id
         }
 
     except SlackApiError as e:
@@ -1377,7 +1414,10 @@ def log_practice_edit(practice: Practice, slack_user_id: str) -> dict:
         return {'success': False, 'error': error_msg}
 
 
-def post_coach_weekly_summary(week_start: datetime) -> dict:
+def post_coach_weekly_summary(
+    week_start: datetime,
+    channel_override: Optional[str] = None
+) -> dict:
     """Post weekly coach review summary to #collab-coaches-practices.
 
     Creates a summary post showing all practices for the week with Edit buttons.
@@ -1385,6 +1425,7 @@ def post_coach_weekly_summary(week_start: datetime) -> dict:
 
     Args:
         week_start: Monday of the week to summarize
+        channel_override: Optional channel name to override default (e.g., 'general')
 
     Returns:
         dict with keys:
@@ -1417,11 +1458,17 @@ def post_coach_weekly_summary(week_start: datetime) -> dict:
     # Build blocks
     blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
 
-    # Post to collab channel
+    # Determine channel - use override if provided
+    if channel_override:
+        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
+    else:
+        channel_id = COLLAB_CHANNEL_ID
+
+    # Post to channel
     client = get_slack_client()
     try:
         response = client.chat_postMessage(
-            channel=COLLAB_CHANNEL_ID,
+            channel=channel_id,
             blocks=blocks,
             text=f"Coach Review: Week of {week_start.strftime('%B %-d')}",
             unfurl_links=False,
@@ -1429,14 +1476,14 @@ def post_coach_weekly_summary(week_start: datetime) -> dict:
         )
 
         message_ts = response.get('ts')
-        current_app.logger.info(f"Posted coach weekly summary: {message_ts}")
+        current_app.logger.info(f"Posted coach weekly summary (ts: {message_ts})")
 
         # Save message_ts to each practice's slack_coach_summary_ts
         for practice in practices:
             practice.slack_coach_summary_ts = message_ts
         db.session.commit()
 
-        return {'success': True, 'message_ts': message_ts, 'channel_id': COLLAB_CHANNEL_ID}
+        return {'success': True, 'message_ts': message_ts, 'channel_id': channel_id}
 
     except SlackApiError as e:
         error_msg = e.response.get('error', str(e))

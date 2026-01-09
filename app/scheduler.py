@@ -133,7 +133,7 @@ def run_channel_sync_job(app: Flask):
         app.logger.info("=" * 60)
 
 
-def run_skipper_morning_check_job(app: Flask):
+def run_skipper_morning_check_job(app: Flask, channel_override: str = None):
     """Execute the morning practice check job within app context.
 
     Runs at 7am daily to evaluate all practices scheduled for today.
@@ -141,6 +141,7 @@ def run_skipper_morning_check_job(app: Flask):
 
     Args:
         app: Flask application instance for context.
+        channel_override: Optional channel name to override default for Slack posts.
     """
     with app.app_context():
         from app.agent.routines.morning_check import run_morning_check
@@ -149,6 +150,8 @@ def run_skipper_morning_check_job(app: Flask):
         app.logger.info("=" * 60)
         app.logger.info("Starting Skipper morning check job")
         app.logger.info(f"Time: {datetime.now().isoformat()}")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
         app.logger.info("=" * 60)
 
         try:
@@ -158,7 +161,7 @@ def run_skipper_morning_check_job(app: Flask):
                 app.logger.info(f"Expired {len(expired)} pending proposals (fail-open)")
 
             # Run morning check
-            result = run_morning_check()
+            result = run_morning_check(channel_override=channel_override)
 
             app.logger.info(
                 f"Morning check complete: "
@@ -176,21 +179,24 @@ def run_skipper_morning_check_job(app: Flask):
         app.logger.info("=" * 60)
 
 
-def run_skipper_48h_check_job(app: Flask):
+def run_skipper_48h_check_job(app: Flask, channel_override: str = None):
     """Execute the 48-hour pre-practice check job within app context.
 
     Runs at 7:15am daily to nudge coaches for workout submission.
 
     Args:
         app: Flask application instance for context.
+        channel_override: Optional channel name to override default for Slack posts.
     """
     with app.app_context():
         from app.agent.routines.pre_practice import run_48h_check
 
         app.logger.info("Starting Skipper 48h check job")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
 
         try:
-            result = run_48h_check()
+            result = run_48h_check(channel_override=channel_override)
 
             app.logger.info(
                 f"48h check complete: "
@@ -203,21 +209,24 @@ def run_skipper_48h_check_job(app: Flask):
             app.logger.error(f"Skipper 48h check failed: {e}", exc_info=True)
 
 
-def run_skipper_24h_check_job(app: Flask):
+def run_skipper_24h_check_job(app: Flask, channel_override: str = None):
     """Execute the 24-hour pre-practice check job within app context.
 
     Runs at 7:30am daily to confirm lead availability and provide weather updates.
 
     Args:
         app: Flask application instance for context.
+        channel_override: Optional channel name to override default for Slack posts.
     """
     with app.app_context():
         from app.agent.routines.pre_practice import run_24h_check
 
         app.logger.info("Starting Skipper 24h check job")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
 
         try:
-            result = run_24h_check()
+            result = run_24h_check(channel_override=channel_override)
 
             app.logger.info(
                 f"24h check complete: "
@@ -230,23 +239,26 @@ def run_skipper_24h_check_job(app: Flask):
             app.logger.error(f"Skipper 24h check failed: {e}", exc_info=True)
 
 
-def run_weekly_summary_job(app: Flask):
+def run_weekly_summary_job(app: Flask, channel_override: str = None):
     """Execute the weekly practice summary job within app context.
 
     Runs Sunday at 6pm to post upcoming week's practices to Slack.
 
     Args:
         app: Flask application instance for context.
+        channel_override: Optional channel name to override default for Slack posts.
     """
     with app.app_context():
         from app.agent.routines.weekly_summary import run_weekly_summary
 
         app.logger.info("=" * 60)
         app.logger.info("Starting weekly practice summary job")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
         app.logger.info("=" * 60)
 
         try:
-            result = run_weekly_summary()
+            result = run_weekly_summary(channel_override=channel_override)
 
             app.logger.info(
                 f"Weekly summary complete: "
@@ -258,7 +270,7 @@ def run_weekly_summary_job(app: Flask):
             app.logger.error(f"Weekly summary failed: {e}", exc_info=True)
 
 
-def run_coach_weekly_summary_job(app: Flask):
+def run_coach_weekly_summary_job(app: Flask, channel_override: str = None):
     """Execute the coach weekly review summary job within app context.
 
     Runs Sunday at 6pm to post a summary of the upcoming week's practices
@@ -266,6 +278,7 @@ def run_coach_weekly_summary_job(app: Flask):
 
     Args:
         app: Flask application instance for context.
+        channel_override: Optional channel name to override default for Slack posts.
     """
     with app.app_context():
         from datetime import timedelta
@@ -273,6 +286,8 @@ def run_coach_weekly_summary_job(app: Flask):
 
         app.logger.info("=" * 60)
         app.logger.info("Starting coach weekly review summary job")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
         app.logger.info("=" * 60)
 
         try:
@@ -285,7 +300,7 @@ def run_coach_weekly_summary_job(app: Flask):
                 hour=0, minute=0, second=0, microsecond=0
             )
 
-            result = post_coach_weekly_summary(week_start)
+            result = post_coach_weekly_summary(week_start, channel_override=channel_override)
 
             if result.get('success'):
                 app.logger.info(
@@ -319,6 +334,102 @@ def run_expire_proposals_job(app: Flask):
 
         except Exception as e:
             app.logger.error(f"Expire proposals failed: {e}", exc_info=True)
+
+
+def run_practice_announcements_job(app: Flask, channel_override: str = None):
+    """Execute the daily practice announcement job within app context.
+
+    Posts practice announcements with smart timing:
+    - Evening practices (12pm+): Run at 8am, announce same day
+    - Morning practices (before 12pm): Run at 8pm, announce for tomorrow
+
+    Args:
+        app: Flask application instance for context.
+        channel_override: Optional channel name to override default for Slack posts.
+    """
+    from datetime import timedelta
+
+    with app.app_context():
+        from app.practices.models import Practice
+        from app.practices.interfaces import PracticeStatus
+        from app.slack.practices import post_practice_announcement
+
+        app.logger.info("=" * 60)
+        app.logger.info("Starting practice announcements job")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
+        app.logger.info("=" * 60)
+
+        now = datetime.now()
+        practices_to_announce = []
+
+        try:
+            if now.hour < 12:
+                # Morning run (around 8am): Announce evening practices for today
+                today_start = now.replace(hour=12, minute=0, second=0, microsecond=0)
+                today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
+
+                practices = Practice.query.filter(
+                    Practice.date >= today_start,
+                    Practice.date <= today_end,
+                    Practice.status.in_([
+                        PracticeStatus.SCHEDULED.value,
+                        PracticeStatus.CONFIRMED.value
+                    ]),
+                    Practice.slack_message_ts.is_(None)  # Not yet announced
+                ).order_by(Practice.date).all()
+
+                app.logger.info(f"Morning run: Found {len(practices)} evening practices to announce")
+                practices_to_announce.extend(practices)
+
+            else:
+                # Evening run (around 8pm): Announce morning practices for tomorrow
+                tomorrow_start = (now + timedelta(days=1)).replace(
+                    hour=0, minute=0, second=0, microsecond=0
+                )
+                tomorrow_noon = tomorrow_start.replace(hour=12)
+
+                practices = Practice.query.filter(
+                    Practice.date >= tomorrow_start,
+                    Practice.date < tomorrow_noon,
+                    Practice.status.in_([
+                        PracticeStatus.SCHEDULED.value,
+                        PracticeStatus.CONFIRMED.value
+                    ]),
+                    Practice.slack_message_ts.is_(None)  # Not yet announced
+                ).order_by(Practice.date).all()
+
+                app.logger.info(f"Evening run: Found {len(practices)} morning practices to announce")
+                practices_to_announce.extend(practices)
+
+            # Announce each practice
+            announced = 0
+            errors = 0
+
+            for practice in practices_to_announce:
+                try:
+                    result = post_practice_announcement(
+                        practice,
+                        channel_override=channel_override
+                    )
+                    if result.get('success'):
+                        announced += 1
+                        app.logger.info(f"Announced practice #{practice.id}")
+                    else:
+                        errors += 1
+                        app.logger.error(f"Failed to announce practice #{practice.id}: {result.get('error')}")
+                except Exception as e:
+                    errors += 1
+                    app.logger.error(f"Error announcing practice #{practice.id}: {e}", exc_info=True)
+
+            app.logger.info(f"Practice announcements complete: announced={announced}, errors={errors}")
+
+        except Exception as e:
+            app.logger.error(f"Practice announcements job failed: {e}", exc_info=True)
+
+        app.logger.info("=" * 60)
+        app.logger.info("Practice announcements job complete")
+        app.logger.info("=" * 60)
 
 
 def init_scheduler(app: Flask) -> bool:
@@ -471,6 +582,40 @@ def init_scheduler(app: Flask) -> bool:
         replace_existing=True
     )
 
+    # ========================================================================
+    # Practice Announcements (smart timing)
+    # ========================================================================
+
+    # Morning announcement run: 8:00 AM for evening practices (today)
+    scheduler.add_job(
+        func=run_practice_announcements_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=8,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='practice_announcements_morning',
+        name='Practice Announcements (Morning)',
+        replace_existing=True,
+        misfire_grace_time=1800
+    )
+
+    # Evening announcement run: 8:00 PM for morning practices (tomorrow)
+    scheduler.add_job(
+        func=run_practice_announcements_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=20,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='practice_announcements_evening',
+        name='Practice Announcements (Evening)',
+        replace_existing=True,
+        misfire_grace_time=1800
+    )
+
     scheduler.start()
 
     app.logger.info("=" * 60)
@@ -538,7 +683,7 @@ def trigger_channel_sync_now(app: Flask) -> None:
         )
 
 
-def trigger_skipper_job_now(app: Flask, job_type: str) -> dict:
+def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = None) -> dict:
     """Manually trigger a Skipper job.
 
     This can be called from the admin UI for on-demand evaluation.
@@ -546,7 +691,9 @@ def trigger_skipper_job_now(app: Flask, job_type: str) -> dict:
     Args:
         app: Flask application instance.
         job_type: One of 'morning_check', '48h_check', '24h_check',
-                  'weekly_summary', 'coach_weekly_summary', 'expire_proposals'
+                  'weekly_summary', 'coach_weekly_summary', 'expire_proposals',
+                  'practice_announcements'
+        channel_override: Optional channel name to override default for Slack posts.
 
     Returns:
         Result dict from the job, or error dict if invalid job_type.
@@ -557,7 +704,14 @@ def trigger_skipper_job_now(app: Flask, job_type: str) -> dict:
         '24h_check': run_skipper_24h_check_job,
         'weekly_summary': run_weekly_summary_job,
         'coach_weekly_summary': run_coach_weekly_summary_job,
-        'expire_proposals': run_expire_proposals_job
+        'expire_proposals': run_expire_proposals_job,
+        'practice_announcements': run_practice_announcements_job
+    }
+
+    # Jobs that support channel_override
+    jobs_with_channel_override = {
+        'morning_check', '48h_check', '24h_check',
+        'weekly_summary', 'coach_weekly_summary', 'practice_announcements'
     }
 
     if job_type not in job_map:
@@ -565,17 +719,26 @@ def trigger_skipper_job_now(app: Flask, job_type: str) -> dict:
 
     job_func = job_map[job_type]
 
+    # Determine args based on whether job supports channel_override
+    if job_type in jobs_with_channel_override and channel_override:
+        job_args = [app, channel_override]
+    else:
+        job_args = [app]
+
     if not scheduler.running:
         # Run directly
-        job_func(app)
-        return {'status': 'completed', 'job': job_type, 'mode': 'direct'}
+        if job_type in jobs_with_channel_override and channel_override:
+            job_func(app, channel_override=channel_override)
+        else:
+            job_func(app)
+        return {'status': 'completed', 'job': job_type, 'mode': 'direct', 'channel_override': channel_override}
     else:
         # Schedule as one-time job
         scheduler.add_job(
             func=job_func,
-            args=[app],
+            args=job_args,
             id=f'manual_{job_type}',
             name=f'Manual {job_type}',
             replace_existing=True
         )
-        return {'status': 'scheduled', 'job': job_type, 'mode': 'scheduler'}
+        return {'status': 'scheduled', 'job': job_type, 'mode': 'scheduler', 'channel_override': channel_override}
