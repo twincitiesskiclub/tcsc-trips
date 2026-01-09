@@ -77,6 +77,7 @@ class SlackMessage:
     reply_count: int = 0
     visibility: MessageVisibility = MessageVisibility.PUBLIC
     posted_at: Optional[datetime] = None
+    thread_ts: Optional[str] = None  # Parent message ts if this is a reply
 
 
 @dataclass
@@ -135,7 +136,8 @@ class NewsletterContext:
 class GenerationResult:
     """Result of newsletter generation."""
     success: bool
-    content: Optional[str] = None
+    content: Optional[str] = None  # Raw content (JSON string or markdown)
+    structured_content: Optional[dict] = None  # Parsed JSON dict (if JSON format)
     version_number: int = 0
     model_used: str = ""
     tokens_used: int = 0
