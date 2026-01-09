@@ -194,6 +194,65 @@ def _count_replies(message: dict) -> int:
     wait=wait_exponential(multiplier=1, min=2, max=30),
     reraise=True,
 )
+def _fetch_thread_replies(
+    channel_id: str,
+    thread_ts: str,
+    since: datetime,
+) -> list[dict]:
+    """Fetch all replies in a thread.
+
+    Args:
+        channel_id: Slack channel ID.
+        thread_ts: Parent message timestamp (thread root).
+        since: Only include replies after this timestamp.
+
+    Returns:
+        List of reply message dicts (excluding parent message).
+    """
+    client = get_slack_client()
+    replies = []
+    cursor = None
+    oldest_ts = str(since.timestamp())
+
+    try:
+        while True:
+            params = {
+                'channel': channel_id,
+                'ts': thread_ts,
+                'oldest': oldest_ts,
+                'limit': 100,
+            }
+            if cursor:
+                params['cursor'] = cursor
+
+            result = client.conversations_replies(**params)
+
+            for msg in result.get('messages', []):
+                # Skip the parent message (same ts as thread_ts)
+                if msg.get('ts') == thread_ts:
+                    continue
+                replies.append(msg)
+
+            cursor = result.get('response_metadata', {}).get('next_cursor')
+            if not cursor:
+                break
+
+    except SlackApiError as e:
+        error_code = e.response.get('error', '')
+        logger.warning(
+            f"Failed to fetch thread replies for {thread_ts}: {error_code}"
+        )
+        return []
+
+    return replies
+
+
+@retry(
+    retry=retry_if_exception_type(SlackApiError),
+    stop=stop_after_attempt(3),
+    wait=wait_exponential(multiplier=1, min=2, max=30),
+    reraise=True,
+)
 def collect_channel_messages(
     channel_id: str,
     since: datetime,
@@ -234,6 +293,7 @@ def collect_channel_messages(
     oldest_ts = str(since.timestamp())
     cursor = None
     total_fetched = 0
+    thread_replies_fetched = 0
 
     try:
         while True:
@@ -275,7 +335,8 @@ def collect_channel_messages(
                 if not is_private:
                     permalink = get_message_permalink(channel_id, message_ts)
 
-                # Create SlackMessage
+                # Create SlackMessage for the parent message
+                reply_count = _count_replies(msg)
                 slack_message = SlackMessage(
                     channel_id=channel_id,
                     channel_name=channel_name,
@@ -285,20 +346,69 @@ def collect_channel_messages(
                     text=text,
                     permalink=permalink,
                     reaction_count=_count_reactions(msg),
-                    reply_count=_count_replies(msg),
+                    reply_count=reply_count,
                     visibility=visibility,
                     posted_at=_parse_message_timestamp(message_ts),
                 )
                 messages.append(slack_message)
+
+                # Fetch thread replies if this message has replies
+                if reply_count > 0:
+                    thread_replies = _fetch_thread_replies(
+                        channel_id=channel_id,
+                        thread_ts=message_ts,
+                        since=since,
+                    )
+
+                    for reply in thread_replies:
+                        # Skip bot messages and messages without user
+                        if reply.get('bot_id') or reply.get('subtype'):
+                            continue
+                        reply_user_id = reply.get('user')
+                        if not reply_user_id:
+                            continue
+
+                        reply_text = reply.get('text', '')
+                        if not reply_text.strip():
+                            continue
+
+                        reply_ts = reply.get('ts', '')
+                        reply_user_name = _get_user_name(reply_user_id)
+
+                        # Get permalink for reply (public channels only)
+                        reply_permalink = None
+                        if not is_private:
+                            reply_permalink = get_message_permalink(
+                                channel_id, reply_ts
+                            )
+
+                        reply_message = SlackMessage(
+                            channel_id=channel_id,
+                            channel_name=channel_name,
+                            message_ts=reply_ts,
+                            user_id=reply_user_id,
+                            user_name=reply_user_name,
+                            text=reply_text,
+                            permalink=reply_permalink,
+                            reaction_count=_count_reactions(reply),
+                            reply_count=0,  # Replies don't have sub-replies
+                            visibility=visibility,
+                            posted_at=_parse_message_timestamp(reply_ts),
+                            thread_ts=message_ts,  # Mark as part of thread
+                        )
+                        messages.append(reply_message)
+                        thread_replies_fetched += 1
 
             # Check for more pages
             cursor = result.get('response_metadata', {}).get('next_cursor')
             if not cursor:
                 break
 
+        parent_count = len(messages) - thread_replies_fetched
         logger.info(
             f"Collected {len(messages)} messages from #{channel_name} "
-            f"(scanned {total_fetched} total)"
+            f"({parent_count} parent + {thread_replies_fetched} thread replies, "
+            f"scanned {total_fetched} total)"
         )
 
     except SlackApiError as e:

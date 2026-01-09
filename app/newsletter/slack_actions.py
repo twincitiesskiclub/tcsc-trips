@@ -10,7 +10,7 @@ import os
 import yaml
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Union
 
 from slack_sdk.errors import SlackApiError
 
@@ -23,6 +23,10 @@ from app.newsletter.interfaces import (
 )
 from app.newsletter.models import Newsletter, NewsletterVersion
 from app.slack.client import get_slack_client, get_channel_id_by_name
+from app.newsletter.templates import (
+    build_newsletter_blocks as build_structured_blocks,
+    get_fallback_text,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -314,7 +318,10 @@ def _build_version_thread_blocks(version: NewsletterVersion) -> list[dict]:
 # Living Post Management
 # =============================================================================
 
-def create_living_post(newsletter: Newsletter, content: str) -> SlackPostReference:
+def create_living_post(
+    newsletter: Newsletter,
+    content: Union[str, dict]
+) -> SlackPostReference:
     """Create initial living post for a new newsletter week.
 
     Posts to configured living post channel (default #tcsc-logging).
@@ -322,7 +329,7 @@ def create_living_post(newsletter: Newsletter, content: str) -> SlackPostReferen
 
     Args:
         newsletter: Newsletter model to create post for
-        content: Initial newsletter content
+        content: Newsletter content - either structured dict or legacy markdown string
 
     Returns:
         SlackPostReference with channel_id and message_ts
@@ -350,16 +357,25 @@ def create_living_post(newsletter: Newsletter, content: str) -> SlackPostReferen
 
     client = get_slack_client()
 
-    # Build blocks
-    blocks = _build_newsletter_blocks(
-        content=content,
-        version_number=newsletter.current_version,
-        status=newsletter.status
-    )
-
-    # Create week date range for fallback text
-    week_str = f"{newsletter.week_start.strftime('%b %d')} - {newsletter.week_end.strftime('%b %d')}"
-    fallback_text = f"Weekly Dispatch ({week_str}) - v{newsletter.current_version}"
+    # Build blocks - use structured template if content is a dict
+    if isinstance(content, dict):
+        logger.info("Using structured Block Kit template for newsletter")
+        blocks = build_structured_blocks(
+            content=content,
+            version_number=newsletter.current_version,
+            status=newsletter.status
+        )
+        fallback_text = get_fallback_text(content)
+    else:
+        logger.info("Using legacy block builder for newsletter")
+        blocks = _build_newsletter_blocks(
+            content=content,
+            version_number=newsletter.current_version,
+            status=newsletter.status
+        )
+        # Create week date range for fallback text
+        week_str = f"{newsletter.week_start.strftime('%b %d')} - {newsletter.week_end.strftime('%b %d')}"
+        fallback_text = f"Weekly Dispatch ({week_str}) - v{newsletter.current_version}"
 
     try:
         response = client.chat_postMessage(
@@ -394,8 +410,8 @@ def create_living_post(newsletter: Newsletter, content: str) -> SlackPostReferen
 
 def update_living_post(
     newsletter: Newsletter,
-    content: str,
-    version_number: int
+    content: Union[str, dict],
+    version_number: Optional[int] = None
 ) -> SlackPostReference:
     """Update existing living post with new content.
 
@@ -403,8 +419,8 @@ def update_living_post(
 
     Args:
         newsletter: Newsletter model with slack_main_message_ts set
-        content: Updated newsletter content
-        version_number: New version number
+        content: Updated newsletter content - either structured dict or legacy string
+        version_number: New version number (defaults to newsletter.current_version)
 
     Returns:
         SlackPostReference with channel_id and message_ts
@@ -415,6 +431,10 @@ def update_living_post(
     """
     if not newsletter.slack_main_message_ts or not newsletter.slack_channel_id:
         raise ValueError("No Slack message to update - create living post first")
+
+    # Default to current version if not specified
+    if version_number is None:
+        version_number = newsletter.current_version
 
     dry_run = is_dry_run()
 
@@ -433,18 +453,29 @@ def update_living_post(
     # Determine if we need review buttons
     include_buttons = newsletter.status == NewsletterStatus.READY_FOR_REVIEW.value
 
-    # Build blocks
-    blocks = _build_newsletter_blocks(
-        content=content,
-        version_number=version_number,
-        status=newsletter.status,
-        include_review_buttons=include_buttons,
-        newsletter_id=newsletter.id
-    )
-
-    # Create fallback text
-    week_str = f"{newsletter.week_start.strftime('%b %d')} - {newsletter.week_end.strftime('%b %d')}"
-    fallback_text = f"Weekly Dispatch ({week_str}) - v{version_number}"
+    # Build blocks - use structured template if content is a dict
+    if isinstance(content, dict):
+        logger.info("Using structured Block Kit template for newsletter update")
+        blocks = build_structured_blocks(
+            content=content,
+            version_number=version_number,
+            status=newsletter.status,
+            include_review_buttons=include_buttons,
+            newsletter_id=newsletter.id
+        )
+        fallback_text = get_fallback_text(content)
+    else:
+        logger.info("Using legacy block builder for newsletter update")
+        blocks = _build_newsletter_blocks(
+            content=content,
+            version_number=version_number,
+            status=newsletter.status,
+            include_review_buttons=include_buttons,
+            newsletter_id=newsletter.id
+        )
+        # Create fallback text
+        week_str = f"{newsletter.week_start.strftime('%b %d')} - {newsletter.week_end.strftime('%b %d')}"
+        fallback_text = f"Weekly Dispatch ({week_str}) - v{version_number}"
 
     try:
         client.chat_update(
