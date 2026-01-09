@@ -594,7 +594,9 @@ if _bot_token:
             practice.workout_description = workout
             practice.cooldown_description = cooldown
             practice.is_dark_practice = is_dark_practice
-            practice.has_social = has_social
+            # has_social is a computed property - clear social_location_id if unchecked
+            if not has_social:
+                practice.social_location_id = None
 
             db.session.commit()
             logger.info(f"Practice {practice_id} fully updated by {user_id}")
