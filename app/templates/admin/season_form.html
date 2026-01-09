@@ -3,92 +3,103 @@
 {% block title %}{{ 'Edit Season' if season else 'New Season' }}{% endblock %}
 
 {% block content %}
-<div class="admin-header">
-    <h1>{{ 'Edit Season' if season else 'New Season' }}</h1>
-    <a href="{{ url_for('admin.get_admin_seasons') }}" class="button button-secondary">Back to Seasons</a>
+<div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+    <h1 class="text-2xl font-semibold text-tcsc-navy m-0">{{ 'Edit Season' if season else 'New Season' }}</h1>
+    <a href="{{ url_for('admin.get_admin_seasons') }}" class="bg-gray-200 text-gray-600 px-4 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Seasons</a>
 </div>
 
-<form class="admin-form" method="POST">
-    <div class="form-row">
-        <div class="form-group">
-            <label for="year">Year</label>
+<form class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100" method="POST">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="year" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Year</label>
             {% set year_val = season.year if season and season.__class__.__name__ != 'dict' else season.get('year') if season else None %}
-            <select id="year" name="year" required>
+            <select id="year" name="year" required
+                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
                 {% for y in range(2024, 2100) %}
                     <option value="{{ y }}" {% if year_val == y or (year_val and year_val|string == y|string) %}selected{% endif %}>{{ y }}</option>
                 {% endfor %}
             </select>
         </div>
-        <div class="form-group">
-            <label for="season_type">Type</label>
+        <div class="mb-5">
+            <label for="season_type" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Type</label>
             {% set season_type_val = season.season_type if season and season.__class__.__name__ != 'dict' else season.get('season_type') if season else None %}
-            <select id="season_type" name="season_type" required>
+            <select id="season_type" name="season_type" required
+                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
                 <option value="spring/summer" {% if season_type_val == 'spring/summer' %}selected{% endif %}>Spring / Summer</option>
                 <option value="fall/winter" {% if season_type_val == 'fall/winter' %}selected{% endif %}>Fall / Winter</option>
             </select>
         </div>
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="start_date">Start Date</label>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="start_date" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Start Date</label>
             {% set start_date_val = season.start_date if season and season.__class__.__name__ != 'dict' else season.get('start_date') if season else None %}
-            <input type="date" id="start_date" name="start_date" value="{% if start_date_val %}{% if start_date_val is string %}{{ start_date_val }}{% else %}{{ start_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required>
+            <input type="date" id="start_date" name="start_date" value="{% if start_date_val %}{% if start_date_val is string %}{{ start_date_val }}{% else %}{{ start_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="form-group">
-            <label for="end_date">End Date</label>
+        <div class="mb-5">
+            <label for="end_date" class="block text-sm font-medium text-tcsc-gray-800 mb-2">End Date</label>
             {% set end_date_val = season.end_date if season and season.__class__.__name__ != 'dict' else season.get('end_date') if season else None %}
-            <input type="date" id="end_date" name="end_date" value="{% if end_date_val %}{% if end_date_val is string %}{{ end_date_val }}{% else %}{{ end_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required>
+            <input type="date" id="end_date" name="end_date" value="{% if end_date_val %}{% if end_date_val is string %}{{ end_date_val }}{% else %}{{ end_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="price_cents">Price ($)</label>
+    <div class="mb-5">
+        <label for="price_cents" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Price ($)</label>
         {% set price_cents_val = season.price_cents if season and season.__class__.__name__ != 'dict' else season.get('price_cents') if season else None %}
-        <input type="number" id="price_cents" name="price_cents" step="0.01" min="0" value="{% if price_cents_val %}{% if price_cents_val is number %}{{ '%.2f'|format(price_cents_val/100) }}{% else %}{{ price_cents_val }}{% endif %}{% endif %}">
+        <input type="number" id="price_cents" name="price_cents" step="0.01" min="0" value="{% if price_cents_val %}{% if price_cents_val is number %}{{ '%.2f'|format(price_cents_val/100) }}{% else %}{{ price_cents_val }}{% endif %}{% endif %}"
+               class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="returning_start">Returning Registration Start</label>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="returning_start" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Returning Registration Start</label>
             {% set returning_start_val = season.returning_start if season and season.__class__.__name__ != 'dict' else season.get('returning_start') if season else None %}
-            <input type="datetime-local" id="returning_start" name="returning_start" value="{% if returning_start_val %}{% if returning_start_val is string %}{{ returning_start_val }}{% else %}{{ returning_start_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+            <input type="datetime-local" id="returning_start" name="returning_start" value="{% if returning_start_val %}{% if returning_start_val is string %}{{ returning_start_val }}{% else %}{{ returning_start_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="form-group">
-            <label for="returning_end">Returning Registration End</label>
+        <div class="mb-5">
+            <label for="returning_end" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Returning Registration End</label>
             {% set returning_end_val = season.returning_end if season and season.__class__.__name__ != 'dict' else season.get('returning_end') if season else None %}
-            <input type="datetime-local" id="returning_end" name="returning_end" value="{% if returning_end_val %}{% if returning_end_val is string %}{{ returning_end_val }}{% else %}{{ returning_end_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+            <input type="datetime-local" id="returning_end" name="returning_end" value="{% if returning_end_val %}{% if returning_end_val is string %}{{ returning_end_val }}{% else %}{{ returning_end_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="new_start">New Registration Start</label>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="new_start" class="block text-sm font-medium text-tcsc-gray-800 mb-2">New Registration Start</label>
             {% set new_start_val = season.new_start if season and season.__class__.__name__ != 'dict' else season.get('new_start') if season else None %}
-            <input type="datetime-local" id="new_start" name="new_start" value="{% if new_start_val %}{% if new_start_val is string %}{{ new_start_val }}{% else %}{{ new_start_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+            <input type="datetime-local" id="new_start" name="new_start" value="{% if new_start_val %}{% if new_start_val is string %}{{ new_start_val }}{% else %}{{ new_start_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="form-group">
-            <label for="new_end">New Registration End</label>
+        <div class="mb-5">
+            <label for="new_end" class="block text-sm font-medium text-tcsc-gray-800 mb-2">New Registration End</label>
             {% set new_end_val = season.new_end if season and season.__class__.__name__ != 'dict' else season.get('new_end') if season else None %}
-            <input type="datetime-local" id="new_end" name="new_end" value="{% if new_end_val %}{% if new_end_val is string %}{{ new_end_val }}{% else %}{{ new_end_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}">
+            <input type="datetime-local" id="new_end" name="new_end" value="{% if new_end_val %}{% if new_end_val is string %}{{ new_end_val }}{% else %}{{ new_end_val.strftime('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="registration_limit">Registration Limit</label>
+    <div class="mb-5">
+        <label for="registration_limit" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Registration Limit</label>
         {% set reg_limit_val = season.registration_limit if season and season.__class__.__name__ != 'dict' else season.get('registration_limit') if season else None %}
-        <input type="number" id="registration_limit" name="registration_limit" min="1" value="{{ reg_limit_val if reg_limit_val else '' }}">
+        <input type="number" id="registration_limit" name="registration_limit" min="1" value="{{ reg_limit_val if reg_limit_val else '' }}"
+               class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
     </div>
 
-    <div class="form-group">
-        <label for="description">Description</label>
+    <div class="mb-5">
+        <label for="description" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Description</label>
         {% set desc_val = season.description if season and season.__class__.__name__ != 'dict' else season.get('description') if season else None %}
-        <textarea id="description" name="description" rows="3">{{ desc_val if desc_val else '' }}</textarea>
+        <textarea id="description" name="description" rows="3"
+                  class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy resize-y">{{ desc_val if desc_val else '' }}</textarea>
     </div>
 
-    <div class="form-actions">
-        <button type="submit" class="button">Save Season</button>
-        <a href="{{ url_for('admin.get_admin_seasons') }}" class="button button-secondary">Cancel</a>
+    <div class="flex gap-3 mt-6">
+        <button type="submit" class="bg-tcsc-navy text-white px-6 py-3 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Season</button>
+        <a href="{{ url_for('admin.get_admin_seasons') }}" class="bg-gray-200 text-gray-600 px-6 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Cancel</a>
     </div>
 </form>
-{% endblock %} 
+{% endblock %}

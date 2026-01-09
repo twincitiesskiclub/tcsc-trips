@@ -1,115 +1,106 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Admin - Seasons</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
-  </head>
-  <body>
-    <div class="admin-container">
-      {% include 'admin/partials/header.html' %}
+{% extends "admin/admin_base.html" %}
 
-      <div class="admin-header">
-        <h1>Seasons Management</h1>
-        <div class="admin-actions">
-          <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
-          <a href="{{ url_for('admin.new_season') }}" class="button">Create New Season</a>
-        </div>
-      </div>
+{% block title %}Seasons{% endblock %}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Type</th>
-            <th>Year</th>
-            <th>Dates</th>
-            <th>Returning Registration</th>
-            <th>New Registration</th>
-            <th>Price</th>
-            <th>Reg. Limit</th>
-            <th>Description</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for season in seasons %}
-          <tr>
-            <td>{{ season.name }}</td>
-            <td>
-              {% if season.is_current %}
-                <span class="status-badge status-active">Current</span>
-              {% else %}
-                <span class="status-badge status-draft">—</span>
-              {% endif %}
-            </td>
-            <td>{{ season.season_type }}</td>
-            <td>{{ season.year }}</td>
-            <td>{{ season.start_date.strftime('%Y-%m-%d') }} to {{ season.end_date.strftime('%Y-%m-%d') }}</td>
-            <td>
-              {% if season.returning_start and season.returning_end %}
-                {{ season.returning_start.strftime('%Y-%m-%d %H:%M') }}<br>to<br>{{ season.returning_end.strftime('%Y-%m-%d %H:%M') }}
-              {% else %}
-                &mdash;
-              {% endif %}
-            </td>
-            <td>
-              {% if season.new_start and season.new_end %}
-                {{ season.new_start.strftime('%Y-%m-%d %H:%M') }}<br>to<br>{{ season.new_end.strftime('%Y-%m-%d %H:%M') }}
-              {% else %}
-                &mdash;
-              {% endif %}
-            </td>
-            <td>
-              {% if season.price_cents %}
-                ${{ '%.2f'|format(season.price_cents/100) }}
-              {% else %}
-                &mdash;
-              {% endif %}
-            </td>
-            <td>
-              {% if season.registration_limit %}
-                {{ season.registration_limit }}
-              {% else %}
-                &mdash;
-              {% endif %}
-            </td>
-            <td>
-              {% if season.description %}
-                {{ season.description|truncate(60) }}
-              {% else %}
-                &mdash;
-              {% endif %}
-            </td>
-            <td>
-              <div class="action-buttons">
-                <a href="{{ url_for('admin.edit_season', season_id=season.id) }}" class="button button-small">Edit</a>
-                <a href="{{ url_for('admin.export_season_members', season_id=season.id) }}" class="button button-small">Export</a>
-                {% if not season.is_current %}
-                <form action="{{ url_for('admin.activate_season', season_id=season.id) }}" method="POST" style="display: inline;">
-                  <button type="submit" class="button button-small button-success" onclick="return confirm('Activate season &quot;{{ season.name }}&quot;?\n\nThis will:\n• Set this as the current season\n• Update all user statuses based on their registration\n• Recalculate seasons_since_active counters\n\nContinue?')">
-                    Activate
-                  </button>
-                </form>
-                {% endif %}
-                <button
-                  class="button button-small button-danger"
-                  onclick="confirmDelete('season', '{{ season.id }}', '{{ season.name }}')"
-                >
-                  Delete
-                </button>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Seasons Management</h1>
+    <div class="flex gap-3">
+      <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
+      <a href="{{ url_for('admin.new_season') }}" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Create New Season</a>
     </div>
+  </div>
 
-    <script src="{{ url_for('static', filename='admin.js') }}"></script>
-  </body>
-</html> 
+  <div class="bg-white rounded-md shadow-sm overflow-x-auto">
+    <table class="w-full border-collapse min-w-[1200px]">
+      <thead>
+        <tr class="border-b border-tcsc-gray-100 bg-gray-50">
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Name</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Status</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Type</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Year</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Dates</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Returning Registration</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">New Registration</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Price</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Reg. Limit</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Description</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for season in seasons %}
+        <tr class="border-b border-tcsc-gray-100 hover:bg-gray-50 transition-colors">
+          <td class="py-3 px-4 text-sm text-tcsc-navy font-medium">{{ season.name }}</td>
+          <td class="py-3 px-4 text-sm">
+            {% if season.is_current %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-500/15 text-green-700">Current</span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-600/10 text-zinc-700">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ season.season_type }}</td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ season.year }}</td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ season.start_date.strftime('%Y-%m-%d') }} to {{ season.end_date.strftime('%Y-%m-%d') }}</td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-600">
+            {% if season.returning_start and season.returning_end %}
+              {{ season.returning_start.strftime('%Y-%m-%d %H:%M') }}<br>to<br>{{ season.returning_end.strftime('%Y-%m-%d %H:%M') }}
+            {% else %}
+              <span class="text-tcsc-gray-400">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-600">
+            {% if season.new_start and season.new_end %}
+              {{ season.new_start.strftime('%Y-%m-%d %H:%M') }}<br>to<br>{{ season.new_end.strftime('%Y-%m-%d %H:%M') }}
+            {% else %}
+              <span class="text-tcsc-gray-400">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">
+            {% if season.price_cents %}
+              ${{ '%.2f'|format(season.price_cents/100) }}
+            {% else %}
+              <span class="text-tcsc-gray-400">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">
+            {% if season.registration_limit %}
+              {{ season.registration_limit }}
+            {% else %}
+              <span class="text-tcsc-gray-400">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-600">
+            {% if season.description %}
+              {{ season.description|truncate(60) }}
+            {% else %}
+              <span class="text-tcsc-gray-400">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm">
+            <div class="flex flex-wrap gap-2">
+              <a href="{{ url_for('admin.edit_season', season_id=season.id) }}" class="bg-tcsc-navy text-white px-3 py-1.5 rounded-tcsc text-xs font-medium hover:opacity-90 transition-all">Edit</a>
+              <a href="{{ url_for('admin.export_season_members', season_id=season.id) }}" class="bg-tcsc-navy text-white px-3 py-1.5 rounded-tcsc text-xs font-medium hover:opacity-90 transition-all">Export</a>
+              {% if not season.is_current %}
+              <form action="{{ url_for('admin.activate_season', season_id=season.id) }}" method="POST" class="inline">
+                <button type="submit" class="bg-status-success-bg text-status-success-text px-3 py-1.5 rounded-tcsc text-xs font-medium hover:bg-green-200 transition-all" onclick="return confirm('Activate season &quot;{{ season.name }}&quot;?\n\nThis will:\n• Set this as the current season\n• Update all user statuses based on their registration\n• Recalculate seasons_since_active counters\n\nContinue?')">
+                  Activate
+                </button>
+              </form>
+              {% endif %}
+              <button
+                class="bg-status-error-bg text-status-error-text px-3 py-1.5 rounded-tcsc text-xs font-medium hover:bg-red-200 transition-all"
+                onclick="confirmDelete('season', '{{ season.id }}', '{{ season.name }}')"
+              >
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

@@ -4,30 +4,6 @@ let pendingBulkAction = null;
 let selectedPaymentIds = [];
 let canViewAmounts = false;
 
-// Toast notification system
-function showToast(message, type = 'success') {
-    const container = document.getElementById('toast-container');
-    const toast = document.createElement('div');
-    toast.className = `toast toast-${type}`;
-
-    const icon = type === 'success' ? '&#10003;' : '&#10007;';
-    toast.innerHTML = `
-        <span class="toast-icon">${icon}</span>
-        <span class="toast-message">${message}</span>
-        <button class="toast-close" onclick="this.parentElement.remove()">&times;</button>
-    `;
-
-    container.appendChild(toast);
-
-    // Auto-remove after 4 seconds
-    setTimeout(() => {
-        if (toast.parentElement) {
-            toast.style.animation = 'slideOut 0.3s ease forwards';
-            setTimeout(() => toast.remove(), 300);
-        }
-    }, 4000);
-}
-
 document.addEventListener('DOMContentLoaded', async () => {
     // Fetch payment data from API
     const response = await fetch('/admin/payments/data');
@@ -40,6 +16,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         data: paymentsData,
         layout: "fitDataStretch",
         height: "calc(100vh - 320px)",
+        placeholder: "No payments found",
         responsiveLayout: false,
         movableColumns: true,
         resizableColumns: true,
@@ -93,9 +70,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const status = data.status;
                 const acceptDisabled = status !== 'requires_capture' ? 'disabled' : '';
                 const refundDisabled = !['requires_capture', 'succeeded'].includes(status) ? 'disabled' : '';
-                return `<div class="action-buttons">
-                    <button class="button button-small button-success" onclick="capturePayment(${data.id}); event.stopPropagation();" ${acceptDisabled}>Accept</button>
-                    <button class="button button-small button-danger" onclick="refundPayment(${data.id}); event.stopPropagation();" ${refundDisabled}>Refund</button>
+                return `<div class="tbl-actions">
+                    <button class="tbl-btn tbl-btn-success" onclick="capturePayment(${data.id}); event.stopPropagation();" ${acceptDisabled}>Accept</button>
+                    <button class="tbl-btn tbl-btn-danger" onclick="refundPayment(${data.id}); event.stopPropagation();" ${refundDisabled}>Refund</button>
                 </div>`;
             }, headerSort: false, width: 180, hozAlign: "center", frozen: true}
         ],

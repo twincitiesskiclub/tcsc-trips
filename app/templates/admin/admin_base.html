@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TCSC Admin - {% block title %}{{ title }}{% endblock %}</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
-    <!-- Include admin-specific styles -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}">
-    <!-- Tabulator CSS -->
+    <!-- Tabulator CSS (load first so our overrides take precedence) -->
     <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
+    <!-- CSS Loading Order: Tailwind with custom Tabulator themes, then legacy -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}">
     {% block extra_css %}{% endblock %}
 </head>
-<body>
+<body class="bg-tcsc-gray-50 min-h-screen">
     <div class="admin-container">
         {% include 'admin/partials/header.html' %}
         <!-- Child templates may add new fields such as registration limit and description -->
@@ -19,6 +21,8 @@
         </div>
     </div>
     <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
+    <!-- Shared toast notifications -->
+    <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
     <!-- Tabulator JS -->
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
     {% block extra_js %}{% endblock %}

@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Frozen columns on left (always visible)
             {title: "", formatter: function(cell) {
                 const id = cell.getRow().getData().id;
-                return `<button class="button button-small" onclick="openEditModal(${id}); event.stopPropagation();">Edit</button>`;
+                return `<button class="tbl-btn tbl-btn-primary" onclick="openEditModal(${id}); event.stopPropagation();">Edit</button>`;
             }, headerSort: false, width: 60, hozAlign: "center", frozen: true},
             {title: "Name", field: "full_name", frozen: true, minWidth: 150,
              formatter: function(cell) {
@@ -188,9 +188,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // View button handlers
-    document.querySelectorAll('.view-btn').forEach(btn => {
+    document.querySelectorAll('.seg-btn').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('global-season-select').value = '';
             currentView = btn.dataset.view;
@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('global-season-select').addEventListener('change', (e) => {
         const seasonId = e.target.value;
         if (seasonId) {
-            document.querySelectorAll('.view-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
             selectedSeasonId = parseInt(seasonId);
             currentView = 'season';
             applyGlobalView();
@@ -581,22 +581,3 @@ async function saveUserTags() {
     }
 }
 
-function showToast(message, type = 'info') {
-    // Remove any existing toast
-    const existingToast = document.querySelector('.toast-notification');
-    if (existingToast) existingToast.remove();
-
-    const toast = document.createElement('div');
-    toast.className = `toast-notification toast-${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    // Trigger show animation
-    setTimeout(() => toast.classList.add('show'), 10);
-
-    // Auto-hide after 3 seconds
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
-}

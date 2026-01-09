@@ -1,0 +1,568 @@
+{% extends 'admin/admin_base.html' %}
+{% block title %}Newsletter Prompts{% endblock %}
+{% block extra_css %}
+<style>
+/* Prompt Editor Layout */
+.prompt-editor-container {
+    display: grid;
+    grid-template-columns: 280px 1fr;
+    gap: 24px;
+    min-height: calc(100vh - 200px);
+}
+
+/* Prompt Selector Panel */
+.prompt-selector {
+    background: white;
+    border-radius: var(--r);
+    padding: 20px;
+    height: fit-content;
+}
+
+.prompt-selector h2 {
+    font: 600 14px var(--f);
+    color: #344054;
+    margin: 0 0 16px 0;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.prompt-list {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.prompt-item {
+    padding: 12px 16px;
+    border-radius: 8px;
+    cursor: pointer;
+    margin-bottom: 8px;
+    transition: all 0.15s ease;
+    border: 1px solid transparent;
+}
+
+.prompt-item:hover {
+    background: #f9fafb;
+}
+
+.prompt-item.active {
+    background: var(--s);
+    border-color: var(--p);
+}
+
+.prompt-item-name {
+    font: 600 14px var(--f);
+    color: #1d2939;
+    margin: 0 0 4px 0;
+}
+
+.prompt-item-desc {
+    font: 400 12px var(--f);
+    color: #667085;
+    margin: 0;
+}
+
+.prompt-item-source {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 6px;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font: 500 10px var(--f);
+    text-transform: uppercase;
+}
+
+.prompt-item-source.database {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.prompt-item-source.file {
+    background: #f3e8ff;
+    color: #7c3aed;
+}
+
+.prompt-item-source.none {
+    background: #fee2e2;
+    color: #dc2626;
+}
+
+/* Editor Panel */
+.prompt-editor {
+    background: white;
+    border-radius: var(--r);
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+}
+
+.editor-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 20px;
+    gap: 16px;
+}
+
+.editor-title {
+    flex: 1;
+}
+
+.editor-title h2 {
+    font: 600 20px var(--f);
+    color: #1d2939;
+    margin: 0 0 4px 0;
+}
+
+.editor-title p {
+    font: 400 14px var(--f);
+    color: #667085;
+    margin: 0;
+}
+
+.editor-meta {
+    text-align: right;
+    font: 400 12px var(--f);
+    color: #667085;
+}
+
+.editor-meta strong {
+    color: #344054;
+}
+
+/* Editor Actions */
+.editor-actions {
+    display: flex;
+    gap: 12px;
+    flex-shrink: 0;
+}
+
+.editor-actions .button {
+    height: 36px;
+    padding: 0 16px;
+    font-size: 13px;
+    margin-top: 0;
+    width: auto;
+}
+
+.button-reset {
+    background: #f3f4f6;
+    color: #374151;
+    border: 1px solid #d1d5db;
+}
+
+.button-reset:hover:not(:disabled) {
+    background: #e5e7eb;
+}
+
+.button-reset:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+/* Textarea */
+.prompt-textarea {
+    flex: 1;
+    width: 100%;
+    min-height: 400px;
+    padding: 16px;
+    border: 1px solid #e4e7ec;
+    border-radius: 8px;
+    font: 400 14px 'JetBrains Mono', 'Monaco', 'Consolas', monospace;
+    line-height: 1.6;
+    resize: vertical;
+    background: #fafbfc;
+    color: #1d2939;
+}
+
+.prompt-textarea:focus {
+    outline: none;
+    border-color: var(--p);
+    box-shadow: 0 0 0 3px rgba(0, 51, 102, 0.1);
+}
+
+/* Footer Status */
+.editor-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 16px;
+    padding-top: 16px;
+    border-top: 1px solid #e4e7ec;
+}
+
+.status-message {
+    font: 400 13px var(--f);
+    color: #667085;
+}
+
+.status-message.success {
+    color: #16a34a;
+}
+
+.status-message.error {
+    color: #dc2626;
+}
+
+.status-message.saving {
+    color: #2563eb;
+}
+
+.word-count {
+    font: 400 12px var(--f);
+    color: #9ca3af;
+}
+
+/* Toast notifications */
+.toast {
+    position: fixed;
+    bottom: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    background: var(--p);
+    color: white;
+    font: 500 14px var(--f);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    z-index: 1000;
+    animation: slideIn 0.3s ease-out;
+}
+
+.toast.error {
+    background: #dc2626;
+}
+
+.toast.success {
+    background: #16a34a;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateY(20px);
+        opacity: 0;
+    }
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+/* Empty state */
+.empty-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 300px;
+    color: #667085;
+    text-align: center;
+}
+
+.empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+}
+
+/* Loading state */
+.loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 200px;
+    color: #667085;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .prompt-editor-container {
+        grid-template-columns: 1fr;
+    }
+
+    .prompt-selector {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Newsletter Prompt Editor</h1>
+    <div class="flex gap-3">
+        <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
+    </div>
+</div>
+
+<div class="prompt-editor-container">
+    <!-- Prompt Selector -->
+    <div class="prompt-selector">
+        <h2>Prompts</h2>
+        <ul class="prompt-list" id="prompt-list">
+            <li class="loading">Loading...</li>
+        </ul>
+    </div>
+
+    <!-- Editor Panel -->
+    <div class="prompt-editor">
+        <div id="editor-content">
+            <div class="empty-state">
+                <div class="empty-state-icon">:memo:</div>
+                <p>Select a prompt to edit</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+let prompts = [];
+let selectedPrompt = null;
+let originalContent = '';
+let hasUnsavedChanges = false;
+
+document.addEventListener('DOMContentLoaded', async () => {
+    await loadPrompts();
+
+    // Warn before leaving with unsaved changes
+    window.addEventListener('beforeunload', (e) => {
+        if (hasUnsavedChanges) {
+            e.preventDefault();
+            e.returnValue = '';
+        }
+    });
+});
+
+async function loadPrompts() {
+    try {
+        const response = await fetch('/admin/newsletter/prompts/data');
+        const data = await response.json();
+        prompts = data.prompts;
+        renderPromptList();
+
+        // Select first prompt by default
+        if (prompts.length > 0) {
+            selectPrompt(prompts[0].name);
+        }
+    } catch (err) {
+        showToast('Error loading prompts: ' + err.message, 'error');
+    }
+}
+
+function renderPromptList() {
+    const list = document.getElementById('prompt-list');
+    list.innerHTML = prompts.map(p => `
+        <li class="prompt-item ${selectedPrompt?.name === p.name ? 'active' : ''}"
+            onclick="selectPrompt('${p.name}')">
+            <div class="prompt-item-name">${p.display_name}</div>
+            <div class="prompt-item-desc">${p.description}</div>
+            <span class="prompt-item-source ${p.source}">${p.source}</span>
+        </li>
+    `).join('');
+}
+
+function selectPrompt(name) {
+    // Check for unsaved changes
+    if (hasUnsavedChanges && selectedPrompt) {
+        if (!confirm('You have unsaved changes. Discard them?')) {
+            return;
+        }
+    }
+
+    selectedPrompt = prompts.find(p => p.name === name);
+    originalContent = selectedPrompt.content || '';
+    hasUnsavedChanges = false;
+
+    renderPromptList();
+    renderEditor();
+}
+
+function renderEditor() {
+    if (!selectedPrompt) return;
+
+    const p = selectedPrompt;
+    const canReset = p.source === 'database' && p.has_file_default;
+
+    const editorContent = document.getElementById('editor-content');
+    editorContent.innerHTML = `
+        <div class="editor-header">
+            <div class="editor-title">
+                <h2>${p.display_name}</h2>
+                <p>${p.description}</p>
+            </div>
+            ${p.updated_at ? `
+                <div class="editor-meta">
+                    <div>Version <strong>${p.version}</strong></div>
+                    <div>Updated ${formatDate(p.updated_at)}</div>
+                    ${p.updated_by ? `<div>by ${p.updated_by}</div>` : ''}
+                </div>
+            ` : ''}
+        </div>
+
+        <textarea
+            id="prompt-content"
+            class="prompt-textarea"
+            placeholder="Enter prompt content..."
+            oninput="handleContentChange()"
+        >${escapeHtml(p.content || '')}</textarea>
+
+        <div class="editor-footer">
+            <div class="editor-actions">
+                <button class="button button-reset" onclick="resetPrompt()" ${!canReset ? 'disabled' : ''}>
+                    Reset to File Default
+                </button>
+                <button class="button" onclick="savePrompt()">
+                    Save Changes
+                </button>
+            </div>
+            <div>
+                <span id="status-message" class="status-message"></span>
+                <span id="word-count" class="word-count"></span>
+            </div>
+        </div>
+    `;
+
+    updateWordCount();
+}
+
+function handleContentChange() {
+    const textarea = document.getElementById('prompt-content');
+    hasUnsavedChanges = textarea.value !== originalContent;
+    updateWordCount();
+    updateStatus('');
+}
+
+function updateWordCount() {
+    const textarea = document.getElementById('prompt-content');
+    if (!textarea) return;
+
+    const text = textarea.value || '';
+    const words = text.trim() ? text.trim().split(/\s+/).length : 0;
+    const chars = text.length;
+
+    const wordCountEl = document.getElementById('word-count');
+    if (wordCountEl) {
+        wordCountEl.textContent = `${words} words, ${chars} chars`;
+    }
+}
+
+function updateStatus(message, type = '') {
+    const statusEl = document.getElementById('status-message');
+    if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.className = 'status-message ' + type;
+    }
+}
+
+async function savePrompt() {
+    if (!selectedPrompt) return;
+
+    const textarea = document.getElementById('prompt-content');
+    const content = textarea.value.trim();
+
+    if (!content) {
+        showToast('Prompt content cannot be empty', 'error');
+        return;
+    }
+
+    updateStatus('Saving...', 'saving');
+
+    try {
+        const response = await fetch('/admin/newsletter/prompts/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                name: selectedPrompt.name,
+                content: content
+            })
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            originalContent = content;
+            hasUnsavedChanges = false;
+
+            // Update local data
+            const idx = prompts.findIndex(p => p.name === selectedPrompt.name);
+            if (idx >= 0) {
+                prompts[idx].content = content;
+                prompts[idx].source = 'database';
+                prompts[idx].id = result.id;
+                prompts[idx].version = result.version;
+                prompts[idx].updated_at = result.updated_at;
+                selectedPrompt = prompts[idx];
+            }
+
+            renderPromptList();
+            renderEditor();
+            showToast('Prompt saved successfully', 'success');
+        } else {
+            updateStatus('Failed to save', 'error');
+            showToast(result.error || 'Failed to save prompt', 'error');
+        }
+    } catch (err) {
+        updateStatus('Error saving', 'error');
+        showToast('Error saving prompt: ' + err.message, 'error');
+    }
+}
+
+async function resetPrompt() {
+    if (!selectedPrompt || !selectedPrompt.id) return;
+
+    if (!confirm(`Reset "${selectedPrompt.display_name}" to file default?\n\nThis will discard your database customizations.`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch(`/admin/newsletter/prompts/${selectedPrompt.id}/reset`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        if (response.ok && result.success) {
+            showToast(result.message, 'success');
+            await loadPrompts();
+            selectPrompt(selectedPrompt.name);
+        } else {
+            showToast(result.error || 'Failed to reset prompt', 'error');
+        }
+    } catch (err) {
+        showToast('Error resetting prompt: ' + err.message, 'error');
+    }
+}
+
+function formatDate(isoString) {
+    if (!isoString) return '';
+    const date = new Date(isoString);
+    return date.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit'
+    });
+}
+
+function escapeHtml(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+function showToast(message, type = 'info') {
+    const existing = document.querySelector('.toast');
+    if (existing) existing.remove();
+
+    const toast = document.createElement('div');
+    toast.className = `toast ${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    setTimeout(() => toast.remove(), 3000);
+}
+</script>
+{% endblock %}
