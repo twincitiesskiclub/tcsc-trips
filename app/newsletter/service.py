@@ -419,13 +419,16 @@ def run_daily_update() -> dict[str, Any]:
                     NewsletterVersion.version_number.desc()
                 ).first()
 
+                # Use structured content if available, otherwise fall back to raw content
+                content_for_slack = gen_result.structured_content or gen_result.content
+
                 if not newsletter.slack_main_message_ts:
                     # Create new living post
-                    post_ref = create_living_post(newsletter, gen_result.content)
+                    post_ref = create_living_post(newsletter, content_for_slack)
                     logger.info(f"Created living post: {post_ref.message_ts if post_ref else 'None'}")
                 else:
                     # Update existing post
-                    post_ref = update_living_post(newsletter, gen_result.content)
+                    post_ref = update_living_post(newsletter, content_for_slack)
                     logger.info(f"Updated living post: {post_ref.message_ts if post_ref else 'None'}")
 
                 # Add version to thread
@@ -537,12 +540,15 @@ def run_sunday_finalize() -> dict[str, Any]:
                     NewsletterVersion.version_number.desc()
                 ).first()
 
+                # Use structured content if available, otherwise fall back to raw content
+                content_for_slack = gen_result.structured_content or gen_result.content
+
                 # Create or update living post
                 if not newsletter.slack_main_message_ts:
-                    post_ref = create_living_post(newsletter, gen_result.content)
+                    post_ref = create_living_post(newsletter, content_for_slack)
                     logger.info(f"Created living post: {post_ref.message_ts if post_ref else 'None'}")
                 else:
-                    post_ref = update_living_post(newsletter, gen_result.content)
+                    post_ref = update_living_post(newsletter, content_for_slack)
                     logger.info(f"Updated living post: {post_ref.message_ts if post_ref else 'None'}")
 
                 # Add version to thread

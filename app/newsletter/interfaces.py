@@ -135,7 +135,8 @@ class NewsletterContext:
 class GenerationResult:
     """Result of newsletter generation."""
     success: bool
-    content: Optional[str] = None
+    content: Optional[str] = None  # Raw content (JSON string or markdown)
+    structured_content: Optional[dict] = None  # Parsed JSON dict (if JSON format)
     version_number: int = 0
     model_used: str = ""
     tokens_used: int = 0
