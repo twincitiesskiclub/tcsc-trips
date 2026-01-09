@@ -20,12 +20,15 @@ from app.practices.service import convert_practice_to_info
 logger = logging.getLogger(__name__)
 
 
-def run_weekly_summary() -> dict:
+def run_weekly_summary(channel_override: str = None) -> dict:
     """
     Generate and post weekly practice summary.
 
     Called on Sunday evening to give members a preview of the upcoming
     week's practices, weather outlook, and any special notes.
+
+    Args:
+        channel_override: Optional channel name to override default for Slack posts
 
     Returns:
         Summary dict with practice count and preview data
@@ -147,13 +150,17 @@ def run_weekly_summary() -> dict:
     logger.info("\nWeekly Summary:\n" + summary_text)
 
     if not dry_run:
-        # Post to Slack #practices channel
+        # Post to Slack #practices channel (or override if specified)
         try:
-            # Get announcement channel from config
-            config = load_skipper_config()
-            channel_name = config.get('escalation', {}).get('announcement_channel', '#practices')
-            # Remove # prefix if present
-            channel_name = channel_name.lstrip('#')
+            # Determine channel - use override if provided
+            if channel_override:
+                channel_name = channel_override.lstrip('#')
+            else:
+                # Get announcement channel from config
+                config = load_skipper_config()
+                channel_name = config.get('escalation', {}).get('announcement_channel', '#practices')
+                channel_name = channel_name.lstrip('#')
+
             channel_id = get_channel_id_by_name(channel_name)
 
             if channel_id:
@@ -178,6 +185,7 @@ def run_weekly_summary() -> dict:
                 logger.info(f"Posted weekly summary to #{channel_name} (ts: {response.get('ts')})")
                 results['slack_posted'] = True
                 results['slack_message_ts'] = response.get('ts')
+                results['channel_override'] = channel_override
             else:
                 logger.error(f"Could not find channel #{channel_name}")
                 results['slack_posted'] = False

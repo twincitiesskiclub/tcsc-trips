@@ -1,0 +1,622 @@
+{% extends 'admin/admin_base.html' %}
+{% block extra_css %}
+<style>
+/* Page Header */
+.page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+    gap: 12px;
+}
+
+.page-header .page-title {
+    margin: 0;
+}
+
+.users-grid-container {
+    max-width: 1200px;
+    margin: 0 auto;
+}
+
+/* Stats Cards */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.stat-card {
+    background: white;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 16px;
+    text-align: center;
+    min-height: 80px;
+}
+
+.stat-value {
+    font-size: 24px;
+    font-weight: 600;
+    color: var(--p);
+}
+
+.stat-label {
+    font-size: 13px;
+    color: var(--g-m);
+    margin-top: 8px;
+}
+
+.stat-card.warning .stat-value {
+    color: #d97706;
+}
+
+.stat-card.success .stat-value {
+    color: #059669;
+}
+
+.stat-card.error .stat-value {
+    color: #dc2626;
+}
+
+/* Action Buttons */
+.action-btn {
+    background: var(--p);
+    color: white;
+    border: none;
+    padding: 10px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.action-btn:hover:not(:disabled) {
+    opacity: 0.9;
+    transform: translateY(-1px);
+}
+
+.action-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.action-btn.secondary {
+    background: #e8e9ec;
+    color: #4a5568;
+}
+
+.action-btn.loading {
+    pointer-events: none;
+}
+
+/* Section */
+.section {
+    background: white;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 20px;
+    margin-bottom: 24px;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+
+.section-title {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--p);
+    margin: 0;
+}
+
+/* Job Cards */
+.jobs-grid {
+    display: grid;
+    gap: 16px;
+}
+
+.job-card {
+    background: var(--g-l);
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    padding: 16px;
+}
+
+.job-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 8px;
+}
+
+.job-name {
+    font-weight: 600;
+    font-size: 15px;
+    color: var(--p);
+}
+
+.job-schedule {
+    font-size: 12px;
+    color: var(--g-m);
+    font-family: monospace;
+    background: white;
+    padding: 2px 8px;
+    border-radius: 4px;
+}
+
+.job-description {
+    font-size: 13px;
+    color: var(--g-d);
+    margin-bottom: 12px;
+}
+
+.job-meta {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 12px;
+    color: var(--g-m);
+    margin-bottom: 12px;
+}
+
+.job-meta-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.job-actions {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.channel-select {
+    padding: 8px 12px;
+    border: 1px solid var(--g-b);
+    border-radius: var(--r);
+    font: 14px var(--f);
+    min-width: 200px;
+    background: white;
+}
+
+.run-btn {
+    background: var(--p);
+    color: white;
+    border: none;
+    padding: 8px 16px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: all 0.2s ease;
+}
+
+.run-btn:hover:not(:disabled) {
+    opacity: 0.9;
+}
+
+.run-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+}
+
+/* Log Output */
+.log-output {
+    background: var(--p);
+    color: #f1f5f9;
+    padding: 16px;
+    border-radius: var(--r);
+    font-family: monospace;
+    font-size: 13px;
+    line-height: 1.6;
+    max-height: 400px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.log-output .log-info {
+    color: #60a5fa;
+}
+
+.log-output .log-success {
+    color: #34d399;
+}
+
+.log-output .log-warning {
+    color: #fbbf24;
+}
+
+.log-output .log-error {
+    color: #f87171;
+}
+
+/* Toast Notifications */
+.toast-notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: var(--r);
+    font: 500 14px var(--f);
+    z-index: 2000;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+    max-width: calc(100% - 40px);
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-success {
+    background: var(--s);
+    color: var(--p);
+}
+
+.toast-error {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.toast-info {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+/* Mobile Responsiveness */
+@media (max-width: 640px) {
+    .page-header {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .stats-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .job-card-header {
+        flex-direction: column;
+        gap: 8px;
+    }
+
+    .job-actions {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .channel-select {
+        min-width: auto;
+        width: 100%;
+    }
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="users-grid-container">
+    <!-- Header -->
+    <div class="page-header">
+        <h1 class="page-title">Scheduled Tasks</h1>
+        <button class="action-btn secondary" onclick="loadStatus()">
+            <span class="btn-icon">↻</span>
+            <span class="btn-text">Refresh</span>
+        </button>
+    </div>
+
+    <!-- Status Cards -->
+    <div class="stats-grid">
+        <div class="stat-card" id="scheduler-card">
+            <div class="stat-value" id="stat-scheduler">-</div>
+            <div class="stat-label">Scheduler</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-jobs-count">-</div>
+            <div class="stat-label">Active Jobs</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value" id="stat-current-job">-</div>
+            <div class="stat-label">Current</div>
+        </div>
+    </div>
+
+    <!-- Manual Triggers Section -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">Manual Triggers</h3>
+        </div>
+        <div class="jobs-grid" id="jobs-list">
+            <!-- Job cards rendered by JS -->
+            <div style="color: var(--g-m); text-align: center; padding: 20px;">
+                Loading jobs...
+            </div>
+        </div>
+    </div>
+
+    <!-- Activity Log -->
+    <div class="section">
+        <div class="section-header">
+            <h3 class="section-title">Activity Log</h3>
+            <button class="action-btn secondary" onclick="clearLog()">
+                <span class="btn-icon">🗑</span>
+                <span class="btn-text">Clear</span>
+            </button>
+        </div>
+        <div class="log-output" id="log-output">Waiting for activity...</div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+// Job and channel data (loaded from server)
+let jobsData = [];
+let channelsData = [];
+
+// Log helper
+function log(message, level = 'info') {
+    const logEl = document.getElementById('log-output');
+    const timestamp = new Date().toLocaleTimeString();
+    const levelClass = `log-${level}`;
+    logEl.innerHTML += `<span class="${levelClass}">[${timestamp}] ${message}</span>\n`;
+    logEl.scrollTop = logEl.scrollHeight;
+}
+
+function clearLog() {
+    document.getElementById('log-output').innerHTML = '';
+}
+
+// Toast notifications
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast-notification toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+
+    requestAnimationFrame(() => toast.classList.add('show'));
+
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+// Load status and jobs
+async function loadStatus() {
+    try {
+        log('Loading status...');
+
+        // Load status and channels in parallel
+        const [statusRes, channelsRes] = await Promise.all([
+            fetch('/admin/scheduled-tasks/status'),
+            fetch('/admin/scheduled-tasks/channels')
+        ]);
+
+        const statusData = await statusRes.json();
+        const channelsDataRes = await channelsRes.json();
+
+        channelsData = channelsDataRes.channels;
+        jobsData = statusData.jobs;
+
+        // Update scheduler status
+        const schedulerCard = document.getElementById('scheduler-card');
+        const schedulerStat = document.getElementById('stat-scheduler');
+        if (statusData.scheduler.running) {
+            schedulerStat.textContent = '✓ Running';
+            schedulerCard.classList.add('success');
+            schedulerCard.classList.remove('error');
+        } else {
+            schedulerStat.textContent = '✗ Stopped';
+            schedulerCard.classList.add('error');
+            schedulerCard.classList.remove('success');
+        }
+
+        // Update jobs count
+        document.getElementById('stat-jobs-count').textContent =
+            statusData.scheduler.jobs?.length || 0;
+
+        // Update current job status
+        const currentJob = statusData.current_job;
+        if (currentJob.running) {
+            document.getElementById('stat-current-job').textContent = currentJob.job_name || 'Running';
+        } else {
+            document.getElementById('stat-current-job').textContent = 'Idle';
+        }
+
+        // Render job cards
+        renderJobs();
+
+        log('Status loaded', 'success');
+
+    } catch (error) {
+        log(`Failed to load status: ${error.message}`, 'error');
+        showToast('Failed to load status', 'error');
+    }
+}
+
+// Render job cards
+function renderJobs() {
+    const container = document.getElementById('jobs-list');
+
+    if (!jobsData || jobsData.length === 0) {
+        container.innerHTML = '<div style="color: var(--g-m); text-align: center; padding: 20px;">No jobs available</div>';
+        return;
+    }
+
+    // Build channel options
+    const channelOptions = channelsData.map(c =>
+        `<option value="${c.id}">${c.name}</option>`
+    ).join('');
+
+    let html = '';
+    for (const job of jobsData) {
+        const nextRunText = job.next_run
+            ? new Date(job.next_run).toLocaleString()
+            : 'Not scheduled';
+
+        html += `
+            <div class="job-card" id="job-${job.id}">
+                <div class="job-card-header">
+                    <div class="job-name">${job.name}</div>
+                    <div class="job-schedule">${job.schedule}</div>
+                </div>
+                <div class="job-description">${job.description}</div>
+                <div class="job-meta">
+                    <div class="job-meta-item">
+                        <span>Default:</span>
+                        <strong>${job.default_channel}</strong>
+                    </div>
+                    <div class="job-meta-item">
+                        <span>Next:</span>
+                        <span>${nextRunText}</span>
+                    </div>
+                </div>
+                <div class="job-actions">
+                    ${job.supports_channel_override ? `
+                        <select class="channel-select" id="channel-${job.id}">
+                            ${channelOptions}
+                        </select>
+                    ` : ''}
+                    <button class="run-btn" id="btn-${job.id}" onclick="triggerJob('${job.id}')">
+                        <span>▶</span>
+                        <span>Run Now</span>
+                    </button>
+                </div>
+            </div>
+        `;
+    }
+
+    container.innerHTML = html;
+}
+
+// Trigger a job
+async function triggerJob(jobId) {
+    const btn = document.getElementById(`btn-${jobId}`);
+    const channelSelect = document.getElementById(`channel-${jobId}`);
+
+    // Get channel override
+    const channelOverride = channelSelect?.value !== 'default' ? channelSelect.value : null;
+    const channelText = channelOverride ? ` → #${channelOverride}` : '';
+
+    // Find job name
+    const job = jobsData.find(j => j.id === jobId);
+    const jobName = job?.name || jobId;
+
+    log(`Triggering ${jobName}${channelText}...`, 'info');
+
+    // Disable button
+    btn.disabled = true;
+    btn.innerHTML = '<span>⏳</span><span>Running...</span>';
+
+    try {
+        // Start the job
+        const response = await fetch(`/admin/scheduled-tasks/trigger/${jobId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel_override: channelOverride || 'default' })
+        });
+
+        const data = await response.json();
+
+        if (data.status === 'already_running') {
+            log(`Another job is already running: ${data.job_name}`, 'warning');
+            showToast('Another job is running', 'warning');
+            return;
+        }
+
+        if (data.status === 'started') {
+            log(`${jobName} started, polling for results...`, 'info');
+            await pollForResults(jobId, jobName);
+        } else if (data.error) {
+            log(`Error: ${data.error}`, 'error');
+            showToast(data.error, 'error');
+        }
+
+    } catch (error) {
+        log(`Failed: ${error.message}`, 'error');
+        showToast('Job failed', 'error');
+    } finally {
+        // Re-enable button
+        btn.disabled = false;
+        btn.innerHTML = '<span>▶</span><span>Run Now</span>';
+        loadStatus(); // Refresh status
+    }
+}
+
+// Poll for results
+async function pollForResults(jobId, jobName) {
+    const maxAttempts = 120; // 2 minutes max
+    let attempts = 0;
+
+    while (attempts < maxAttempts) {
+        attempts++;
+
+        try {
+            const response = await fetch('/admin/scheduled-tasks/result');
+            const data = await response.json();
+
+            if (data.status === 'running') {
+                if (attempts % 5 === 0) {
+                    log(`Still running... (${attempts}s)`, 'info');
+                }
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
+
+            if (data.status === 'completed') {
+                const channelText = data.channel_override ? ` (→ #${data.channel_override})` : '';
+                log(`${jobName} completed${channelText}`, 'success');
+
+                // Log result details if available
+                if (data.result) {
+                    const r = data.result;
+                    if (r.status) {
+                        log(`  Status: ${r.status} (${r.mode})`, 'info');
+                    }
+                }
+
+                showToast(`${jobName} completed`, 'success');
+                return;
+            }
+
+            if (data.status === 'error') {
+                log(`${jobName} failed: ${data.error}`, 'error');
+                showToast(`${jobName} failed`, 'error');
+                return;
+            }
+
+            // Idle or unexpected status
+            log(`Job finished (status: ${data.status})`, 'info');
+            return;
+
+        } catch (error) {
+            log(`Polling error: ${error.message}`, 'error');
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+
+    log('Job timed out after 2 minutes', 'error');
+    showToast('Job timed out', 'error');
+}
+
+// Load status on page load
+document.addEventListener('DOMContentLoaded', loadStatus);
+</script>
+{% endblock %}
