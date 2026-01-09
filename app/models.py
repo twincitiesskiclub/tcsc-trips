@@ -389,3 +389,64 @@ class StatusChange(db.Model):
 
     def __repr__(self):
         return f'<StatusChange {self.id} {self.previous_status}->{self.new_status}>'
+
+
+class AppConfig(db.Model):
+    """Global configuration settings editable from admin UI.
+
+    Used for season-wide settings that may need to change during the season,
+    such as expected practice days, default times, and other configurable values.
+
+    Values are stored as JSON for flexibility in storing complex data structures.
+    """
+    __tablename__ = 'app_config'
+
+    id = db.Column(db.Integer, primary_key=True)
+    key = db.Column(db.String(100), unique=True, nullable=False)
+    value = db.Column(JSON)  # Flexible JSON storage (uses JSONB on PostgreSQL)
+    description = db.Column(db.Text)
+    category = db.Column(db.String(50))  # e.g., 'practices', 'slack', 'membership'
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<AppConfig {self.key}>'
+
+    @classmethod
+    def get(cls, key, default=None):
+        """Get config value by key.
+
+        Args:
+            key: The configuration key to look up
+            default: Value to return if key not found
+
+        Returns:
+            The stored value (parsed from JSON) or the default
+        """
+        config = cls.query.filter_by(key=key).first()
+        return config.value if config else default
+
+    @classmethod
+    def set(cls, key, value, description=None, category=None):
+        """Set a config value, creating or updating as needed.
+
+        Args:
+            key: The configuration key
+            value: The value to store (will be serialized as JSON)
+            description: Optional description of this setting
+            category: Optional category for grouping settings
+
+        Returns:
+            The AppConfig instance
+        """
+        config = cls.query.filter_by(key=key).first()
+        if config:
+            config.value = value
+            if description is not None:
+                config.description = description
+            if category is not None:
+                config.category = category
+        else:
+            config = cls(key=key, value=value, description=description, category=category)
+            db.session.add(config)
+        return config

@@ -3,7 +3,7 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for
 from datetime import datetime
 from ..auth import admin_required
-from ..models import db, User, Tag
+from ..models import db, User, Tag, AppConfig
 from ..practices.models import (
     Practice, PracticeLocation, PracticeActivity, PracticeType,
     PracticeLead, SocialLocation, practice_activities_junction,
@@ -1076,3 +1076,65 @@ def trigger_weekly_summary():
             'success': False,
             'error': str(e)
         }), 500
+
+
+# ============================================================================
+# App Config (Global Settings)
+# ============================================================================
+
+@admin_practices_bp.route('/settings/data')
+@admin_required
+def settings_data():
+    """Return practice-related settings from AppConfig."""
+    # Get practice_days config
+    practice_days = AppConfig.get('practice_days', [
+        {"day": "tuesday", "time": "18:00", "active": True},
+        {"day": "thursday", "time": "18:00", "active": True},
+        {"day": "saturday", "time": "09:00", "active": True}
+    ])
+
+    return jsonify({
+        'practice_days': practice_days
+    })
+
+
+@admin_practices_bp.route('/settings/practice-days', methods=['POST'])
+@admin_required
+def update_practice_days():
+    """Update the practice_days configuration."""
+    if not request.json:
+        return jsonify({'error': 'JSON body required'}), 400
+
+    practice_days = request.json.get('practice_days')
+    if practice_days is None:
+        return jsonify({'error': 'practice_days is required'}), 400
+
+    # Validate the structure
+    if not isinstance(practice_days, list):
+        return jsonify({'error': 'practice_days must be an array'}), 400
+
+    for entry in practice_days:
+        if not isinstance(entry, dict):
+            return jsonify({'error': 'Each entry must be an object'}), 400
+        if 'day' not in entry:
+            return jsonify({'error': 'Each entry must have a day field'}), 400
+        if entry['day'].lower() not in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']:
+            return jsonify({'error': f'Invalid day: {entry["day"]}'}), 400
+
+    try:
+        AppConfig.set(
+            key='practice_days',
+            value=practice_days,
+            description='Expected practice days and default times for weekly coach summary',
+            category='practices'
+        )
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'practice_days': practice_days
+        })
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': str(e)}), 500

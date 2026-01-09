@@ -139,6 +139,7 @@ class Practice(db.Model):
     slack_channel_id = db.Column(db.String(50))
     slack_log_message_ts = db.Column(db.String(50))  # Logging thread in #tcsc-logging
     slack_collab_message_ts = db.Column(db.String(50))  # Collab review post in #collab-coaches-practices
+    slack_coach_summary_ts = db.Column(db.String(50))  # Weekly coach summary post for threading edits
 
     # Coach review workflow
     coach_approved = db.Column(db.Boolean, default=False, nullable=False)

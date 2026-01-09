@@ -14,7 +14,8 @@ Scheduled Jobs:
 - 7:00 AM: Skipper morning check (today's practices)
 - 7:15 AM: Skipper 48h check (workout reminders)
 - 7:30 AM: Skipper 24h check (lead confirmation)
-- 6:00 PM Sunday: Weekly practice summary
+- 6:00 PM Sunday: Weekly practice summary (members channel)
+- 6:00 PM Sunday: Coach weekly review summary (collab-coaches-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
 """
 import os
@@ -257,6 +258,48 @@ def run_weekly_summary_job(app: Flask):
             app.logger.error(f"Weekly summary failed: {e}", exc_info=True)
 
 
+def run_coach_weekly_summary_job(app: Flask):
+    """Execute the coach weekly review summary job within app context.
+
+    Runs Sunday at 6pm to post a summary of the upcoming week's practices
+    to #collab-coaches-practices with Edit buttons for each practice.
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from datetime import timedelta
+        from app.slack.practices import post_coach_weekly_summary
+
+        app.logger.info("=" * 60)
+        app.logger.info("Starting coach weekly review summary job")
+        app.logger.info("=" * 60)
+
+        try:
+            # Calculate the start of the upcoming week (Monday)
+            today = datetime.now()
+            days_until_monday = (7 - today.weekday()) % 7
+            if days_until_monday == 0:
+                days_until_monday = 7  # If today is Monday, get next Monday
+            week_start = (today + timedelta(days=days_until_monday)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+            result = post_coach_weekly_summary(week_start)
+
+            if result.get('success'):
+                app.logger.info(
+                    f"Coach weekly summary posted: "
+                    f"{result.get('practices_shown', 0)} practices, "
+                    f"{result.get('placeholders_shown', 0)} placeholders"
+                )
+            else:
+                app.logger.error(f"Coach weekly summary failed: {result.get('error')}")
+
+        except Exception as e:
+            app.logger.error(f"Coach weekly summary failed: {e}", exc_info=True)
+
+
 def run_expire_proposals_job(app: Flask):
     """Expire pending cancellation proposals that have timed out.
 
@@ -399,6 +442,22 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=3600
     )
 
+    # Coach weekly review: Post to collab-coaches-practices on Sunday at 6:00 PM
+    scheduler.add_job(
+        func=run_coach_weekly_summary_job,
+        args=[app],
+        trigger=CronTrigger(
+            day_of_week='sun',
+            hour=18,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='coach_weekly_summary',
+        name='Coach Weekly Review Summary',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
     # Expire proposals: Check hourly for timed-out proposals (fail-open)
     scheduler.add_job(
         func=run_expire_proposals_job,
@@ -487,7 +546,7 @@ def trigger_skipper_job_now(app: Flask, job_type: str) -> dict:
     Args:
         app: Flask application instance.
         job_type: One of 'morning_check', '48h_check', '24h_check',
-                  'weekly_summary', 'expire_proposals'
+                  'weekly_summary', 'coach_weekly_summary', 'expire_proposals'
 
     Returns:
         Result dict from the job, or error dict if invalid job_type.
@@ -497,6 +556,7 @@ def trigger_skipper_job_now(app: Flask, job_type: str) -> dict:
         '48h_check': run_skipper_48h_check_job,
         '24h_check': run_skipper_24h_check_job,
         'weekly_summary': run_weekly_summary_job,
+        'coach_weekly_summary': run_coach_weekly_summary_job,
         'expire_proposals': run_expire_proposals_job
     }
 
