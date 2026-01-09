@@ -23,13 +23,16 @@ from app.agent.brain import generate_evaluation_summary
 logger = logging.getLogger(__name__)
 
 
-def run_morning_check() -> dict:
+def run_morning_check(channel_override: str = None) -> dict:
     """
     Run morning check for all practices scheduled today.
 
     Evaluates each practice, posts a daily recap to #practices-core,
     and proposes cancellations if needed. This function is called by
     the scheduler at 7am daily.
+
+    Args:
+        channel_override: Optional channel name to override default for Slack posts
 
     Returns:
         Summary dict with counts of practices checked, proposals created, etc.
@@ -158,17 +161,18 @@ def run_morning_check() -> dict:
     if recap_evaluations and not dry_run:
         try:
             from app.slack.practices import post_daily_practice_recap
-            recap_result = post_daily_practice_recap(recap_evaluations)
+            recap_result = post_daily_practice_recap(recap_evaluations, channel_override=channel_override)
             results['recap_posted'] = recap_result.get('success', False)
+            results['channel_override'] = channel_override
             if recap_result.get('success'):
-                logger.info(f"Daily recap posted to #practices-core")
+                logger.info(f"Daily recap posted (channel_override={channel_override})")
             else:
                 logger.error(f"Failed to post daily recap: {recap_result.get('error')}")
         except Exception as e:
             logger.error(f"Error posting daily recap: {e}", exc_info=True)
             results['recap_posted'] = False
     elif dry_run and recap_evaluations:
-        logger.info("[DRY RUN] Would post daily recap to #practices-core")
+        logger.info("[DRY RUN] Would post daily recap")
 
     # Summary
     logger.info("\n" + "=" * 60)

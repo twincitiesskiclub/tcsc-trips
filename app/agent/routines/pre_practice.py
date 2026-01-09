@@ -22,12 +22,15 @@ from app.slack.practices import (
 logger = logging.getLogger(__name__)
 
 
-def run_48h_check() -> dict:
+def run_48h_check(channel_override: str = None) -> dict:
     """
     Check practices 48 hours out and post reminder to #collab-coaches-practices.
 
     This routine helps ensure workouts are posted with enough time for
     members to see them and plan their participation. Tags @kj as a safety check.
+
+    Args:
+        channel_override: Optional channel name to override default for Slack posts
 
     Returns:
         Summary dict with results
@@ -102,16 +105,17 @@ def run_48h_check() -> dict:
     if practices_needing_workout:
         if not dry_run:
             try:
-                post_result = post_48h_workout_reminder(practices_needing_workout)
+                post_result = post_48h_workout_reminder(practices_needing_workout, channel_override=channel_override)
                 results['channel_post_sent'] = post_result.get('success', False)
+                results['channel_override'] = channel_override
                 if post_result.get('success'):
-                    logger.info("Posted 48h workout reminder to #collab-coaches-practices")
+                    logger.info(f"Posted 48h workout reminder (channel_override={channel_override})")
                 else:
                     logger.error(f"Failed to post 48h reminder: {post_result.get('error')}")
             except Exception as e:
                 logger.error(f"Error posting 48h reminder: {e}", exc_info=True)
         else:
-            logger.info(f"[DRY RUN] Would post reminder to #collab-coaches-practices for {len(practices_needing_workout)} practices")
+            logger.info(f"[DRY RUN] Would post reminder for {len(practices_needing_workout)} practices")
 
     logger.info(f"48h check complete: {results['checked']} checked, "
                f"{results['needs_workout']} need workouts, "
@@ -120,13 +124,16 @@ def run_48h_check() -> dict:
     return results
 
 
-def run_24h_check() -> dict:
+def run_24h_check(channel_override: str = None) -> dict:
     """
     Check practices 24 hours out and post lead confirmation request to
     #coord-practices-leads-assists.
 
     Also provides weather updates to practice announcements if conditions
     have changed significantly.
+
+    Args:
+        channel_override: Optional channel name to override default for Slack posts
 
     Returns:
         Summary dict with confirmation status and weather updates
@@ -255,16 +262,17 @@ def run_24h_check() -> dict:
     if practices_needing_confirmation:
         if not dry_run:
             try:
-                post_result = post_24h_lead_confirmation(practices_needing_confirmation)
+                post_result = post_24h_lead_confirmation(practices_needing_confirmation, channel_override=channel_override)
                 results['channel_post_sent'] = post_result.get('success', False)
+                results['channel_override'] = channel_override
                 if post_result.get('success'):
-                    logger.info("Posted 24h lead confirmation to #coord-practices-leads-assists")
+                    logger.info(f"Posted 24h lead confirmation (channel_override={channel_override})")
                 else:
                     logger.error(f"Failed to post 24h confirmation: {post_result.get('error')}")
             except Exception as e:
                 logger.error(f"Error posting 24h confirmation: {e}", exc_info=True)
         else:
-            logger.info(f"[DRY RUN] Would post confirmation to #coord-practices-leads-assists for {len(practices_needing_confirmation)} practices")
+            logger.info(f"[DRY RUN] Would post confirmation for {len(practices_needing_confirmation)} practices")
 
     logger.info(f"24h check complete: {results['checked']} checked, "
                f"{results['confirmed']} confirmed leads, "

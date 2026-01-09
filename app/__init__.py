@@ -8,6 +8,7 @@ from .config import configure_database, load_stripe_config
 from .models import db, SocialEvent
 from .routes.admin import admin
 from .routes.admin_practices import admin_practices_bp
+from .routes.admin_scheduled_tasks import admin_scheduled_tasks
 from .routes.admin_skipper import admin_skipper_bp
 from .routes.auth import auth
 from .routes.main import main
@@ -39,6 +40,7 @@ def create_app(environment=None):
     app.register_blueprint(payments)
     app.register_blueprint(admin)
     app.register_blueprint(admin_practices_bp)
+    app.register_blueprint(admin_scheduled_tasks)
     app.register_blueprint(admin_skipper_bp)
     app.register_blueprint(auth)
     app.register_blueprint(registration)
