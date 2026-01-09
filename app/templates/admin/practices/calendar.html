@@ -4,62 +4,7 @@
 
 {% block extra_css %}
 <style>
-/* Calendar Container */
-.calendar-container {
-    background: white;
-    border-radius: var(--r);
-    padding: 24px;
-}
-
-.calendar-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 24px;
-    padding-bottom: 16px;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-.calendar-title {
-    font: 600 20px var(--f);
-    color: var(--p);
-    margin: 0;
-}
-
-.calendar-nav {
-    display: flex;
-    align-items: center;
-    gap: 16px;
-}
-
-.calendar-nav button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 36px;
-    padding: 0 16px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white;
-    font: 500 14px var(--f);
-    color: #344054;
-    cursor: pointer;
-    transition: all 0.15s;
-}
-
-.calendar-nav button:hover {
-    background: #f9fafb;
-    border-color: var(--p);
-}
-
-.month-label {
-    font: 600 16px var(--f);
-    color: var(--p);
-    min-width: 150px;
-    text-align: center;
-}
-
-/* Calendar Grid */
+/* Calendar Grid - uses CSS grid which works better with specific sizing */
 .calendar-grid {
     display: grid;
     grid-template-columns: repeat(7, 1fr);
@@ -70,64 +15,7 @@
     overflow: hidden;
 }
 
-.calendar-day-header {
-    background: var(--p);
-    color: white;
-    padding: 12px;
-    text-align: center;
-    font: 600 13px var(--f);
-}
-
-.calendar-day {
-    background: white;
-    min-height: 100px;
-    padding: 8px;
-    position: relative;
-}
-
-.calendar-day.other-month {
-    background: #f9fafb;
-}
-
-.calendar-day.today {
-    background: #eff6ff;
-}
-
-.day-number {
-    font: 600 14px var(--f);
-    color: #1d2939;
-    margin-bottom: 4px;
-}
-
-.calendar-day.other-month .day-number {
-    color: #9ca3af;
-}
-
-.calendar-day.today .day-number {
-    color: var(--p);
-}
-
-/* Practice Items */
-.practice-item {
-    display: block;
-    padding: 4px 6px;
-    margin-bottom: 4px;
-    border-radius: 4px;
-    font: 500 11px var(--f);
-    color: white;
-    cursor: pointer;
-    text-decoration: none;
-    transition: all 0.15s;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
-
-.practice-item:hover {
-    opacity: 0.85;
-    transform: translateY(-1px);
-}
-
+/* Practice item status colors - dynamically generated via JS */
 .practice-item.status-scheduled {
     background: #3b82f6;
 }
@@ -144,114 +32,73 @@
     background: #6b7280;
 }
 
-.practice-time {
-    font-weight: 600;
-    margin-right: 4px;
+/* Legend status colors */
+.legend-color.status-scheduled {
+    background: #3b82f6;
 }
 
-/* Legend */
-.calendar-legend {
-    display: flex;
-    gap: 20px;
-    margin-top: 20px;
-    padding: 16px;
-    background: #f9fafb;
-    border-radius: 6px;
+.legend-color.status-confirmed {
+    background: #10b981;
 }
 
-.legend-item {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font: 400 13px var(--f);
-    color: #344054;
+.legend-color.status-cancelled {
+    background: #ef4444;
 }
 
-.legend-color {
-    width: 20px;
-    height: 20px;
-    border-radius: 4px;
-}
-
-/* Toolbar */
-.calendar-toolbar {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 16px;
-}
-
-.toolbar-actions {
-    display: flex;
-    gap: 8px;
-}
-
-/* Loading State */
-.calendar-loading {
-    text-align: center;
-    padding: 40px;
-    color: #6b7280;
-}
-
-/* Empty State */
-.no-practices {
-    text-align: center;
-    padding: 12px;
-    color: #6b7280;
-    font-size: 12px;
-    font-style: italic;
+.legend-color.status-completed {
+    background: #6b7280;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="admin-header">
-    <h1>Practice Calendar</h1>
-    <div class="admin-actions">
-        <a href="{{ url_for('admin_practices.practices_list') }}" class="button">List View</a>
-        <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Practice Calendar</h1>
+    <div class="flex gap-2">
+        <a href="{{ url_for('admin_practices.practices_list') }}" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">List View</a>
+        <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
     </div>
 </div>
 
-<div class="calendar-container">
-    <div class="calendar-toolbar">
-        <div class="calendar-nav">
-            <button id="prev-month" onclick="changeMonth(-1)">← Previous</button>
-            <span class="month-label" id="current-month"></span>
-            <button id="next-month" onclick="changeMonth(1)">Next →</button>
+<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100">
+    <div class="flex justify-between items-center mb-4">
+        <div class="flex items-center gap-4">
+            <button id="prev-month" onclick="changeMonth(-1)" class="inline-flex items-center justify-center h-9 px-4 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50 hover:border-tcsc-navy">&larr; Previous</button>
+            <span class="month-label font-semibold text-base text-tcsc-navy min-w-[150px] text-center" id="current-month"></span>
+            <button id="next-month" onclick="changeMonth(1)" class="inline-flex items-center justify-center h-9 px-4 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50 hover:border-tcsc-navy">Next &rarr;</button>
         </div>
-        <div class="toolbar-actions">
-            <button class="button button-secondary" onclick="goToToday()">Today</button>
+        <div class="flex gap-2">
+            <button class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="goToToday()">Today</button>
         </div>
     </div>
 
     <div id="calendar-grid" class="calendar-grid">
         <!-- Calendar headers -->
-        <div class="calendar-day-header">Sunday</div>
-        <div class="calendar-day-header">Monday</div>
-        <div class="calendar-day-header">Tuesday</div>
-        <div class="calendar-day-header">Wednesday</div>
-        <div class="calendar-day-header">Thursday</div>
-        <div class="calendar-day-header">Friday</div>
-        <div class="calendar-day-header">Saturday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Sunday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Monday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Tuesday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Wednesday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Thursday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Friday</div>
+        <div class="bg-tcsc-navy text-white p-3 text-center text-sm font-semibold">Saturday</div>
         <!-- Days populated via JavaScript -->
     </div>
 
-    <div class="calendar-legend">
-        <div class="legend-item">
-            <div class="legend-color status-scheduled"></div>
+    <div class="flex gap-5 mt-5 p-4 bg-gray-50 rounded-md">
+        <div class="flex items-center gap-2 text-sm text-gray-700">
+            <div class="legend-color status-scheduled w-5 h-5 rounded"></div>
             <span>Scheduled</span>
         </div>
-        <div class="legend-item">
-            <div class="legend-color status-confirmed"></div>
+        <div class="flex items-center gap-2 text-sm text-gray-700">
+            <div class="legend-color status-confirmed w-5 h-5 rounded"></div>
             <span>Confirmed</span>
         </div>
-        <div class="legend-item">
-            <div class="legend-color status-cancelled"></div>
+        <div class="flex items-center gap-2 text-sm text-gray-700">
+            <div class="legend-color status-cancelled w-5 h-5 rounded"></div>
             <span>Cancelled</span>
         </div>
-        <div class="legend-item">
-            <div class="legend-color status-completed"></div>
+        <div class="flex items-center gap-2 text-sm text-gray-700">
+            <div class="legend-color status-completed w-5 h-5 rounded"></div>
             <span>Completed</span>
         </div>
     </div>
@@ -326,21 +173,28 @@ function renderCalendar() {
 
 function createDayCell(day, year, month, isOtherMonth) {
     const dayDiv = document.createElement('div');
-    dayDiv.className = 'calendar-day';
+    dayDiv.className = 'bg-white min-h-[100px] p-2 relative';
     if (isOtherMonth) {
-        dayDiv.className += ' other-month';
+        dayDiv.className += ' bg-gray-50';
     }
 
     // Check if today
     const today = new Date();
     const cellDate = new Date(year, month, day);
     if (cellDate.toDateString() === today.toDateString()) {
-        dayDiv.className += ' today';
+        dayDiv.className += ' bg-blue-50';
     }
 
     // Day number
     const dayNumber = document.createElement('div');
-    dayNumber.className = 'day-number';
+    dayNumber.className = 'font-semibold text-sm mb-1';
+    if (isOtherMonth) {
+        dayNumber.className += ' text-gray-400';
+    } else if (cellDate.toDateString() === today.toDateString()) {
+        dayNumber.className += ' text-tcsc-navy';
+    } else {
+        dayNumber.className += ' text-gray-800';
+    }
     dayNumber.textContent = day;
     dayDiv.appendChild(dayNumber);
 
@@ -356,7 +210,7 @@ function createDayCell(day, year, month, isOtherMonth) {
     if (dayPractices.length > 0) {
         dayPractices.forEach(practice => {
             const practiceDiv = document.createElement('a');
-            practiceDiv.className = `practice-item status-${practice.status}`;
+            practiceDiv.className = `practice-item block px-1.5 py-1 mb-1 rounded text-xs font-medium text-white cursor-pointer no-underline transition-all hover:opacity-85 hover:-translate-y-px overflow-hidden text-ellipsis whitespace-nowrap status-${practice.status}`;
             practiceDiv.href = `/admin/practices/${practice.id}`;
 
             // Format time
@@ -367,7 +221,7 @@ function createDayCell(day, year, month, isOtherMonth) {
                 hour12: true
             });
 
-            practiceDiv.innerHTML = `<span class="practice-time">${timeStr}</span>${practice.location_name}`;
+            practiceDiv.innerHTML = `<span class="font-semibold mr-1">${timeStr}</span>${practice.location_name}`;
             dayDiv.appendChild(practiceDiv);
         });
     }

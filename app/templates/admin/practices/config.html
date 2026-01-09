@@ -1,436 +1,112 @@
 {% extends 'admin/admin_base.html' %}
 {% block title %}Practices Configuration{% endblock %}
 
-{% block extra_css %}
-<style>
-/* Config Container */
-.config-container {
-    background: white;
-    border-radius: var(--r);
-    padding: 20px;
-}
-
-/* Tab Navigation */
-.config-tabs {
-    display: flex;
-    gap: 0;
-    border-bottom: 2px solid #e4e7ec;
-    margin-bottom: 20px;
-}
-
-.config-tab {
-    padding: 12px 24px;
-    font: 500 14px var(--f);
-    color: #667085;
-    background: transparent;
-    border: none;
-    border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
-    cursor: pointer;
-    transition: all 0.2s;
-}
-
-.config-tab:hover {
-    color: var(--p);
-}
-
-.config-tab.active {
-    color: var(--p);
-    border-bottom-color: var(--p);
-}
-
-/* Tab Content */
-.tab-content {
-    display: none;
-}
-
-.tab-content.active {
-    display: block;
-}
-
-/* Toolbar */
-.config-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.config-toolbar .button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 36px;
-    padding: 0 16px;
-    margin-top: 0;
-    width: auto;
-}
-
-/* Item Count Badge */
-.item-count {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: #f2f4f7;
-    border-radius: 6px;
-    font: 500 13px var(--f);
-    color: #344054;
-    margin-left: auto;
-}
-
-.item-count strong {
-    color: var(--p);
-}
-
-/* Tabulator Customizations */
-.config-table {
-    border: 1px solid #e4e7ec;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.config-table .tabulator-header {
-    background: #f9fafb;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-.config-table .tabulator-col-title {
-    font: 600 13px var(--f);
-    color: #344054;
-}
-
-.config-table .tabulator-cell {
-    font: 400 14px var(--f);
-    color: #1d2939;
-    border-right: none;
-}
-
-.config-table .tabulator-row:hover {
-    background: #f9fafb;
-}
-
-/* Count badge */
-.count-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 8px;
-    background: #f2f4f7;
-    border-radius: 12px;
-    font: 500 12px var(--f);
-    color: #344054;
-}
-
-.count-badge.has-items {
-    background: var(--s);
-    color: var(--p);
-}
-
-/* Action buttons */
-.table-actions {
-    display: flex;
-    gap: 6px;
-    justify-content: center;
-}
-
-.table-actions .button {
-    height: 28px;
-    padding: 0 10px;
-    font-size: 12px;
-    margin-top: 0;
-    width: auto;
-}
-
-/* Toast notifications */
-.toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: var(--r);
-    background: var(--p);
-    color: white;
-    font: 500 14px var(--f);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 1000;
-    animation: slideIn 0.3s ease-out;
-}
-
-.toast.error {
-    background: #dc2626;
-}
-
-.toast.success {
-    background: #16a34a;
-}
-
-@keyframes slideIn {
-    from { transform: translateX(100px); opacity: 0; }
-    to { transform: translateX(0); opacity: 1; }
-}
-
-/* Inline editor styling */
-.tabulator-edit-box {
-    padding: 4px 8px;
-    border: 2px solid var(--p) !important;
-    border-radius: 4px;
-    font: 400 14px var(--f);
-}
-
-/* Status Reference Tab */
-.status-reference-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-    gap: 20px;
-}
-
-.status-group {
-    background: #f9fafb;
-    border-radius: 8px;
-    padding: 16px;
-}
-
-.status-group h3 {
-    font: 600 14px var(--f);
-    color: #344054;
-    margin: 0 0 12px 0;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-.status-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 0;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-.status-item:last-child {
-    border-bottom: none;
-}
-
-.status-item code {
-    background: #e4e7ec;
-    padding: 2px 8px;
-    border-radius: 4px;
-    font: 500 12px monospace;
-    color: #344054;
-}
-
-.status-item span {
-    font: 400 13px var(--f);
-    color: #667085;
-}
-
-/* JSON array display */
-.json-array-display {
-    font: 400 13px var(--f);
-    color: #667085;
-}
-
-/* Settings Section */
-.settings-section {
-    max-width: 600px;
-}
-
-.settings-section h3 {
-    font: 600 16px var(--f);
-    color: #1d2939;
-    margin: 0 0 8px 0;
-}
-
-.settings-description {
-    font: 400 14px var(--f);
-    color: #667085;
-    margin: 0 0 20px 0;
-    line-height: 1.5;
-}
-
-.practice-days-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.practice-day-row {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    background: #f9fafb;
-    border-radius: 8px;
-    border: 1px solid #e4e7ec;
-}
-
-.practice-day-row select,
-.practice-day-row input[type="time"] {
-    padding: 8px 12px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    font: 400 14px var(--f);
-    background: white;
-}
-
-.practice-day-row select {
-    min-width: 140px;
-}
-
-.practice-day-row input[type="time"] {
-    width: 120px;
-}
-
-.practice-day-row label {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    font: 400 14px var(--f);
-    color: #344054;
-    cursor: pointer;
-}
-
-.practice-day-row input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    cursor: pointer;
-}
-
-.practice-day-row .remove-day {
-    margin-left: auto;
-    background: none;
-    border: none;
-    color: #dc2626;
-    font: 500 14px var(--f);
-    cursor: pointer;
-    padding: 4px 8px;
-}
-
-.practice-day-row .remove-day:hover {
-    text-decoration: underline;
-}
-
-.settings-actions {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid #e4e7ec;
-}
-
-.settings-actions .button {
-    height: 40px;
-    padding: 0 24px;
-}
-</style>
-{% endblock %}
 
 {% block content %}
-<div class="admin-header">
-    <h1>Practices Configuration</h1>
-    <div class="admin-actions">
-        <a href="{{ url_for('admin_practices.practices_list') }}" class="button button-secondary">Back to Practices</a>
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Practices Configuration</h1>
+    <div class="flex gap-2">
+        <a href="{{ url_for('admin_practices.practices_list') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Practices</a>
     </div>
 </div>
 
-<div class="config-container">
+<div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
     <!-- Tab Navigation -->
-    <div class="config-tabs">
-        <button class="config-tab active" data-tab="locations">Locations</button>
-        <button class="config-tab" data-tab="activities">Activities</button>
-        <button class="config-tab" data-tab="types">Types</button>
-        <button class="config-tab" data-tab="social-locations">Social Locations</button>
-        <button class="config-tab" data-tab="settings">Settings</button>
-        <button class="config-tab" data-tab="status-reference">Status Reference</button>
+    <div class="flex gap-0 border-b-2 border-gray-200 mb-5">
+        <button class="config-tab active py-3 px-6 text-sm font-medium text-tcsc-navy bg-transparent border-none border-b-2 border-tcsc-navy -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="locations">Locations</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="activities">Activities</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="types">Types</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="social-locations">Social Locations</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="settings">Settings</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="status-reference">Status Reference</button>
     </div>
 
     <!-- Tab Content: Locations -->
-    <div id="locations-tab" class="tab-content active">
-        <div class="config-toolbar">
-            <button class="button" onclick="addNewLocation()">Add Location</button>
-            <div class="item-count">
+    <div id="locations-tab" class="tab-content">
+        <div class="flex items-center gap-3 mb-4">
+            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewLocation()">Add Location</button>
+            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
                 <span>Total:</span>
-                <strong id="location-count">0</strong>
+                <strong id="location-count" class="text-tcsc-navy">0</strong>
                 <span>locations</span>
             </div>
         </div>
-        <div id="locations-table" class="config-table"></div>
+        <div id="locations-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Activities -->
-    <div id="activities-tab" class="tab-content">
-        <div class="config-toolbar">
-            <button class="button" onclick="addNewActivity()">Add Activity</button>
-            <div class="item-count">
+    <div id="activities-tab" class="tab-content hidden">
+        <div class="flex items-center gap-3 mb-4">
+            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewActivity()">Add Activity</button>
+            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
                 <span>Total:</span>
-                <strong id="activity-count">0</strong>
+                <strong id="activity-count" class="text-tcsc-navy">0</strong>
                 <span>activities</span>
             </div>
         </div>
-        <div id="activities-table" class="config-table"></div>
+        <div id="activities-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Types -->
-    <div id="types-tab" class="tab-content">
-        <div class="config-toolbar">
-            <button class="button" onclick="addNewType()">Add Type</button>
-            <div class="item-count">
+    <div id="types-tab" class="tab-content hidden">
+        <div class="flex items-center gap-3 mb-4">
+            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewType()">Add Type</button>
+            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
                 <span>Total:</span>
-                <strong id="type-count">0</strong>
+                <strong id="type-count" class="text-tcsc-navy">0</strong>
                 <span>types</span>
             </div>
         </div>
-        <div id="types-table" class="config-table"></div>
+        <div id="types-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Social Locations -->
-    <div id="social-locations-tab" class="tab-content">
-        <div class="config-toolbar">
-            <button class="button" onclick="addNewSocialLocation()">Add Social Location</button>
-            <div class="item-count">
+    <div id="social-locations-tab" class="tab-content hidden">
+        <div class="flex items-center gap-3 mb-4">
+            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewSocialLocation()">Add Social Location</button>
+            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
                 <span>Total:</span>
-                <strong id="social-location-count">0</strong>
+                <strong id="social-location-count" class="text-tcsc-navy">0</strong>
                 <span>social locations</span>
             </div>
         </div>
-        <div id="social-locations-table" class="config-table"></div>
+        <div id="social-locations-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Settings -->
-    <div id="settings-tab" class="tab-content">
-        <div class="settings-section">
-            <h3>Practice Days</h3>
-            <p class="settings-description">Configure which days of the week practices are expected. This is used by the weekly coach summary to show placeholders for days without scheduled practices.</p>
+    <div id="settings-tab" class="tab-content hidden">
+        <div class="max-w-[600px]">
+            <h3 class="font-semibold text-base text-gray-800 mb-2">Practice Days</h3>
+            <p class="text-sm text-gray-500 mb-5 leading-relaxed">Configure which days of the week practices are expected. This is used by the weekly coach summary to show placeholders for days without scheduled practices.</p>
 
             <div id="practice-days-editor">
-                <div class="practice-days-list" id="practice-days-list"></div>
-                <button class="button button-secondary" onclick="addPracticeDay()">Add Day</button>
+                <div class="flex flex-col gap-3 mb-4" id="practice-days-list"></div>
+                <button class="toolbar-btn toolbar-btn-secondary" onclick="addPracticeDay()">Add Day</button>
             </div>
 
-            <div class="settings-actions">
-                <button class="button" onclick="savePracticeDays()">Save Changes</button>
+            <div class="mt-6 pt-5 border-t border-gray-200">
+                <button class="toolbar-btn toolbar-btn-primary" onclick="savePracticeDays()">Save Changes</button>
             </div>
         </div>
     </div>
 
     <!-- Tab Content: Status Reference (Read-Only) -->
-    <div id="status-reference-tab" class="tab-content">
-        <div class="status-reference-grid">
-            <div class="status-group">
-                <h3>Practice Status</h3>
+    <div id="status-reference-tab" class="tab-content hidden">
+        <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-5">
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="font-semibold text-sm text-gray-700 mb-3 pb-2 border-b border-gray-200">Practice Status</h3>
                 <div id="practice-status-list"></div>
             </div>
-            <div class="status-group">
-                <h3>Lead Role</h3>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="font-semibold text-sm text-gray-700 mb-3 pb-2 border-b border-gray-200">Lead Role</h3>
                 <div id="lead-role-list"></div>
             </div>
-            <div class="status-group">
-                <h3>RSVP Status</h3>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="font-semibold text-sm text-gray-700 mb-3 pb-2 border-b border-gray-200">RSVP Status</h3>
                 <div id="rsvp-status-list"></div>
             </div>
-            <div class="status-group">
-                <h3>Cancellation Status</h3>
+            <div class="bg-gray-50 rounded-lg p-4">
+                <h3 class="font-semibold text-sm text-gray-700 mb-3 pb-2 border-b border-gray-200">Cancellation Status</h3>
                 <div id="cancellation-status-list"></div>
             </div>
         </div>
@@ -474,12 +150,18 @@ function attachTabListeners() {
     document.querySelectorAll('.config-tab').forEach(tab => {
         tab.addEventListener('click', () => {
             // Remove active from all tabs and content
-            document.querySelectorAll('.config-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelectorAll('.config-tab').forEach(t => {
+                t.classList.remove('active');
+                t.classList.remove('text-tcsc-navy', 'border-tcsc-navy');
+                t.classList.add('text-gray-500', 'border-transparent');
+            });
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
 
             // Activate clicked tab
             tab.classList.add('active');
-            document.getElementById(tab.dataset.tab + '-tab').classList.add('active');
+            tab.classList.remove('text-gray-500', 'border-transparent');
+            tab.classList.add('text-tcsc-navy', 'border-tcsc-navy');
+            document.getElementById(tab.dataset.tab + '-tab').classList.remove('hidden');
         });
     });
 }
@@ -970,8 +652,8 @@ function initSocialLocationsTable() {
                 editor: "input",
                 formatter: (cell) => {
                     const url = cell.getValue();
-                    if (!url) return '<span class="json-array-display">—</span>';
-                    return `<a href="${url}" target="_blank" style="color: var(--p);">View Map</a>`;
+                    if (!url) return '<span class="text-gray-500">—</span>';
+                    return `<a href="${url}" target="_blank" class="text-tcsc-navy hover:underline">View Map</a>`;
                 },
                 cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
             },
@@ -1085,14 +767,14 @@ function renderStatusList(key, elementId) {
     const items = statusData[key] || [];
 
     if (items.length === 0) {
-        container.innerHTML = '<div class="status-item"><span>No statuses defined</span></div>';
+        container.innerHTML = '<div class="flex items-center gap-2.5 py-2"><span class="text-sm text-gray-500">No statuses defined</span></div>';
         return;
     }
 
     container.innerHTML = items.map(s =>
-        `<div class="status-item">
-            <code>${s.value}</code>
-            <span>${s.name}</span>
+        `<div class="flex items-center gap-2.5 py-2 border-b border-gray-200 last:border-b-0">
+            <code class="bg-gray-200 py-0.5 px-2 rounded text-xs font-medium font-mono text-gray-700">${s.value}</code>
+            <span class="text-sm text-gray-500">${s.name}</span>
         </div>`
     ).join('');
 }
@@ -1111,23 +793,23 @@ function renderPracticeDays() {
     if (!container) return;
 
     if (practiceDays.length === 0) {
-        container.innerHTML = '<p style="color: #667085; font-style: italic;">No practice days configured. Click "Add Day" to add one.</p>';
+        container.innerHTML = '<p class="text-gray-500 italic">No practice days configured. Click "Add Day" to add one.</p>';
         return;
     }
 
     container.innerHTML = practiceDays.map((day, index) => `
-        <div class="practice-day-row" data-index="${index}">
-            <select onchange="updatePracticeDay(${index}, 'day', this.value)">
+        <div class="practice-day-row flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200" data-index="${index}">
+            <select onchange="updatePracticeDay(${index}, 'day', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white min-w-[140px]">
                 ${['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d =>
                     `<option value="${d}" ${day.day?.toLowerCase() === d ? 'selected' : ''}>${d.charAt(0).toUpperCase() + d.slice(1)}</option>`
                 ).join('')}
             </select>
-            <input type="time" value="${day.time || '18:00'}" onchange="updatePracticeDay(${index}, 'time', this.value)">
-            <label>
-                <input type="checkbox" ${day.active !== false ? 'checked' : ''} onchange="updatePracticeDay(${index}, 'active', this.checked)">
+            <input type="time" value="${day.time || '18:00'}" onchange="updatePracticeDay(${index}, 'time', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white w-[120px]">
+            <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                <input type="checkbox" ${day.active !== false ? 'checked' : ''} onchange="updatePracticeDay(${index}, 'active', this.checked)" class="w-[18px] h-[18px] cursor-pointer">
                 Active
             </label>
-            <button type="button" class="remove-day" onclick="removePracticeDay(${index})">Remove</button>
+            <button type="button" class="ml-auto bg-transparent border-none text-red-600 font-medium text-sm cursor-pointer py-1 px-2 hover:underline" onclick="removePracticeDay(${index})">Remove</button>
         </div>
     `).join('');
 }
@@ -1178,14 +860,14 @@ async function savePracticeDays() {
 // ============================================================================
 function formatJsonArray(val) {
     if (!val || !Array.isArray(val) || val.length === 0) {
-        return '<span class="json-array-display">—</span>';
+        return '<span class="text-gray-500">—</span>';
     }
-    return `<span class="json-array-display">${val.join(', ')}</span>`;
+    return `<span class="text-sm text-gray-500">${val.join(', ')}</span>`;
 }
 
 function formatCount(count) {
-    const cls = count > 0 ? 'count-badge has-items' : 'count-badge';
-    return `<span class="${cls}">${count || 0}</span>`;
+    const hasItems = count > 0;
+    return `<span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium ${hasItems ? 'bg-tcsc-secondary text-tcsc-navy' : 'bg-gray-100 text-gray-700'}">${count || 0}</span>`;
 }
 
 function formatDeleteButton(cell, entityType, countField) {
@@ -1195,25 +877,14 @@ function formatDeleteButton(cell, entityType, countField) {
     const funcName = `delete${entityType}`;
 
     if (canDelete) {
-        return `<div class="table-actions">
-            <button class="button button-small button-danger" onclick="${funcName}(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Delete</button>
+        return `<div class="tbl-actions justify-center">
+            <button class="tbl-btn tbl-btn-danger" onclick="${funcName}(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Delete</button>
         </div>`;
     }
-    return `<div class="table-actions">
-        <button class="button button-small button-secondary" disabled title="Cannot delete - has references">Delete</button>
+    return `<div class="tbl-actions justify-center">
+        <button class="tbl-btn tbl-btn-secondary" disabled title="Cannot delete - has references">Delete</button>
     </div>`;
 }
 
-function showToast(message, type = 'info') {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => toast.remove(), 3000);
-}
 </script>
 {% endblock %}

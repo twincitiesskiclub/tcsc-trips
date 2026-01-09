@@ -3,70 +3,80 @@
 {% block title %}{{ 'Edit Social Event' if social_event else 'New Social Event' }}{% endblock %}
 
 {% block content %}
-<div class="admin-header">
-    <h1>{{ 'Edit Social Event' if social_event else 'New Social Event' }}</h1>
-    <a href="{{ url_for('admin.get_admin_social_events') }}" class="button button-secondary">Back to Social Events</a>
+<div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+    <h1 class="text-2xl font-semibold text-tcsc-navy m-0">{{ 'Edit Social Event' if social_event else 'New Social Event' }}</h1>
+    <a href="{{ url_for('admin.get_admin_social_events') }}" class="bg-gray-200 text-gray-600 px-4 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Social Events</a>
 </div>
 
-<form class="admin-form" method="POST">
-    <div class="form-row">
-        <div class="form-group">
-            <label for="name">Event Name</label>
-            <input type="text" id="name" name="name" value="{{ social_event.name if social_event else '' }}" required>
+<form class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100" method="POST">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="name" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Event Name</label>
+            <input type="text" id="name" name="name" value="{{ social_event.name if social_event else '' }}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="form-group">
-            <label for="slug">Event Slug</label>
+        <div class="mb-5">
+            <label for="slug" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Event Slug</label>
             <input type="text" id="slug" name="slug" value="{{ social_event.slug if social_event else '' }}" required
                    pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens allowed"
-                   {% if social_event %}readonly{% endif %}>
+                   {% if social_event %}readonly{% endif %}
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy {% if social_event %}bg-gray-100 cursor-not-allowed{% endif %}">
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="location">Location</label>
-        <input type="text" id="location" name="location" value="{{ social_event.location if social_event else '' }}" required>
+    <div class="mb-5">
+        <label for="location" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Location</label>
+        <input type="text" id="location" name="location" value="{{ social_event.location if social_event else '' }}" required
+               class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="max_participants">Maximum Participants</label>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="max_participants" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Maximum Participants</label>
             <input type="number" id="max_participants" name="max_participants"
-                   value="{{ social_event.max_participants if social_event else '' }}" required>
+                   value="{{ social_event.max_participants if social_event else '' }}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="form-group">
-            <label for="price">Price ($)</label>
+        <div class="mb-5">
+            <label for="price" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Price ($)</label>
             <input type="number" id="price" name="price" step="0.01"
-                   value="{{ '%.2f'|format(social_event.price / 100) if social_event else '' }}" required>
+                   value="{{ '%.2f'|format(social_event.price / 100) if social_event else '' }}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="event_date">Event Date & Time</label>
+    <div class="mb-5">
+        <label for="event_date" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Event Date & Time</label>
         <input type="datetime-local" id="event_date" name="event_date"
-               value="{{ social_event.event_date.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required>
+               value="{{ social_event.event_date.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required
+               class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
     </div>
 
-    <div class="form-row">
-        <div class="form-group">
-            <label for="signup_start">Signup Start</label>
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
+        <div class="mb-5">
+            <label for="signup_start" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Signup Start</label>
             <input type="datetime-local" id="signup_start" name="signup_start"
-                   value="{{ social_event.signup_start.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required>
+                   value="{{ social_event.signup_start.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="form-group">
-            <label for="signup_end">Signup End</label>
+        <div class="mb-5">
+            <label for="signup_end" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Signup End</label>
             <input type="datetime-local" id="signup_end" name="signup_end"
-                   value="{{ social_event.signup_end.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required>
+                   value="{{ social_event.signup_end.strftime('%Y-%m-%dT%H:%M') if social_event else '' }}" required
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
     </div>
 
-    <div class="form-group">
-        <label for="description">Description</label>
-        <textarea id="description" name="description" rows="4" required>{{ social_event.description if social_event else '' }}</textarea>
+    <div class="mb-5">
+        <label for="description" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Description</label>
+        <textarea id="description" name="description" rows="4" required
+                  class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy resize-y">{{ social_event.description if social_event else '' }}</textarea>
     </div>
 
-    <div class="form-group">
-        <label for="status">Status</label>
-        <select id="status" name="status" required>
+    <div class="mb-5">
+        <label for="status" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Status</label>
+        <select id="status" name="status" required
+                class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             <option value="draft" {% if social_event and social_event.status == 'draft' %}selected{% endif %}>Draft</option>
             <option value="active" {% if social_event and social_event.status == 'active' %}selected{% endif %}>Active</option>
             <option value="completed" {% if social_event and social_event.status == 'completed' %}selected{% endif %}>Completed</option>
@@ -74,9 +84,9 @@
         </select>
     </div>
 
-    <div class="form-actions">
-        <button type="submit" class="button">Save Event</button>
-        <a href="{{ url_for('admin.get_admin_social_events') }}" class="button button-secondary">Cancel</a>
+    <div class="flex gap-3 mt-6">
+        <button type="submit" class="bg-tcsc-navy text-white px-6 py-3 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Event</button>
+        <a href="{{ url_for('admin.get_admin_social_events') }}" class="bg-gray-200 text-gray-600 px-6 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Cancel</a>
     </div>
 </form>
 {% endblock %}

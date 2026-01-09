@@ -1,0 +1,13 @@
+{
+  "name": "tcsc-trips",
+  "version": "1.0.0",
+  "description": "Twin Cities Ski Club trip and membership registration",
+  "scripts": {
+    "tailwind:watch": "tailwindcss -i ./app/static/css/tailwind-input.css -o ./app/static/css/tailwind-output.css --watch",
+    "tailwind:build": "tailwindcss -i ./app/static/css/tailwind-input.css -o ./app/static/css/tailwind-output.css --minify"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0",
+    "@tailwindcss/forms": "^0.5.7"
+  }
+}

@@ -1,163 +1,11 @@
 {% extends 'admin/admin_base.html' %}
 {% block extra_css %}
 <style>
-/* Users Grid Styles */
-.users-grid-container {
-    background: white;
-    border-radius: var(--r);
-    padding: 20px;
-}
-
-/* Toolbar */
-.users-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 16px;
-    flex-wrap: wrap;
-}
-
-/* Unified control height and styling */
-.toolbar-control {
-    height: 32px;
-    padding: 0 12px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white;
-    font: 400 13px var(--f);
-    color: #344054;
-    box-sizing: border-box;
-}
-
-.toolbar-control:focus {
-    outline: none;
-    border-color: var(--p);
-    box-shadow: 0 0 0 1px var(--p);
-}
-
-/* Segmented Button Group */
-.btn-group {
-    display: inline-flex;
-    align-items: stretch;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white;
-}
-
-.btn-group .view-btn {
-    /* Reset global button styles */
-    all: unset;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    padding: 7px 14px;
-    border-right: 1px solid #d0d5dd;
-    background: transparent;
-    cursor: pointer;
-    font: 500 13px var(--f);
-    color: #344054;
-    transition: background 0.15s ease;
-    white-space: nowrap;
-}
-
-.btn-group .view-btn:last-child {
-    border-right: none;
-}
-
-.btn-group .view-btn:hover {
-    background: #f9fafb;
-}
-
-.btn-group .view-btn.active {
-    background: var(--p);
-    color: white;
-}
-
-/* Dropdowns */
-.users-toolbar select {
-    height: 32px;
-    padding: 0 28px 0 10px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center;
-    font: 400 13px var(--f);
-    color: #344054;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-}
-
-.users-toolbar select:focus {
-    outline: none;
-    border-color: var(--p);
-}
-
 #global-season-select {
     min-width: 130px;
 }
 
-/* Member Count Badge */
-.member-count {
-    height: 32px;
-    display: inline-flex;
-    align-items: center;
-    padding: 0 12px;
-    background: #f2f4f7;
-    border: 1px solid #e4e7ec;
-    border-radius: 6px;
-    font: 500 13px var(--f);
-    color: #475467;
-    white-space: nowrap;
-}
-
-/* Search Input */
-#users-search {
-    height: 32px;
-    width: 160px;
-    padding: 0 10px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white;
-    font: 400 13px var(--f);
-    color: #344054;
-}
-
-#users-search::placeholder {
-    color: #98a2b3;
-}
-
-#users-search:focus {
-    outline: none;
-    border-color: var(--p);
-}
-
-/* Table Footer */
-.table-footer {
-    display: flex;
-    justify-content: flex-end;
-    margin-top: 16px;
-    padding-top: 16px;
-    border-top: 1px solid #e4e7ec;
-}
-
-.table-footer .button-secondary {
-    height: 36px;
-    padding: 0 16px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white;
-    font: 500 13px var(--f);
-    color: #344054;
-    cursor: pointer;
-    transition: all 0.15s ease;
-}
-
-.table-footer .button-secondary:hover {
-    background: #f9fafb;
-    border-color: #98a2b3;
-}
-
-/* Role Filter Dropdown - matches .users-toolbar select styling */
+/* Role Filter Dropdown */
 .role-filter-dropdown {
     position: relative;
 }
@@ -168,12 +16,11 @@
     border: 1px solid #d0d5dd;
     border-radius: 6px;
     background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center;
-    font: 400 13px var(--f);
+    font-size: 13px;
     color: #344054;
     cursor: pointer;
     appearance: none;
     -webkit-appearance: none;
-    /* Override global button styles */
     display: inline-block;
     width: auto;
     margin-top: 0;
@@ -185,11 +32,11 @@
 
 .role-filter-btn:focus {
     outline: none;
-    border-color: var(--p);
+    border-color: #1c2c44;
 }
 
 .role-filter-btn.has-selection {
-    border-color: var(--p);
+    border-color: #1c2c44;
     background-color: rgba(28,44,68,0.03);
 }
 
@@ -222,8 +69,9 @@
 }
 
 .role-filter-header span {
-    font: 600 12px var(--f);
-    color: var(--g-m);
+    font-weight: 600;
+    font-size: 12px;
+    color: #667085;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
@@ -232,8 +80,9 @@
     padding: 4px 8px;
     border: none;
     background: none;
-    font: 500 12px var(--f);
-    color: var(--p);
+    font-weight: 500;
+    font-size: 12px;
+    color: #1c2c44;
     cursor: pointer;
 }
 
@@ -269,7 +118,7 @@
 }
 
 .role-toggle.selected {
-    border-color: var(--p);
+    border-color: #1c2c44;
     background: rgba(28,44,68,0.08);
     box-shadow: 0 0 0 2px rgba(28,44,68,0.1);
 }
@@ -288,7 +137,7 @@
     left: 50%;
     transform: translateX(-50%) translateY(-6px);
     padding: 5px 8px;
-    background: var(--p);
+    background: #1c2c44;
     color: white;
     font-size: 11px;
     font-weight: 500;
@@ -307,67 +156,12 @@
 }
 
 .role-filter-count {
-    background: var(--p);
+    background: #1c2c44;
     color: white;
     font-size: 11px;
     font-weight: 600;
     padding: 2px 6px;
     border-radius: 10px;
-}
-
-/* Page Title */
-.page-title {
-    margin: 0 0 12px 0;
-    font-size: 20px;
-    color: var(--p);
-}
-
-/* Tabulator theme overrides */
-.tabulator {
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    font-family: var(--f);
-}
-
-.tabulator .tabulator-header {
-    background: var(--p);
-    color: white;
-    border-bottom: none;
-}
-
-.tabulator .tabulator-header .tabulator-col {
-    background: var(--p);
-    border-right: 1px solid rgba(255,255,255,0.1);
-}
-
-.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
-    background: rgba(255,255,255,0.1);
-}
-
-.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
-    padding: 10px 8px;
-}
-
-.tabulator-row.tabulator-row-even {
-    background: #f9f9f9;
-}
-
-.tabulator-row:hover {
-    background: #f0f0f0;
-}
-
-.tabulator-cell {
-    padding: 8px;
-}
-
-.tabulator-cell a {
-    color: var(--p);
-    text-decoration: none;
-    font-weight: 500;
-}
-
-.tabulator-cell a:hover {
-    text-decoration: underline;
 }
 
 /* Tag Badges */
@@ -396,7 +190,7 @@
 }
 
 .tag-empty {
-    color: var(--g-l);
+    color: #d0d5dd;
     font-size: 13px;
 }
 
@@ -440,7 +234,7 @@
     left: 50%;
     transform: translateX(-50%) translateY(-4px);
     padding: 6px 10px;
-    background: var(--p);
+    background: #1c2c44;
     color: white;
     font-size: 12px;
     font-weight: 500;
@@ -462,7 +256,7 @@
     left: 50%;
     transform: translateX(-50%) translateY(2px);
     border: 5px solid transparent;
-    border-top-color: var(--p);
+    border-top-color: #1c2c44;
     opacity: 0;
     visibility: hidden;
     transition: opacity 0.2s, visibility 0.2s;
@@ -506,10 +300,10 @@
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    color: var(--g-m);
+    color: #667085;
     margin-bottom: 8px;
     padding-bottom: 4px;
-    border-bottom: 1px solid var(--g-b);
+    border-bottom: 1px solid #e4e7ec;
 }
 
 .tag-category-items {
@@ -537,7 +331,7 @@
     height: 16px;
     margin: 0;
     cursor: pointer;
-    accent-color: var(--p);
+    accent-color: #1c2c44;
 }
 
 /* Inline tag checkboxes for edit modal */
@@ -567,72 +361,39 @@
     height: 14px;
     margin: 0;
     cursor: pointer;
-    accent-color: var(--p);
+    accent-color: #1c2c44;
 }
 
-/* Toast Notifications */
-.toast-notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    z-index: 2000;
-    opacity: 0;
-    transform: translateX(100%);
-    transition: all 0.3s ease;
-}
-
-.toast-notification.show {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.toast-success {
-    background: var(--s);
-    color: var(--p);
-}
-
-.toast-error {
-    background: #fee2e2;
-    color: #991b1b;
-}
-
-.toast-info {
-    background: var(--status-info-bg);
-    color: var(--status-info-text);
-}
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="users-grid-container">
-    <h1 class="page-title" id="view-title">Members</h1>
+<div class="bg-white rounded-tcsc p-5">
+    <h1 class="text-xl font-semibold text-tcsc-navy mb-3" id="view-title">Members</h1>
 
     <!-- Toolbar -->
-    <div class="users-toolbar">
-        <div class="btn-group">
-            <button class="view-btn active" data-view="all">All</button>
-            <button class="view-btn" data-view="current">Current</button>
-            <button class="view-btn" data-view="alumni">Alumni</button>
+    <div class="flex items-center gap-2.5 mb-4 flex-wrap">
+        <div class="seg-group">
+            <button class="seg-btn active" data-view="all">All</button>
+            <button class="seg-btn" data-view="current">Current</button>
+            <button class="seg-btn" data-view="alumni">Alumni</button>
         </div>
-        <select id="global-season-select">
+        <select id="global-season-select" class="tbl-select">
             <option value="">Season...</option>
             {% for season in all_seasons %}
             <option value="{{ season.id }}">{{ season.name }}</option>
             {% endfor %}
         </select>
-        <span id="member-count" class="member-count">0 members</span>
-        <input type="text" id="users-search" placeholder="Search...">
-        <select id="status-filter">
+        <span id="member-count" class="h-8 inline-flex items-center px-3 bg-gray-100 border border-gray-200 rounded-md text-sm font-medium text-gray-600 whitespace-nowrap">0 members</span>
+        <input type="text" id="users-search" class="tbl-search" placeholder="Search...">
+        <select id="status-filter" class="tbl-select">
             <option value="">Status</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING">Pending</option>
             <option value="ALUMNI">Alumni</option>
             <option value="DROPPED">Dropped</option>
         </select>
-        <div class="role-filter-dropdown" id="role-filter-dropdown">
+        <div class="role-filter-dropdown relative" id="role-filter-dropdown">
             <button type="button" class="role-filter-btn" id="role-filter-btn" onclick="toggleRoleDropdown()">
                 <span id="role-filter-label">Roles</span>
             </button>
@@ -646,7 +407,7 @@
                 </div>
             </div>
         </div>
-        <select id="season-filter">
+        <select id="season-filter" class="tbl-select">
             <option value="">Season Status</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING_LOTTERY">Pending Lottery</option>
@@ -658,49 +419,49 @@
         </select>
     </div>
 
-    <div id="users-table"></div>
+    <div id="users-table" class="tabulator-data"></div>
 
-    <div class="table-footer">
-        <button id="export-csv" class="button-secondary">Export CSV</button>
+    <div class="flex justify-end mt-4 pt-4 border-t border-gray-200">
+        <button id="export-csv" class="toolbar-btn toolbar-btn-secondary">Export CSV</button>
     </div>
 </div>
 
 <!-- Edit Modal -->
-<div id="edit-modal" class="modal" style="display: none;">
-    <div class="modal-overlay" onclick="closeModal()"></div>
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 id="modal-title">Edit Member</h2>
-            <button class="modal-close" onclick="closeModal()">&times;</button>
+<div id="edit-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
+    <div class="absolute inset-0" onclick="closeModal()"></div>
+    <div class="relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl">
+        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
+            <h2 id="modal-title" class="text-lg font-semibold text-tcsc-navy">Edit Member</h2>
+            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeModal()">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="p-5">
             <form id="edit-user-form" method="POST">
                 <input type="hidden" name="form_type" value="quick">
                 <div id="modal-form-fields"></div>
             </form>
         </div>
-        <div class="modal-footer">
-            <button type="button" class="button button-secondary" onclick="closeModal()">Cancel</button>
-            <a href="#" class="button button-secondary" id="view-details-link">View Details</a>
-            <button type="submit" form="edit-user-form" class="button">Save Changes</button>
+        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
+            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeModal()">Cancel</button>
+            <a href="#" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" id="view-details-link">View Details</a>
+            <button type="submit" form="edit-user-form" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Changes</button>
         </div>
     </div>
 </div>
 
 <!-- Tag Assignment Modal -->
-<div id="tag-modal" class="modal" style="display: none;">
-    <div class="modal-overlay" onclick="closeTagModal()"></div>
-    <div class="modal-content" style="max-width: 550px;">
-        <div class="modal-header">
-            <h2 id="tag-modal-title">Assign Tags</h2>
-            <button class="modal-close" onclick="closeTagModal()">&times;</button>
+<div id="tag-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
+    <div class="absolute inset-0" onclick="closeTagModal()"></div>
+    <div class="relative bg-white rounded-tcsc w-full max-w-[550px] mx-4 shadow-xl">
+        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
+            <h2 id="tag-modal-title" class="text-lg font-semibold text-tcsc-navy">Assign Tags</h2>
+            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeTagModal()">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="p-5">
             <div id="tag-checkboxes"></div>
         </div>
-        <div class="modal-footer">
-            <button type="button" class="button button-secondary" onclick="closeTagModal()">Cancel</button>
-            <button type="button" class="button" onclick="saveUserTags()">Save Tags</button>
+        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
+            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeTagModal()">Cancel</button>
+            <button type="button" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all" onclick="saveUserTags()">Save Tags</button>
         </div>
     </div>
 </div>

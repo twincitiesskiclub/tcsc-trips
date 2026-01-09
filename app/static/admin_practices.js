@@ -121,6 +121,7 @@ function initTable() {
         movableColumns: true,
         resizableColumns: true,
         renderVerticalBuffer: 500,
+        placeholder: "No practices found",
 
         columns: [
             {title: "Date", field: "date", minWidth: 150,
@@ -211,12 +212,12 @@ function initTable() {
                     const id = data.id;
                     const status = data.status;
 
-                    let btns = '<div class="action-buttons">';
-                    btns += '<button class="action-btn action-btn-edit" onclick="openEditModal(' + id + ')">Edit</button>';
+                    let btns = '<div class="tbl-actions">';
+                    btns += '<button class="tbl-btn tbl-btn-primary" onclick="openEditModal(' + id + ')">Edit</button>';
                     if (status !== 'cancelled') {
-                        btns += '<button class="action-btn action-btn-cancel" onclick="openCancelModal(' + id + ')">Cancel</button>';
+                        btns += '<button class="tbl-btn tbl-btn-secondary" onclick="openCancelModal(' + id + ')">Cancel</button>';
                     }
-                    btns += '<button class="action-btn action-btn-danger" onclick="deletePractice(' + id + ')">Delete</button>';
+                    btns += '<button class="tbl-btn tbl-btn-danger" onclick="deletePractice(' + id + ')">Delete</button>';
                     btns += '</div>';
                     return btns;
                 }
@@ -577,23 +578,6 @@ async function deletePractice(practiceId) {
         console.error('Error deleting practice:', error);
         showToast('Failed to delete practice', 'error');
     }
-}
-
-function showToast(message, type = 'success') {
-    const existing = document.querySelector('.toast-notification');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    toast.className = `toast-notification ${type === 'error' ? 'toast-error' : ''}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => toast.classList.add('show'), 10);
-
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 3000);
 }
 
 // Close modal on Escape key

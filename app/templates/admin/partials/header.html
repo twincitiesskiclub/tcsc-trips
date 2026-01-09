@@ -1,16 +1,22 @@
+{% if session.user %}
+  <div class="flex items-center justify-between py-3 mb-4 border-b border-tcsc-gray-100">
+    <div class="text-sm text-tcsc-gray-600">
+      Logged in as: <span class="font-medium text-tcsc-navy">{{ session.user.email }}</span>
+    </div>
+    <a href="{{ url_for('auth.logout') }}" class="text-sm text-tcsc-navy font-medium hover:underline transition-colors">Logout</a>
+  </div>
+{% endif %}
+
 {% with messages = get_flashed_messages(with_categories=true) %}
   {% if messages %}
     {% for category, message in messages %}
-      <div class="flash-message {{ category }}">
+      <div class="px-4 py-3 rounded-tcsc mb-4 animate-slide-in
+        {% if category == 'success' %}bg-status-success-bg text-status-success-text border border-green-200
+        {% elif category == 'error' %}bg-status-error-bg text-status-error-text border border-red-200
+        {% elif category == 'warning' %}bg-status-warning-bg text-status-warning-text border border-yellow-200
+        {% else %}bg-status-info-bg text-status-info-text border border-blue-200{% endif %}">
         {{ message }}
       </div>
     {% endfor %}
   {% endif %}
 {% endwith %}
-
-{% if session.user %}
-  <div class="user-info">
-    Logged in as: {{ session.user.email }}
-    <a href="{{ url_for('auth.logout') }}">Logout</a>
-  </div>
-{% endif %} 

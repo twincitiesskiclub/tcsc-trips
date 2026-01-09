@@ -4,92 +4,101 @@
     <meta charset="utf-8" />
     <title>TCSC Admin</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
+    <!-- CSS Loading Order: Tailwind first, then legacy (during migration) -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
   </head>
-  <body>
-    <div class="admin-container">
+  <body class="bg-gray-50">
+    <div class="max-w-6xl mx-auto px-5 py-8">
+      <!-- Flash Messages -->
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
           {% for category, message in messages %}
-            <div class="flash-message {{ category }}">
+            <div class="{% if category == 'success' %}bg-tcsc-mint text-tcsc-navy{% elif category == 'error' %}bg-red-100 text-red-700{% else %}bg-blue-100 text-blue-700{% endif %} px-4 py-3 rounded-tcsc mb-4 animate-slide-in">
               {{ message }}
             </div>
           {% endfor %}
         {% endif %}
       {% endwith %}
 
+      <!-- User Info -->
       {% if session.user %}
-        <div class="user-info">
+        <div class="text-sm text-tcsc-gray-600 mb-6">
           Logged in as: {{ session.user.email }}
-          <a href="{{ url_for('auth.logout') }}">Logout</a>
+          <a href="{{ url_for('auth.logout') }}" class="text-tcsc-navy hover:underline ml-2">Logout</a>
         </div>
       {% endif %}
 
-      <h1>TCSC Admin Dashboard</h1>
-      
-      <div class="admin-menu">
-        <a href="{{ url_for('admin.get_admin_payments') }}" class="admin-menu-item">
-          <h2>Payments Management</h2>
-          <p>View and manage payment transactions</p>
-        </a>
-        
-        <a href="{{ url_for('admin.get_admin_users') }}" class="admin-menu-item">
-          <h2>User Management</h2>
-          <p>View, edit, and manage club members</p>
+      <!-- Page Title -->
+      <h1 class="text-3xl font-semibold text-tcsc-navy mb-8">TCSC Admin Dashboard</h1>
+
+      <!-- Menu Grid -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        <a href="{{ url_for('admin.get_admin_payments') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Payments Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">View and manage payment transactions</p>
         </a>
 
-        <a href="{{ url_for('admin.roles') }}" class="admin-menu-item">
-          <h2>Role Management</h2>
-          <p>Manage member roles and badges</p>
+        <a href="{{ url_for('admin.get_admin_users') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">User Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">View, edit, and manage club members</p>
         </a>
 
-        <a href="{{ url_for('admin.get_admin_seasons') }}" class="admin-menu-item">
-          <h2>Seasons Management</h2>
-          <p>Create and manage club seasons</p>
-        </a>
-        
-        <a href="{{ url_for('admin.get_admin_trips') }}" class="admin-menu-item">
-          <h2>Trips Management</h2>
-          <p>Create and manage ski trips</p>
+        <a href="{{ url_for('admin.roles') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Role Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Manage member roles and badges</p>
         </a>
 
-        <a href="{{ url_for('admin.get_admin_social_events') }}" class="admin-menu-item">
-          <h2>Social Events Management</h2>
-          <p>Create and manage social events</p>
+        <a href="{{ url_for('admin.get_admin_seasons') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Seasons Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Create and manage club seasons</p>
         </a>
 
-        <a href="{{ url_for('admin.get_admin_slack') }}" class="admin-menu-item">
-          <h2>Slack Sync</h2>
-          <p>Sync and link Slack users with members</p>
+        <a href="{{ url_for('admin.get_admin_trips') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Trips Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Create and manage ski trips</p>
         </a>
 
-        <a href="{{ url_for('admin_practices.practices_list') }}" class="admin-menu-item">
-          <h2>Practice Management</h2>
-          <p>Create and manage practice sessions</p>
+        <a href="{{ url_for('admin.get_admin_social_events') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Social Events Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Create and manage social events</p>
         </a>
 
-        <a href="{{ url_for('admin_practices.practices_config') }}" class="admin-menu-item">
-          <h2>Practices Config</h2>
-          <p>Manage locations, activities, types, and social venues</p>
+        <a href="{{ url_for('admin.get_admin_slack') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Slack Sync</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Sync and link Slack users with members</p>
         </a>
 
-        <a href="{{ url_for('admin_skipper.skipper_dashboard') }}" class="admin-menu-item">
-          <h2>Skipper Dashboard</h2>
-          <p>Monitor and approve practice cancellations</p>
+        <a href="{{ url_for('admin_practices.practices_list') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Practice Management</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Create and manage practice sessions</p>
         </a>
 
-        <a href="{{ url_for('admin_scheduled_tasks.index') }}" class="admin-menu-item">
-          <h2>Scheduled Tasks</h2>
-          <p>Monitor and manually trigger scheduled jobs</p>
+        <a href="{{ url_for('admin_practices.practices_config') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Practices Config</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Manage locations, activities, types, and social venues</p>
         </a>
 
-        <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="admin-menu-item">
-          <h2>Channel Sync</h2>
-          <p>Sync Slack channel memberships</p>
+        <a href="{{ url_for('admin_skipper.skipper_dashboard') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Skipper Dashboard</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Monitor and approve practice cancellations</p>
+        </a>
+
+        <a href="{{ url_for('admin_scheduled_tasks.index') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Scheduled Tasks</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Monitor and manually trigger scheduled jobs</p>
+        </a>
+
+        <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Channel Sync</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Sync Slack channel memberships</p>
+        </a>
+
+        <a href="{{ url_for('admin_newsletter.prompts_page') }}" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 hover:shadow-lg hover:-translate-y-0.5 transition-all no-underline">
+          <h2 class="text-lg font-semibold text-tcsc-navy mb-2">Newsletter Prompts</h2>
+          <p class="text-tcsc-gray-600 text-sm m-0">Edit AI generation prompts for Weekly Dispatch</p>
         </a>
       </div>
     </div>
   </body>
-</html> 
+</html>
