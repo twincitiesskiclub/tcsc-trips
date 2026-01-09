@@ -108,23 +108,38 @@ OVERALL ASSESSMENT: {"Practice can proceed" if evaluation.is_go else "Practice s
 Write a clear, concise summary for club members:"""
 
     try:
+        logger.info("=" * 50)
+        logger.info("CLAUDE API: Generating evaluation summary")
+        logger.info(f"  Practice ID: {evaluation.practice_id}")
+        logger.info(f"  Assessment: {'GO' if evaluation.is_go else 'NO-GO'}")
+        logger.info(f"  Context length: {len(context)} chars")
+        logger.info("  Calling Claude API...")
+
+        import time
+        start_time = time.time()
         client = get_anthropic_client()
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=500,
             messages=[{"role": "user", "content": prompt}]
         )
+        elapsed = time.time() - start_time
 
         if not response.content:
-            logger.error("Empty response from Claude API")
+            logger.error("  ERROR: Empty response from Claude API")
+            logger.info("=" * 50)
             return _fallback_evaluation_summary(evaluation)
 
         summary = response.content[0].text.strip()
-        logger.info("Generated evaluation summary via Claude")
+        logger.info(f"  Response received in {elapsed:.2f}s")
+        logger.info(f"  Summary ({len(summary)} chars): {summary[:100]}...")
+        logger.info("=" * 50)
         return summary
 
     except Exception as e:
-        logger.error(f"Failed to generate summary with Claude: {e}")
+        logger.error(f"  ERROR: Failed to generate summary - {e}")
+        logger.info("  Falling back to template-based summary")
+        logger.info("=" * 50)
         return _fallback_evaluation_summary(evaluation)
 
 
@@ -201,23 +216,37 @@ PRACTICE DETAILS:
 Write a cancellation message for Slack (use friendly but professional tone):"""
 
     try:
+        logger.info("=" * 50)
+        logger.info("CLAUDE API: Generating cancellation message")
+        logger.info(f"  Practice ID: {practice.id}")
+        logger.info(f"  Context length: {len(context)} chars")
+        logger.info("  Calling Claude API...")
+
+        import time
+        start_time = time.time()
         client = get_anthropic_client()
         response = client.messages.create(
             model="claude-sonnet-4-20250514",
             max_tokens=500,
             messages=[{"role": "user", "content": prompt}]
         )
+        elapsed = time.time() - start_time
 
         if not response.content:
-            logger.error("Empty response from Claude API")
+            logger.error("  ERROR: Empty response from Claude API")
+            logger.info("=" * 50)
             return _fallback_cancellation_message(practice, evaluation)
 
         message = response.content[0].text.strip()
-        logger.info("Generated cancellation message via Claude")
+        logger.info(f"  Response received in {elapsed:.2f}s")
+        logger.info(f"  Message ({len(message)} chars): {message[:100]}...")
+        logger.info("=" * 50)
         return message
 
     except Exception as e:
-        logger.error(f"Failed to generate message with Claude: {e}")
+        logger.error(f"  ERROR: Failed to generate message - {e}")
+        logger.info("  Falling back to template-based message")
+        logger.info("=" * 50)
         return _fallback_cancellation_message(practice, evaluation)
 
 

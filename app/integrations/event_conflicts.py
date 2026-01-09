@@ -5,6 +5,7 @@ Scrapes race calendars and venue closures to identify conflicts with scheduled p
 """
 
 import logging
+import re
 import time
 from datetime import datetime, timedelta
 from typing import Optional
@@ -59,13 +60,35 @@ def _parse_race_date(date_text: str) -> Optional[datetime]:
     Parse race date from various formats used in race calendars.
 
     Common formats:
+    - "Jan.4" or "Jan 4" (no year - assumes current year)
     - "12/27/2025"
     - "Dec 27, 2025"
     - "Saturday, December 27, 2025"
     """
     date_text = date_text.strip()
+    current_year = datetime.utcnow().year
 
-    # Try common formats
+    # Handle "Jan.4" or "Jan.14" format (SkinnySkI uses this)
+    dot_match = re.match(r'^(\w{3})\.(\d{1,2})$', date_text)
+    if dot_match:
+        month_str = dot_match.group(1)
+        day_str = dot_match.group(2)
+        try:
+            return datetime.strptime(f"{month_str} {day_str}, {current_year}", '%b %d, %Y')
+        except ValueError:
+            pass
+
+    # Handle "Jan 4" format (no year)
+    short_match = re.match(r'^(\w{3})\s+(\d{1,2})$', date_text)
+    if short_match:
+        month_str = short_match.group(1)
+        day_str = short_match.group(2)
+        try:
+            return datetime.strptime(f"{month_str} {day_str}, {current_year}", '%b %d, %Y')
+        except ValueError:
+            pass
+
+    # Try common formats with year
     formats = [
         '%m/%d/%Y',
         '%m/%d/%y',
@@ -81,7 +104,7 @@ def _parse_race_date(date_text: str) -> Optional[datetime]:
         except ValueError:
             continue
 
-    logger.warning(f"Failed to parse race date: {date_text}")
+    logger.debug(f"Could not parse race date: {date_text}")
     return None
 
 
@@ -91,7 +114,9 @@ def _scrape_skinnyski_races() -> list[EventConflict]:
 
     Returns list of EventConflict objects for races.
     """
-    logger.info("Scraping SkinnySkI race calendar")
+    logger.info("=" * 50)
+    logger.info("EVENT CONFLICTS: Starting SkinnySkI race calendar scrape")
+    logger.info(f"  URL: {SKINNYSKI_CALENDAR_URL}")
 
     source = 'skinnyski_races'
 
@@ -99,11 +124,15 @@ def _scrape_skinnyski_races() -> list[EventConflict]:
     if _should_rate_limit(source):
         wait_time = max(0, MIN_REQUEST_INTERVAL_SECONDS - (time.time() - _last_request_time[source]))
         if wait_time > 0:
-            logger.warning(f"Rate limit: waiting {wait_time:.1f} seconds")
+            logger.warning(f"  Rate limit: waiting {wait_time:.1f} seconds")
             time.sleep(wait_time)
 
     try:
+        start_time = time.time()
+        logger.info("  Fetching page...")
         response = requests.get(SKINNYSKI_CALENDAR_URL, timeout=15)
+        elapsed = time.time() - start_time
+        logger.info(f"  Response: {response.status_code} in {elapsed:.2f}s ({len(response.content)} bytes)")
         response.raise_for_status()
         _update_rate_limit(source)
 
@@ -111,127 +140,107 @@ def _scrape_skinnyski_races() -> list[EventConflict]:
 
         races = []
 
-        # Look for race listings
-        # SkinnySkI typically uses tables or divs with race information
-        # We'll look for common patterns
+        # SkinnySkI uses CSS classes for event calendar:
+        # - ss-eventcalendar-entry: Container for each event
+        # - ss-eventcalendar-date: Date like "Jan.4" or "Jan.2-4"
+        # - ss-eventcalendar-title: Race name and link, with location in parentheses
 
-        # Try finding tables first
-        tables = soup.find_all('table')
+        # Find all event entries
+        event_entries = soup.find_all('div', class_='ss-eventcalendar-entry')
+        logger.info(f"  Found {len(event_entries)} event entries")
 
-        for table in tables:
-            rows = table.find_all('tr')
-
-            for row in rows:
-                cells = row.find_all(['td', 'th'])
-
-                if len(cells) < 2:
-                    continue
-
-                try:
-                    # Extract race information
-                    # Typical structure: Date | Race Name | Location
-                    date_cell = cells[0]
-                    name_cell = cells[1] if len(cells) > 1 else cells[0]
-                    location_cell = cells[2] if len(cells) > 2 else None
-
-                    date_text = date_cell.get_text(strip=True)
-                    race_date = _parse_race_date(date_text)
-
-                    if not race_date:
-                        continue
-
-                    race_name = name_cell.get_text(strip=True)
-                    if not race_name or race_name.lower() in ['date', 'race', 'event']:
-                        # Skip header rows
-                        continue
-
-                    location_name = location_cell.get_text(strip=True) if location_cell else None
-
-                    # Extract URL if present
-                    race_url = SKINNYSKI_CALENDAR_URL
-                    link = name_cell.find('a', href=True)
-                    if link:
-                        href = link['href']
-                        if href.startswith('http'):
-                            race_url = href
-                        elif href.startswith('/'):
-                            race_url = f"https://www.skinnyski.com{href}"
-                        else:
-                            race_url = f"https://www.skinnyski.com/{href}"
-
-                    # Determine if this affects practice
-                    # Races typically block trail access at popular venues
-                    affects_practice = True  # Conservative: assume races affect practice
-
-                    race = EventConflict(
-                        name=race_name,
-                        event_type='race',
-                        date=race_date,
-                        location=location_name,
-                        affects_practice=affects_practice,
-                        source='SkinnySkI',
-                        url=race_url,
-                        notes=None
-                    )
-
-                    races.append(race)
-                    logger.debug(f"Parsed race: {race_name} on {race_date.date()}")
-
-                except Exception as e:
-                    logger.warning(f"Failed to parse race row: {e}")
-                    continue
-
-        # Also check for div-based listings
-        race_divs = soup.find_all('div', class_=lambda x: x and 'race' in x.lower())
-
-        for div in race_divs:
+        for entry in event_entries:
             try:
-                # Look for date pattern
-                date_elem = div.find(class_=lambda x: x and 'date' in x.lower())
-                if date_elem:
-                    date_text = date_elem.get_text(strip=True)
-                    race_date = _parse_race_date(date_text)
+                # Extract date
+                date_div = entry.find('div', class_='ss-eventcalendar-date')
+                if not date_div:
+                    continue
 
-                    if race_date:
-                        # Extract name and location
-                        name_elem = div.find(class_=lambda x: x and 'name' in x.lower())
-                        race_name = name_elem.get_text(strip=True) if name_elem else div.get_text(strip=True)[:100]
+                date_text = date_div.get_text(strip=True)
+                # Handle date ranges like "Jan.2-4" by taking the first date
+                if '-' in date_text:
+                    date_text = date_text.split('-')[0]
 
-                        location_elem = div.find(class_=lambda x: x and 'location' in x.lower())
-                        location_name = location_elem.get_text(strip=True) if location_elem else None
+                # Parse date like "Jan.4" or "Jan 4"
+                race_date = _parse_race_date(date_text)
+                if not race_date:
+                    # Try adding current year explicitly
+                    date_match = re.match(r'(\w+)\.?(\d+)', date_text)
+                    if date_match:
+                        month_str = date_match.group(1)
+                        day_str = date_match.group(2)
+                        current_year = datetime.utcnow().year
+                        try:
+                            race_date = datetime.strptime(f"{month_str} {day_str}, {current_year}", '%b %d, %Y')
+                        except ValueError:
+                            logger.debug(f"  Could not parse date: {date_text}")
+                            continue
 
-                        # Get URL
-                        race_url = SKINNYSKI_CALENDAR_URL
-                        link = div.find('a', href=True)
-                        if link:
-                            href = link['href']
-                            if href.startswith('http'):
-                                race_url = href
-                            elif href.startswith('/'):
-                                race_url = f"https://www.skinnyski.com{href}"
+                if not race_date:
+                    continue
 
-                        race = EventConflict(
-                            name=race_name,
-                            event_type='race',
-                            date=race_date,
-                            location=location_name,
-                            affects_practice=True,
-                            source='SkinnySkI',
-                            url=race_url,
-                            notes=None
-                        )
+                # Extract title and location
+                title_div = entry.find('div', class_='ss-eventcalendar-title')
+                if not title_div:
+                    continue
 
-                        races.append(race)
+                # Get race name from link
+                title_link = title_div.find('a', href=True)
+                if not title_link:
+                    continue
+
+                race_name = title_link.get_text(strip=True)
+                if not race_name:
+                    continue
+
+                # Build race URL
+                race_url = SKINNYSKI_CALENDAR_URL
+                href = title_link.get('href', '')
+                if href:
+                    if href.startswith('http'):
+                        race_url = href
+                    elif href.startswith('/'):
+                        race_url = f"https://www.skinnyski.com{href}"
+
+                # Extract location - it appears in parentheses after the link
+                # e.g., "(Saint Paul, MN)"
+                title_text = title_div.get_text(strip=True)
+                location_name = None
+                location_match = re.search(r'\(([^)]+)\)', title_text)
+                if location_match:
+                    location_name = location_match.group(1)
+
+                # Also check for dedicated location div
+                if not location_name:
+                    location_div = entry.find('div', class_='ss-eventcalendar-location')
+                    if location_div:
+                        location_name = location_div.get_text(strip=True)
+
+                race = EventConflict(
+                    name=race_name,
+                    event_type='race',
+                    date=race_date,
+                    location=location_name,
+                    affects_practice=True,  # Conservative: assume races affect practice
+                    source='SkinnySkI',
+                    url=race_url,
+                    notes=None
+                )
+
+                races.append(race)
+                logger.info(f"  + {race_name}: {race_date.strftime('%b %d')} at {location_name or 'unknown'}")
 
             except Exception as e:
-                logger.warning(f"Failed to parse race div: {e}")
+                logger.warning(f"  Failed to parse event entry: {e}")
                 continue
 
-        logger.info(f"Scraped {len(races)} races from SkinnySkI")
+        logger.info(f"EVENT CONFLICTS: Scraped {len(races)} races total")
+        logger.info("=" * 50)
         return races
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to scrape SkinnySkI calendar: {e}")
+        logger.error(f"EVENT CONFLICTS: Failed to scrape - {e}")
+        logger.info("=" * 50)
         # Return empty list rather than failing
         return []
 

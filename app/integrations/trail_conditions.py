@@ -199,114 +199,151 @@ def _scrape_trail_reports() -> list[TrailCondition]:
 
     Returns list of TrailCondition objects.
     """
-    logger.info("Scraping SkinnySkI trail reports")
+    logger.info("=" * 50)
+    logger.info("TRAIL CONDITIONS: Starting SkinnySkI scrape")
+    logger.info(f"  URL: {REPORTS_URL}")
 
     # Check rate limit
     if _should_rate_limit():
         wait_time = max(0, MIN_REQUEST_INTERVAL_SECONDS - (time.time() - _last_request_time))
         if wait_time > 0:
-            logger.warning(f"Rate limit: waiting {wait_time:.1f} seconds")
+            logger.warning(f"  Rate limit: waiting {wait_time:.1f} seconds")
             time.sleep(wait_time)
 
     try:
+        start_time = time.time()
+        logger.info("  Fetching page...")
         response = requests.get(REPORTS_URL, timeout=15)
+        elapsed = time.time() - start_time
+        logger.info(f"  Response: {response.status_code} in {elapsed:.2f}s ({len(response.content)} bytes)")
         response.raise_for_status()
         _update_rate_limit()
 
         soup = BeautifulSoup(response.content, 'html.parser')
 
-        # Find the trail reports table
-        # SkinnySkI structure may vary, but typically uses a table with class 'trails-table' or similar
-        # We'll look for tables and parse the most likely candidate
-
         reports = []
 
-        # Look for tables that might contain trail reports
-        tables = soup.find_all('table')
+        # SkinnySkI uses CSS classes for trail reports:
+        # - ss-reporting-trail: Container for each report
+        # - ss-trailsopen: Trails open status (e.g., "Trails Open: Most")
+        # - ss-skirating: Ski quality rating (e.g., "Good skis")
+        # - ss-reporting-text: The report text
 
-        for table in tables:
-            rows = table.find_all('tr')
+        # Find all trail report entries
+        report_entries = soup.find_all('span', class_='ss-reporting-trail')
+        logger.info(f"  Found {len(report_entries)} trail report entries")
 
-            # Skip header row
-            for row in rows[1:]:
-                cells = row.find_all(['td', 'th'])
+        for entry in report_entries:
+            try:
+                # Get the parent list item to find all associated elements
+                parent = entry.find_parent('li') or entry.find_parent('div')
+                if not parent:
+                    parent = entry
 
-                if len(cells) < 3:  # Need at least location, conditions, date
+                # Extract date from the start of the text (e.g., "Jan 8 - ")
+                entry_text = entry.get_text(strip=True)
+                date_match = re.match(r'^(\w+\s+\d+)\s*-\s*', entry_text)
+                report_date = None
+                if date_match:
+                    date_str = date_match.group(1)
+                    # Add current year
+                    current_year = datetime.utcnow().year
+                    try:
+                        report_date = datetime.strptime(f"{date_str}, {current_year}", '%b %d, %Y')
+                    except ValueError:
+                        logger.debug(f"  Could not parse date: {date_str}")
+
+                # Extract location from link
+                location_link = entry.find('a', href=True)
+                location = location_link.get_text(strip=True) if location_link else None
+                if not location:
                     continue
 
-                try:
-                    # Extract data from cells
-                    # This is a best-effort parse - exact structure may vary
-                    location = cells[0].get_text(strip=True)
-                    if not location:
-                        continue
+                # Build report URL
+                report_url = REPORTS_URL
+                if location_link and location_link.get('href'):
+                    href = location_link['href']
+                    if not href.startswith('http'):
+                        report_url = f"{BASE_URL}/{href.lstrip('/')}"
+                    else:
+                        report_url = href
 
-                    # Look for condition indicators
-                    condition_cell = cells[1] if len(cells) > 1 else cells[0]
-                    condition_text = condition_cell.get_text(strip=True)
+                # Find trails open status (in ss-trailsopen span)
+                trails_open_span = parent.find('span', class_=lambda x: x and 'ss-trailsopen' in x)
+                trails_open = 'unknown'
+                if trails_open_span:
+                    trails_open_text = trails_open_span.get_text(strip=True)
+                    # Parse from "Trails Open: Most" format
+                    if ':' in trails_open_text:
+                        trails_open = _parse_trail_status(trails_open_text.split(':')[-1].strip())
+                    else:
+                        trails_open = _parse_trail_status(trails_open_text)
 
-                    # Look for date
-                    date_cell = cells[-1]
-                    date_text = date_cell.get_text(strip=True)
-                    report_date = _parse_report_date(date_text)
+                # Find ski quality rating (in ss-skirating span)
+                ski_rating_span = parent.find('span', class_=lambda x: x and 'ss-skirating' in x)
+                ski_quality = 'fair'
+                if ski_rating_span:
+                    ski_quality_text = ski_rating_span.get_text(strip=True)
+                    ski_quality = _parse_ski_quality(ski_quality_text)
 
-                    # Parse conditions
-                    trails_open = _parse_trail_status(condition_text)
-                    ski_quality = _parse_ski_quality(condition_text)
+                # Find grooming technique if mentioned (in ss-technique span)
+                technique_span = parent.find('span', class_=lambda x: x and 'ss-technique' in x)
+                groomed_for = None
+                if technique_span:
+                    technique_text = technique_span.get_text(strip=True).lower()
+                    if 'classic' in technique_text:
+                        groomed_for = 'classic'
+                    elif 'freestyle' in technique_text or 'skate' in technique_text:
+                        groomed_for = 'skate'
 
-                    # Check for grooming info
-                    groomed = 'groom' in condition_text.lower()
-                    groomed_for = _parse_groomed_for(condition_text) if groomed else None
+                # Find report text
+                report_text_span = parent.find('span', class_='ss-reporting-text')
+                notes = report_text_span.get_text(strip=True) if report_text_span else None
 
-                    # Extract snow depth if mentioned
-                    snow_depth = None
-                    new_snow = None
+                # Check for grooming mentions in notes
+                groomed = False
+                if notes and 'groom' in notes.lower():
+                    groomed = True
 
-                    # Look for patterns like "12 inches" or "6" of snow"
+                # Extract snow depth if mentioned in notes
+                snow_depth = None
+                if notes:
                     snow_pattern = r'(\d+\.?\d*)\s*(?:inches|in|")\s*(?:of\s*)?(?:new\s*)?(?:snow)?'
-                    matches = re.findall(snow_pattern, condition_text.lower())
+                    matches = re.findall(snow_pattern, notes.lower())
                     if matches:
                         try:
                             snow_depth = float(matches[0])
                         except ValueError:
                             pass
 
-                    # Build report URL (may link to specific report)
-                    report_url = REPORTS_URL
-                    link = row.find('a', href=True)
-                    if link:
-                        href = link['href']
-                        if not href.startswith('http'):
-                            report_url = f"{BASE_URL}/{href.lstrip('/')}"
-                        else:
-                            report_url = href
+                report = TrailCondition(
+                    location=location,
+                    trails_open=trails_open,
+                    ski_quality=ski_quality,
+                    groomed=groomed,
+                    groomed_for=groomed_for,
+                    snow_depth_inches=snow_depth,
+                    new_snow_inches=None,
+                    report_date=report_date,
+                    report_source='SkinnySkI',
+                    report_url=report_url,
+                    notes=notes  # Full user report text
+                )
 
-                    report = TrailCondition(
-                        location=location,
-                        trails_open=trails_open,
-                        ski_quality=ski_quality,
-                        groomed=groomed,
-                        groomed_for=groomed_for,
-                        snow_depth_inches=snow_depth,
-                        new_snow_inches=new_snow,
-                        report_date=report_date,
-                        report_source='SkinnySkI',
-                        report_url=report_url,
-                        notes=condition_text
-                    )
+                reports.append(report)
+                logger.info(f"  + {location}: {trails_open} open, {ski_quality} quality")
 
-                    reports.append(report)
-                    logger.debug(f"Parsed report for {location}")
+            except Exception as e:
+                logger.warning(f"  Failed to parse report entry: {e}")
+                continue
 
-                except Exception as e:
-                    logger.warning(f"Failed to parse table row: {e}")
-                    continue
-
-        logger.info(f"Scraped {len(reports)} trail reports from SkinnySkI")
+        logger.info(f"TRAIL CONDITIONS: Scraped {len(reports)} reports total")
+        logger.info("=" * 50)
         return reports
 
     except requests.exceptions.RequestException as e:
-        logger.error(f"Failed to scrape SkinnySkI: {e}")
+        logger.error(f"TRAIL CONDITIONS: Failed to scrape - {e}")
+        logger.info("=" * 50)
         raise
 
 
