@@ -667,6 +667,12 @@ def post_coach_summary():
         message_ts = response.get('ts')
         print(f"\nPosted to #tcsc-devs! message_ts: {message_ts}")
 
+        # Save message_ts to practices so edit flow can update the summary
+        for p in practices:
+            p.slack_coach_summary_ts = message_ts
+        db.session.commit()
+        print(f"Linked {len(practices)} practice(s) to summary post")
+
         print("\n" + "="*60)
         print("COACH SUMMARY TEST POST COMPLETE")
         print("="*60)
