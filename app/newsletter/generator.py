@@ -453,24 +453,79 @@ Double-check that all links are properly formatted and all names are attributed 
         else:
             api_params['temperature'] = temperature
 
-        response = client.messages.create(**api_params)
+        # Use streaming for extended thinking (required for long operations)
+        if use_thinking:
+            logger.info("  Using streaming mode for extended thinking...")
+            logger.info("  Claude is thinking deeply...")
 
-        elapsed = time.time() - start_time
+            thinking_started = False
+            text_started = False
+            dot_count = 0
 
-        if not response.content:
-            logger.error("  ERROR: Empty response from Claude API")
-            logger.info("=" * 50)
-            return GenerationResult(
-                success=False,
-                error="Empty response from Claude API"
-            )
+            with client.messages.stream(**api_params) as stream:
+                for event in stream:
+                    # Log progress indicators
+                    if hasattr(event, 'type'):
+                        if event.type == 'content_block_start':
+                            block = getattr(event, 'content_block', None)
+                            if block and getattr(block, 'type', None) == 'thinking':
+                                if not thinking_started:
+                                    logger.info("  [Thinking phase started]")
+                                    thinking_started = True
+                            elif block and getattr(block, 'type', None) == 'text':
+                                if not text_started:
+                                    logger.info("  [Writing response]")
+                                    text_started = True
+                        elif event.type == 'content_block_delta':
+                            # Show periodic progress
+                            dot_count += 1
+                            if dot_count % 50 == 0:
+                                logger.info(f"  ... still processing ({dot_count} chunks)")
 
-        # Extract text content (skip thinking blocks)
-        raw_content = None
-        for block in response.content:
-            if hasattr(block, 'text'):
-                raw_content = block.text
-                break
+                # Get the final message
+                response = stream.get_final_message()
+
+            logger.info("  [Stream complete]")
+
+            elapsed = time.time() - start_time
+
+            if not response.content:
+                logger.error("  ERROR: Empty response from Claude API")
+                logger.info("=" * 50)
+                return GenerationResult(
+                    success=False,
+                    error="Empty response from Claude API"
+                )
+
+            # Extract text content (skip thinking blocks)
+            raw_content = None
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    raw_content = block.text
+                    break
+
+            tokens_used = response.usage.input_tokens + response.usage.output_tokens
+        else:
+            response = client.messages.create(**api_params)
+
+            elapsed = time.time() - start_time
+
+            if not response.content:
+                logger.error("  ERROR: Empty response from Claude API")
+                logger.info("=" * 50)
+                return GenerationResult(
+                    success=False,
+                    error="Empty response from Claude API"
+                )
+
+            # Extract text content (skip thinking blocks)
+            raw_content = None
+            for block in response.content:
+                if hasattr(block, 'text'):
+                    raw_content = block.text
+                    break
+
+            tokens_used = response.usage.input_tokens + response.usage.output_tokens
 
         if not raw_content:
             logger.error("  ERROR: No text content in response")
@@ -479,8 +534,6 @@ Double-check that all links are properly formatted and all names are attributed 
                 success=False,
                 error="No text content in Claude response"
             )
-
-        tokens_used = response.usage.input_tokens + response.usage.output_tokens
 
         logger.info(f"  Response received in {elapsed:.2f}s")
         logger.info(f"  Tokens used: {tokens_used}")

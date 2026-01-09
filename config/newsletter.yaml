@@ -52,11 +52,11 @@ newsletter:
 
   generation:
     model: "claude-opus-4-5-20251101"
-    max_tokens: 32768
+    max_tokens: 64000  # Maximum output for Opus 4.5
     temperature: 1.0  # Required for extended thinking
     extended_thinking:
       enabled: true
-      budget_tokens: 50000  # Tokens for Claude to think deeply before responding
+      budget_tokens: 32000  # Half of max for deep thinking
 
   # Submission types shown in /dispatch modal
   submission_types:
