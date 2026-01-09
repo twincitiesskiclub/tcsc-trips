@@ -1123,6 +1123,110 @@ def log_practice_edit(practice: Practice, slack_user_id: str) -> dict:
         return {'success': False, 'error': error_msg}
 
 
+def post_coach_weekly_summary(week_start: datetime) -> dict:
+    """Post weekly coach review summary to #collab-coaches-practices.
+
+    Creates a summary post showing all practices for the week with Edit buttons.
+    For days without practices, shows placeholders with "Add Practice" buttons.
+
+    Args:
+        week_start: Monday of the week to summarize
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - message_ts: str (if success)
+        - error: str (only if success=False)
+    """
+    from datetime import timedelta
+    from app.models import AppConfig, db
+    from app.slack.blocks import build_coach_weekly_summary_blocks
+
+    # Get expected practice days from config
+    expected_days = AppConfig.get('practice_days', [
+        {"day": "tuesday", "time": "18:00", "active": True},
+        {"day": "thursday", "time": "18:00", "active": True},
+        {"day": "saturday", "time": "09:00", "active": True}
+    ])
+
+    # Query practices for the week
+    week_end = week_start + timedelta(days=7)
+    practices = Practice.query.filter(
+        Practice.date >= week_start,
+        Practice.date < week_end
+    ).order_by(Practice.date).all()
+
+    # Convert to PracticeInfo
+    practice_infos = [convert_practice_to_info(p) for p in practices]
+
+    # Build blocks
+    blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
+
+    # Post to collab channel
+    client = get_slack_client()
+    try:
+        response = client.chat_postMessage(
+            channel=COLLAB_CHANNEL_ID,
+            blocks=blocks,
+            text=f"Coach Review: Week of {week_start.strftime('%B %-d')}",
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        message_ts = response.get('ts')
+        current_app.logger.info(f"Posted coach weekly summary: {message_ts}")
+
+        # Save message_ts to each practice's slack_coach_summary_ts
+        for practice in practices:
+            practice.slack_coach_summary_ts = message_ts
+        db.session.commit()
+
+        return {'success': True, 'message_ts': message_ts, 'channel_id': COLLAB_CHANNEL_ID}
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error posting coach weekly summary: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def log_coach_summary_edit(practice: Practice, slack_user_id: str) -> dict:
+    """Log an edit action to the coach weekly summary thread.
+
+    Args:
+        practice: Practice SQLAlchemy model with slack_coach_summary_ts set
+        slack_user_id: Slack user ID who made the edit
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+    """
+    if not practice.slack_coach_summary_ts:
+        return {'success': False, 'error': 'No summary message to add thread to'}
+
+    client = get_slack_client()
+    timestamp = datetime.now().strftime('%-I:%M %p')
+    date_str = practice.date.strftime('%A, %b %-d')
+    log_text = f":pencil2: <@{slack_user_id}> updated *{date_str}* practice at {timestamp}"
+
+    try:
+        client.chat_postMessage(
+            channel=COLLAB_CHANNEL_ID,
+            thread_ts=practice.slack_coach_summary_ts,
+            text=log_text,
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        current_app.logger.info(f"Logged coach summary edit for practice #{practice.id}")
+        return {'success': True}
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error logging coach summary edit: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
 def get_practice_coach_ids(practice: Practice) -> list[str]:
     """Get Slack IDs of coaches assigned to this practice.
 

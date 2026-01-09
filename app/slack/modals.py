@@ -542,6 +542,214 @@ def build_practice_edit_full_modal(practice: PracticeInfo, locations: list = Non
                     "text": "Options"
                 },
                 "element": _build_practice_flags_element(practice)
+            },
+            {
+                "type": "input",
+                "block_id": "notify_block",
+                "optional": True,
+                "label": {
+                    "type": "plain_text",
+                    "text": "Notification"
+                },
+                "element": {
+                    "type": "checkboxes",
+                    "action_id": "notify_update",
+                    "options": [
+                        {
+                            "text": {"type": "mrkdwn", "text": "*Post update notification*"},
+                            "description": {"type": "plain_text", "text": "Notify the thread about this change"},
+                            "value": "notify"
+                        }
+                    ],
+                    "initial_options": [
+                        {
+                            "text": {"type": "mrkdwn", "text": "*Post update notification*"},
+                            "description": {"type": "plain_text", "text": "Notify the thread about this change"},
+                            "value": "notify"
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+
+def build_practice_create_modal(practice_date: 'datetime', default_time: str, locations: list = None,
+                                channel_id: str = None, message_ts: str = None) -> dict:
+    """Build modal for creating a new practice from weekly summary.
+
+    Args:
+        practice_date: Date for the new practice
+        default_time: Default time string (e.g., "18:00")
+        locations: List of (id, name) tuples for location dropdown
+        channel_id: Channel where the summary post lives (for updating)
+        message_ts: Timestamp of the summary post (for updating)
+
+    Returns:
+        Slack modal view payload
+    """
+    date_str = practice_date.strftime('%A, %B %-d')
+
+    # Build metadata with date, channel, and message_ts
+    import json
+    metadata = json.dumps({
+        'date': practice_date.strftime('%Y-%m-%d'),
+        'channel_id': channel_id,
+        'message_ts': message_ts
+    })
+
+    # Build location dropdown options
+    location_options = []
+    if locations:
+        for loc_id, loc_name in locations:
+            option = {
+                "text": {"type": "plain_text", "text": loc_name},
+                "value": str(loc_id)
+            }
+            location_options.append(option)
+
+    # Build location element
+    if location_options:
+        location_element = {
+            "type": "static_select",
+            "action_id": "location_id",
+            "placeholder": {"type": "plain_text", "text": "Select a location"},
+            "options": location_options
+        }
+    else:
+        # Fallback to text input if no locations provided
+        location_element = {
+            "type": "plain_text_input",
+            "action_id": "location_id",
+            "placeholder": {"type": "plain_text", "text": "Enter location name"}
+        }
+
+    return {
+        "type": "modal",
+        "callback_id": "practice_create",
+        "private_metadata": metadata,
+        "title": {
+            "type": "plain_text",
+            "text": "Add Practice"
+        },
+        "submit": {
+            "type": "plain_text",
+            "text": "Create Practice"
+        },
+        "close": {
+            "type": "plain_text",
+            "text": "Cancel"
+        },
+        "blocks": [
+            {
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"*Creating practice for {date_str}*"
+                }
+            },
+            {
+                "type": "divider"
+            },
+            {
+                "type": "input",
+                "block_id": "location_block",
+                "label": {
+                    "type": "plain_text",
+                    "text": "Location"
+                },
+                "element": location_element
+            },
+            {
+                "type": "input",
+                "block_id": "time_block",
+                "label": {
+                    "type": "plain_text",
+                    "text": "Time"
+                },
+                "element": {
+                    "type": "timepicker",
+                    "action_id": "practice_time",
+                    "initial_time": default_time,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "Select time"
+                    }
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "warmup_block",
+                "optional": True,
+                "label": {
+                    "type": "plain_text",
+                    "text": "Warmup"
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "warmup_description",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "e.g., 15 min easy ski, focus on balance"
+                    }
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "workout_block",
+                "optional": True,
+                "label": {
+                    "type": "plain_text",
+                    "text": "Main Workout"
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "workout_description",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "e.g., 5 x 4min @ threshold (2min rest)"
+                    }
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "cooldown_block",
+                "optional": True,
+                "label": {
+                    "type": "plain_text",
+                    "text": "Cooldown"
+                },
+                "element": {
+                    "type": "plain_text_input",
+                    "action_id": "cooldown_description",
+                    "multiline": True,
+                    "placeholder": {
+                        "type": "plain_text",
+                        "text": "e.g., 10 min easy, stretching"
+                    }
+                }
+            },
+            {
+                "type": "input",
+                "block_id": "flags_block",
+                "optional": True,
+                "label": {
+                    "type": "plain_text",
+                    "text": "Options"
+                },
+                "element": {
+                    "type": "checkboxes",
+                    "action_id": "practice_flags",
+                    "options": [
+                        {
+                            "text": {"type": "mrkdwn", "text": "*Dark practice*"},
+                            "description": {"type": "plain_text", "text": "Practice after sunset, bring lights"},
+                            "value": "is_dark_practice"
+                        }
+                    ]
+                }
             }
         ]
     }

@@ -457,6 +457,203 @@ def build_combined_lift_blocks(
     return blocks
 
 
+def build_coach_weekly_summary_blocks(
+    practices: list[PracticeInfo],
+    expected_days: list[dict],
+    week_start: 'datetime'
+) -> list[dict]:
+    """Build Block Kit blocks for weekly coach review summary.
+
+    Creates a compact summary showing all practices for the week with Edit buttons.
+    For days without practices, shows placeholders with "Add Practice" buttons.
+
+    Args:
+        practices: List of PracticeInfo for existing practices
+        expected_days: List of dicts with day/time/active from config
+            e.g., [{"day": "tuesday", "time": "18:00", "active": true}]
+        week_start: Monday of the week being displayed
+
+    Returns:
+        List of Slack Block Kit blocks
+    """
+    from datetime import timedelta
+
+    blocks = []
+
+    # Calculate week end for header
+    week_end = week_start + timedelta(days=6)
+    week_range = f"{week_start.strftime('%B %-d')}-{week_end.strftime('%-d, %Y')}"
+
+    # Build practice lookup by day of week
+    practice_by_day = {}
+    for p in practices:
+        day_lower = p.date.strftime('%A').lower()
+        practice_by_day[day_lower] = p
+
+    # ==========================================================================
+    # HEADER
+    # ==========================================================================
+    blocks.append({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": f":clipboard: Coach Review: Week of {week_range}",
+            "emoji": True
+        }
+    })
+
+    blocks.append({"type": "divider"})
+
+    # ==========================================================================
+    # EACH EXPECTED DAY
+    # ==========================================================================
+    for day_config in expected_days:
+        if not day_config.get('active', True):
+            continue
+
+        day_name = day_config['day'].lower()
+        default_time = day_config.get('time', '18:00')
+
+        # Calculate the actual date for this day of week
+        days_map = {'monday': 0, 'tuesday': 1, 'wednesday': 2, 'thursday': 3,
+                    'friday': 4, 'saturday': 5, 'sunday': 6}
+        day_offset = days_map.get(day_name, 0)
+        day_date = week_start + timedelta(days=day_offset)
+
+        practice = practice_by_day.get(day_name)
+
+        if practice:
+            # ==========================================================
+            # EXISTING PRACTICE
+            # ==========================================================
+            day_num = practice.date.strftime('%-d')
+            day_suffix = _get_day_suffix(int(day_num))
+            time_str = practice.date.strftime('%I:%M %p').lstrip('0')
+            day_full = practice.date.strftime('%A')
+            month_short = practice.date.strftime('%b')
+
+            # Location and types
+            location_name = practice.location.name if practice.location else "TBD"
+            location_spot = practice.location.spot if practice.location and practice.location.spot else None
+            full_location = f"{location_name} - {location_spot}" if location_spot else location_name
+
+            type_names = ", ".join([t.name for t in practice.practice_types]) if practice.practice_types else ""
+
+            # Header line with date/time/location
+            header_text = f":calendar: *{day_full}, {month_short} {day_num}{day_suffix} at {time_str}*"
+            context_parts = [f":round_pushpin: {full_location}"]
+            if type_names:
+                context_parts.append(f":ski: {type_names}")
+
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f"{header_text}\n{' | '.join(context_parts)}"
+                }
+            })
+
+            # Workout details (combined into one block)
+            workout_lines = []
+            if practice.warmup_description:
+                # Truncate long descriptions
+                warmup = practice.warmup_description[:100] + "..." if len(practice.warmup_description) > 100 else practice.warmup_description
+                workout_lines.append(f":fire: *Warmup:* {warmup}")
+            if practice.workout_description:
+                workout = practice.workout_description[:150] + "..." if len(practice.workout_description) > 150 else practice.workout_description
+                workout_lines.append(f":nerd_face: *Workout:* {workout}")
+            if practice.cooldown_description:
+                cooldown = practice.cooldown_description[:100] + "..." if len(practice.cooldown_description) > 100 else practice.cooldown_description
+                workout_lines.append(f":ice_cube: *Cooldown:* {cooldown}")
+
+            if workout_lines:
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "\n".join(workout_lines)
+                    }
+                })
+            else:
+                blocks.append({
+                    "type": "section",
+                    "text": {
+                        "type": "mrkdwn",
+                        "text": "_No workout details yet. Click Edit to add._"
+                    }
+                })
+
+            # Flags (dark practice, social)
+            flags = []
+            if practice.is_dark_practice:
+                flags.append(":new_moon: Dark practice")
+            if practice.social_location:
+                flags.append(f":tropical_drink: Social after")
+
+            if flags:
+                blocks.append({
+                    "type": "context",
+                    "elements": [{
+                        "type": "mrkdwn",
+                        "text": " | ".join(flags)
+                    }]
+                })
+
+            # Edit button
+            blocks.append({
+                "type": "actions",
+                "elements": [{
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
+                    "action_id": "edit_practice_full",
+                    "value": str(practice.id)
+                }]
+            })
+
+        else:
+            # ==========================================================
+            # PLACEHOLDER - NO PRACTICE FOR THIS DAY
+            # ==========================================================
+            day_num = day_date.strftime('%-d')
+            day_suffix = _get_day_suffix(int(day_num))
+            day_full = day_date.strftime('%A')
+            month_short = day_date.strftime('%b')
+
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": f":calendar: *{day_full}, {month_short} {day_num}{day_suffix}* — _No practice scheduled_"
+                }
+            })
+
+            # Add Practice button with date as value
+            blocks.append({
+                "type": "actions",
+                "elements": [{
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": ":heavy_plus_sign: Add Practice", "emoji": True},
+                    "action_id": "create_practice_from_summary",
+                    "value": day_date.strftime('%Y-%m-%d')
+                }]
+            })
+
+        blocks.append({"type": "divider"})
+
+    # ==========================================================================
+    # FOOTER
+    # ==========================================================================
+    blocks.append({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": ":bulb: Click *Edit* to update workout details. Changes will notify this thread unless unchecked."
+        }]
+    })
+
+    return blocks
+
+
 def build_cancellation_proposal_blocks(
     proposal: CancellationProposal,
     evaluation: Optional[PracticeEvaluation] = None
