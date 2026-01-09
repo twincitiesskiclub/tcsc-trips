@@ -1,235 +1,7 @@
 {% extends 'admin/admin_base.html' %}
 {% block extra_css %}
 <style>
-/* Page Header */
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.page-header .page-title {
-    margin: 0;
-}
-
-.users-grid-container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-/* Stats Cards */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.stat-card {
-    background: white;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 16px;
-    text-align: center;
-    min-height: 80px;
-}
-
-.stat-value {
-    font-size: 24px;
-    font-weight: 600;
-    color: var(--p);
-}
-
-.stat-label {
-    font-size: 13px;
-    color: var(--g-m);
-    margin-top: 8px;
-}
-
-.stat-card.warning .stat-value {
-    color: #d97706;
-}
-
-.stat-card.success .stat-value {
-    color: #059669;
-}
-
-.stat-card.error .stat-value {
-    color: #dc2626;
-}
-
-/* Action Buttons */
-.action-btn {
-    background: var(--p);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.action-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    transform: translateY(-1px);
-}
-
-.action-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.action-btn.secondary {
-    background: #e8e9ec;
-    color: #4a5568;
-}
-
-.action-btn.loading {
-    pointer-events: none;
-}
-
-/* Section */
-.section {
-    background: white;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 20px;
-    margin-bottom: 24px;
-}
-
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--p);
-    margin: 0;
-}
-
-/* Job Cards */
-.jobs-grid {
-    display: grid;
-    gap: 16px;
-}
-
-.job-card {
-    background: var(--g-l);
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 16px;
-}
-
-.job-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 8px;
-}
-
-.job-name {
-    font-weight: 600;
-    font-size: 15px;
-    color: var(--p);
-}
-
-.job-schedule {
-    font-size: 12px;
-    color: var(--g-m);
-    font-family: monospace;
-    background: white;
-    padding: 2px 8px;
-    border-radius: 4px;
-}
-
-.job-description {
-    font-size: 13px;
-    color: var(--g-d);
-    margin-bottom: 12px;
-}
-
-.job-meta {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    font-size: 12px;
-    color: var(--g-m);
-    margin-bottom: 12px;
-}
-
-.job-meta-item {
-    display: flex;
-    align-items: center;
-    gap: 4px;
-}
-
-.job-actions {
-    display: flex;
-    gap: 12px;
-    align-items: center;
-    flex-wrap: wrap;
-}
-
-.channel-select {
-    padding: 8px 12px;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    font: 14px var(--f);
-    min-width: 200px;
-    background: white;
-}
-
-.run-btn {
-    background: var(--p);
-    color: white;
-    border: none;
-    padding: 8px 16px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    transition: all 0.2s ease;
-}
-
-.run-btn:hover:not(:disabled) {
-    opacity: 0.9;
-}
-
-.run-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-}
-
-/* Log Output */
-.log-output {
-    background: var(--p);
-    color: #f1f5f9;
-    padding: 16px;
-    border-radius: var(--r);
-    font-family: monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    max-height: 400px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
+/* Log output color classes */
 .log-output .log-info {
     color: #60a5fa;
 }
@@ -246,19 +18,11 @@
     color: #f87171;
 }
 
-/* Toast Notifications */
+/* Toast animation */
 .toast-notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    z-index: 2000;
     opacity: 0;
     transform: translateX(100%);
     transition: all 0.3s ease;
-    max-width: calc(100% - 40px);
 }
 
 .toast-notification.show {
@@ -266,100 +30,63 @@
     transform: translateX(0);
 }
 
-.toast-success {
-    background: var(--s);
-    color: var(--p);
-}
-
-.toast-error {
-    background: #fee2e2;
-    color: #991b1b;
-}
-
-.toast-info {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 640px) {
-    .page-header {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .job-card-header {
-        flex-direction: column;
-        gap: 8px;
-    }
-
-    .job-actions {
-        flex-direction: column;
-        align-items: stretch;
-    }
-
-    .channel-select {
-        min-width: auto;
-        width: 100%;
-    }
+/* Loading state for buttons */
+.action-btn.loading {
+    pointer-events: none;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="users-grid-container">
+<div class="max-w-6xl mx-auto">
     <!-- Header -->
-    <div class="page-header">
-        <h1 class="page-title">Scheduled Tasks</h1>
-        <button class="action-btn secondary" onclick="loadStatus()">
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-5">
+        <h1 class="text-2xl font-semibold text-tcsc-navy m-0">Scheduled Tasks</h1>
+        <button class="bg-gray-200 text-gray-600 border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all hover:bg-gray-300" onclick="loadStatus()">
             <span class="btn-icon">↻</span>
             <span class="btn-text">Refresh</span>
         </button>
     </div>
 
     <!-- Status Cards -->
-    <div class="stats-grid">
-        <div class="stat-card" id="scheduler-card">
-            <div class="stat-value" id="stat-scheduler">-</div>
-            <div class="stat-label">Scheduler</div>
+    <div class="grid grid-cols-2 sm:grid-cols-3 gap-4 mb-6">
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]" id="scheduler-card">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-scheduler">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Scheduler</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-jobs-count">-</div>
-            <div class="stat-label">Active Jobs</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-jobs-count">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Active Jobs</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-current-job">-</div>
-            <div class="stat-label">Current</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-current-job">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Current</div>
         </div>
     </div>
 
     <!-- Manual Triggers Section -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">Manual Triggers</h3>
+    <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-base font-semibold text-tcsc-navy m-0">Manual Triggers</h3>
         </div>
-        <div class="jobs-grid" id="jobs-list">
+        <div class="grid gap-4" id="jobs-list">
             <!-- Job cards rendered by JS -->
-            <div style="color: var(--g-m); text-align: center; padding: 20px;">
+            <div class="text-tcsc-gray-600 text-center py-5">
                 Loading jobs...
             </div>
         </div>
     </div>
 
     <!-- Activity Log -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">Activity Log</h3>
-            <button class="action-btn secondary" onclick="clearLog()">
+    <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-base font-semibold text-tcsc-navy m-0">Activity Log</h3>
+            <button class="bg-gray-200 text-gray-600 border-none px-4 py-2 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all hover:bg-gray-300" onclick="clearLog()">
                 <span class="btn-icon">🗑</span>
                 <span class="btn-text">Clear</span>
             </button>
         </div>
-        <div class="log-output" id="log-output">Waiting for activity...</div>
+        <div class="log-output bg-gray-900 text-gray-100 p-4 rounded-tcsc font-mono text-sm leading-relaxed max-h-96 overflow-y-auto whitespace-pre-wrap break-words" id="log-output">Waiting for activity...</div>
     </div>
 </div>
 {% endblock %}
@@ -386,7 +113,10 @@ function clearLog() {
 // Toast notifications
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = `toast-notification toast-${type}`;
+    let bgClass = 'bg-blue-100 text-blue-800';
+    if (type === 'success') bgClass = 'bg-green-100 text-green-800';
+    if (type === 'error') bgClass = 'bg-red-100 text-red-800';
+    toast.className = `toast-notification fixed top-5 right-5 px-5 py-3 rounded-tcsc font-medium text-sm z-[2000] max-w-[calc(100%-40px)] ${bgClass}`;
     toast.textContent = message;
     document.body.appendChild(toast);
 
@@ -420,12 +150,10 @@ async function loadStatus() {
         const schedulerStat = document.getElementById('stat-scheduler');
         if (statusData.scheduler.running) {
             schedulerStat.textContent = '✓ Running';
-            schedulerCard.classList.add('success');
-            schedulerCard.classList.remove('error');
+            schedulerStat.className = 'text-2xl font-semibold text-green-600';
         } else {
             schedulerStat.textContent = '✗ Stopped';
-            schedulerCard.classList.add('error');
-            schedulerCard.classList.remove('success');
+            schedulerStat.className = 'text-2xl font-semibold text-red-600';
         }
 
         // Update jobs count
@@ -456,7 +184,7 @@ function renderJobs() {
     const container = document.getElementById('jobs-list');
 
     if (!jobsData || jobsData.length === 0) {
-        container.innerHTML = '<div style="color: var(--g-m); text-align: center; padding: 20px;">No jobs available</div>';
+        container.innerHTML = '<div class="text-tcsc-gray-600 text-center py-5">No jobs available</div>';
         return;
     }
 
@@ -472,29 +200,29 @@ function renderJobs() {
             : 'Not scheduled';
 
         html += `
-            <div class="job-card" id="job-${job.id}">
-                <div class="job-card-header">
-                    <div class="job-name">${job.name}</div>
-                    <div class="job-schedule">${job.schedule}</div>
+            <div class="bg-gray-50 border border-tcsc-gray-100 rounded-tcsc p-4" id="job-${job.id}">
+                <div class="flex flex-col sm:flex-row justify-between items-start gap-2 mb-2">
+                    <div class="font-semibold text-sm text-tcsc-navy">${job.name}</div>
+                    <div class="text-xs text-tcsc-gray-600 font-mono bg-white px-2 py-0.5 rounded">${job.schedule}</div>
                 </div>
-                <div class="job-description">${job.description}</div>
-                <div class="job-meta">
-                    <div class="job-meta-item">
+                <div class="text-sm text-gray-700 mb-3">${job.description}</div>
+                <div class="flex items-center gap-3 text-xs text-tcsc-gray-600 mb-3">
+                    <div class="flex items-center gap-1">
                         <span>Default:</span>
                         <strong>${job.default_channel}</strong>
                     </div>
-                    <div class="job-meta-item">
+                    <div class="flex items-center gap-1">
                         <span>Next:</span>
                         <span>${nextRunText}</span>
                     </div>
                 </div>
-                <div class="job-actions">
+                <div class="flex flex-wrap items-center gap-3">
                     ${job.supports_channel_override ? `
-                        <select class="channel-select" id="channel-${job.id}">
+                        <select class="px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm bg-white min-w-[200px]" id="channel-${job.id}">
                             ${channelOptions}
                         </select>
                     ` : ''}
-                    <button class="run-btn" id="btn-${job.id}" onclick="triggerJob('${job.id}')">
+                    <button class="bg-tcsc-navy text-white border-none px-4 py-2 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-1.5 transition-all hover:opacity-90 disabled:opacity-60 disabled:cursor-not-allowed" id="btn-${job.id}" onclick="triggerJob('${job.id}')">
                         <span>▶</span>
                         <span>Run Now</span>
                     </button>

@@ -2,75 +2,6 @@
 {% block title %}Role Management{% endblock %}
 {% block extra_css %}
 <style>
-/* Roles Grid Container */
-.roles-grid-container {
-    background: white;
-    border-radius: var(--r);
-    padding: 20px;
-}
-
-/* Toolbar */
-.roles-toolbar {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    margin-bottom: 16px;
-}
-
-.roles-toolbar .button {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 36px;
-    padding: 0 16px;
-    margin-top: 0;
-    width: auto;
-}
-
-/* Role Count Badge */
-.role-count {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 6px 12px;
-    background: #f2f4f7;
-    border-radius: 6px;
-    font: 500 13px var(--f);
-    color: #344054;
-    margin-left: auto;
-}
-
-.role-count strong {
-    color: var(--p);
-}
-
-/* Tabulator Customizations */
-#roles-table {
-    border: 1px solid #e4e7ec;
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-#roles-table .tabulator-header {
-    background: #f9fafb;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-#roles-table .tabulator-col-title {
-    font: 600 13px var(--f);
-    color: #344054;
-}
-
-#roles-table .tabulator-cell {
-    font: 400 14px var(--f);
-    color: #1d2939;
-    border-right: none;
-}
-
-#roles-table .tabulator-row:hover {
-    background: #f9fafb;
-}
-
 /* Emoji preview in grid */
 .role-emoji-preview {
     font-size: 20px;
@@ -96,82 +27,45 @@
     padding: 0 8px;
     background: #f2f4f7;
     border-radius: 12px;
-    font: 500 12px var(--f);
+    font-weight: 500;
+    font-size: 12px;
     color: #344054;
 }
 
 .user-count-badge.has-users {
-    background: var(--s);
-    color: var(--p);
-}
-
-/* Action buttons */
-.role-actions {
-    display: flex;
-    gap: 6px;
-    justify-content: center;
-}
-
-.role-actions .button {
-    height: 28px;
-    padding: 0 10px;
-    font-size: 12px;
-    margin-top: 0;
-    width: auto;
-}
-
-/* Toast notifications */
-.toast {
-    position: fixed;
-    bottom: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: var(--r);
-    background: var(--p);
-    color: white;
-    font: 500 14px var(--f);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-    z-index: 1000;
-    animation: slideIn 0.3s ease-out;
-}
-
-.toast.error {
-    background: #dc2626;
-}
-
-.toast.success {
-    background: #16a34a;
+    background: #d4f5e9;
+    color: #1c2c44;
 }
 
 /* Inline editor styling */
 .tabulator-edit-box {
     padding: 4px 8px;
-    border: 2px solid var(--p) !important;
+    border: 2px solid #1c2c44 !important;
     border-radius: 4px;
-    font: 400 14px var(--f);
+    font-size: 14px;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="admin-header">
-    <h1>Role Management</h1>
-    <div class="admin-actions">
-        <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
+<div class="flex items-center justify-between mb-6">
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Role Management</h1>
+    <div class="flex gap-3">
+        <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
     </div>
 </div>
 
-<div class="roles-grid-container">
-    <div class="roles-toolbar">
-        <button class="button" onclick="addNewRole()">Add New Role</button>
-        <div class="role-count">
+<div class="bg-white rounded-tcsc p-5">
+    <div class="flex items-center gap-3 mb-4">
+        <button class="toolbar-btn toolbar-btn-primary" onclick="addNewRole()">Add New Role</button>
+        <div class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-md text-sm font-medium text-gray-700">
             <span>Total:</span>
-            <strong id="role-count">0</strong>
+            <strong id="role-count" class="text-tcsc-navy">0</strong>
             <span>roles</span>
         </div>
     </div>
 
-    <div id="roles-table"></div>
+    <div id="roles-table" class="tabulator-config"></div>
 </div>
 {% endblock %}
 
@@ -263,9 +157,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const data = cell.getRow().getData();
                     const canDelete = !data.user_count || data.user_count === 0;
                     const deleteBtn = canDelete
-                        ? `<button class="button button-small button-danger" onclick="deleteRole(${data.id}, '${data.display_name}')">Delete</button>`
-                        : `<button class="button button-small button-secondary" disabled title="Cannot delete - has users">Delete</button>`;
-                    return `<div class="role-actions">${deleteBtn}</div>`;
+                        ? `<button class="tbl-btn tbl-btn-danger" onclick="deleteRole(${data.id}, '${data.display_name}')">Delete</button>`
+                        : `<button class="tbl-btn tbl-btn-danger" disabled title="Cannot delete - has users">Delete</button>`;
+                    return `<div class="tbl-actions">${deleteBtn}</div>`;
                 },
                 headerSort: false
             }
@@ -364,18 +258,6 @@ async function refreshData() {
     rolesData = data.tags;
     rolesTable.setData(rolesData);
     document.getElementById('role-count').textContent = rolesData.length;
-}
-
-function showToast(message, type = 'info') {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    toast.className = `toast ${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => toast.remove(), 3000);
 }
 </script>
 {% endblock %}

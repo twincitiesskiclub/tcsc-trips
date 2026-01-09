@@ -1,132 +1,16 @@
 {% extends 'admin/admin_base.html' %}
 {% block extra_css %}
 <style>
-/* Page Header */
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.page-header .page-title {
-    margin: 0;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-/* Stats Cards */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.stat-card {
-    background: white;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 16px;
-    text-align: center;
-}
-
-.stat-value {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--p);
-}
-
-.stat-label {
-    font-size: 13px;
-    color: var(--g-m);
-    margin-top: 4px;
-}
-
-/* Clickable stat card link */
-.stat-card-link {
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    border: 1px solid var(--g-b);
-}
-
-.stat-card-link:hover {
-    border-color: var(--p);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-
-.stat-card-link .stat-label {
-    color: var(--p);
-    font-weight: 500;
-}
-
-.stat-card-link.status-ok {
-    border-color: #d1fae5;
-    background: #f0fdf4;
-}
-
-.stat-card-link.status-warning {
-    border-color: #fef3c7;
-    background: #fffbeb;
-}
-
-.stat-card-link.status-error {
-    border-color: #fee2e2;
-    background: #fef2f2;
-}
-
-/* Action Buttons */
-.action-btn {
-    background: var(--p);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.action-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    transform: translateY(-1px);
-}
-
-.action-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.action-btn.secondary {
-    background: #e8e9ec;
-    color: #4a5568;
-}
-
-.action-btn.info {
-    background: #3b82f6;
-}
-
 /* Loading state for buttons */
-.action-btn.loading {
+.loading {
     pointer-events: none;
 }
 
-.action-btn.loading .btn-icon {
+.loading .btn-icon {
     display: none;
 }
 
-.action-btn.loading .btn-text::after {
+.loading .btn-text::after {
     content: '...';
     animation: dots 1.2s steps(4, end) infinite;
 }
@@ -138,253 +22,32 @@
     80%, 100% { content: '...'; }
 }
 
-.sync-status {
-    font-size: 13px;
-    color: var(--g-m);
+/* Stat card link styles */
+.stat-card-link {
+    border: 1px solid #e4e7ec;
 }
 
-/* Section Header with Filters */
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin: 24px 0 12px 0;
-}
-
-.section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--p);
-    margin: 0;
-}
-
-/* Filter Button Group - matching users.html pattern */
-.btn-group {
-    display: inline-flex;
-    align-items: stretch;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white;
-}
-
-.btn-group .filter-btn {
-    all: unset;
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    padding: 6px 12px;
-    border-right: 1px solid #d0d5dd;
-    background: transparent;
-    cursor: pointer;
-    font: 500 13px var(--f);
-    color: #344054;
-    transition: background 0.15s ease;
-    white-space: nowrap;
-}
-
-.btn-group .filter-btn:last-child {
-    border-right: none;
-}
-
-.btn-group .filter-btn:hover {
-    background: #f9fafb;
-}
-
-.btn-group .filter-btn.active {
-    background: var(--p);
-    color: white;
-}
-
-.section {
-    margin-bottom: 32px;
-}
-
-/* Tabulator overrides - matching users.html pattern */
-.tabulator {
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    font-family: var(--f);
-}
-
-.tabulator .tabulator-header {
-    background: var(--p);
-    color: white;
-    border-bottom: none;
-}
-
-.tabulator .tabulator-header .tabulator-col {
-    background: var(--p);
-    border-right: 1px solid rgba(255,255,255,0.1);
-}
-
-.tabulator .tabulator-header .tabulator-col.tabulator-sortable:hover {
-    background: rgba(255,255,255,0.1);
-}
-
-.tabulator .tabulator-header .tabulator-col .tabulator-col-content {
-    padding: 10px 8px;
-}
-
-.tabulator-row.tabulator-row-even {
-    background: #f9f9f9;
-}
-
-.tabulator-row:hover {
-    background: #f0f0f0;
-}
-
-.tabulator-cell {
-    padding: 8px;
-}
-
-/* Toast Notifications */
-.toast-notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    z-index: 2000;
-    opacity: 0;
-    transform: translateX(100%);
-    transition: all 0.3s ease;
-}
-
-.toast-notification.show {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.toast-success {
-    background: var(--s);
-    color: var(--p);
-}
-
-.toast-error {
-    background: #fee2e2;
-    color: #991b1b;
-}
-
-.toast-info {
-    background: var(--status-info-bg);
-    color: var(--status-info-text);
-}
-
-/* Message Modal Styles */
-.recipient-controls {
-    display: flex;
-    gap: 8px;
-    margin-bottom: 12px;
-    align-items: center;
-}
-
-.recipient-controls .button-small {
-    flex-shrink: 0;
-}
-
-.recipient-search {
-    flex: 1;
-}
-
-.recipient-list {
-    max-height: 280px;
-    overflow-y: auto;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 8px 12px;
-    background: #fafafa;
-}
-
-.recipient-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    padding: 8px 4px;
-    cursor: pointer;
-    border-bottom: 1px solid var(--g-b);
-    transition: background 0.15s ease;
-}
-
-.recipient-item:last-child {
-    border-bottom: none;
-}
-
-.recipient-item:hover {
-    background: white;
-}
-
-.recipient-item input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    cursor: pointer;
-    accent-color: var(--p);
-    flex-shrink: 0;
-}
-
-.recipient-item .recipient-name {
-    font-weight: 500;
-    color: var(--p);
-}
-
-.recipient-item .recipient-email {
-    color: var(--g-m);
-    font-size: 13px;
-}
-
-.selected-count {
-    margin-top: 10px;
-    font-size: 13px;
-    color: var(--g-m);
-}
-
-.mode-options {
-    display: flex;
-    gap: 24px;
-    margin-top: 8px;
-}
-
-.mode-option {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    cursor: pointer;
-    font-weight: 500;
-    color: var(--p);
-}
-
-.mode-option input[type="radio"] {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    cursor: pointer;
-    accent-color: var(--p);
-}
-
-.mode-hint {
-    font-size: 12px;
-    color: var(--g-m);
-    margin-top: 8px;
+.stat-card-link:hover {
+    border-color: #1c2c44;
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="users-grid-container">
+<div class="bg-white rounded-tcsc p-5">
     <!-- Header with title and sync button -->
-    <div class="page-header">
-        <h1 class="page-title">Slack User Sync</h1>
-        <div class="header-actions">
-            <button class="action-btn secondary" id="message-btn" onclick="openMessageModal()">
+    <div class="flex justify-between items-center mb-5">
+        <h1 class="text-xl font-semibold text-tcsc-navy">Slack User Sync</h1>
+        <div class="flex items-center gap-3">
+            <button class="toolbar-btn toolbar-btn-secondary" id="message-btn" onclick="openMessageModal()">
                 <span class="btn-icon">✉</span>
                 <span class="btn-text">Send Message</span>
             </button>
-            <button class="action-btn" id="sync-btn" onclick="runSync()">
+            <button class="toolbar-btn toolbar-btn-primary" id="sync-btn" onclick="runSync()">
                 <span class="btn-icon">↓</span>
                 <span class="btn-text">Sync from Slack</span>
             </button>
-            <button class="action-btn info" id="profile-sync-btn" onclick="runProfileSync()">
+            <button class="toolbar-btn toolbar-btn-primary" id="profile-sync-btn" onclick="runProfileSync()">
                 <span class="btn-icon">↑</span>
                 <span class="btn-text">Sync to Slack</span>
             </button>
@@ -392,127 +55,127 @@
     </div>
 
     <!-- Stats -->
-    <div class="stats-grid">
-        <div class="stat-card">
-            <div class="stat-value" id="stat-slack-users">-</div>
-            <div class="stat-label">Slack Users</div>
+    <div class="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4 mb-6">
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
+            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-slack-users">-</div>
+            <div class="text-sm text-gray-500 mt-1">Slack Users</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-db-users">-</div>
-            <div class="stat-label">Database Users</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
+            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-db-users">-</div>
+            <div class="text-sm text-gray-500 mt-1">Database Users</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-matched">-</div>
-            <div class="stat-label">Matched</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
+            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-matched">-</div>
+            <div class="text-sm text-gray-500 mt-1">Matched</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-unmatched-slack">-</div>
-            <div class="stat-label">Slack Only</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
+            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-unmatched-slack">-</div>
+            <div class="text-sm text-gray-500 mt-1">Slack Only</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-unmatched-db">-</div>
-            <div class="stat-label">DB Only</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
+            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-unmatched-db">-</div>
+            <div class="text-sm text-gray-500 mt-1">DB Only</div>
         </div>
-        <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="stat-card stat-card-link" id="channel-sync-card">
-            <div class="stat-value" id="stat-channel-sync">-</div>
-            <div class="stat-label">Channel Sync →</div>
+        <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="stat-card-link bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center no-underline cursor-pointer hover:border-tcsc-navy hover:-translate-y-0.5 hover:shadow-lg transition-all" id="channel-sync-card">
+            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-channel-sync">-</div>
+            <div class="text-sm text-tcsc-navy font-medium mt-1">Channel Sync →</div>
         </a>
     </div>
 
     <!-- Database Users with filter -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">Database Users</h3>
-            <div class="btn-group">
-                <button class="filter-btn active" data-filter="all" onclick="setUserFilter('all', this)">All</button>
-                <button class="filter-btn" data-filter="matched" onclick="setUserFilter('matched', this)">Matched</button>
-                <button class="filter-btn" data-filter="unmatched" onclick="setUserFilter('unmatched', this)">Unmatched</button>
+    <div class="mb-8">
+        <div class="flex justify-between items-center my-6 mb-3">
+            <h3 class="text-base font-semibold text-tcsc-navy">Database Users</h3>
+            <div class="seg-group">
+                <button class="seg-btn active" data-filter="all" onclick="setUserFilter('all', this)">All</button>
+                <button class="seg-btn" data-filter="matched" onclick="setUserFilter('matched', this)">Matched</button>
+                <button class="seg-btn" data-filter="unmatched" onclick="setUserFilter('unmatched', this)">Unmatched</button>
             </div>
         </div>
-        <div id="users-table"></div>
+        <div id="users-table" class="tabulator-data"></div>
     </div>
 
     <!-- Slack Only Users -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">Slack Users Without Database Match</h3>
+    <div class="mb-8">
+        <div class="flex justify-between items-center my-6 mb-3">
+            <h3 class="text-base font-semibold text-tcsc-navy">Slack Users Without Database Match</h3>
         </div>
-        <div id="slack-only-table"></div>
+        <div id="slack-only-table" class="tabulator-data"></div>
     </div>
 </div>
 
-<!-- Link Modal - using existing modal pattern from _admin.css -->
-<div id="link-modal" class="modal" style="display: none;">
-    <div class="modal-overlay" onclick="closeLinkModal()"></div>
-    <div class="modal-content">
-        <div class="modal-header">
-            <h2 id="link-modal-title">Link User</h2>
-            <button class="modal-close" onclick="closeLinkModal()">&times;</button>
+<!-- Link Modal -->
+<div id="link-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
+    <div class="absolute inset-0" onclick="closeLinkModal()"></div>
+    <div class="relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl">
+        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
+            <h2 id="link-modal-title" class="text-lg font-semibold text-tcsc-navy">Link User</h2>
+            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeLinkModal()">&times;</button>
         </div>
-        <div class="modal-body">
-            <p id="link-modal-description"></p>
+        <div class="p-5">
+            <p id="link-modal-description" class="mb-4 text-gray-600"></p>
             <div class="form-group">
-                <label for="link-select">Select Match:</label>
-                <select id="link-select"></select>
+                <label for="link-select" class="block text-sm font-medium text-gray-700 mb-1">Select Match:</label>
+                <select id="link-select" class="w-full h-10 px-3 border border-gray-300 rounded-md"></select>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="button button-secondary" onclick="closeLinkModal()">Cancel</button>
-            <button class="button" onclick="confirmLink()">Link</button>
+        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
+            <button class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeLinkModal()">Cancel</button>
+            <button class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all" onclick="confirmLink()">Link</button>
         </div>
     </div>
 </div>
 
 <!-- Send Message Modal -->
-<div id="message-modal" class="modal" style="display: none;">
-    <div class="modal-overlay" onclick="closeMessageModal()"></div>
-    <div class="modal-content" style="max-width: 600px;">
-        <div class="modal-header">
-            <h2>Send Slack Message</h2>
-            <button class="modal-close" onclick="closeMessageModal()">&times;</button>
+<div id="message-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
+    <div class="absolute inset-0" onclick="closeMessageModal()"></div>
+    <div class="relative bg-white rounded-tcsc w-full max-w-[600px] mx-4 shadow-xl">
+        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
+            <h2 class="text-lg font-semibold text-tcsc-navy">Send Slack Message</h2>
+            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeMessageModal()">&times;</button>
         </div>
-        <div class="modal-body">
+        <div class="p-5">
             <!-- User Selection -->
-            <div class="form-group">
-                <label>Select Recipients:</label>
-                <div class="recipient-controls">
-                    <button type="button" class="button button-secondary button-small" onclick="selectAllUsers()">Select All</button>
-                    <button type="button" class="button button-secondary button-small" onclick="deselectAllUsers()">Deselect All</button>
-                    <input type="text" id="user-search" class="recipient-search" placeholder="Filter users...">
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Select Recipients:</label>
+                <div class="flex gap-2 mb-3 items-center">
+                    <button type="button" class="bg-gray-200 text-gray-600 px-3 py-1.5 rounded-tcsc text-xs font-medium hover:bg-gray-300 transition-all flex-shrink-0" onclick="selectAllUsers()">Select All</button>
+                    <button type="button" class="bg-gray-200 text-gray-600 px-3 py-1.5 rounded-tcsc text-xs font-medium hover:bg-gray-300 transition-all flex-shrink-0" onclick="deselectAllUsers()">Deselect All</button>
+                    <input type="text" id="user-search" class="flex-1 h-8 px-2.5 border border-gray-300 rounded-md text-sm placeholder:text-gray-400" placeholder="Filter users...">
                 </div>
-                <div id="user-checkboxes" class="recipient-list"></div>
-                <div class="selected-count">
+                <div id="user-checkboxes" class="max-h-[280px] overflow-y-auto border border-tcsc-gray-100 rounded-tcsc p-3 bg-gray-50"></div>
+                <div class="mt-2.5 text-sm text-gray-500">
                     <span id="selected-count">0</span> user(s) selected
                 </div>
             </div>
 
             <!-- Message Mode -->
-            <div class="form-group">
-                <label>Message Mode:</label>
-                <div class="mode-options">
-                    <label class="mode-option">
-                        <input type="radio" name="message-mode" value="individual" checked>
+            <div class="mb-4">
+                <label class="block text-sm font-medium text-gray-700 mb-2">Message Mode:</label>
+                <div class="flex gap-6 mt-2">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-tcsc-navy">
+                        <input type="radio" name="message-mode" value="individual" checked class="w-4 h-4 accent-tcsc-navy">
                         <span>Individual DMs</span>
                     </label>
-                    <label class="mode-option">
-                        <input type="radio" name="message-mode" value="mpdm">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-tcsc-navy">
+                        <input type="radio" name="message-mode" value="mpdm" class="w-4 h-4 accent-tcsc-navy">
                         <span>Group DM (MPDM)</span>
                     </label>
                 </div>
-                <div class="mode-hint">
+                <div class="text-xs text-gray-500 mt-2">
                     Individual: Each user gets a separate DM. Group: All users in one conversation.
                 </div>
             </div>
 
             <!-- Message Content -->
-            <div class="form-group">
-                <label for="message-text">Message:</label>
-                <textarea id="message-text" rows="6" placeholder="Enter your message..."></textarea>
+            <div class="mb-4">
+                <label for="message-text" class="block text-sm font-medium text-gray-700 mb-1">Message:</label>
+                <textarea id="message-text" rows="6" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Enter your message..."></textarea>
             </div>
         </div>
-        <div class="modal-footer">
-            <button class="button button-secondary" onclick="closeMessageModal()">Cancel</button>
-            <button class="button" id="send-message-btn" onclick="sendMessage()">Send Message</button>
+        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
+            <button class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeMessageModal()">Cancel</button>
+            <button class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all" id="send-message-btn" onclick="sendMessage()">Send Message</button>
         </div>
     </div>
 </div>

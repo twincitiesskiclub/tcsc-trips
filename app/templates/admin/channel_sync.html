@@ -1,243 +1,7 @@
 {% extends 'admin/admin_base.html' %}
 {% block extra_css %}
 <style>
-/* Page Header */
-.page-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-    flex-wrap: wrap;
-    gap: 12px;
-}
-
-.page-header .page-title {
-    margin: 0;
-}
-
-.users-grid-container {
-    max-width: 1200px;
-    margin: 0 auto;
-}
-
-.header-actions {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-}
-
-/* Stats Cards */
-.stats-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-}
-
-.stat-card {
-    background: white;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 16px;
-    text-align: center;
-    min-height: 80px;
-}
-
-.stat-value {
-    font-size: 28px;
-    font-weight: 600;
-    color: var(--p);
-}
-
-.stat-label {
-    font-size: 13px;
-    color: var(--g-m);
-    margin-top: 8px;
-}
-
-.stat-card.warning .stat-value {
-    color: #d97706;
-}
-
-.stat-card.success .stat-value {
-    color: #059669;
-}
-
-.stat-card.error .stat-value {
-    color: #dc2626;
-}
-
-/* Status Badges */
-.status-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 4px 10px;
-    border-radius: 20px;
-    font-size: 13px;
-    font-weight: 500;
-}
-
-.status-badge.valid {
-    background: #d1fae5;
-    color: #059669;
-}
-
-.status-badge.invalid {
-    background: #fee2e2;
-    color: #dc2626;
-}
-
-.status-badge.dry-run {
-    background: #fef3c7;
-    color: #d97706;
-}
-
-.status-badge.live {
-    background: #dbeafe;
-    color: #2563eb;
-}
-
-/* Action Buttons */
-.action-btn {
-    background: var(--p);
-    color: white;
-    border: none;
-    padding: 10px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    transition: all 0.2s ease;
-    white-space: nowrap;
-}
-
-.action-btn:hover:not(:disabled) {
-    opacity: 0.9;
-    transform: translateY(-1px);
-}
-
-.action-btn:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-    transform: none;
-}
-
-.action-btn:focus-visible {
-    outline: 2px solid var(--p);
-    outline-offset: 2px;
-}
-
-.action-btn.secondary {
-    background: #e8e9ec;
-    color: #4a5568;
-}
-
-.action-btn.warning {
-    background: #f59e0b;
-}
-
-.action-btn.success {
-    background: #10b981;
-}
-
-/* Loading state for buttons */
-.action-btn.loading {
-    pointer-events: none;
-}
-
-.action-btn.loading .btn-icon {
-    display: none;
-}
-
-.action-btn.loading .btn-text::after {
-    content: '...';
-}
-
-/* Section */
-.section {
-    background: white;
-    border: 1px solid var(--g-b);
-    border-radius: var(--r);
-    padding: 20px;
-    margin-bottom: 24px;
-}
-
-.section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 20px;
-}
-
-.section-title {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--p);
-    margin: 0;
-}
-
-/* Info Grid */
-.info-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
-}
-
-.info-item {
-    padding: 12px;
-    background: var(--g-l);
-    border-radius: var(--r);
-}
-
-.info-label {
-    font-size: 12px;
-    color: var(--g-m);
-    margin-bottom: 4px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.info-value {
-    font-size: 14px;
-    font-weight: 500;
-    color: var(--p);
-}
-
-/* Channel List */
-.channel-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    margin-top: 8px;
-}
-
-.channel-tag {
-    background: var(--g-l);
-    color: var(--g-d);
-    padding: 2px 8px;
-    border-radius: 4px;
-    font-size: 12px;
-    font-family: monospace;
-}
-
-/* Log Output */
-.log-output {
-    background: var(--p);
-    color: #f1f5f9;
-    padding: 16px;
-    border-radius: var(--r);
-    font-family: monospace;
-    font-size: 13px;
-    line-height: 1.6;
-    max-height: 400px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-}
-
+/* Log output color classes */
 .log-output .log-info {
     color: #60a5fa;
 }
@@ -254,53 +18,11 @@
     color: #f87171;
 }
 
-/* Results Table */
-.results-table {
-    width: 100%;
-    border-collapse: collapse;
-    margin-top: 16px;
-    margin-bottom: 16px;
-}
-
-.results-table th,
-.results-table td {
-    padding: 10px 12px;
-    text-align: left;
-    border-bottom: 1px solid var(--g-b);
-}
-
-.traces-header {
-    margin-top: 20px;
-    margin-bottom: 12px;
-    color: var(--p);
-    font-size: 15px;
-    font-weight: 600;
-}
-
-.results-table th {
-    background: var(--g-l);
-    font-weight: 600;
-    font-size: 13px;
-    color: var(--g-m);
-}
-
-.results-table td {
-    font-size: 14px;
-}
-
-/* Toast Notifications */
+/* Toast animation */
 .toast-notification {
-    position: fixed;
-    top: 20px;
-    right: 20px;
-    padding: 12px 20px;
-    border-radius: var(--r);
-    font: 500 14px var(--f);
-    z-index: 2000;
     opacity: 0;
     transform: translateX(100%);
     transition: all 0.3s ease;
-    max-width: calc(100% - 40px);
 }
 
 .toast-notification.show {
@@ -308,66 +30,32 @@
     transform: translateX(0);
 }
 
-.toast-success {
-    background: var(--s);
-    color: var(--p);
+/* Loading state for buttons */
+.action-btn.loading {
+    pointer-events: none;
 }
 
-.toast-error {
-    background: #fee2e2;
-    color: #991b1b;
+.action-btn.loading .btn-icon {
+    display: none;
 }
 
-.toast-info {
-    background: #dbeafe;
-    color: #1d4ed8;
-}
-
-/* Mobile Responsiveness */
-@media (max-width: 640px) {
-    .page-header {
-        flex-direction: column;
-        align-items: flex-start;
-        gap: 12px;
-    }
-
-    .header-actions {
-        width: 100%;
-        justify-content: flex-start;
-    }
-
-    .stats-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-
-    .info-grid {
-        grid-template-columns: 1fr;
-    }
-
-    .section {
-        padding: 16px;
-    }
-
-    .toast-notification {
-        right: 10px;
-        left: 10px;
-        max-width: none;
-    }
+.action-btn.loading .btn-text::after {
+    content: '...';
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="users-grid-container">
+<div class="max-w-6xl mx-auto">
     <!-- Header with title and sync buttons -->
-    <div class="page-header">
-        <h1 class="page-title">Channel Sync</h1>
-        <div class="header-actions">
-            <button class="action-btn secondary" id="dry-run-btn" onclick="runSync(true)">
+    <div class="flex flex-wrap justify-between items-center gap-3 mb-5">
+        <h1 class="text-2xl font-semibold text-tcsc-navy m-0">Channel Sync</h1>
+        <div class="flex items-center gap-3">
+            <button class="action-btn bg-gray-200 text-gray-600 border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="dry-run-btn" onclick="runSync(true)">
                 <span class="btn-icon">🔍</span>
                 <span class="btn-text">Dry Run</span>
             </button>
-            <button class="action-btn warning" id="live-run-btn" onclick="runSync(false)">
+            <button class="action-btn bg-amber-500 text-white border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="live-run-btn" onclick="runSync(false)">
                 <span class="btn-icon">⚡</span>
                 <span class="btn-text">Live Run</span>
             </button>
@@ -375,93 +63,93 @@
     </div>
 
     <!-- Status Cards -->
-    <div class="stats-grid">
-        <div class="stat-card" id="scheduler-card">
-            <div class="stat-value" id="stat-scheduler">-</div>
-            <div class="stat-label">Scheduler</div>
+    <div class="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]" id="scheduler-card">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-scheduler">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Scheduler</div>
         </div>
-        <div class="stat-card" id="creds-card">
-            <div class="stat-value" id="stat-creds">-</div>
-            <div class="stat-label">Admin API</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]" id="creds-card">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-creds">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Admin API</div>
         </div>
-        <div class="stat-card" id="mode-card">
-            <div class="stat-value" id="stat-mode">-</div>
-            <div class="stat-label">Mode</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]" id="mode-card">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-mode">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Mode</div>
         </div>
-        <div class="stat-card">
-            <div class="stat-value" id="stat-next-run">-</div>
-            <div class="stat-label">Next Run</div>
+        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center min-h-[80px]">
+            <div class="text-2xl font-semibold text-tcsc-navy" id="stat-next-run">-</div>
+            <div class="text-sm text-tcsc-gray-600 mt-2">Next Run</div>
         </div>
     </div>
 
     <!-- Configuration Section -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">Configuration</h3>
-            <button class="action-btn secondary" onclick="loadStatus()">
+    <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-base font-semibold text-tcsc-navy m-0">Configuration</h3>
+            <button class="bg-gray-200 text-gray-600 border-none px-4 py-2 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all hover:bg-gray-300" onclick="loadStatus()">
                 <span class="btn-icon">↻</span>
                 <span class="btn-text">Refresh</span>
             </button>
         </div>
-        <div class="info-grid">
-            <div class="info-item">
-                <div class="info-label">Full Member Channels</div>
-                <div class="info-value" id="config-full-member">-</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div class="p-3 bg-gray-50 rounded-tcsc">
+                <div class="text-xs text-tcsc-gray-600 mb-1 uppercase tracking-wide">Full Member Channels</div>
+                <div class="text-sm font-medium text-tcsc-navy" id="config-full-member">-</div>
             </div>
-            <div class="info-item">
-                <div class="info-label">Multi-Channel Guest</div>
-                <div class="info-value" id="config-mcg">-</div>
+            <div class="p-3 bg-gray-50 rounded-tcsc">
+                <div class="text-xs text-tcsc-gray-600 mb-1 uppercase tracking-wide">Multi-Channel Guest</div>
+                <div class="text-sm font-medium text-tcsc-navy" id="config-mcg">-</div>
             </div>
-            <div class="info-item">
-                <div class="info-label">Single-Channel Guest</div>
-                <div class="info-value" id="config-scg">-</div>
+            <div class="p-3 bg-gray-50 rounded-tcsc">
+                <div class="text-xs text-tcsc-gray-600 mb-1 uppercase tracking-wide">Single-Channel Guest</div>
+                <div class="text-sm font-medium text-tcsc-navy" id="config-scg">-</div>
             </div>
-            <div class="info-item">
-                <div class="info-label">Exception Tags</div>
-                <div class="info-value" id="config-tags">-</div>
+            <div class="p-3 bg-gray-50 rounded-tcsc">
+                <div class="text-xs text-tcsc-gray-600 mb-1 uppercase tracking-wide">Exception Tags</div>
+                <div class="text-sm font-medium text-tcsc-navy" id="config-tags">-</div>
             </div>
         </div>
     </div>
 
     <!-- ExpertVoice Section -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">ExpertVoice Sync</h3>
-            <div class="header-actions">
-                <button class="action-btn secondary" id="ev-dry-run-btn" onclick="runExpertVoice(true)">
+    <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
+        <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
+            <h3 class="text-base font-semibold text-tcsc-navy m-0">ExpertVoice Sync</h3>
+            <div class="flex items-center gap-3">
+                <button class="action-btn bg-gray-200 text-gray-600 border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="ev-dry-run-btn" onclick="runExpertVoice(true)">
                     <span class="btn-icon">🔍</span>
                     <span class="btn-text">Dry Run</span>
                 </button>
-                <button class="action-btn success" id="ev-live-btn" onclick="runExpertVoice(false)">
+                <button class="action-btn bg-emerald-500 text-white border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="ev-live-btn" onclick="runExpertVoice(false)">
                     <span class="btn-icon">📤</span>
                     <span class="btn-text">Upload</span>
                 </button>
             </div>
         </div>
-        <p style="color: var(--g-m); font-size: 14px; margin: 12px 0 0 0;">
+        <p class="text-tcsc-gray-600 text-sm m-0">
             Syncs eligible members (ACTIVE + 1-season ALUMNI) to ExpertVoice via SFTP for pro deals access.
         </p>
     </div>
 
     <!-- Results Section -->
-    <div class="section" id="results-section" style="display: none;">
-        <div class="section-header">
-            <h3 class="section-title">Last Sync Results</h3>
-            <span class="status-badge" id="results-mode">-</span>
+    <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6 hidden" id="results-section">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-base font-semibold text-tcsc-navy m-0">Last Sync Results</h3>
+            <span class="inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium" id="results-mode">-</span>
         </div>
         <div id="results-content"></div>
     </div>
 
     <!-- Log Output -->
-    <div class="section">
-        <div class="section-header">
-            <h3 class="section-title">Activity Log</h3>
-            <button class="action-btn secondary" onclick="clearLog()">
+    <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
+        <div class="flex justify-between items-center mb-5">
+            <h3 class="text-base font-semibold text-tcsc-navy m-0">Activity Log</h3>
+            <button class="bg-gray-200 text-gray-600 border-none px-4 py-2 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all hover:bg-gray-300" onclick="clearLog()">
                 <span class="btn-icon">🗑</span>
                 <span class="btn-text">Clear</span>
             </button>
         </div>
-        <div class="log-output" id="log-output">Waiting for activity...</div>
+        <div class="log-output bg-gray-900 text-gray-100 p-4 rounded-tcsc font-mono text-sm leading-relaxed max-h-96 overflow-y-auto whitespace-pre-wrap break-words" id="log-output">Waiting for activity...</div>
     </div>
 </div>
 {% endblock %}
@@ -484,7 +172,10 @@ function clearLog() {
 // Toast notifications
 function showToast(message, type = 'info') {
     const toast = document.createElement('div');
-    toast.className = `toast-notification toast-${type}`;
+    let bgClass = 'bg-blue-100 text-blue-800';
+    if (type === 'success') bgClass = 'bg-green-100 text-green-800';
+    if (type === 'error') bgClass = 'bg-red-100 text-red-800';
+    toast.className = `toast-notification fixed top-5 right-5 px-5 py-3 rounded-tcsc font-medium text-sm z-[2000] max-w-[calc(100%-40px)] ${bgClass}`;
     toast.textContent = message;
     document.body.appendChild(toast);
 
@@ -514,12 +205,10 @@ async function loadStatus() {
         const schedulerStat = document.getElementById('stat-scheduler');
         if (data.scheduler.running) {
             schedulerStat.textContent = '✓ Running';
-            schedulerCard.classList.add('success');
-            schedulerCard.classList.remove('error');
+            schedulerStat.className = 'text-2xl font-semibold text-green-600';
         } else {
             schedulerStat.textContent = '✗ Stopped';
-            schedulerCard.classList.add('error');
-            schedulerCard.classList.remove('success');
+            schedulerStat.className = 'text-2xl font-semibold text-red-600';
         }
 
         // Update next run time
@@ -531,30 +220,24 @@ async function loadStatus() {
         }
 
         // Update credentials status
-        const credsCard = document.getElementById('creds-card');
         const credsStat = document.getElementById('stat-creds');
         if (data.credentials.valid) {
             credsStat.textContent = '✓ Valid';
-            credsCard.classList.add('success');
-            credsCard.classList.remove('error');
+            credsStat.className = 'text-2xl font-semibold text-green-600';
         } else {
             credsStat.textContent = '✗ Invalid';
-            credsCard.classList.add('error');
-            credsCard.classList.remove('success');
+            credsStat.className = 'text-2xl font-semibold text-red-600';
             log(`Credential error: ${data.credentials.error}`, 'error');
         }
 
         // Update mode
-        const modeCard = document.getElementById('mode-card');
         const modeStat = document.getElementById('stat-mode');
         if (data.config.dry_run) {
             modeStat.textContent = 'Dry Run';
-            modeCard.classList.add('warning');
-            modeCard.classList.remove('success');
+            modeStat.className = 'text-2xl font-semibold text-amber-600';
         } else {
             modeStat.textContent = 'LIVE';
-            modeCard.classList.add('success');
-            modeCard.classList.remove('warning');
+            modeStat.className = 'text-2xl font-semibold text-green-600';
         }
 
         // Update config info
@@ -761,33 +444,33 @@ function displayResults(data, type) {
     const content = document.getElementById('results-content');
     const badge = document.getElementById('results-mode');
 
-    section.style.display = 'block';
+    section.classList.remove('hidden');
     badge.textContent = data.dry_run ? 'Dry Run' : 'Live';
-    badge.className = `status-badge ${data.dry_run ? 'dry-run' : 'live'}`;
+    badge.className = `inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-medium ${data.dry_run ? 'bg-amber-100 text-amber-700' : 'bg-blue-100 text-blue-700'}`;
 
     if (type === 'slack' && data.slack_sync) {
         const s = data.slack_sync;
         let html = `
-            <table class="results-table">
-                <tr><th>Metric</th><th>Value</th></tr>
-                <tr><td>Users Processed</td><td>${s.total_processed}</td></tr>
-                <tr><td>Reactivated Users</td><td>${s.reactivated_users}</td></tr>
-                <tr><td>Role Changes</td><td>${s.role_changes}</td></tr>
-                <tr><td>Channel Adds</td><td>${s.channel_adds}</td></tr>
-                <tr><td>Channel Removals</td><td>${s.channel_removals}</td></tr>
-                <tr><td>Invites Sent</td><td>${s.invites_sent}</td></tr>
-                <tr><td>Users Skipped</td><td>${s.users_skipped}</td></tr>
-                <tr><td>Errors</td><td>${s.error_count}</td></tr>
+            <table class="w-full border-collapse mt-4 mb-4">
+                <tr><th class="bg-gray-50 font-semibold text-sm text-tcsc-gray-600 px-3 py-2.5 text-left border-b border-tcsc-gray-100">Metric</th><th class="bg-gray-50 font-semibold text-sm text-tcsc-gray-600 px-3 py-2.5 text-left border-b border-tcsc-gray-100">Value</th></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Users Processed</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.total_processed}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Reactivated Users</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.reactivated_users}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Role Changes</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.role_changes}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Channel Adds</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.channel_adds}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Channel Removals</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.channel_removals}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Invites Sent</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.invites_sent}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Users Skipped</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.users_skipped}</td></tr>
+                <tr><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">Errors</td><td class="text-sm px-3 py-2.5 border-b border-tcsc-gray-100">${s.error_count}</td></tr>
             </table>
         `;
 
         // Display action traces if any
         if (s.traces && s.traces.length > 0) {
             html += `
-                <h4 class="traces-header">
+                <h4 class="mt-5 mb-3 text-tcsc-navy text-sm font-semibold">
                     Action Traces (${s.traces.length})
                 </h4>
-                <div class="log-output" style="max-height: 400px;">`;
+                <div class="log-output bg-gray-900 text-gray-100 p-4 rounded-tcsc font-mono text-sm leading-relaxed max-h-96 overflow-y-auto whitespace-pre-wrap break-words">`;
             s.traces.forEach(trace => {
                 // Color-code by action type
                 let levelClass = 'log-info';

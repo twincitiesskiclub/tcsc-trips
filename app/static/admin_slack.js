@@ -96,10 +96,10 @@ async function loadUsers() {
                     {title: "Actions", formatter: function(cell) {
                         const row = cell.getData();
                         if (row.slack_matched) {
-                            return `<button class="button button-small button-secondary" onclick="unlinkUser(${row.id})">Unlink</button>`;
+                            return `<button class="tbl-btn tbl-btn-secondary" onclick="unlinkUser(${row.id})">Unlink</button>`;
                         } else {
-                            return `<button class="button button-small" onclick="showLinkDbModal(${row.id})">Link</button>` +
-                                   ` <button class="button button-small button-danger" onclick="confirmDeleteUser(${row.id})">Delete</button>`;
+                            return `<div class="tbl-actions"><button class="tbl-btn tbl-btn-primary" onclick="showLinkDbModal(${row.id})">Link</button>` +
+                                   `<button class="tbl-btn tbl-btn-danger" onclick="confirmDeleteUser(${row.id})">Delete</button></div>`;
                         }
                     }, width: 160, hozAlign: "center", headerSort: false}
                 ]
@@ -139,8 +139,8 @@ async function loadSlackOnly() {
                     {title: "Full Name", field: "full_name", minWidth: 150},
                     {title: "Actions", formatter: function(cell) {
                         const id = cell.getData().id;
-                        return `<button class="button button-small" onclick="showLinkSlackModal(${id})">Link</button>` +
-                               ` <button class="button button-small button-secondary" onclick="importSlackUser(${id})">Import</button>`;
+                        return `<div class="tbl-actions"><button class="tbl-btn tbl-btn-primary" onclick="showLinkSlackModal(${id})">Link</button>` +
+                               `<button class="tbl-btn tbl-btn-secondary" onclick="importSlackUser(${id})">Import</button></div>`;
                     }, width: 180, hozAlign: "center", headerSort: false}
                 ]
             });
@@ -165,7 +165,7 @@ function setUserFilter(filter, btn) {
     currentFilter = filter;
 
     // Update button states
-    document.querySelectorAll('.btn-group .filter-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.seg-group .seg-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
     // Update table
@@ -465,28 +465,6 @@ async function importSlackUser(slackUserId) {
     } catch (e) {
         showToast('Failed to import: ' + e.message, 'error');
     }
-}
-
-// Simple toast notification
-function showToast(message, type = 'info') {
-    // Remove existing toasts
-    document.querySelectorAll('.toast-notification').forEach(t => t.remove());
-
-    const toast = document.createElement('div');
-    toast.className = `toast-notification toast-${type}`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    // Trigger animation
-    requestAnimationFrame(() => {
-        toast.classList.add('show');
-    });
-
-    // Auto-remove after 4 seconds
-    setTimeout(() => {
-        toast.classList.remove('show');
-        setTimeout(() => toast.remove(), 300);
-    }, 4000);
 }
 
 // ============================================

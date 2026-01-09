@@ -1,81 +1,86 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>Admin - Trips</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}" />
-  </head>
-  <body>
-    <div class="admin-container">
-      {% include 'admin/partials/header.html' %}
+{% extends "admin/admin_base.html" %}
 
-      <div class="admin-header">
-        <h1>Trips Management</h1>
-        <div class="admin-actions">
-          <a href="{{ url_for('admin.get_admin_page') }}" class="button button-secondary">Back to Dashboard</a>
-          <a href="{{ url_for('admin.new_trip') }}" class="button">Create New Trip</a>
-        </div>
-      </div>
+{% block title %}Trips{% endblock %}
 
-      <table>
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Destination</th>
-            <th>Dates</th>
-            <th>Signup Period</th>
-            <th>Capacity</th>
-            <th>Price Range</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for trip in trips %}
-          <tr>
-            <td>{{ trip.name }}</td>
-            <td>{{ trip.destination }}</td>
-            <td>{{ trip.formatted_date_range }}</td>
-            <td>
-              {{ trip.signup_start|format_date('%Y-%m-%d') }} to
-              {{ trip.signup_end|format_date('%Y-%m-%d') }}
-            </td>
-            <td>
-              Standard: {{ trip.max_participants_standard }}<br>
-              Extra: {{ trip.max_participants_extra }}
-            </td>
-            <td>
-              {% if trip.price_low == trip.price_high %}
-                {{ trip.price_low|format_price }}
-              {% else %}
-                {{ trip.price_low|format_price }} - {{ trip.price_high|format_price }}
-              {% endif %}
-            </td>
-            <td>
-              <span class="status-badge status-{{ trip.status }}">
+{% block content %}
+<div class="max-w-6xl mx-auto">
+  <div class="flex justify-between items-center mb-6">
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Trips Management</h1>
+    <div class="flex gap-3">
+      <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
+      <a href="{{ url_for('admin.new_trip') }}" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Create New Trip</a>
+    </div>
+  </div>
+
+  <div class="bg-white rounded-md shadow-sm overflow-x-auto">
+    <table class="w-full border-collapse min-w-[800px]">
+      <thead>
+        <tr class="border-b border-tcsc-gray-100 bg-gray-50">
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Name</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Destination</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Dates</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Signup Period</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Capacity</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Price Range</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Status</th>
+          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for trip in trips %}
+        <tr class="border-b border-tcsc-gray-100 hover:bg-gray-50 transition-colors">
+          <td class="py-3 px-4 text-sm text-tcsc-navy">{{ trip.name }}</td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ trip.destination }}</td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ trip.formatted_date_range }}</td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">
+            {{ trip.signup_start|format_date('%Y-%m-%d') }} to
+            {{ trip.signup_end|format_date('%Y-%m-%d') }}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">
+            Standard: {{ trip.max_participants_standard }}<br>
+            Extra: {{ trip.max_participants_extra }}
+          </td>
+          <td class="py-3 px-4 text-sm text-tcsc-gray-800">
+            {% if trip.price_low == trip.price_high %}
+              {{ trip.price_low|format_price }}
+            {% else %}
+              {{ trip.price_low|format_price }} - {{ trip.price_high|format_price }}
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm">
+            {% if trip.status == 'active' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-500/15 text-green-700">
                 {{ trip.status }}
               </span>
-            </td>
-            <td>
-              <div class="action-buttons">
-                <a href="{{ url_for('admin.edit_trip', trip_id=trip.id) }}" class="button button-small">Edit</a>
-                <button
-                  class="button button-small button-danger"
-                  onclick="confirmDelete('trip', '{{ trip.id }}', '{{ trip.name }}')"
-                >
-                  Delete
-                </button>
-              </div>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
-    <script src="{{ url_for('static', filename='admin.js') }}"></script>
-  </body>
-</html> 
+            {% elif trip.status == 'draft' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-600/10 text-zinc-700">
+                {{ trip.status }}
+              </span>
+            {% elif trip.status == 'closed' %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/15 text-red-700">
+                {{ trip.status }}
+              </span>
+            {% else %}
+              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-400/20 text-amber-700">
+                {{ trip.status }}
+              </span>
+            {% endif %}
+          </td>
+          <td class="py-3 px-4 text-sm">
+            <div class="flex gap-2">
+              <a href="{{ url_for('admin.edit_trip', trip_id=trip.id) }}" class="bg-tcsc-navy text-white px-3 py-1.5 rounded-tcsc text-xs font-medium hover:opacity-90 transition-all">Edit</a>
+              <button
+                class="bg-status-error-bg text-status-error-text px-3 py-1.5 rounded-tcsc text-xs font-medium hover:bg-red-200 transition-all"
+                onclick="confirmDelete('trip', '{{ trip.id }}', '{{ trip.name }}')"
+              >
+                Delete
+              </button>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
