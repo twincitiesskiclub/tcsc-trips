@@ -5,12 +5,14 @@ Uses Claude Opus 4.5 to generate the Weekly Dispatch newsletter
 from collected Slack messages, news items, and member submissions.
 """
 
+import json
 import logging
 import os
+import re
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Union
 
 from app.newsletter.interfaces import (
     GenerationResult,
@@ -99,22 +101,140 @@ def _get_default_prompt() -> str:
     """Return embedded default prompt for fallback."""
     return """You are writing the weekly newsletter for the Twin Cities Ski Club (TCSC).
 
-Create an engaging newsletter that:
-- Opens with a warm greeting and seasonal context
-- Summarizes key Slack activity from the week
-- Includes trail conditions from monitored locations
-- Shares relevant local ski news
-- Incorporates any member submissions
-- Ends with a call to action
+Return ONLY a valid JSON object with this structure:
+{
+  "week_dates": "Month Day-Day, Year",
+  "opening_hook": "2-3 engaging sentences...",
+  "week_in_review": ["Item 1", "Item 2"],
+  "trail_conditions": [{"location": "Name", "status": "Open", "quality": "Good", "notes": ""}],
+  "local_news": [{"title": "Title", "link": "URL", "summary": "Brief"}],
+  "member_submissions": [],
+  "looking_ahead": ["Upcoming item"],
+  "closing": "Sign-off :wave:"
+}
 
-Use Slack-compatible markdown. Keep total length under 800 words.
-Be warm and inclusive, with light touches of humor.
-
-Privacy rules:
-- Public channels: Can quote and link
-- Private channels: Summarize themes only, no names or links
-- Member submissions: Respect attribution preferences
+Use Slack mrkdwn: *bold*, _italic_, <url|text> links, :emoji:.
+NO markdown headers, tables, or horizontal rules.
 """
+
+
+def _parse_newsletter_json(content: str) -> Optional[dict]:
+    """Parse newsletter JSON from Claude's response.
+
+    Handles various formats Claude might return:
+    - Pure JSON
+    - JSON in markdown code blocks
+    - JSON with surrounding text
+
+    Args:
+        content: Raw response from Claude
+
+    Returns:
+        Parsed dict or None if parsing fails
+    """
+    if not content:
+        return None
+
+    # Try to extract JSON from markdown code block
+    json_match = re.search(r'```(?:json)?\s*\n?([\s\S]*?)\n?```', content)
+    if json_match:
+        json_str = json_match.group(1).strip()
+    else:
+        # Try to find JSON object directly
+        # Look for content starting with { and ending with }
+        json_match = re.search(r'\{[\s\S]*\}', content)
+        if json_match:
+            json_str = json_match.group(0)
+        else:
+            json_str = content.strip()
+
+    try:
+        parsed = json.loads(json_str)
+        if not isinstance(parsed, dict):
+            logger.warning("Parsed JSON is not a dict")
+            return None
+
+        # Validate required fields exist
+        required_fields = ['week_dates', 'opening_hook', 'closing']
+        missing = [f for f in required_fields if f not in parsed]
+        if missing:
+            logger.warning(f"JSON missing required fields: {missing}")
+            # Still return the parsed content, just log the warning
+
+        return parsed
+
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse newsletter JSON: {e}")
+        logger.debug(f"Content that failed to parse: {json_str[:500]}...")
+        return None
+
+
+def _structured_to_markdown(content: dict) -> str:
+    """Convert structured content dict to markdown string for storage.
+
+    This provides a readable fallback in case Block Kit rendering fails.
+
+    Args:
+        content: Structured newsletter content dict
+
+    Returns:
+        Markdown string representation
+    """
+    lines = []
+
+    week = content.get('week_dates', 'This Week')
+    lines.append(f":newspaper: *TCSC Weekly Dispatch* :ski:")
+    lines.append(f"_{week}_")
+    lines.append("")
+
+    if content.get('opening_hook'):
+        lines.append(content['opening_hook'])
+        lines.append("")
+
+    if content.get('week_in_review'):
+        lines.append("*:speech_balloon: Week in Review*")
+        for item in content['week_in_review']:
+            lines.append(f"• {item}")
+        lines.append("")
+
+    if content.get('trail_conditions'):
+        lines.append("*:ski: Trail Conditions*")
+        for trail in content['trail_conditions']:
+            loc = trail.get('location', '')
+            status = trail.get('status', '')
+            quality = trail.get('quality', '')
+            lines.append(f"• *{loc}*: {status}, {quality}")
+        lines.append("")
+
+    if content.get('local_news'):
+        lines.append("*:newspaper: Local Ski News*")
+        for news in content['local_news']:
+            title = news.get('title', '')
+            link = news.get('link', '')
+            if link:
+                lines.append(f"• <{link}|{title}>")
+            else:
+                lines.append(f"• {title}")
+        lines.append("")
+
+    if content.get('member_submissions'):
+        lines.append("*:raised_hands: Member Submissions*")
+        for sub in content['member_submissions']:
+            text = sub.get('content', '')
+            attr = sub.get('attribution', 'Anonymous')
+            lines.append(f"• {text} _— {attr}_")
+        lines.append("")
+
+    if content.get('looking_ahead'):
+        lines.append("*:calendar: Looking Ahead*")
+        for item in content['looking_ahead']:
+            lines.append(f"• {item}")
+        lines.append("")
+
+    if content.get('closing'):
+        lines.append(content['closing'])
+
+    return "\n".join(lines)
 
 
 def build_generation_context(context: NewsletterContext) -> str:
@@ -239,10 +359,12 @@ def generate_newsletter(
     """
     if not ANTHROPIC_AVAILABLE:
         logger.warning("Anthropic SDK not available, using fallback generator")
-        fallback_content = generate_fallback_newsletter(context)
+        structured = generate_fallback_newsletter(context)
+        content = _structured_to_markdown(structured)
         return GenerationResult(
             success=True,
-            content=fallback_content,
+            content=content,
+            structured_content=structured,
             version_number=0,
             model_used="fallback",
             tokens_used=0,
@@ -298,17 +420,31 @@ Double-check that all links are properly formatted and all names are attributed 
                 error="Empty response from Claude API"
             )
 
-        content = response.content[0].text
+        raw_content = response.content[0].text
         tokens_used = response.usage.input_tokens + response.usage.output_tokens
 
         logger.info(f"  Response received in {elapsed:.2f}s")
         logger.info(f"  Tokens used: {tokens_used}")
-        logger.info(f"  Content length: {len(content)} chars")
+        logger.info(f"  Content length: {len(raw_content)} chars")
+
+        # Try to parse as JSON
+        structured_content = _parse_newsletter_json(raw_content)
+
+        if structured_content:
+            logger.info("  Successfully parsed JSON response")
+            # Convert to markdown for storage/fallback
+            content = _structured_to_markdown(structured_content)
+        else:
+            logger.warning("  Could not parse JSON, using raw content")
+            content = raw_content
+            structured_content = None
+
         logger.info("=" * 50)
 
         return GenerationResult(
             success=True,
             content=content,
+            structured_content=structured_content,
             version_number=0,  # Set by caller
             model_used=DEFAULT_MODEL,
             tokens_used=tokens_used,
@@ -319,10 +455,12 @@ Double-check that all links are properly formatted and all names are attributed 
         logger.info("  Falling back to template-based generation")
         logger.info("=" * 50)
 
-        fallback_content = generate_fallback_newsletter(context)
+        structured = generate_fallback_newsletter(context)
+        content = _structured_to_markdown(structured)
         return GenerationResult(
             success=True,
-            content=fallback_content,
+            content=content,
+            structured_content=structured,
             version_number=0,
             model_used="fallback",
             tokens_used=0,
@@ -330,7 +468,7 @@ Double-check that all links are properly formatted and all names are attributed 
         )
 
 
-def generate_fallback_newsletter(context: NewsletterContext) -> str:
+def generate_fallback_newsletter(context: NewsletterContext) -> dict:
     """Generate newsletter using template-based fallback.
 
     Used when Claude API is unavailable or fails.
@@ -339,62 +477,62 @@ def generate_fallback_newsletter(context: NewsletterContext) -> str:
         context: NewsletterContext with all collected data
 
     Returns:
-        Template-generated newsletter content
+        Structured newsletter content dict
     """
     logger.info("Generating fallback newsletter")
 
-    lines = []
-
-    # Header
     week_str = f"{context.week_start.strftime('%B %d')} - {context.week_end.strftime('%B %d, %Y')}"
-    lines.append(f":newspaper: *TCSC Weekly Dispatch* :ski:")
-    lines.append(f"_Week of {week_str}_")
-    lines.append("")
 
-    # Opening
-    lines.append("Hey TCSC! Here's your weekly roundup of what's happening in our skiing community.")
-    lines.append("")
+    # Build structured content
+    structured = {
+        "week_dates": week_str,
+        "opening_hook": "Hey TCSC! :ski: Here's your weekly roundup of what's happening in our skiing community.",
+        "week_in_review": [],
+        "trail_conditions": [],
+        "local_news": [],
+        "member_submissions": [],
+        "looking_ahead": [],
+        "closing": "See you on the trails! :wave:\n\n_This newsletter was generated automatically._"
+    }
 
     # Week in Review
     if context.slack_messages:
-        lines.append("*:speech_balloon: Week in Review*")
         public_msgs = [m for m in context.slack_messages if m.visibility == MessageVisibility.PUBLIC]
         for msg in public_msgs[:5]:
-            lines.append(f"- {msg.user_name} in #{msg.channel_name}: {msg.text[:100]}...")
-        lines.append("")
+            link_text = f"<{msg.permalink}|{msg.user_name}>" if msg.permalink else msg.user_name
+            structured["week_in_review"].append(
+                f"{link_text} in #{msg.channel_name}: {msg.text[:100]}..."
+            )
 
     # Trail Conditions
     if context.trail_conditions:
-        lines.append("*:evergreen_tree: Trail Conditions*")
         for trail in context.trail_conditions:
-            emoji = ":white_check_mark:" if trail.trails_open == 'all' else ":warning:"
-            lines.append(f"{emoji} *{trail.location}*: {trail.trails_open} open, {trail.ski_quality} quality")
-        lines.append("")
+            structured["trail_conditions"].append({
+                "location": trail.location,
+                "status": trail.trails_open.capitalize() if trail.trails_open else "Unknown",
+                "quality": trail.ski_quality.capitalize() if trail.ski_quality else "Unknown",
+                "notes": trail.notes[:100] if trail.notes else ""
+            })
 
     # Local News
     if context.news_items:
-        lines.append("*:newspaper: Local Ski News*")
         for item in context.news_items[:3]:
-            lines.append(f"- <{item.url}|{item.title}>")
-        lines.append("")
+            structured["local_news"].append({
+                "title": item.title,
+                "link": item.url,
+                "summary": item.summary[:100] if item.summary else ""
+            })
 
     # Member Submissions
     if context.submissions:
-        lines.append("*:star: Member Submissions*")
         for sub in context.submissions:
-            if sub.permission_to_name:
-                lines.append(f"- From {sub.display_name}: {sub.content[:150]}...")
-            else:
-                lines.append(f"- Anonymous member shares: {sub.content[:150]}...")
-        lines.append("")
+            structured["member_submissions"].append({
+                "type": sub.submission_type.value,
+                "content": sub.content[:150],
+                "attribution": sub.display_name if sub.permission_to_name else "Anonymous"
+            })
 
-    # Closing
-    lines.append("---")
-    lines.append("See you on the trails! :wave:")
-    lines.append("")
-    lines.append("_This newsletter was generated automatically. Reply with feedback or suggestions!_")
-
-    return "\n".join(lines)
+    return structured
 
 
 def save_newsletter_version(
