@@ -484,11 +484,16 @@ def build_coach_weekly_summary_blocks(
     week_end = week_start + timedelta(days=6)
     week_range = f"{week_start.strftime('%B %-d')}-{week_end.strftime('%-d, %Y')}"
 
-    # Build practice lookup by day of week
+    # Build practice lookup by day of week (list per day for multiple practices)
     practice_by_day = {}
     for p in practices:
         day_lower = p.date.strftime('%A').lower()
-        practice_by_day[day_lower] = p
+        if day_lower not in practice_by_day:
+            practice_by_day[day_lower] = []
+        practice_by_day[day_lower].append(p)
+
+    # Track which practices have been shown (by practice ID)
+    shown_practice_ids = set()
 
     # ==========================================================================
     # HEADER
@@ -520,7 +525,14 @@ def build_coach_weekly_summary_blocks(
         day_offset = days_map.get(day_name, 0)
         day_date = week_start + timedelta(days=day_offset)
 
-        practice = practice_by_day.get(day_name)
+        # Find the next unshown practice for this day
+        practice = None
+        day_practices = practice_by_day.get(day_name, [])
+        for p in day_practices:
+            if p.id not in shown_practice_ids:
+                practice = p
+                shown_practice_ids.add(p.id)
+                break
 
         if practice:
             # ==========================================================
