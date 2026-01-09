@@ -14,7 +14,9 @@ Scheduled Jobs:
 - 7:00 AM: Skipper morning check (today's practices) → posts recap to #practices-core
 - 7:15 AM: Skipper 48h check (workout reminders) → posts to #collab-coaches-practices
 - 7:30 AM: Skipper 24h check (lead confirmation) → posts to #coord-practices-leads-assists
+- 8:00 AM: Newsletter daily update → regenerates living post
 - 4:00 PM Sunday: Coach weekly review summary (collab-coaches-practices)
+- 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
 """
@@ -432,6 +434,90 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
         app.logger.info("=" * 60)
 
 
+def run_newsletter_daily_job(app: Flask):
+    """Execute the newsletter daily update job within app context.
+
+    Runs at 8am daily to regenerate the newsletter with latest content
+    from Slack channels and external news sources.
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from app.newsletter.service import run_daily_update
+
+        app.logger.info("=" * 60)
+        app.logger.info("Starting newsletter daily update job")
+        app.logger.info(f"Time: {datetime.now().isoformat()}")
+        app.logger.info("=" * 60)
+
+        try:
+            result = run_daily_update()
+
+            if result.get('skipped'):
+                app.logger.info(f"Newsletter daily update skipped: {result.get('reason')}")
+            else:
+                app.logger.info(
+                    f"Newsletter daily update complete: "
+                    f"newsletter_id={result.get('newsletter_id')}, "
+                    f"version={result.get('version_number')}, "
+                    f"messages={result.get('messages_collected', 0)}, "
+                    f"news_items={result.get('news_items_scraped', 0)}"
+                )
+
+            if result.get('errors'):
+                for error in result['errors'][:5]:
+                    app.logger.warning(f"Newsletter error: {error}")
+
+        except Exception as e:
+            app.logger.error(f"Newsletter daily update failed: {e}", exc_info=True)
+
+        app.logger.info("=" * 60)
+        app.logger.info("Newsletter daily update job complete")
+        app.logger.info("=" * 60)
+
+
+def run_newsletter_sunday_job(app: Flask):
+    """Execute the newsletter Sunday finalization job within app context.
+
+    Runs at 6pm on Sundays to finalize the newsletter and mark it
+    ready for admin review before publication.
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from app.newsletter.service import run_sunday_finalize
+
+        app.logger.info("=" * 60)
+        app.logger.info("Starting newsletter Sunday finalization job")
+        app.logger.info(f"Time: {datetime.now().isoformat()}")
+        app.logger.info("=" * 60)
+
+        try:
+            result = run_sunday_finalize()
+
+            if result.get('skipped'):
+                app.logger.info(f"Newsletter finalization skipped: {result.get('reason')}")
+            else:
+                app.logger.info(
+                    f"Newsletter finalization complete: "
+                    f"newsletter_id={result.get('newsletter_id')}, "
+                    f"status={result.get('previous_status')} -> {result.get('new_status')}"
+                )
+
+            if result.get('errors'):
+                for error in result['errors'][:5]:
+                    app.logger.warning(f"Newsletter error: {error}")
+
+        except Exception as e:
+            app.logger.error(f"Newsletter Sunday finalization failed: {e}", exc_info=True)
+
+        app.logger.info("=" * 60)
+        app.logger.info("Newsletter Sunday finalization job complete")
+        app.logger.info("=" * 60)
+
+
 def init_scheduler(app: Flask) -> bool:
     """Initialize the scheduler within the Flask application.
 
@@ -616,6 +702,41 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=1800
     )
 
+    # ========================================================================
+    # Newsletter Jobs (Weekly Dispatch)
+    # ========================================================================
+
+    # Newsletter daily update: 8:00 AM daily (after practice announcements)
+    scheduler.add_job(
+        func=run_newsletter_daily_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=8,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='newsletter_daily_update',
+        name='Newsletter Daily Update',
+        replace_existing=True,
+        misfire_grace_time=3600  # 1 hour grace
+    )
+
+    # Newsletter Sunday finalize: 6:00 PM Sunday (before weekly summary)
+    scheduler.add_job(
+        func=run_newsletter_sunday_job,
+        args=[app],
+        trigger=CronTrigger(
+            day_of_week='sun',
+            hour=18,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='newsletter_sunday_finalize',
+        name='Newsletter Sunday Finalize',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
     scheduler.start()
 
     app.logger.info("=" * 60)
@@ -692,7 +813,8 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         app: Flask application instance.
         job_type: One of 'morning_check', '48h_check', '24h_check',
                   'weekly_summary', 'coach_weekly_summary', 'expire_proposals',
-                  'practice_announcements'
+                  'practice_announcements', 'newsletter_daily_update',
+                  'newsletter_sunday_finalize'
         channel_override: Optional channel name to override default for Slack posts.
 
     Returns:
@@ -705,7 +827,9 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         'weekly_summary': run_weekly_summary_job,
         'coach_weekly_summary': run_coach_weekly_summary_job,
         'expire_proposals': run_expire_proposals_job,
-        'practice_announcements': run_practice_announcements_job
+        'practice_announcements': run_practice_announcements_job,
+        'newsletter_daily_update': run_newsletter_daily_job,
+        'newsletter_sunday_finalize': run_newsletter_sunday_job,
     }
 
     # Jobs that support channel_override

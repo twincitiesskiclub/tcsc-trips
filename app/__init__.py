@@ -6,7 +6,16 @@ from flask_migrate import Migrate
 from .auth import init_oauth
 from .config import configure_database, load_stripe_config
 from .models import db, SocialEvent
+from .newsletter.models import (
+    Newsletter,
+    NewsletterVersion,
+    NewsletterSubmission,
+    NewsletterDigest,
+    NewsletterNewsItem,
+    NewsletterPrompt,
+)
 from .routes.admin import admin
+from .routes.admin_newsletter import admin_newsletter_bp
 from .routes.admin_practices import admin_practices_bp
 from .routes.admin_scheduled_tasks import admin_scheduled_tasks
 from .routes.admin_skipper import admin_skipper_bp
@@ -39,6 +48,7 @@ def create_app(environment=None):
     app.register_blueprint(socials)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
+    app.register_blueprint(admin_newsletter_bp)
     app.register_blueprint(admin_practices_bp)
     app.register_blueprint(admin_scheduled_tasks)
     app.register_blueprint(admin_skipper_bp)

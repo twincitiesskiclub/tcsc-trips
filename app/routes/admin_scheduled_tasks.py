@@ -44,6 +44,7 @@ TRIGGERABLE_JOBS = [
         'default_channel': '#practices-core',
         'schedule': 'Daily 7:00am',
         'supports_channel_override': True,
+        'category': 'practices',
     },
     {
         'id': '48h_check',
@@ -52,6 +53,7 @@ TRIGGERABLE_JOBS = [
         'default_channel': '#collab-coaches-practices',
         'schedule': 'Daily 7:15am',
         'supports_channel_override': True,
+        'category': 'practices',
     },
     {
         'id': '24h_check',
@@ -60,6 +62,7 @@ TRIGGERABLE_JOBS = [
         'default_channel': '#coord-practices-leads-assists',
         'schedule': 'Daily 7:30am',
         'supports_channel_override': True,
+        'category': 'practices',
     },
     {
         'id': 'practice_announcements',
@@ -68,6 +71,7 @@ TRIGGERABLE_JOBS = [
         'default_channel': '#practices',
         'schedule': '8:00am / 8:00pm',
         'supports_channel_override': True,
+        'category': 'practices',
     },
     {
         'id': 'coach_weekly_summary',
@@ -76,6 +80,7 @@ TRIGGERABLE_JOBS = [
         'default_channel': '#collab-coaches-practices',
         'schedule': 'Sundays 4:00pm',
         'supports_channel_override': True,
+        'category': 'practices',
     },
     {
         'id': 'weekly_summary',
@@ -84,6 +89,25 @@ TRIGGERABLE_JOBS = [
         'default_channel': '#practices',
         'schedule': 'Sundays 8:30pm',
         'supports_channel_override': True,
+        'category': 'practices',
+    },
+    {
+        'id': 'newsletter_daily_update',
+        'name': 'Newsletter Daily Update',
+        'description': 'Regenerate newsletter with latest content',
+        'default_channel': None,
+        'schedule': 'Daily 8:00am',
+        'supports_channel_override': False,
+        'category': 'newsletter',
+    },
+    {
+        'id': 'newsletter_sunday_finalize',
+        'name': 'Newsletter Sunday Finalize',
+        'description': 'Finalize newsletter and add review buttons',
+        'default_channel': None,
+        'schedule': 'Sundays 6:00pm',
+        'supports_channel_override': False,
+        'category': 'newsletter',
     },
 ]
 

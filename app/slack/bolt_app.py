@@ -84,9 +84,65 @@ if _bot_token:
             blocks=response.get("blocks")
         )
 
+    @bolt_app.command("/dispatch")
+    def handle_dispatch_command(ack, command, client, logger):
+        """Handle /dispatch slash command - opens submission modal.
+
+        Opens a modal for members to submit content to the Weekly Dispatch
+        newsletter (member spotlights, stories, events, announcements).
+        """
+        ack()
+
+        user_id = command.get("user_id", "")
+        trigger_id = command.get("trigger_id")
+
+        if not trigger_id:
+            logger.error("No trigger_id in /dispatch command")
+            client.chat_postEphemeral(
+                channel=command["channel_id"],
+                user=user_id,
+                text=":warning: Could not open submission form. Please try again."
+            )
+            return
+
+        from app.newsletter.modals import build_dispatch_submission_modal
+
+        modal = build_dispatch_submission_modal()
+
+        try:
+            client.views_open(trigger_id=trigger_id, view=modal)
+        except Exception as e:
+            logger.error(f"Failed to open dispatch modal: {e}")
+            client.chat_postEphemeral(
+                channel=command["channel_id"],
+                user=user_id,
+                text=":warning: Could not open submission form. Please try again."
+            )
+
     # =========================================================================
     # Block Actions (Button Clicks)
     # =========================================================================
+
+    @bolt_app.action("open_dispatch_modal")
+    def handle_open_dispatch_modal(ack, body, action, client, logger):
+        """Handle 'Submit to Dispatch' button from App Home."""
+        ack()
+
+        user_id = body["user"]["id"]
+        trigger_id = body.get("trigger_id")
+
+        if not trigger_id:
+            logger.error("No trigger_id in open_dispatch_modal action")
+            return
+
+        from app.newsletter.modals import build_dispatch_submission_modal
+
+        modal = build_dispatch_submission_modal()
+
+        try:
+            client.views_open(trigger_id=trigger_id, view=modal)
+        except Exception as e:
+            logger.error(f"Failed to open dispatch modal from App Home: {e}")
 
     @bolt_app.action("rsvp_going")
     @bolt_app.action("rsvp_not_going")
@@ -326,6 +382,132 @@ if _bot_token:
 
             # Open the modal
             client.views_open(trigger_id=trigger_id, view=modal)
+
+    @bolt_app.action("newsletter_approve")
+    def handle_newsletter_approve(ack, body, action, client, logger):
+        """Handle newsletter approval button click.
+
+        1. Ack immediately
+        2. Get newsletter from action value (newsletter_id)
+        3. Update newsletter status to APPROVED
+        4. Publish to announcement channel
+        5. Update living post to remove buttons
+        6. Send confirmation
+        """
+        ack()
+
+        user_id = body["user"]["id"]
+        newsletter_id = int(action["value"])
+
+        with get_app_context():
+            from app.newsletter.models import Newsletter
+            from app.newsletter.interfaces import NewsletterStatus
+            from app.models import db
+
+            newsletter = Newsletter.query.get(newsletter_id)
+            if not newsletter:
+                channel_id = body.get("channel", {}).get("id")
+                if channel_id:
+                    client.chat_postEphemeral(
+                        channel=channel_id,
+                        user=user_id,
+                        text=":warning: Newsletter not found."
+                    )
+                return
+
+            if newsletter.status == NewsletterStatus.PUBLISHED.value:
+                channel_id = body.get("channel", {}).get("id")
+                if channel_id:
+                    client.chat_postEphemeral(
+                        channel=channel_id,
+                        user=user_id,
+                        text=":information_source: This newsletter has already been published."
+                    )
+                return
+
+            # Update status to approved
+            newsletter.status = NewsletterStatus.APPROVED.value
+            newsletter.published_by_slack_uid = user_id
+            db.session.commit()
+
+            # Publish to announcement channel
+            try:
+                from app.newsletter.slack_actions import publish_to_announcement_channel
+                result = publish_to_announcement_channel(newsletter)
+
+                if result.success:
+                    newsletter.status = NewsletterStatus.PUBLISHED.value
+                    newsletter.published_at = datetime.utcnow()
+                    db.session.commit()
+
+                    # Send confirmation
+                    channel_id = body.get("channel", {}).get("id")
+                    if channel_id:
+                        client.chat_postEphemeral(
+                            channel=channel_id,
+                            user=user_id,
+                            text=":white_check_mark: Newsletter published to #announcements-tcsc!"
+                        )
+                    logger.info(f"Newsletter {newsletter_id} published by {user_id}")
+                else:
+                    channel_id = body.get("channel", {}).get("id")
+                    if channel_id:
+                        client.chat_postEphemeral(
+                            channel=channel_id,
+                            user=user_id,
+                            text=f":warning: Failed to publish: {result.error}"
+                        )
+            except ImportError:
+                # slack_actions module not yet implemented
+                logger.warning("newsletter.slack_actions not available - skipping publish")
+                channel_id = body.get("channel", {}).get("id")
+                if channel_id:
+                    client.chat_postEphemeral(
+                        channel=channel_id,
+                        user=user_id,
+                        text=":warning: Newsletter approved but publish module not available."
+                    )
+
+    @bolt_app.action("newsletter_request_changes")
+    def handle_newsletter_request_changes(ack, body, action, client, logger):
+        """Handle request changes button - opens feedback modal.
+
+        1. Ack immediately
+        2. Open modal for feedback input
+        """
+        ack()
+
+        user_id = body["user"]["id"]
+        newsletter_id = int(action["value"])
+        trigger_id = body.get("trigger_id")
+
+        if not trigger_id:
+            logger.error("No trigger_id in newsletter_request_changes action")
+            return
+
+        # Build and open feedback modal
+        modal = {
+            "type": "modal",
+            "callback_id": "newsletter_feedback",
+            "private_metadata": str(newsletter_id),
+            "title": {"type": "plain_text", "text": "Request Changes"},
+            "submit": {"type": "plain_text", "text": "Submit Feedback"},
+            "blocks": [
+                {
+                    "type": "input",
+                    "block_id": "feedback_block",
+                    "label": {"type": "plain_text", "text": "What changes would you like?"},
+                    "element": {
+                        "type": "plain_text_input",
+                        "action_id": "feedback_text",
+                        "multiline": True,
+                        "placeholder": {"type": "plain_text", "text": "Describe the changes needed..."}
+                    }
+                }
+            ]
+        }
+
+        client.views_open(trigger_id=trigger_id, view=modal)
 
     @bolt_app.action("create_practice_from_summary")
     def handle_create_practice_from_summary(ack, body, action, client, logger):
@@ -775,6 +957,163 @@ if _bot_token:
                     logger.info(f"Substitution request posted for practice {practice_id}")
                 else:
                     logger.error(f"Failed to post substitution request: {result.get('error')}")
+
+    @bolt_app.view("dispatch_submission")
+    def handle_dispatch_submission(ack, body, view, client, logger):
+        """Handle dispatch modal submission - saves to database.
+
+        Creates a NewsletterSubmission record and sends a confirmation
+        ephemeral message to the user.
+        """
+        ack()
+
+        user_id = body["user"]["id"]
+        user_name = body["user"].get("name", "Unknown")
+        values = _safe_get(view, "state", "values", default={})
+
+        # Extract form values
+        submission_type = _safe_get(
+            values, "type_block", "submission_type", "selected_option", "value",
+            default="content"
+        )
+        content = _safe_get(
+            values, "content_block", "submission_content", "value",
+            default=""
+        )
+
+        # Check attribution checkbox
+        attribution_options = _safe_get(
+            values, "attribution_block", "permission_to_name", "selected_options",
+            default=[]
+        )
+        permission_to_name = any(
+            opt.get("value") == "include_name" for opt in attribution_options
+        )
+
+        if not content or len(content.strip()) < 10:
+            logger.warning(f"Dispatch submission from {user_id} was empty or too short")
+            return
+
+        with get_app_context():
+            from app.newsletter.models import NewsletterSubmission, Newsletter
+            from app.newsletter.interfaces import SubmissionType, SubmissionStatus
+            from app.models import db
+
+            # Get display name from Slack profile if available
+            display_name = user_name
+            try:
+                user_info = client.users_info(user=user_id)
+                if user_info.get("ok"):
+                    profile = user_info.get("user", {}).get("profile", {})
+                    display_name = (
+                        profile.get("display_name") or
+                        profile.get("real_name") or
+                        user_name
+                    )
+            except Exception as e:
+                logger.warning(f"Could not fetch user profile for {user_id}: {e}")
+
+            # Get current newsletter if exists (submissions can also be unattached)
+            current_newsletter = Newsletter.get_current_week()
+            newsletter_id = current_newsletter.id if current_newsletter else None
+
+            # Create submission record
+            submission = NewsletterSubmission(
+                newsletter_id=newsletter_id,
+                slack_user_id=user_id,
+                display_name=display_name,
+                submission_type=submission_type,
+                content=content.strip(),
+                permission_to_name=permission_to_name,
+                status=SubmissionStatus.PENDING.value
+            )
+            db.session.add(submission)
+            db.session.commit()
+
+            logger.info(
+                f"Newsletter submission #{submission.id} created: "
+                f"type={submission_type}, user={user_id}, permission_to_name={permission_to_name}"
+            )
+
+            # Send confirmation message
+            from app.newsletter.modals import build_dispatch_confirmation_blocks
+
+            content_preview = content[:100].strip()
+            confirmation_blocks = build_dispatch_confirmation_blocks(
+                submission_type=submission_type,
+                content_preview=content_preview,
+                permission_to_name=permission_to_name
+            )
+
+            try:
+                client.chat_postMessage(
+                    channel=user_id,  # DM to user
+                    text="Your submission to the Weekly Dispatch has been received!",
+                    blocks=confirmation_blocks
+                )
+            except Exception as e:
+                logger.warning(f"Could not send dispatch confirmation DM to {user_id}: {e}")
+
+    @bolt_app.view("newsletter_feedback")
+    def handle_newsletter_feedback_submission(ack, body, view, client, logger):
+        """Handle feedback modal submission.
+
+        1. Save feedback to newsletter.admin_feedback
+        2. Trigger regeneration with feedback
+        3. Confirm to user
+        """
+        ack()
+
+        user_id = body["user"]["id"]
+        newsletter_id = int(view.get("private_metadata") or "0")
+        values = _safe_get(view, "state", "values", default={})
+
+        feedback = _safe_get(values, "feedback_block", "feedback_text", "value", default="")
+
+        if not feedback or len(feedback.strip()) < 5:
+            logger.warning(f"Newsletter feedback from {user_id} was empty or too short")
+            return
+
+        with get_app_context():
+            from app.newsletter.models import Newsletter
+            from app.models import db
+
+            newsletter = Newsletter.query.get(newsletter_id)
+            if not newsletter:
+                logger.error(f"Newsletter {newsletter_id} not found for feedback")
+                return
+
+            # Save feedback
+            newsletter.admin_feedback = feedback.strip()
+            db.session.commit()
+
+            logger.info(f"Newsletter {newsletter_id} feedback received from {user_id}")
+
+            # Post feedback to thread (if slack_actions module is available)
+            try:
+                from app.newsletter.slack_actions import post_feedback_request
+                post_feedback_request(newsletter, feedback.strip())
+            except ImportError:
+                logger.warning("newsletter.slack_actions not available - skipping thread post")
+
+            # Note: Regeneration can be triggered by:
+            # 1. The next daily scheduled job which will pick up the feedback
+            # 2. Or manually triggering regeneration
+            # The service module (when implemented) can handle:
+            # generate_newsletter_version(newsletter, context, trigger='feedback')
+
+            # Send DM confirmation to the user who submitted feedback
+            try:
+                client.chat_postMessage(
+                    channel=user_id,
+                    text=(
+                        ":memo: Your feedback has been recorded for the Weekly Dispatch.\n"
+                        f"*Feedback:* {feedback[:200]}{'...' if len(feedback) > 200 else ''}\n\n"
+                        "The newsletter will be regenerated with your feedback incorporated."
+                    )
+                )
+            except Exception as e:
+                logger.warning(f"Could not send feedback confirmation DM to {user_id}: {e}")
 
     # =========================================================================
     # Events
