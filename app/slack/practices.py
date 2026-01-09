@@ -786,10 +786,264 @@ def update_practice_rsvp_counts(practice: Practice) -> dict:
 
 
 # =============================================================================
-# RSVP Logging (to #tcsc-logging)
+# Channel IDs
 # =============================================================================
 
 LOGGING_CHANNEL_ID = "C0A5VEV86Q6"  # #tcsc-logging
+PRACTICES_CORE_CHANNEL_ID = "C0535SLU7TR"  # #practices-core (daily recaps + proposals)
+COORD_CHANNEL_ID = "C02J4DGCFL2"  # #coord-practices-leads-assists (24h lead reminders)
+
+
+# KJ's Slack ID for 48h check tagging
+KJ_SLACK_ID = "U02K45N1JEV"
+
+
+def post_48h_workout_reminder(practices_needing_workout: list) -> dict:
+    """Post 48h workout reminder to #collab-coaches-practices.
+
+    Tags @kj as a safety check before practices go live.
+
+    Args:
+        practices_needing_workout: List of Practice objects missing workouts
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - message_ts: str (if success)
+        - error: str (if failure)
+    """
+    from app.practices.service import convert_practice_to_info
+
+    if not practices_needing_workout:
+        return {'success': True, 'message_ts': None, 'skipped': True}
+
+    client = get_slack_client()
+
+    # Build message blocks
+    blocks = []
+
+    blocks.append({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": ":memo: Workout Check - 48 Hours Out",
+            "emoji": True
+        }
+    })
+
+    blocks.append({
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": f"<@{KJ_SLACK_ID}> The following practice(s) need workout descriptions before posting:"
+        }
+    })
+
+    blocks.append({"type": "divider"})
+
+    for practice in practices_needing_workout:
+        practice_info = convert_practice_to_info(practice)
+        time_str = practice_info.date.strftime('%A, %b %-d at %-I:%M %p')
+        location = practice_info.location.name if practice_info.location else "TBD"
+
+        # Get coach names
+        coaches = [lead for lead in practice.leads if lead.role == 'coach']
+        coach_text = ", ".join([f"<@{c.user.slack_user.slack_uid}>" for c in coaches
+                               if c.user and c.user.slack_user]) or "No coach assigned"
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{time_str}*\n:round_pushpin: {location}\n:bust_in_silhouette: {coach_text}"
+            }
+        })
+
+    try:
+        response = client.chat_postMessage(
+            channel=COLLAB_CHANNEL_ID,
+            blocks=blocks,
+            text="48h Workout Check",
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        message_ts = response.get('ts')
+        current_app.logger.info(f"Posted 48h workout reminder to #collab-coaches-practices (ts: {message_ts})")
+
+        return {
+            'success': True,
+            'message_ts': message_ts,
+            'channel_id': COLLAB_CHANNEL_ID
+        }
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error posting 48h workout reminder: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def post_24h_lead_confirmation(practices_needing_confirmation: list) -> dict:
+    """Post 24h lead confirmation request to #coord-practices-leads-assists.
+
+    Tags the assigned leads for each practice needing confirmation.
+
+    Args:
+        practices_needing_confirmation: List of tuples (Practice, lead_slack_ids)
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - message_ts: str (if success)
+        - error: str (if failure)
+    """
+    from app.practices.service import convert_practice_to_info
+
+    if not practices_needing_confirmation:
+        return {'success': True, 'message_ts': None, 'skipped': True}
+
+    client = get_slack_client()
+
+    # Build message blocks
+    blocks = []
+
+    blocks.append({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": ":clock1: Lead Confirmation - Tomorrow's Practices",
+            "emoji": True
+        }
+    })
+
+    blocks.append({
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": "Please confirm your availability for tomorrow's practice(s):"
+        }
+    })
+
+    blocks.append({"type": "divider"})
+
+    for practice, lead_slack_ids in practices_needing_confirmation:
+        practice_info = convert_practice_to_info(practice)
+        time_str = practice_info.date.strftime('%-I:%M %p')
+        location = practice_info.location.name if practice_info.location else "TBD"
+
+        # Build lead mentions
+        lead_mentions = " ".join([f"<@{uid}>" for uid in lead_slack_ids]) or "No lead assigned"
+
+        # Practice type info
+        type_names = ", ".join([t.name for t in practice_info.practice_types]) if practice_info.practice_types else "Practice"
+
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"{lead_mentions}\n*{time_str}* - {type_names} at *{location}*"
+            }
+        })
+
+        # Add confirm/need-sub buttons
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": ":white_check_mark: I'll be there", "emoji": True},
+                    "style": "primary",
+                    "action_id": "lead_confirm",
+                    "value": str(practice.id)
+                },
+                {
+                    "type": "button",
+                    "text": {"type": "plain_text", "text": ":sos: Need a sub", "emoji": True},
+                    "style": "danger",
+                    "action_id": "lead_need_sub",
+                    "value": str(practice.id)
+                }
+            ]
+        })
+
+        blocks.append({"type": "divider"})
+
+    try:
+        response = client.chat_postMessage(
+            channel=COORD_CHANNEL_ID,
+            blocks=blocks,
+            text="24h Lead Confirmation",
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        message_ts = response.get('ts')
+        current_app.logger.info(f"Posted 24h lead confirmation to #coord-practices-leads-assists (ts: {message_ts})")
+
+        return {
+            'success': True,
+            'message_ts': message_ts,
+            'channel_id': COORD_CHANNEL_ID
+        }
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error posting 24h lead confirmation: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def post_daily_practice_recap(evaluations: list[dict]) -> dict:
+    """Post daily practice conditions recap to #practices-core.
+
+    Called by morning_check routine at 7am when there are practices today.
+    Shows weather, trail conditions, lead status, and any cancellation proposals.
+
+    Args:
+        evaluations: List of dicts with keys:
+            - practice: PracticeInfo
+            - evaluation: PracticeEvaluation (or None)
+            - summary: str
+            - is_go: bool
+            - proposal_id: int (if cancellation proposed)
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - message_ts: str (if success)
+        - error: str (if failure)
+    """
+    from app.slack.blocks import build_daily_practice_recap_blocks
+
+    client = get_slack_client()
+
+    # Check if any proposals were created
+    has_proposals = any(e.get('proposal_id') for e in evaluations)
+
+    # Build blocks
+    blocks = build_daily_practice_recap_blocks(evaluations, has_proposals)
+
+    try:
+        response = client.chat_postMessage(
+            channel=PRACTICES_CORE_CHANNEL_ID,
+            blocks=blocks,
+            text="Daily Practice Conditions Recap",
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        message_ts = response.get('ts')
+        current_app.logger.info(f"Posted daily practice recap to #practices-core (ts: {message_ts})")
+
+        return {
+            'success': True,
+            'message_ts': message_ts,
+            'channel_id': PRACTICES_CORE_CHANNEL_ID
+        }
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error posting daily practice recap: {error_msg}")
+        return {'success': False, 'error': error_msg}
 
 
 def create_practice_log_thread(practice: Practice) -> dict:

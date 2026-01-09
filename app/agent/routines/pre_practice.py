@@ -1,8 +1,8 @@
 """
 Pre-practice check routines (48h and 24h before practice).
 
-48h check: Nudge coaches to submit workout plan
-24h check: Confirm lead availability and provide weather update
+48h check: Post workout reminder to #collab-coaches-practices (tag @kj)
+24h check: Post lead confirmation to #coord-practices-leads-assists (tag leads)
 """
 
 import logging
@@ -14,8 +14,8 @@ from app.practices.models import Practice
 from app.agent.decision_engine import evaluate_practice, load_skipper_config
 from app.agent.brain import generate_evaluation_summary
 from app.slack.practices import (
-    send_workout_reminder,
-    send_lead_availability_request,
+    post_48h_workout_reminder,
+    post_24h_lead_confirmation,
     update_practice_announcement
 )
 
@@ -24,13 +24,13 @@ logger = logging.getLogger(__name__)
 
 def run_48h_check() -> dict:
     """
-    Check practices 48 hours out and nudge coaches for workout submission.
+    Check practices 48 hours out and post reminder to #collab-coaches-practices.
 
     This routine helps ensure workouts are posted with enough time for
-    members to see them and plan their participation.
+    members to see them and plan their participation. Tags @kj as a safety check.
 
     Returns:
-        Summary dict with nudge counts and results
+        Summary dict with results
     """
     logger.info("Running 48-hour pre-practice check")
 
@@ -58,9 +58,12 @@ def run_48h_check() -> dict:
         'checked': 0,
         'needs_workout': 0,
         'has_workout': 0,
-        'nudges_sent': 0,
+        'channel_post_sent': False,
         'practices': []
     }
+
+    # Collect practices needing workouts
+    practices_needing_workout = []
 
     for practice in practices:
         try:
@@ -84,37 +87,7 @@ def run_48h_check() -> dict:
                 logger.info(f"Practice {practice.id} needs workout submission")
                 results['needs_workout'] += 1
                 practice_result['status'] = 'needs_workout'
-
-                # Identify coaches to nudge
-                coaches = [lead for lead in practice.leads if lead.role == 'coach']
-
-                if coaches:
-                    logger.info(f"Nudging {len(coaches)} coach(es) for workout")
-                    practice_result['coaches_to_nudge'] = [
-                        lead.display_name for lead in coaches
-                    ]
-
-                    if not dry_run:
-                        # Send Slack DM to coaches
-                        for coach in coaches:
-                            slack_uid = coach.user.slack_user.slack_uid if coach.user and coach.user.slack_user else None
-                            if slack_uid:
-                                try:
-                                    result = send_workout_reminder(practice, slack_uid)
-                                    if result['success']:
-                                        results['nudges_sent'] += 1
-                                    else:
-                                        logger.warning(f"Failed to send reminder to {coach.display_name}: {result.get('error')}")
-                                except Exception as e:
-                                    logger.error(f"Error sending reminder to {coach.display_name}: {e}", exc_info=True)
-                            else:
-                                logger.warning(f"Coach {coach.display_name} has no Slack user ID")
-                    else:
-                        logger.info(f"[DRY RUN] Would nudge coaches: {practice_result['coaches_to_nudge']}")
-                        results['nudges_sent'] += len(coaches)
-                else:
-                    logger.warning(f"Practice {practice.id} has no coach assigned")
-                    practice_result['issue'] = 'no_coach'
+                practices_needing_workout.append(practice)
 
             results['practices'].append(practice_result)
 
@@ -125,19 +98,35 @@ def run_48h_check() -> dict:
                 'error': str(e)
             })
 
+    # Post channel reminder if any practices need workouts
+    if practices_needing_workout:
+        if not dry_run:
+            try:
+                post_result = post_48h_workout_reminder(practices_needing_workout)
+                results['channel_post_sent'] = post_result.get('success', False)
+                if post_result.get('success'):
+                    logger.info("Posted 48h workout reminder to #collab-coaches-practices")
+                else:
+                    logger.error(f"Failed to post 48h reminder: {post_result.get('error')}")
+            except Exception as e:
+                logger.error(f"Error posting 48h reminder: {e}", exc_info=True)
+        else:
+            logger.info(f"[DRY RUN] Would post reminder to #collab-coaches-practices for {len(practices_needing_workout)} practices")
+
     logger.info(f"48h check complete: {results['checked']} checked, "
                f"{results['needs_workout']} need workouts, "
-               f"{results['nudges_sent']} nudges sent")
+               f"channel_post_sent={results['channel_post_sent']}")
 
     return results
 
 
 def run_24h_check() -> dict:
     """
-    Check practices 24 hours out for lead confirmation and weather update.
+    Check practices 24 hours out and post lead confirmation request to
+    #coord-practices-leads-assists.
 
-    Provides final go/no-go assessment and alerts leads if conditions
-    have changed significantly since the 48h check.
+    Also provides weather updates to practice announcements if conditions
+    have changed significantly.
 
     Returns:
         Summary dict with confirmation status and weather updates
@@ -169,8 +158,12 @@ def run_24h_check() -> dict:
         'confirmed': 0,
         'needs_confirmation': 0,
         'weather_updates': 0,
+        'channel_post_sent': False,
         'practices': []
     }
+
+    # Collect practices needing lead confirmation with their lead Slack IDs
+    practices_needing_confirmation = []
 
     for practice in practices:
         try:
@@ -203,27 +196,15 @@ def run_24h_check() -> dict:
                 # Identify leads to contact
                 leads = [lead for lead in practice.leads if lead.role == 'lead']
                 if leads:
-                    practice_result['leads_to_contact'] = [
-                        lead.display_name for lead in leads
-                    ]
+                    lead_slack_ids = []
+                    for lead in leads:
+                        slack_uid = lead.user.slack_user.slack_uid if lead.user and lead.user.slack_user else None
+                        if slack_uid:
+                            lead_slack_ids.append(slack_uid)
 
-                    if not dry_run:
-                        # Send Slack DM to leads
-                        for lead in leads:
-                            slack_uid = lead.user.slack_user.slack_uid if lead.user and lead.user.slack_user else None
-                            if slack_uid:
-                                try:
-                                    result = send_lead_availability_request(practice, slack_uid)
-                                    if result['success']:
-                                        logger.info(f"Sent confirmation request to {lead.display_name}")
-                                    else:
-                                        logger.warning(f"Failed to send confirmation to {lead.display_name}: {result.get('error')}")
-                                except Exception as e:
-                                    logger.error(f"Error sending confirmation to {lead.display_name}: {e}", exc_info=True)
-                            else:
-                                logger.warning(f"Lead {lead.display_name} has no Slack user ID")
-                    else:
-                        logger.info(f"[DRY RUN] Would contact leads: {practice_result['leads_to_contact']}")
+                    if lead_slack_ids:
+                        practices_needing_confirmation.append((practice, lead_slack_ids))
+                    practice_result['leads_to_contact'] = [lead.display_name for lead in leads]
 
             # Weather update
             if evaluation.weather:
@@ -270,8 +251,24 @@ def run_24h_check() -> dict:
                 'error': str(e)
             })
 
+    # Post channel confirmation request if any practices need it
+    if practices_needing_confirmation:
+        if not dry_run:
+            try:
+                post_result = post_24h_lead_confirmation(practices_needing_confirmation)
+                results['channel_post_sent'] = post_result.get('success', False)
+                if post_result.get('success'):
+                    logger.info("Posted 24h lead confirmation to #coord-practices-leads-assists")
+                else:
+                    logger.error(f"Failed to post 24h confirmation: {post_result.get('error')}")
+            except Exception as e:
+                logger.error(f"Error posting 24h confirmation: {e}", exc_info=True)
+        else:
+            logger.info(f"[DRY RUN] Would post confirmation to #coord-practices-leads-assists for {len(practices_needing_confirmation)} practices")
+
     logger.info(f"24h check complete: {results['checked']} checked, "
                f"{results['confirmed']} confirmed leads, "
-               f"{results['weather_updates']} weather updates sent")
+               f"{results['weather_updates']} weather updates, "
+               f"channel_post_sent={results['channel_post_sent']}")
 
     return results

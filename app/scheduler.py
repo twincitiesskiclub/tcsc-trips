@@ -11,11 +11,11 @@ Safety:
 
 Scheduled Jobs:
 - 3:00 AM: Slack Channel Sync + ExpertVoice sync
-- 7:00 AM: Skipper morning check (today's practices)
-- 7:15 AM: Skipper 48h check (workout reminders)
-- 7:30 AM: Skipper 24h check (lead confirmation)
-- 6:00 PM Sunday: Weekly practice summary (members channel)
-- 6:00 PM Sunday: Coach weekly review summary (collab-coaches-practices)
+- 7:00 AM: Skipper morning check (today's practices) → posts recap to #practices-core
+- 7:15 AM: Skipper 48h check (workout reminders) → posts to #collab-coaches-practices
+- 7:30 AM: Skipper 24h check (lead confirmation) → posts to #coord-practices-leads-assists
+- 4:00 PM Sunday: Coach weekly review summary (collab-coaches-practices)
+- 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
 """
 import os
@@ -426,14 +426,14 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=1800
     )
 
-    # Weekly summary: Post upcoming week on Sunday at 6:00 PM
+    # Weekly summary: Post upcoming week on Sunday at 8:30 PM
     scheduler.add_job(
         func=run_weekly_summary_job,
         args=[app],
         trigger=CronTrigger(
             day_of_week='sun',
-            hour=18,
-            minute=0,
+            hour=20,
+            minute=30,
             timezone='America/Chicago'
         ),
         id='skipper_weekly_summary',
@@ -442,13 +442,13 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=3600
     )
 
-    # Coach weekly review: Post to collab-coaches-practices on Sunday at 6:00 PM
+    # Coach weekly review: Post to collab-coaches-practices on Sunday at 4:00 PM
     scheduler.add_job(
         func=run_coach_weekly_summary_job,
         args=[app],
         trigger=CronTrigger(
             day_of_week='sun',
-            hour=18,
+            hour=16,
             minute=0,
             timezone='America/Chicago'
         ),
