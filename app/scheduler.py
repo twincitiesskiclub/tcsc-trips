@@ -350,6 +350,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
         channel_override: Optional channel name to override default for Slack posts.
     """
     from datetime import timedelta
+    from zoneinfo import ZoneInfo
 
     with app.app_context():
         from app.practices.models import Practice
@@ -362,7 +363,12 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
             app.logger.info(f"Channel override: {channel_override}")
         app.logger.info("=" * 60)
 
-        now = datetime.now()
+        # Use Central timezone for logic (matches scheduler trigger timezone)
+        # Convert to naive datetime for database comparisons (Practice.date is naive)
+        central_tz = ZoneInfo('America/Chicago')
+        now_central = datetime.now(central_tz)
+        now = now_central.replace(tzinfo=None)  # Naive datetime in Central time
+        app.logger.info(f"Current time (Central): {now_central.strftime('%Y-%m-%d %H:%M %Z')}")
         practices_to_announce = []
 
         try:
@@ -370,6 +376,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
                 # Morning run (around 8am): Announce evening practices for today
                 today_start = now.replace(hour=12, minute=0, second=0, microsecond=0)
                 today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
+                app.logger.info(f"Morning run: Looking for practices between {today_start} and {today_end}")
 
                 practices = Practice.query.filter(
                     Practice.date >= today_start,
@@ -390,6 +397,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
                     hour=0, minute=0, second=0, microsecond=0
                 )
                 tomorrow_noon = tomorrow_start.replace(hour=12)
+                app.logger.info(f"Evening run: Looking for practices between {tomorrow_start} and {tomorrow_noon}")
 
                 practices = Practice.query.filter(
                     Practice.date >= tomorrow_start,
