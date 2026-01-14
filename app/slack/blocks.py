@@ -262,7 +262,7 @@ def build_combined_lift_blocks(
     - Day 2: ☑️ ballot_box_with_check
 
     Args:
-        practices: List of lift practices to combine (should be 2)
+        practices: List of lift practices to combine (2-3 practices)
         weather_data: Optional dict mapping practice.id to WeatherConditions
 
     Returns:
@@ -288,8 +288,8 @@ def build_combined_lift_blocks(
     days = [p.date.strftime('%a') for p in sorted_practices]
     days_str = " + ".join(days)
 
-    # RSVP emoji mapping
-    rsvp_emojis = [":white_check_mark:", ":ballot_box_with_check:"]
+    # RSVP emoji mapping (supports up to 3 lift days)
+    rsvp_emojis = [":white_check_mark:", ":ballot_box_with_check:", ":heavy_check_mark:"]
 
     # ==========================================================================
     # HEADER: :weight_lifter: _TCSC Lift_ • Wed & Fri

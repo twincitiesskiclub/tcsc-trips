@@ -15,7 +15,7 @@ Scheduled Jobs:
 - 7:15 AM: Skipper 48h check (workout reminders) → posts to #collab-coaches-practices
 - 7:30 AM: Skipper 24h check (lead confirmation) → posts to #coord-practices-leads-assists
 - 8:00 AM: Newsletter daily update → regenerates living post
-- 4:00 PM Sunday: Coach weekly review summary (collab-coaches-practices)
+- 8:00 AM Sunday: Coach weekly review summary (collab-coaches-practices)
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
@@ -338,12 +338,50 @@ def run_expire_proposals_job(app: Flask):
             app.logger.error(f"Expire proposals failed: {e}", exc_info=True)
 
 
+def _is_strength_practice(practice) -> bool:
+    """Check if a practice has the 'Strength' practice type."""
+    return any(
+        pt.name.lower() == 'strength'
+        for pt in practice.practice_types
+    )
+
+
+def _get_upcoming_strength_practices(now, app) -> list:
+    """Get all unannounced strength practices in the next 7 days.
+
+    Used to combine multiple strength/lift practices into a single announcement.
+    """
+    from datetime import timedelta
+    from app.practices.models import Practice
+    from app.practices.interfaces import PracticeStatus
+
+    week_end = now + timedelta(days=7)
+
+    practices = Practice.query.filter(
+        Practice.date >= now,
+        Practice.date <= week_end,
+        Practice.status.in_([
+            PracticeStatus.SCHEDULED.value,
+            PracticeStatus.CONFIRMED.value
+        ]),
+        Practice.slack_message_ts.is_(None)  # Not yet announced
+    ).order_by(Practice.date).all()
+
+    strength_practices = [p for p in practices if _is_strength_practice(p)]
+    app.logger.info(f"Found {len(strength_practices)} unannounced strength practices in next 7 days")
+
+    return strength_practices
+
+
 def run_practice_announcements_job(app: Flask, channel_override: str = None):
     """Execute the daily practice announcement job within app context.
 
     Posts practice announcements with smart timing:
     - Evening practices (12pm+): Run at 8am, announce same day
     - Morning practices (before 12pm): Run at 8pm, announce for tomorrow
+
+    Strength practices (lift workouts) are combined into a single announcement
+    when multiple are found in the upcoming week.
 
     Args:
         app: Flask application instance for context.
@@ -355,7 +393,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
     with app.app_context():
         from app.practices.models import Practice
         from app.practices.interfaces import PracticeStatus
-        from app.slack.practices import post_practice_announcement
+        from app.slack.practices import post_practice_announcement, post_combined_lift_announcement
 
         app.logger.info("=" * 60)
         app.logger.info("Starting practice announcements job")
@@ -412,11 +450,56 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
                 app.logger.info(f"Evening run: Found {len(practices)} morning practices to announce")
                 practices_to_announce.extend(practices)
 
-            # Announce each practice
+            # Separate strength practices from regular practices
+            strength_in_window = [p for p in practices_to_announce if _is_strength_practice(p)]
+            regular_practices = [p for p in practices_to_announce if not _is_strength_practice(p)]
+
             announced = 0
             errors = 0
 
-            for practice in practices_to_announce:
+            # Handle strength practices: combine if any are in this announcement window
+            if strength_in_window:
+                # Get ALL unannounced strength practices in next 7 days to combine
+                all_strength = _get_upcoming_strength_practices(now, app)
+
+                if len(all_strength) >= 2:
+                    # Combine multiple strength practices into one announcement
+                    app.logger.info(f"Combining {len(all_strength)} strength practices into single announcement")
+                    try:
+                        result = post_combined_lift_announcement(
+                            all_strength,
+                            channel_override=channel_override
+                        )
+                        if result.get('success'):
+                            announced += len(all_strength)
+                            practice_ids = [p.id for p in all_strength]
+                            app.logger.info(f"Announced combined strength practices: {practice_ids}")
+                        else:
+                            errors += len(all_strength)
+                            app.logger.error(f"Failed to announce combined strength practices: {result.get('error')}")
+                    except Exception as e:
+                        errors += len(all_strength)
+                        app.logger.error(f"Error announcing combined strength practices: {e}", exc_info=True)
+                else:
+                    # Only one strength practice, post individually
+                    for practice in strength_in_window:
+                        try:
+                            result = post_practice_announcement(
+                                practice,
+                                channel_override=channel_override
+                            )
+                            if result.get('success'):
+                                announced += 1
+                                app.logger.info(f"Announced strength practice #{practice.id}")
+                            else:
+                                errors += 1
+                                app.logger.error(f"Failed to announce practice #{practice.id}: {result.get('error')}")
+                        except Exception as e:
+                            errors += 1
+                            app.logger.error(f"Error announcing practice #{practice.id}: {e}", exc_info=True)
+
+            # Announce regular (non-strength) practices individually
+            for practice in regular_practices:
                 try:
                     result = post_practice_announcement(
                         practice,
@@ -647,13 +730,13 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=3600
     )
 
-    # Coach weekly review: Post to collab-coaches-practices on Sunday at 4:00 PM
+    # Coach weekly review: Post to collab-coaches-practices on Sunday at 8:00 AM
     scheduler.add_job(
         func=run_coach_weekly_summary_job,
         args=[app],
         trigger=CronTrigger(
             day_of_week='sun',
-            hour=16,
+            hour=8,
             minute=0,
             timezone='America/Chicago'
         ),

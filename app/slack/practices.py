@@ -12,6 +12,7 @@ from app.models import db
 from app.slack.client import get_slack_client, send_direct_message, get_channel_id_by_name
 from app.slack.blocks import (
     build_practice_announcement_blocks,
+    build_combined_lift_blocks,
     build_cancellation_proposal_blocks,
     build_cancellation_decision_update,
     build_lead_confirmation_blocks,
@@ -160,6 +161,98 @@ def post_practice_announcement(
     except SlackApiError as e:
         error_msg = e.response.get('error', str(e))
         current_app.logger.error(f"Error posting practice announcement: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def post_combined_lift_announcement(
+    practices: list[Practice],
+    channel_override: Optional[str] = None
+) -> dict:
+    """Post combined lift announcement for multiple lift practices.
+
+    Used when 2-3 lift practices (e.g., Wed + Fri at Balance Fitness) should
+    be announced together in a single message with per-day RSVP emojis.
+
+    Args:
+        practices: List of Practice SQLAlchemy models (2-3 practices)
+        channel_override: Optional channel name to override default
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - message_ts: str (only if success=True)
+        - channel_id: str (only if success=True)
+        - error: str (only if success=False)
+    """
+    if not practices:
+        return {'success': False, 'error': 'No practices provided'}
+
+    client = get_slack_client()
+
+    # Determine channel
+    if channel_override:
+        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
+    else:
+        channel_id = _get_announcement_channel()
+
+    if not channel_id:
+        return {'success': False, 'error': 'Could not find announcement channel'}
+
+    # Convert SQLAlchemy models to PracticeInfo dataclasses
+    from app.practices.service import convert_practice_to_info
+    practice_infos = [convert_practice_to_info(p) for p in practices]
+
+    # Build combined blocks
+    blocks = build_combined_lift_blocks(practice_infos)
+
+    # Sort practices by date for consistent emoji assignment
+    sorted_practices = sorted(practices, key=lambda p: p.date)
+
+    # Build fallback text with all days
+    days = [p.date.strftime('%A') for p in sorted_practices]
+    days_str = " & ".join(days)
+
+    try:
+        response = client.chat_postMessage(
+            channel=channel_id,
+            blocks=blocks,
+            text=f"TCSC Lift - {days_str}",
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        message_ts = response.get('ts')
+        practice_ids = [p.id for p in sorted_practices]
+        current_app.logger.info(f"Posted combined lift announcement for practices {practice_ids} (ts: {message_ts})")
+
+        # Save slack info to all practices
+        for practice in sorted_practices:
+            practice.slack_message_ts = message_ts
+            practice.slack_channel_id = channel_id
+        db.session.commit()
+
+        # Add RSVP emojis for each day (different emoji per day)
+        rsvp_emojis = ["white_check_mark", "ballot_box_with_check", "heavy_check_mark"]
+        for i, practice in enumerate(sorted_practices):
+            emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else "white_check_mark"
+            try:
+                client.reactions_add(
+                    channel=channel_id,
+                    timestamp=message_ts,
+                    name=emoji
+                )
+            except Exception as e:
+                current_app.logger.warning(f"Could not add {emoji} reaction: {e}")
+
+        return {
+            'success': True,
+            'message_ts': message_ts,
+            'channel_id': channel_id
+        }
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error posting combined lift announcement: {error_msg}")
         return {'success': False, 'error': error_msg}
 
 
@@ -1422,6 +1515,7 @@ def post_coach_weekly_summary(
 
     Creates a summary post showing all practices for the week with Edit buttons.
     For days without practices, shows placeholders with "Add Practice" buttons.
+    Tags users with HEAD_COACH role for review.
 
     Args:
         week_start: Monday of the week to summarize
@@ -1434,7 +1528,7 @@ def post_coach_weekly_summary(
         - error: str (only if success=False)
     """
     from datetime import timedelta
-    from app.models import AppConfig, db
+    from app.models import AppConfig, db, Tag, User
     from app.practices.service import convert_practice_to_info
     from app.slack.blocks import build_coach_weekly_summary_blocks
 
@@ -1463,6 +1557,25 @@ def post_coach_weekly_summary(
         channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
     else:
         channel_id = COLLAB_CHANNEL_ID
+
+    # Get users with HEAD_COACH tag to mention
+    review_tags = Tag.query.filter(Tag.name == 'HEAD_COACH').all()
+    mentions = []
+    for tag in review_tags:
+        for user in tag.users:
+            if user.slack_user and user.slack_user.slack_uid:
+                mentions.append(f"<@{user.slack_user.slack_uid}>")
+
+    # Add mentions as a context block at the end if we have any
+    if mentions:
+        unique_mentions = list(dict.fromkeys(mentions))  # Remove duplicates, preserve order
+        blocks.append({
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": f":eyes: {' '.join(unique_mentions)} — please review this week's practices"
+            }]
+        })
 
     # Post to channel
     client = get_slack_client()
