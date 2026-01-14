@@ -34,9 +34,9 @@ from app import create_app
 from app.models import db
 from app.practices.models import Practice, PracticeRSVP
 from app.practices.service import convert_practice_to_info
-from app.slack.blocks import build_practice_announcement_blocks, build_combined_lift_blocks, build_coach_weekly_summary_blocks
+from app.slack.blocks import build_practice_announcement_blocks, build_combined_lift_blocks, build_coach_weekly_summary_blocks, build_weekly_summary_blocks
 from app.slack.client import get_slack_client
-from app.slack.practices import post_practice_announcement, post_collab_review
+from app.slack.practices import post_practice_announcement, post_collab_review, post_combined_lift_announcement
 from app.integrations.weather import get_weather_for_location
 
 # Channel IDs
@@ -434,19 +434,22 @@ def post_collab():
 
 
 def get_lift_practices():
-    """Get lift practices at Balance Fitness Studio for this week."""
+    """Get strength/lift practices for this week.
+
+    Identifies lift practices by checking for 'Strength' practice type.
+    """
     from datetime import datetime, timedelta
 
-    # Find practices at Balance Fitness Studio in the next 7 days
+    # Find practices in the next 7 days
     practices = Practice.query.filter(
         Practice.date >= datetime.now(),
         Practice.date <= datetime.now() + timedelta(days=7)
     ).order_by(Practice.date).all()
 
-    # Filter to Balance Fitness Studio (lift location)
+    # Filter to practices with 'Strength' practice type
     lift_practices = [
         p for p in practices
-        if p.location and 'balance' in p.location.name.lower()
+        if any(pt.name.lower() == 'strength' for pt in p.practice_types)
     ]
 
     return lift_practices
@@ -459,7 +462,7 @@ def post_lift_test():
         lift_practices = get_lift_practices()
 
         if not lift_practices:
-            print("No lift practices found at Balance Fitness Studio this week")
+            print("No strength/lift practices found this week")
             return
 
         print(f"Found {len(lift_practices)} lift practice(s):")
@@ -467,45 +470,19 @@ def post_lift_test():
             date_str = p.date.strftime('%a %b %-d %I:%M %p')
             print(f"  #{p.id}: {date_str}")
 
-        # Convert to PracticeInfo
-        practice_infos = [convert_practice_to_info(p) for p in lift_practices]
+        # Use the codebase function with test channel override
+        result = post_combined_lift_announcement(lift_practices, channel_override='tcsc-devs')
 
-        # Build combined blocks
-        blocks = build_combined_lift_blocks(practice_infos)
-
-        # Post to test channel
-        client = get_slack_client()
-        response = client.chat_postMessage(
-            channel=TEST_CHANNEL,
-            blocks=blocks,
-            text="TCSC Lift Sessions",
-            unfurl_links=False,
-            unfurl_media=False
-        )
-
-        message_ts = response.get('ts')
-        print(f"\nPosted to tcsc-devs! message_ts: {message_ts}")
-
-        # Add both RSVP emojis
-        rsvp_emojis = ["white_check_mark", "ballot_box_with_check"]
-        for emoji in rsvp_emojis:
-            try:
-                client.reactions_add(
-                    channel=TEST_CHANNEL,
-                    timestamp=message_ts,
-                    name=emoji
-                )
-                print(f"Added :{emoji}: emoji")
-            except Exception as e:
-                print(f"Could not add {emoji}: {e}")
-
-        print("\n" + "="*60)
-        print("LIFT TEST POST COMPLETE")
-        print("="*60)
-        print(f"Message TS: {message_ts}")
-        print(f"Channel: {TEST_CHANNEL}")
-        print("\nCheck #tcsc-devs to see the combined lift post!")
-        print("RSVP with ✅ for first day, ☑️ for second day")
+        if result.get('success'):
+            print("\n" + "="*60)
+            print("LIFT TEST POST COMPLETE")
+            print("="*60)
+            print(f"Message TS: {result.get('message_ts')}")
+            print(f"Channel: {result.get('channel_id')}")
+            print("\nCheck #tcsc-devs to see the combined lift post!")
+            print("RSVP with ✅ for first day, ☑️ for second day, ✔️ for third day")
+        else:
+            print(f"\nFailed to post: {result.get('error')}")
 
 
 def post_lift_prod():
@@ -515,7 +492,7 @@ def post_lift_prod():
         lift_practices = get_lift_practices()
 
         if not lift_practices:
-            print("No lift practices found at Balance Fitness Studio this week")
+            print("No strength/lift practices found this week")
             return
 
         print(f"Found {len(lift_practices)} lift practice(s):")
@@ -523,50 +500,17 @@ def post_lift_prod():
             date_str = p.date.strftime('%a %b %-d %I:%M %p')
             print(f"  #{p.id}: {date_str}")
 
-        # Convert to PracticeInfo
-        practice_infos = [convert_practice_to_info(p) for p in lift_practices]
+        # Use the codebase function (no override = production channel)
+        result = post_combined_lift_announcement(lift_practices)
 
-        # Build combined blocks
-        blocks = build_combined_lift_blocks(practice_infos)
-
-        # Post to production channel
-        client = get_slack_client()
-        response = client.chat_postMessage(
-            channel=PROD_CHANNEL,
-            blocks=blocks,
-            text="TCSC Lift Sessions",
-            unfurl_links=False,
-            unfurl_media=False
-        )
-
-        message_ts = response.get('ts')
-        print(f"\nPosted to #announcements-practices! message_ts: {message_ts}")
-
-        # Add both RSVP emojis
-        rsvp_emojis = ["white_check_mark", "ballot_box_with_check"]
-        for emoji in rsvp_emojis:
-            try:
-                client.reactions_add(
-                    channel=PROD_CHANNEL,
-                    timestamp=message_ts,
-                    name=emoji
-                )
-                print(f"Added :{emoji}: emoji")
-            except Exception as e:
-                print(f"Could not add {emoji}: {e}")
-
-        # Update the practice records with the message info
-        for p in lift_practices:
-            p.slack_message_ts = message_ts
-            p.slack_channel_id = PROD_CHANNEL
-        db.session.commit()
-        print(f"Updated {len(lift_practices)} practice record(s) with channel info")
-
-        print("\n" + "="*60)
-        print("LIFT PRODUCTION POST COMPLETE")
-        print("="*60)
-        print(f"Message TS: {message_ts}")
-        print(f"Channel: {PROD_CHANNEL}")
+        if result.get('success'):
+            print("\n" + "="*60)
+            print("LIFT PRODUCTION POST COMPLETE")
+            print("="*60)
+            print(f"Message TS: {result.get('message_ts')}")
+            print(f"Channel: {result.get('channel_id')}")
+        else:
+            print(f"\nFailed to post: {result.get('error')}")
 
 
 def update_lift_prod():
@@ -721,6 +665,134 @@ def post_coach_summary_prod():
             print(f"\nFailed to post: {result.get('error')}")
 
 
+def update_weekly_summary():
+    """Find and update the weekly summary post in #announcements-practices."""
+    from datetime import datetime, timedelta
+    from app.practices.interfaces import PracticeStatus
+    from app.agent.decision_engine import load_skipper_config
+
+    app = create_app()
+    with app.app_context():
+        client = get_slack_client()
+
+        # Search recent messages in announcements-practices for weekly summary
+        print(f"Searching for weekly summary in #{PROD_CHANNEL}...")
+
+        try:
+            result = client.conversations_history(
+                channel=PROD_CHANNEL,
+                limit=20  # Check last 20 messages
+            )
+            messages = result.get('messages', [])
+        except Exception as e:
+            print(f"Error fetching channel history: {e}")
+            return
+
+        # Find the weekly summary message (has "Weekly Practice Summary" as fallback text)
+        weekly_msg = None
+        for msg in messages:
+            # Check fallback text or blocks for weekly summary indicators
+            text = msg.get('text', '')
+            if 'Weekly Practice Summary' in text or "Week of" in text:
+                weekly_msg = msg
+                break
+
+            # Also check blocks header
+            blocks = msg.get('blocks', [])
+            for block in blocks:
+                if block.get('type') == 'header':
+                    header_text = block.get('text', {}).get('text', '')
+                    if 'Week of' in header_text:
+                        weekly_msg = msg
+                        break
+            if weekly_msg:
+                break
+
+        if not weekly_msg:
+            print("Could not find weekly summary post in recent messages")
+            print("Recent messages found:")
+            for msg in messages[:5]:
+                ts = msg.get('ts', '')
+                text = msg.get('text', '')[:50]
+                print(f"  {ts}: {text}...")
+            return
+
+        message_ts = weekly_msg.get('ts')
+        print(f"Found weekly summary: ts={message_ts}")
+
+        # Show current header
+        blocks = weekly_msg.get('blocks', [])
+        for block in blocks:
+            if block.get('type') == 'header':
+                print(f"Current header: {block.get('text', {}).get('text', '')}")
+                break
+
+        # Get practices for the upcoming week (same logic as run_weekly_summary)
+        now = datetime.utcnow()
+        week_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_end = week_start + timedelta(days=7)
+
+        practices = Practice.query.filter(
+            Practice.date >= week_start,
+            Practice.date < week_end,
+            Practice.status.in_([
+                PracticeStatus.SCHEDULED.value,
+                PracticeStatus.CONFIRMED.value
+            ])
+        ).order_by(Practice.date).all()
+
+        print(f"\nFound {len(practices)} practices for week of {week_start.strftime('%B %d')}")
+        for p in practices:
+            date_str = p.date.strftime('%a %b %-d %I:%M %p')
+            loc = p.location.name if p.location else 'No location'
+            print(f"  #{p.id}: {date_str} at {loc}")
+
+        # Build weather data
+        weather_data = {}
+        for practice in practices:
+            if practice.location and practice.location.latitude and practice.location.longitude:
+                try:
+                    weather = get_weather_for_location(
+                        lat=practice.location.latitude,
+                        lon=practice.location.longitude,
+                        target_datetime=practice.date
+                    )
+                    weather_data[practice.id] = {
+                        'temp_f': int(weather.temperature_f),
+                        'feels_like_f': int(weather.feels_like_f),
+                        'conditions': weather.conditions_summary,
+                        'precipitation_chance': int(weather.precipitation_chance)
+                    }
+                except Exception as e:
+                    print(f"  Weather fetch failed for practice {practice.id}: {e}")
+
+        # Convert to PracticeInfo and rebuild blocks
+        practice_infos = [convert_practice_to_info(p) for p in practices]
+        new_blocks = build_weekly_summary_blocks(practice_infos, weather_data=weather_data)
+
+        print(f"\nRebuilt {len(new_blocks)} blocks")
+
+        confirm = input("\nUpdate the post? (y/N): ").strip().lower()
+        if confirm != 'y':
+            print("Aborted")
+            return
+
+        # Update the message
+        try:
+            client.chat_update(
+                channel=PROD_CHANNEL,
+                ts=message_ts,
+                blocks=new_blocks,
+                text="Weekly Practice Summary"
+            )
+            print("\n" + "="*60)
+            print("WEEKLY SUMMARY UPDATE COMPLETE")
+            print("="*60)
+            print(f"Updated message ts: {message_ts}")
+        except Exception as e:
+            print(f"\nFailed to update: {e}")
+
+
 def show_status():
     """Show current practice status."""
     app = create_app()
@@ -755,6 +827,7 @@ if __name__ == '__main__':
         print("  update-lift-prod - Update existing lift post")
         print("  post-coach-summary - Post weekly coach summary to tcsc-devs")
         print("  post-coach-summary-prod - Post weekly coach summary to collab-coaches-practices")
+        print("  update-weekly-summary - Find and update weekly summary in announcements-practices")
         print("  status      - Show current practice status")
         sys.exit(1)
 
@@ -780,6 +853,8 @@ if __name__ == '__main__':
         post_coach_summary()
     elif command == 'post-coach-summary-prod':
         post_coach_summary_prod()
+    elif command == 'update-weekly-summary':
+        update_weekly_summary()
     elif command == 'status':
         show_status()
     else:
