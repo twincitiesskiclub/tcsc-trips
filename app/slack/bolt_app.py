@@ -741,6 +741,7 @@ if _bot_token:
             from app.models import db
             from app.slack.practices import (
                 update_practice_post,
+                update_practice_slack_post,
                 update_collab_post,
                 log_practice_edit,
                 log_collab_edit,
@@ -835,10 +836,10 @@ if _bot_token:
                 except Exception as e:
                     logger.warning(f"Could not update coach summary post: {e}")
 
-            # Update the #practices post
+            # Update the #practices post (handles both individual and combined lift posts)
             if practice.slack_message_ts:
                 try:
-                    update_practice_post(practice)
+                    update_practice_slack_post(practice)
                     if should_notify:
                         log_practice_edit(practice, user_id)
                 except Exception as e:

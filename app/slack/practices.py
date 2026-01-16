@@ -1710,3 +1710,110 @@ def escalate_practice_review(practice: Practice) -> dict:
         error_msg = e.response.get('error', str(e))
         current_app.logger.error(f"Error escalating practice review: {error_msg}")
         return {'success': False, 'error': error_msg}
+
+
+# =============================================================================
+# Combined Lift Post Updates
+# =============================================================================
+
+def is_combined_lift_practice(practice: Practice) -> bool:
+    """Check if practice is part of a combined lift post.
+
+    A practice is part of a combined lift if:
+    1. It has slack_message_ts set
+    2. Another practice shares the same slack_message_ts
+
+    Args:
+        practice: Practice SQLAlchemy model
+
+    Returns:
+        True if practice is part of a combined post with other practices.
+    """
+    if not practice.slack_message_ts:
+        return False
+
+    # Count how many practices share this message_ts
+    count = Practice.query.filter(
+        Practice.slack_message_ts == practice.slack_message_ts
+    ).count()
+
+    return count > 1
+
+
+def update_combined_lift_post(practice: Practice) -> dict:
+    """Update combined lift announcement when any practice in it changes.
+
+    Finds all practices sharing the same slack_message_ts and rebuilds
+    the combined block structure.
+
+    Args:
+        practice: Practice SQLAlchemy model (one of the combined practices)
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+    """
+    if not practice.slack_message_ts or not practice.slack_channel_id:
+        return {'success': False, 'error': 'No Slack message to update'}
+
+    client = get_slack_client()
+
+    # Find all practices sharing this message_ts
+    practices = Practice.query.filter(
+        Practice.slack_message_ts == practice.slack_message_ts
+    ).order_by(Practice.date).all()
+
+    if not practices:
+        return {'success': False, 'error': 'No practices found for this message'}
+
+    # Convert to PracticeInfo dataclasses
+    from app.practices.service import convert_practice_to_info
+    practice_infos = [convert_practice_to_info(p) for p in practices]
+
+    # Build combined blocks
+    blocks = build_combined_lift_blocks(practice_infos)
+
+    # Build fallback text with all days
+    days = [p.date.strftime('%A') for p in practices]
+    days_str = " & ".join(days)
+
+    try:
+        client.chat_update(
+            channel=practice.slack_channel_id,
+            ts=practice.slack_message_ts,
+            blocks=blocks,
+            text=f"TCSC Lift - {days_str}"
+        )
+
+        practice_ids = [p.id for p in practices]
+        current_app.logger.info(f"Updated combined lift post for practices {practice_ids}")
+        return {'success': True}
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error updating combined lift post: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
+def update_practice_slack_post(practice: Practice) -> dict:
+    """Smart update that handles both individual and combined posts.
+
+    Detects whether the practice is part of a combined lift post and
+    uses the appropriate update function.
+
+    Args:
+        practice: Practice SQLAlchemy model
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+    """
+    if not practice.slack_message_ts:
+        return {'success': False, 'error': 'No Slack post to update'}
+
+    if is_combined_lift_practice(practice):
+        return update_combined_lift_post(practice)
+    else:
+        return update_practice_post(practice)
