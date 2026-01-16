@@ -294,6 +294,15 @@ def edit_practice(practice_id):
 
         db.session.commit()
 
+        # Update Slack post if one exists
+        if practice.slack_message_ts:
+            from app.slack.practices import update_practice_slack_post
+            result = update_practice_slack_post(practice)
+            if not result.get('success'):
+                current_app.logger.warning(
+                    f"Failed to update Slack post for practice #{practice.id}: {result.get('error')}"
+                )
+
         return jsonify({
             'success': True,
             'message': 'Practice updated successfully'
