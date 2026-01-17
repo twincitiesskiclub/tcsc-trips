@@ -76,7 +76,10 @@ def load_skipper_config(force_reload: bool = False) -> dict:
         }
 
 
-def evaluate_practice(practice: Practice) -> PracticeEvaluation:
+def evaluate_practice(
+    practice: Practice,
+    skip_lead_check: bool = False
+) -> PracticeEvaluation:
     """
     Evaluate all conditions for a practice and determine if it's safe to proceed.
 
@@ -88,11 +91,12 @@ def evaluate_practice(practice: Practice) -> PracticeEvaluation:
     Checks:
     - Weather thresholds (temp, wind, precipitation, lightning)
     - Trail quality and grooming for activity type
-    - Lead confirmation status
+    - Lead confirmation status (unless skip_lead_check=True)
     - Daylight requirements
 
     Args:
         practice: Practice to evaluate
+        skip_lead_check: If True, skip lead verification (for 7am weather-only check)
 
     Returns:
         PracticeEvaluation with all violations and go/no-go decision
@@ -165,8 +169,8 @@ def evaluate_practice(practice: Practice) -> PracticeEvaluation:
             trail_violations = check_trail_thresholds(trail, activity.name, config)
             all_violations.extend(trail_violations)
 
-    # Lead availability check
-    lead_violations = check_lead_availability(practice, config)
+    # Lead availability check (skip for 7am weather-only check)
+    lead_violations = check_lead_availability(practice, config, skip_lead_check=skip_lead_check)
     all_violations.extend(lead_violations)
 
     # Daylight checks

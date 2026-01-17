@@ -533,6 +533,106 @@ def send_workout_reminder(practice: Practice, coach_slack_id: str) -> dict:
         return {'success': False, 'error': error_msg}
 
 
+def send_lead_checkin_dm(practice: Practice) -> dict:
+    """Send group DM to practices directors + lead for lead check-in.
+
+    Used by 4pm/10pm lead verification checks when a lead hasn't confirmed
+    by reacting to the practice post.
+
+    Args:
+        practice: Practice SQLAlchemy model
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - channel_id: str (only if success=True)
+        - error: str (only if success=False)
+    """
+    from app.models import Tag
+    from app.slack.client import open_conversation, get_slack_client
+    from app.utils import format_datetime_central
+
+    # Get practices directors by tag
+    director_slack_ids = []
+    practices_director_tag = Tag.query.filter_by(name='PRACTICES_DIRECTOR').first()
+    if practices_director_tag:
+        for user in practices_director_tag.users:
+            if user.slack_user and user.slack_user.slack_uid:
+                director_slack_ids.append(user.slack_user.slack_uid)
+
+    # Fallback admin IDs if no directors are tagged
+    ADMIN_FALLBACK_IDS = ["U02JP5QNQFS", "U02K5TKMQH3", "U02J6R6CZS7"]  # augie, simon, rob
+
+    if not director_slack_ids:
+        current_app.logger.warning("No PRACTICES_DIRECTOR users found, using admin fallback")
+        director_slack_ids = ADMIN_FALLBACK_IDS
+
+    # Get lead Slack IDs
+    lead_slack_ids = []
+    lead_mentions = []
+    for lead in practice.leads:
+        if lead.role == 'lead' and lead.user and lead.user.slack_user:
+            lead_slack_ids.append(lead.user.slack_user.slack_uid)
+            lead_mentions.append(f"<@{lead.user.slack_user.slack_uid}>")
+
+    if not lead_slack_ids:
+        current_app.logger.warning(f"No Slack IDs for leads of practice #{practice.id}")
+        return {'success': False, 'error': 'No lead Slack IDs found'}
+
+    # Combine all participants (deduplicate)
+    all_participants = list(set(director_slack_ids + lead_slack_ids))
+
+    if len(all_participants) < 2:
+        return {'success': False, 'error': 'Not enough participants for group DM'}
+
+    # Open the group conversation
+    conv_result = open_conversation(all_participants)
+    if not conv_result.get('success'):
+        return conv_result
+
+    channel_id = conv_result.get('channel_id')
+
+    # Build the message
+    time_str = format_datetime_central(practice.date, '%-I:%M %p')
+    location = practice.location.name if practice.location else "TBD"
+    practice_types = ", ".join([t.name for t in practice.practice_types]) if practice.practice_types else "Practice"
+    lead_mention_text = " ".join(lead_mentions)
+    director_mention_text = ", ".join(f"<@{uid}>" for uid in director_slack_ids)
+
+    # Determine if evening or morning practice for message
+    is_tonight = practice.date.date() == datetime.utcnow().date()
+    time_label = "Tonight" if is_tonight else "Tomorrow"
+
+    message = (
+        f":clipboard: *Practice Check-In*\n\n"
+        f"*{time_label}* — {time_str}\n"
+        f"{practice_types} at {location}\n\n"
+        f"---\n\n"
+        f"Hey {lead_mention_text}! Just verifying you're good to lead {time_label.lower()}.\n\n"
+        f":white_check_mark: React to the practice post or reply here to confirm!\n\n"
+        f"If you need a sub, post to <#C02J4DGCFL2|coord-practices-leads-assists>.\n"
+        f"If you need to go over anything, {director_mention_text} are here."
+    )
+
+    client = get_slack_client()
+
+    try:
+        client.chat_postMessage(
+            channel=channel_id,
+            text=message,
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        current_app.logger.info(f"Sent lead check-in DM for practice #{practice.id} to {len(all_participants)} participants")
+        return {'success': True, 'channel_id': channel_id}
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error sending lead check-in DM: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
 def post_substitution_request(
     practice: Practice,
     requester_slack_id: str,

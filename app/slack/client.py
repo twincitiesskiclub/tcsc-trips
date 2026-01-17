@@ -345,6 +345,133 @@ def get_latest_messages_by_user(channel_id: str, max_messages: int = 500) -> dic
 
 
 # =============================================================================
+# Reaction Checking Functions (for lead verification)
+# =============================================================================
+
+
+def get_reactions_for_message(channel_id: str, message_ts: str) -> dict[str, list[str]]:
+    """
+    Get all reactions on a message with user lists.
+
+    Args:
+        channel_id: Slack channel ID
+        message_ts: Message timestamp
+
+    Returns:
+        Dict mapping reaction name -> list of user IDs who reacted
+        e.g., {'white_check_mark': ['U123', 'U456'], 'thumbsup': ['U789']}
+        Returns empty dict if message not found or on error.
+    """
+    client = get_slack_client()
+
+    try:
+        response = client.reactions_get(channel=channel_id, timestamp=message_ts)
+        message = response.get('message', {})
+        reactions = message.get('reactions', [])
+
+        result = {}
+        for reaction in reactions:
+            name = reaction.get('name')
+            users = reaction.get('users', [])
+            if name:
+                result[name] = users
+
+        return result
+
+    except SlackApiError as e:
+        error = e.response.get('error', '')
+        if error == 'message_not_found':
+            current_app.logger.warning(
+                f"Message not found for reactions: {channel_id}/{message_ts}"
+            )
+            return {}
+        current_app.logger.error(f"Slack API error getting reactions: {e}")
+        return {}
+
+
+def has_user_reacted_with_emoji(
+    channel_id: str,
+    message_ts: str,
+    user_slack_ids: list[str],
+    emoji_names: list[str]
+) -> dict[str, bool]:
+    """
+    Check if specific users have reacted with specific emojis to a message.
+
+    Args:
+        channel_id: Slack channel ID
+        message_ts: Message timestamp
+        user_slack_ids: List of Slack user IDs to check
+        emoji_names: List of emoji names to look for (e.g., ['white_check_mark', '+1'])
+
+    Returns:
+        Dict mapping user_slack_id -> bool (True if they reacted with any of the emojis)
+    """
+    reactions = get_reactions_for_message(channel_id, message_ts)
+
+    # Build set of users who reacted with any of the target emojis
+    users_who_reacted = set()
+    for emoji_name in emoji_names:
+        if emoji_name in reactions:
+            users_who_reacted.update(reactions[emoji_name])
+
+    # Check each requested user
+    return {
+        user_id: user_id in users_who_reacted
+        for user_id in user_slack_ids
+    }
+
+
+# Combined practice emoji mapping (day index -> emoji name)
+COMBINED_PRACTICE_EMOJIS = {
+    0: 'white_check_mark',      # Day 1 (e.g., Wednesday)
+    1: 'ballot_box_with_check',  # Day 2 (e.g., Friday)
+    2: 'heavy_check_mark',       # Day 3 (if applicable)
+}
+
+
+def get_lead_confirmation_emoji_for_practice(practice) -> list[str]:
+    """
+    Get the emoji name(s) that a lead should use to confirm for a practice.
+
+    For standalone practices: returns ['white_check_mark']
+    For combined practices: returns the emoji for that practice's day in the combined post
+
+    Combined lift practices share the same slack_message_ts. The emoji order is:
+    - Day 1: white_check_mark
+    - Day 2: ballot_box_with_check
+    - Day 3: heavy_check_mark
+
+    Args:
+        practice: Practice model instance
+
+    Returns:
+        List of emoji names that would count as confirmation
+    """
+    # Check if this is a combined lift practice by seeing if other practices
+    # share the same slack_message_ts
+    if practice.slack_message_ts:
+        from app.practices.models import Practice as PracticeModel
+
+        # Find all practices sharing this message timestamp
+        sibling_practices = PracticeModel.query.filter(
+            PracticeModel.slack_message_ts == practice.slack_message_ts
+        ).order_by(PracticeModel.date).all()
+
+        if len(sibling_practices) > 1:
+            # This is a combined practice - find this practice's position
+            try:
+                day_index = sibling_practices.index(practice)
+                emoji_name = COMBINED_PRACTICE_EMOJIS.get(day_index, 'white_check_mark')
+                return [emoji_name]
+            except ValueError:
+                pass
+
+    # Default: standard white check mark
+    return ['white_check_mark']
+
+
+# =============================================================================
 # Channel Sync Operations (for Slack channel membership management)
 # =============================================================================
 

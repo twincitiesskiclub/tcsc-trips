@@ -218,18 +218,33 @@ def check_trail_thresholds(
     return violations
 
 
-def check_lead_availability(practice: Practice, config: dict) -> list[ThresholdViolation]:
+def check_lead_availability(
+    practice: Practice,
+    config: dict,
+    skip_lead_check: bool = False
+) -> list[ThresholdViolation]:
     """
     Check if practice has confirmed lead within required timeframe.
+
+    Lead confirmation can happen via:
+    1. Button click (sets PracticeLead.confirmed = True)
+    2. Checkmark reaction on the practice announcement post
 
     Args:
         practice: Practice to check
         config: Threshold configuration from skipper.yaml
+        skip_lead_check: If True, skip lead verification entirely (for 7am weather-only check)
 
     Returns:
         List of ThresholdViolation objects
     """
     violations = []
+
+    # Skip lead check if requested (e.g., for 7am weather-only check)
+    if skip_lead_check:
+        logger.info("Lead check skipped (skip_lead_check=True)")
+        return violations
+
     thresholds = config.get('thresholds', {}).get('lead', {})
 
     # Check if lead confirmation is required
@@ -237,7 +252,8 @@ def check_lead_availability(practice: Practice, config: dict) -> list[ThresholdV
         return violations
 
     # Check if practice has any leads assigned
-    if not practice.leads:
+    leads_with_lead_role = [lead for lead in practice.leads if lead.role == 'lead']
+    if not leads_with_lead_role:
         violations.append(ThresholdViolation(
             threshold_name='has_lead',
             threshold_value=1.0,
@@ -247,8 +263,12 @@ def check_lead_availability(practice: Practice, config: dict) -> list[ThresholdV
         ))
         return violations
 
-    # Check for confirmed leads
-    confirmed_leads = [lead for lead in practice.leads if lead.confirmed]
+    # Check for confirmed leads (via DB flag first)
+    confirmed_leads = [lead for lead in leads_with_lead_role if lead.confirmed]
+
+    # If no DB-confirmed leads, check for reaction-based confirmation
+    if not confirmed_leads and practice.slack_message_ts and practice.slack_channel_id:
+        confirmed_leads = _check_lead_reactions(practice, leads_with_lead_role)
 
     if not confirmed_leads:
         # Check if we're within confirmation deadline
@@ -276,6 +296,75 @@ def check_lead_availability(practice: Practice, config: dict) -> list[ThresholdV
 
     logger.info(f"Lead check found {len(violations)} violations")
     return violations
+
+
+def _check_lead_reactions(practice: Practice, leads: list) -> list:
+    """
+    Check if any leads have reacted to the practice post with a checkmark.
+
+    If a lead has reacted, auto-sets their PracticeLead.confirmed = True.
+
+    Args:
+        practice: Practice with slack_message_ts and slack_channel_id
+        leads: List of PracticeLead objects to check
+
+    Returns:
+        List of leads who have confirmed via reaction
+    """
+    from app.models import db
+    from app.slack.client import (
+        has_user_reacted_with_emoji,
+        get_lead_confirmation_emoji_for_practice
+    )
+
+    confirmed_via_reaction = []
+
+    # Get the emoji(s) that count as confirmation for this practice
+    emoji_names = get_lead_confirmation_emoji_for_practice(practice)
+
+    # Collect lead Slack IDs
+    lead_slack_ids = []
+    lead_by_slack_id = {}
+    for lead in leads:
+        if lead.user and lead.user.slack_user and lead.user.slack_user.slack_uid:
+            slack_uid = lead.user.slack_user.slack_uid
+            lead_slack_ids.append(slack_uid)
+            lead_by_slack_id[slack_uid] = lead
+
+    if not lead_slack_ids:
+        logger.warning(f"No Slack IDs found for leads of practice #{practice.id}")
+        return []
+
+    # Check reactions
+    try:
+        reaction_results = has_user_reacted_with_emoji(
+            practice.slack_channel_id,
+            practice.slack_message_ts,
+            lead_slack_ids,
+            emoji_names
+        )
+
+        # Auto-confirm leads who have reacted
+        for slack_uid, has_reacted in reaction_results.items():
+            if has_reacted:
+                lead = lead_by_slack_id[slack_uid]
+                if not lead.confirmed:
+                    lead.confirmed = True
+                    lead.confirmed_at = datetime.utcnow()
+                    logger.info(
+                        f"Auto-confirmed lead {lead.user.email if lead.user else 'unknown'} "
+                        f"via reaction on practice #{practice.id}"
+                    )
+                confirmed_via_reaction.append(lead)
+
+        # Commit any changes
+        if confirmed_via_reaction:
+            db.session.commit()
+
+    except Exception as e:
+        logger.error(f"Error checking lead reactions for practice #{practice.id}: {e}")
+
+    return confirmed_via_reaction
 
 
 def check_daylight(

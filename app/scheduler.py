@@ -11,9 +11,11 @@ Safety:
 
 Scheduled Jobs:
 - 3:00 AM: Slack Channel Sync + ExpertVoice sync
-- 7:00 AM: Skipper morning check (today's practices) → posts recap to #practices-core
+- 7:00 AM: Skipper morning check (today's practices) → weather/conditions check
 - 7:15 AM: Skipper 48h check (workout reminders) → posts to #collab-coaches-practices
-- 7:30 AM: Skipper 24h check (lead confirmation) → posts to #coord-practices-leads-assists
+- 7:30 AM: Skipper 24h check → DISABLED (replaced by 4pm/10pm lead checks)
+- 4:00 PM: Evening lead check (noon-midnight today) → weather + lead verification
+- 10:00 PM: Morning lead check (before noon tomorrow) → weather + lead verification
 - 8:00 AM: Newsletter daily update → regenerates living post
 - 8:00 AM Sunday: Coach weekly review summary (collab-coaches-practices)
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
@@ -239,6 +241,44 @@ def run_skipper_24h_check_job(app: Flask, channel_override: str = None):
 
         except Exception as e:
             app.logger.error(f"Skipper 24h check failed: {e}", exc_info=True)
+
+
+def run_lead_check_job(app: Flask, check_type: str, channel_override: str = None):
+    """Execute a lead verification check within app context.
+
+    Args:
+        app: Flask application instance for context.
+        check_type: Either 'evening' (4pm) or 'morning' (10pm).
+        channel_override: Optional channel name to override default for Slack posts.
+    """
+    with app.app_context():
+        from app.agent.routines.lead_verification import (
+            run_evening_lead_check,
+            run_morning_lead_check
+        )
+
+        check_fn = run_evening_lead_check if check_type == 'evening' else run_morning_lead_check
+        time_label = "4pm evening" if check_type == 'evening' else "10pm morning"
+
+        app.logger.info("=" * 60)
+        app.logger.info(f"Starting {time_label} lead verification check")
+        if channel_override:
+            app.logger.info(f"Channel override: {channel_override}")
+        app.logger.info("=" * 60)
+
+        try:
+            result = check_fn(channel_override=channel_override)
+
+            app.logger.info(
+                f"{check_type.title()} lead check complete: "
+                f"checked={result.get('checked', 0)}, "
+                f"safe={result.get('safe', 0)}, "
+                f"proposals={result.get('proposals_created', 0)}, "
+                f"dms_sent={result.get('dms_sent', 0)}"
+            )
+
+        except Exception as e:
+            app.logger.error(f"{check_type.title()} lead check failed: {e}", exc_info=True)
 
 
 def run_weekly_summary_job(app: Flask, channel_override: str = None):
@@ -699,19 +739,51 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=1800
     )
 
-    # 24h check: Confirm leads and weather at 7:30 AM
+    # 24h check: DISABLED - Lead confirmation now uses reaction-based system
+    # The 4pm and 10pm checks handle lead verification via practice post reactions
+    # Keeping job function for manual triggering if needed, but not scheduled
+    # scheduler.add_job(
+    #     func=run_skipper_24h_check_job,
+    #     args=[app],
+    #     trigger=CronTrigger(
+    #         hour=7,
+    #         minute=30,
+    #         timezone='America/Chicago'
+    #     ),
+    #     id='skipper_24h_check',
+    #     name='Skipper 24h Check',
+    #     replace_existing=True,
+    #     misfire_grace_time=1800
+    # )
+
+    # 4pm evening check: Verify leads for evening practices (noon to midnight today)
     scheduler.add_job(
-        func=run_skipper_24h_check_job,
-        args=[app],
+        func=run_lead_check_job,
+        args=[app, 'evening'],
         trigger=CronTrigger(
-            hour=7,
-            minute=30,
+            hour=16,
+            minute=0,
             timezone='America/Chicago'
         ),
-        id='skipper_24h_check',
-        name='Skipper 24h Check',
+        id='skipper_evening_lead_check',
+        name='Skipper Evening Lead Check',
         replace_existing=True,
-        misfire_grace_time=1800
+        misfire_grace_time=1800  # 30 min grace
+    )
+
+    # 10pm morning check: Verify leads for morning practices (before noon tomorrow)
+    scheduler.add_job(
+        func=run_lead_check_job,
+        args=[app, 'morning'],
+        trigger=CronTrigger(
+            hour=22,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='skipper_morning_lead_check',
+        name='Skipper Morning Lead Check',
+        replace_existing=True,
+        misfire_grace_time=1800  # 30 min grace
     )
 
     # Weekly summary: Post upcoming week on Sunday at 8:30 PM
@@ -915,6 +987,8 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         'morning_check': run_skipper_morning_check_job,
         '48h_check': run_skipper_48h_check_job,
         '24h_check': run_skipper_24h_check_job,
+        'evening_lead_check': run_lead_check_job,
+        'morning_lead_check': run_lead_check_job,
         'weekly_summary': run_weekly_summary_job,
         'coach_weekly_summary': run_coach_weekly_summary_job,
         'expire_proposals': run_expire_proposals_job,
@@ -926,7 +1000,14 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
     # Jobs that support channel_override
     jobs_with_channel_override = {
         'morning_check', '48h_check', '24h_check',
+        'evening_lead_check', 'morning_lead_check',
         'weekly_summary', 'coach_weekly_summary', 'practice_announcements'
+    }
+
+    # Lead check jobs require check_type parameter
+    lead_check_types = {
+        'evening_lead_check': 'evening',
+        'morning_lead_check': 'morning',
     }
 
     if job_type not in job_map:
@@ -934,8 +1015,11 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
 
     job_func = job_map[job_type]
 
-    # Determine args based on whether job supports channel_override
-    if job_type in jobs_with_channel_override and channel_override:
+    # Determine args based on job type
+    if job_type in lead_check_types:
+        check_type = lead_check_types[job_type]
+        job_args = [app, check_type, channel_override] if channel_override else [app, check_type]
+    elif job_type in jobs_with_channel_override and channel_override:
         job_args = [app, channel_override]
     else:
         job_args = [app]
