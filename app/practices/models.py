@@ -147,6 +147,9 @@ class Practice(db.Model):
     approved_at = db.Column(db.DateTime)
     escalated = db.Column(db.Boolean, default=False, nullable=False)
 
+    # Lead verification
+    lead_nudge_sent_at = db.Column(db.DateTime)  # Track when 4pm/10pm nudge DM was sent
+
     # Cancellation
     cancellation_reason = db.Column(db.Text)
 

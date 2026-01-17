@@ -91,8 +91,8 @@ def run_morning_check(channel_override: str = None) -> dict:
                        f"{practice.day_of_week} at {practice.date.strftime('%H:%M')}, "
                        f"{practice.location.name if practice.location else 'No location'}")
 
-            # Evaluate practice conditions
-            evaluation = evaluate_practice(practice)
+            # Evaluate practice conditions (skip lead check - handled by 4pm/10pm jobs)
+            evaluation = evaluate_practice(practice, skip_lead_check=True)
 
             # Generate summary
             summary = generate_evaluation_summary(evaluation)
