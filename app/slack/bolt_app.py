@@ -560,7 +560,10 @@ if _bot_token:
             value = body['actions'][0]['value']
             newsletter_id, section_id, section_type = value.split(':')
             newsletter_id = int(newsletter_id)
-            section_id = int(section_id)
+            # Note: section_id is parsed for validation but not used for the query.
+            # Sections are fetched by newsletter_id + section_type, not by ID,
+            # since section_type is unique per newsletter.
+            _ = int(section_id)  # Validate it's a valid integer
         except (KeyError, ValueError) as e:
             logger.error(f"Invalid section edit button value: {e}")
             return
@@ -1276,10 +1279,13 @@ if _bot_token:
                 return
 
             # Notify user
-            client.chat_postMessage(
-                channel=editor_uid,
-                text=f":white_check_mark: *{result['section_type'].replace('_', ' ').title()}* section updated!"
-            )
+            try:
+                client.chat_postMessage(
+                    channel=editor_uid,
+                    text=f":white_check_mark: *{result['section_type'].replace('_', ' ').title()}* section updated!"
+                )
+            except Exception as e:
+                logger.warning(f"Could not send edit confirmation DM to {editor_uid}: {e}")
 
             logger.info(f"Section {section_type} edited by {editor_uid}")
 
