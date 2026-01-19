@@ -56,6 +56,9 @@ from app.newsletter.slack_actions import (
     add_version_to_thread,
     add_review_buttons,
     remove_review_buttons,
+    # Section-based Living Post
+    create_living_post_with_sections,
+    build_section_blocks_with_edit_buttons,
     # Publishing
     publish_to_announcement_channel,
     # Feedback
@@ -169,6 +172,9 @@ __all__ = [
     'add_version_to_thread',
     'add_review_buttons',
     'remove_review_buttons',
+    # Slack Actions - Section-based Living Post
+    'create_living_post_with_sections',
+    'build_section_blocks_with_edit_buttons',
     # Slack Actions - Publishing
     'publish_to_announcement_channel',
     # Slack Actions - Feedback
