@@ -704,3 +704,53 @@ class NewsletterHost(db.Model):
     def is_external(self) -> bool:
         """Check if host is external (not a Slack member)."""
         return bool(self.external_name or self.external_email) and not self.slack_user_id
+
+
+class PhotoSubmission(db.Model):
+    """Curated photo from #photos channel for Photo Gallery.
+
+    Photos are collected from the channel and ranked by reactions.
+    Admin selects which photos to include in the newsletter.
+    """
+    __tablename__ = 'photo_submissions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False
+    )
+
+    # Slack file info
+    slack_file_id = db.Column(db.String(20), nullable=False)
+    slack_permalink = db.Column(db.String(500))
+
+    # Fallback if permalink expires
+    fallback_description = db.Column(db.Text)
+
+    # Who posted the photo
+    submitted_by_user_id = db.Column(db.String(20))
+
+    # Photo metadata
+    caption = db.Column(db.Text)
+    reaction_count = db.Column(db.Integer, default=0)
+
+    # Admin curation
+    selected = db.Column(db.Boolean, default=False)
+
+    # Timestamps
+    posted_at = db.Column(db.DateTime)  # When originally posted to Slack
+    collected_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('photo_submissions', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<PhotoSubmission {self.slack_file_id} newsletter={self.newsletter_id}>'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'newsletter_id', 'slack_file_id',
+            name='uq_photo_submission_file'
+        ),
+    )
