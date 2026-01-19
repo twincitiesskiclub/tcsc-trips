@@ -279,11 +279,48 @@ def edit_trip(trip_id):
 def delete_trip(trip_id):
     return delete_entity(Trip, trip_id, 'Trip', 'admin.get_admin_trips')
 
+
+@admin.route('/admin/trips/data')
+@admin_required
+def trips_data():
+    """JSON data endpoint for trips Tabulator grid."""
+    trips = Trip.query.order_by(Trip.start_date.desc()).all()
+    return jsonify({
+        'trips': [{
+            'id': t.id,
+            'name': t.name,
+            'destination': t.destination,
+            'start_date': t.start_date.strftime('%Y-%m-%d') if t.start_date else None,
+            'end_date': t.end_date.strftime('%Y-%m-%d') if t.end_date else None,
+            'date_range': t.formatted_date_range,
+            'signup_start': t.signup_start.strftime('%Y-%m-%d') if t.signup_start else None,
+            'signup_end': t.signup_end.strftime('%Y-%m-%d') if t.signup_end else None,
+            'capacity_standard': t.max_participants_standard,
+            'capacity_extra': t.max_participants_extra,
+            'price_low': t.price_low,
+            'price_high': t.price_high,
+            'status': t.status
+        } for t in trips]
+    })
+
+
+@admin.route('/admin/trips/<int:trip_id>/delete', methods=['POST'])
+@admin_required
+def delete_trip_json(trip_id):
+    """JSON API for deleting a trip (used by Tabulator grid)."""
+    trip = Trip.query.get_or_404(trip_id)
+    try:
+        db.session.delete(trip)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @admin.route('/admin/seasons')
 @admin_required
 def get_admin_seasons():
-    seasons = Season.query.order_by(Season.start_date.desc()).all()
-    return render_template('admin/seasons.html', seasons=seasons)
+    return render_template('admin/seasons.html')
 
 @admin.route('/admin/seasons/new', methods=['GET', 'POST'])
 @admin_required
@@ -332,11 +369,51 @@ def delete_season(season_id):
     return delete_entity(Season, season_id, 'Season', 'admin.get_admin_seasons')
 
 
+@admin.route('/admin/seasons/data')
+@admin_required
+def seasons_data():
+    """JSON data endpoint for seasons Tabulator grid."""
+    seasons = Season.query.order_by(Season.year.desc(), Season.start_date.desc()).all()
+    return jsonify({
+        'seasons': [{
+            'id': s.id,
+            'name': s.name,
+            'is_current': s.is_current,
+            'season_type': s.season_type,
+            'year': s.year,
+            'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else None,
+            'end_date': s.end_date.strftime('%Y-%m-%d') if s.end_date else None,
+            'returning_start': s.returning_start.strftime('%Y-%m-%d %H:%M') if s.returning_start else None,
+            'returning_end': s.returning_end.strftime('%Y-%m-%d %H:%M') if s.returning_end else None,
+            'new_start': s.new_start.strftime('%Y-%m-%d %H:%M') if s.new_start else None,
+            'new_end': s.new_end.strftime('%Y-%m-%d %H:%M') if s.new_end else None,
+            'price_cents': s.price_cents,
+            'registration_limit': s.registration_limit,
+            'description': s.description
+        } for s in seasons]
+    })
+
+
+@admin.route('/admin/seasons/<int:season_id>/delete-json', methods=['POST'])
+@admin_required
+def delete_season_json(season_id):
+    """JSON API endpoint for deleting a season."""
+    season = Season.query.get_or_404(season_id)
+    try:
+        db.session.delete(season)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
+
+
 @admin.route('/admin/seasons/<int:season_id>/activate', methods=['POST'])
 @admin_required
 def activate_season(season_id):
     """Activate a season as the current season and sync all user statuses."""
     season = Season.query.get_or_404(season_id)
+    is_json_request = request.is_json or request.headers.get('Content-Type') == 'application/json'
 
     try:
         # Unset is_current on all seasons
@@ -366,13 +443,30 @@ def activate_season(season_id):
 
         db.session.commit()
 
-        flash_success(
+        message = (
             f'Season "{season.name}" is now active. '
             f'Updated {len(users)} users: {active_count} active, {alumni_count} alumni, '
             f'{pending_count} pending, {dropped_count} dropped.'
         )
+
+        if is_json_request:
+            return jsonify({
+                'success': True,
+                'message': message,
+                'stats': {
+                    'total': len(users),
+                    'active': active_count,
+                    'alumni': alumni_count,
+                    'pending': pending_count,
+                    'dropped': dropped_count
+                }
+            })
+
+        flash_success(message)
     except Exception as e:
         db.session.rollback()
+        if is_json_request:
+            return jsonify({'success': False, 'error': str(e)}), 400
         flash_error(f'Error activating season: {str(e)}')
 
     return redirect(url_for('admin.get_admin_seasons'))
@@ -429,6 +523,41 @@ def edit_social_event(event_id):
 @admin_required
 def delete_social_event(event_id):
     return delete_entity(SocialEvent, event_id, 'Social Event', 'admin.get_admin_social_events')
+
+
+@admin.route('/admin/social-events/data')
+@admin_required
+def social_events_data():
+    """JSON data endpoint for social events Tabulator grid."""
+    events = SocialEvent.query.order_by(SocialEvent.event_date.desc()).all()
+    return jsonify({
+        'events': [{
+            'id': e.id,
+            'name': e.name,
+            'location': e.location,
+            'event_date': e.formatted_date,
+            'event_time': e.formatted_time,
+            'signup_start': e.signup_start.strftime('%Y-%m-%d') if e.signup_start else None,
+            'signup_end': e.signup_end.strftime('%Y-%m-%d') if e.signup_end else None,
+            'max_participants': e.max_participants,
+            'price': e.price,
+            'status': e.status
+        } for e in events]
+    })
+
+
+@admin.route('/admin/social-events/<int:event_id>/delete', methods=['POST'])
+@admin_required
+def delete_social_event_json(event_id):
+    """JSON API endpoint for deleting a social event."""
+    event = SocialEvent.query.get_or_404(event_id)
+    try:
+        db.session.delete(event)
+        db.session.commit()
+        return jsonify({'success': True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 @admin.route('/admin/seasons/<int:season_id>/export')

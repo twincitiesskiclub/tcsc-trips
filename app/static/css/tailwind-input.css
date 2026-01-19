@@ -126,23 +126,6 @@
     @apply transition-all;
   }
 
-  /* === Segmented Button Groups === */
-  .seg-group {
-    @apply inline-flex rounded-md bg-white overflow-hidden shrink-0;
-    @apply border border-tcsc-gray-100 shadow-sm;
-  }
-
-  .seg-btn {
-    @apply h-9 px-4 text-sm font-medium text-gray-600 bg-white;
-    @apply border-r border-tcsc-gray-100 last:border-r-0;
-    @apply hover:bg-gray-50 transition-all cursor-pointer;
-    @apply inline-flex items-center;
-  }
-
-  .seg-btn.active {
-    @apply bg-tcsc-navy text-white hover:bg-tcsc-navy border-tcsc-navy;
-  }
-
   /* === Toolbar Count Badge === */
   .toolbar-count {
     @apply h-9 inline-flex items-center gap-1.5 px-3;
@@ -161,10 +144,6 @@
 
   .toolbar-spacer {
     @apply flex-1 min-w-[2rem];
-  }
-
-  .toolbar-group {
-    @apply flex items-center gap-2 shrink-0 ml-auto;
   }
 
   /* === Action Button Container (for multiple buttons in a cell) === */
@@ -207,7 +186,7 @@
 
   .admin-btn-secondary {
     @apply bg-white text-tcsc-gray-600 border border-tcsc-gray-100
-           hover:bg-tcsc-gray-50 hover:border-tcsc-gray-200;
+           hover:bg-tcsc-gray-50 hover:border-tcsc-gray-400;
   }
 
   .admin-btn-danger {
@@ -220,14 +199,22 @@
 
   /* --- Pill Filter Group --- */
   .admin-pill-group {
-    @apply inline-flex rounded-tcsc border border-tcsc-gray-100
-           overflow-hidden shadow-sm;
+    @apply inline-flex border border-tcsc-gray-100 shadow-sm;
+    border-radius: 6px;
   }
 
   .admin-pill {
     @apply px-3 py-1.5 text-sm font-medium bg-white text-tcsc-gray-600
            border-r border-tcsc-gray-100 last:border-r-0
            transition-colors duration-150 cursor-pointer;
+  }
+
+  .admin-pill:first-child {
+    border-radius: 5px 0 0 5px;
+  }
+
+  .admin-pill:last-child {
+    border-radius: 0 5px 5px 0;
   }
 
   .admin-pill:hover:not(.active) {
@@ -251,7 +238,7 @@
   }
 
   .admin-search {
-    @apply h-9 px-3 pl-9 text-sm rounded-tcsc w-44
+    @apply h-[30px] px-3 pl-8 text-sm rounded-tcsc w-40
            border border-tcsc-gray-100 bg-white shadow-sm
            placeholder:text-tcsc-gray-400
            focus:outline-none focus:border-tcsc-navy

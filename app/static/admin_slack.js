@@ -96,10 +96,10 @@ async function loadUsers() {
                     {title: "Actions", formatter: function(cell) {
                         const row = cell.getData();
                         if (row.slack_matched) {
-                            return `<button class="tbl-btn tbl-btn-secondary" onclick="unlinkUser(${row.id})">Unlink</button>`;
+                            return `<button class="admin-btn admin-btn-sm admin-btn-secondary" onclick="unlinkUser(${row.id})">Unlink</button>`;
                         } else {
-                            return `<div class="tbl-actions"><button class="tbl-btn tbl-btn-primary" onclick="showLinkDbModal(${row.id})">Link</button>` +
-                                   `<button class="tbl-btn tbl-btn-danger" onclick="confirmDeleteUser(${row.id})">Delete</button></div>`;
+                            return `<div class="admin-actions"><button class="admin-btn admin-btn-sm admin-btn-primary" onclick="showLinkDbModal(${row.id})">Link</button>` +
+                                   `<button class="admin-btn admin-btn-sm admin-btn-danger" onclick="confirmDeleteUser(${row.id})">Delete</button></div>`;
                         }
                     }, width: 160, hozAlign: "center", headerSort: false}
                 ]
@@ -139,8 +139,8 @@ async function loadSlackOnly() {
                     {title: "Full Name", field: "full_name", minWidth: 150},
                     {title: "Actions", formatter: function(cell) {
                         const id = cell.getData().id;
-                        return `<div class="tbl-actions"><button class="tbl-btn tbl-btn-primary" onclick="showLinkSlackModal(${id})">Link</button>` +
-                               `<button class="tbl-btn tbl-btn-secondary" onclick="importSlackUser(${id})">Import</button></div>`;
+                        return `<div class="admin-actions"><button class="admin-btn admin-btn-sm admin-btn-primary" onclick="showLinkSlackModal(${id})">Link</button>` +
+                               `<button class="admin-btn admin-btn-sm admin-btn-secondary" onclick="importSlackUser(${id})">Import</button></div>`;
                     }, width: 180, hozAlign: "center", headerSort: false}
                 ]
             });
@@ -165,7 +165,7 @@ function setUserFilter(filter, btn) {
     currentFilter = filter;
 
     // Update button states
-    document.querySelectorAll('.seg-group .seg-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.admin-pill-group .admin-pill').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
 
     // Update table

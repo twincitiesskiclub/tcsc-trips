@@ -1,0 +1,166 @@
+<!-- Sidebar Navigation -->
+<nav class="flex h-full flex-col bg-white">
+  <!-- Logo/Header -->
+  <div class="flex items-center gap-3 border-b border-zinc-950/5 p-4">
+    <div class="flex h-8 w-8 items-center justify-center rounded-lg bg-tcsc-navy text-white font-bold text-sm">
+      TC
+    </div>
+    <span class="font-semibold text-tcsc-navy">TCSC Admin</span>
+  </div>
+
+  <!-- Navigation Items -->
+  <div class="flex flex-1 flex-col overflow-y-auto p-4">
+    <!-- Main Section -->
+    <div class="flex flex-col gap-0.5">
+      <a href="{{ url_for('admin.get_admin_page') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin.get_admin_page' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="m2.25 12 8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75M8.25 21h8.25" />
+        </svg>
+        <span>Dashboard</span>
+      </a>
+    </div>
+
+    <!-- Members Section -->
+    <h3 class="mb-1 mt-6 px-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Members</h3>
+    <div class="flex flex-col gap-0.5">
+      <a href="{{ url_for('admin.get_admin_users') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin.get_admin_users' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 6.375a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z" />
+        </svg>
+        <span>Members</span>
+      </a>
+      <a href="{{ url_for('admin.get_admin_payments') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin.get_admin_payments' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3m-3.75 3h15a2.25 2.25 0 0 0 2.25-2.25V6.75A2.25 2.25 0 0 0 19.5 4.5h-15a2.25 2.25 0 0 0-2.25 2.25v10.5A2.25 2.25 0 0 0 4.5 19.5Z" />
+        </svg>
+        <span>Payments</span>
+      </a>
+      <a href="{{ url_for('admin.roles') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin.roles' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9.568 3H5.25A2.25 2.25 0 0 0 3 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 0 0 5.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 0 0 9.568 3Z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6 6h.008v.008H6V6Z" />
+        </svg>
+        <span>Roles</span>
+      </a>
+    </div>
+
+    <!-- Events Section -->
+    <h3 class="mb-1 mt-6 px-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Events</h3>
+    <div class="flex flex-col gap-0.5">
+      <a href="{{ url_for('admin.get_admin_seasons') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint in ['admin.get_admin_seasons', 'admin.new_season', 'admin.edit_season'] %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 0 1 2.25-2.25h13.5A2.25 2.25 0 0 1 21 7.5v11.25m-18 0A2.25 2.25 0 0 0 5.25 21h13.5A2.25 2.25 0 0 0 21 18.75m-18 0v-7.5A2.25 2.25 0 0 1 5.25 9h13.5A2.25 2.25 0 0 1 21 11.25v7.5" />
+        </svg>
+        <span>Seasons</span>
+      </a>
+      <a href="{{ url_for('admin.get_admin_trips') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint in ['admin.get_admin_trips', 'admin.new_trip', 'admin.edit_trip'] %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M15 10.5a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z" />
+          <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 10.5c0 7.142-7.5 11.25-7.5 11.25S4.5 17.642 4.5 10.5a7.5 7.5 0 1 1 15 0Z" />
+        </svg>
+        <span>Trips</span>
+      </a>
+      <a href="{{ url_for('admin.get_admin_social_events') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint in ['admin.get_admin_social_events', 'admin.new_social_event', 'admin.edit_social_event'] %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Z" />
+        </svg>
+        <span>Social Events</span>
+      </a>
+    </div>
+
+    <!-- Practices Section -->
+    <h3 class="mb-1 mt-6 px-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Practices</h3>
+    <div class="flex flex-col gap-0.5">
+      <a href="{{ url_for('admin_practices.practices_list') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint in ['admin_practices.practices_list', 'admin_practices.practice_detail', 'admin_practices.practices_calendar'] %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
+        </svg>
+        <span>Practice List</span>
+      </a>
+      <a href="{{ url_for('admin_practices.practices_config') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin_practices.practices_config' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 1 1-3 0m3 0a1.5 1.5 0 1 0-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 0 1-3 0m3 0a1.5 1.5 0 0 0-3 0m-9.75 0h9.75" />
+        </svg>
+        <span>Configuration</span>
+      </a>
+      <a href="{{ url_for('admin_skipper.skipper_dashboard') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin_skipper.skipper_dashboard' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126ZM12 15.75h.007v.008H12v-.008Z" />
+        </svg>
+        <span>Skipper</span>
+      </a>
+    </div>
+
+    <!-- Integrations Section -->
+    <h3 class="mb-1 mt-6 px-2 text-xs font-medium uppercase tracking-wider text-zinc-400">Integrations</h3>
+    <div class="flex flex-col gap-0.5">
+      <a href="{{ url_for('admin.get_admin_slack') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin.get_admin_slack' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 0 1 .865-.501 48.172 48.172 0 0 0 3.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0 0 12 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018Z" />
+        </svg>
+        <span>Slack Sync</span>
+      </a>
+      <a href="{{ url_for('admin.channel_sync_dashboard') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin.channel_sync_dashboard' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+        </svg>
+        <span>Channel Sync</span>
+      </a>
+    </div>
+
+    <!-- System Section -->
+    <h3 class="mb-1 mt-6 px-2 text-xs font-medium uppercase tracking-wider text-zinc-400">System</h3>
+    <div class="flex flex-col gap-0.5">
+      <a href="{{ url_for('admin_scheduled_tasks.index') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin_scheduled_tasks.index' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />
+        </svg>
+        <span>Scheduled Tasks</span>
+      </a>
+      <a href="{{ url_for('admin_newsletter.prompts_page') }}"
+         class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
+                {% if request.endpoint == 'admin_newsletter.prompts_page' %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+        <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M12 7.5h1.5m-1.5 3h1.5m-7.5 3h7.5m-7.5 3h7.5m3-9h3.375c.621 0 1.125.504 1.125 1.125V18a2.25 2.25 0 0 1-2.25 2.25M16.5 7.5V18a2.25 2.25 0 0 0 2.25 2.25M16.5 7.5V4.875c0-.621-.504-1.125-1.125-1.125H4.125C3.504 3.75 3 4.254 3 4.875V18a2.25 2.25 0 0 0 2.25 2.25h13.5M6 7.5h3v3H6v-3Z" />
+        </svg>
+        <span>Newsletter</span>
+      </a>
+    </div>
+  </div>
+
+  <!-- Footer with user info -->
+  <div class="border-t border-zinc-950/5 p-4">
+    {% if session.user %}
+    <div class="flex items-center justify-between text-sm">
+      <span class="text-zinc-500 truncate max-w-[140px]" title="{{ session.user.email }}">{{ session.user.email }}</span>
+      <a href="{{ url_for('auth.logout') }}" class="text-tcsc-navy font-medium hover:underline">Logout</a>
+    </div>
+    {% endif %}
+  </div>
+</nav>

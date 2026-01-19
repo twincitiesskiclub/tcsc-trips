@@ -1,77 +1,30 @@
-{% extends "admin/admin_base.html" %}
+{% extends 'admin/admin_base.html' %}
 
 {% block title %}Social Events{% endblock %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto">
-  <div class="flex justify-between items-center mb-6">
-    <h1 class="text-2xl font-semibold text-tcsc-navy">Social Events Management</h1>
-    <div class="flex gap-3">
-      <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
-      <a href="{{ url_for('admin.new_social_event') }}" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Create New Event</a>
+<div class="bg-white rounded-tcsc p-5">
+    <div class="admin-header">
+        <h1>Social Events</h1>
+        <a href="{{ url_for('admin.new_social_event') }}" class="admin-btn admin-btn-lg admin-btn-primary">+ Create New Event</a>
     </div>
-  </div>
 
-  <div class="bg-white rounded-md shadow-sm overflow-x-auto">
-    <table class="w-full border-collapse min-w-[800px]">
-      <thead>
-        <tr class="border-b border-tcsc-gray-100 bg-gray-50">
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Name</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Location</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Date</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Signup Period</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Capacity</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Price</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Status</th>
-          <th class="text-left text-sm font-medium text-tcsc-gray-600 py-3 px-4">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for event in social_events %}
-        <tr class="border-b border-tcsc-gray-100 hover:bg-gray-50 transition-colors">
-          <td class="py-3 px-4 text-sm text-tcsc-navy font-medium">{{ event.name }}</td>
-          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ event.location }}</td>
-          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ event.formatted_date }}</td>
-          <td class="py-3 px-4 text-sm text-tcsc-gray-600">
-            {{ event.signup_start|format_date('%Y-%m-%d') }} to
-            {{ event.signup_end|format_date('%Y-%m-%d') }}
-          </td>
-          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ event.max_participants }}</td>
-          <td class="py-3 px-4 text-sm text-tcsc-gray-800">{{ event.price|format_price }}</td>
-          <td class="py-3 px-4 text-sm">
-            {% if event.status == 'active' %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-green-500/15 text-green-700">
-                {{ event.status }}
-              </span>
-            {% elif event.status == 'draft' %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-zinc-600/10 text-zinc-700">
-                {{ event.status }}
-              </span>
-            {% elif event.status == 'closed' %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-red-500/15 text-red-700">
-                {{ event.status }}
-              </span>
-            {% else %}
-              <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-medium bg-amber-400/20 text-amber-700">
-                {{ event.status }}
-              </span>
-            {% endif %}
-          </td>
-          <td class="py-3 px-4 text-sm">
-            <div class="flex gap-2">
-              <a href="{{ url_for('admin.edit_social_event', event_id=event.id) }}" class="bg-tcsc-navy text-white px-3 py-1.5 rounded-tcsc text-xs font-medium hover:opacity-90 transition-all">Edit</a>
-              <button
-                class="bg-status-error-bg text-status-error-text px-3 py-1.5 rounded-tcsc text-xs font-medium hover:bg-red-200 transition-all"
-                onclick="confirmDelete('social-event', '{{ event.id }}', '{{ event.name }}')"
-              >
-                Delete
-              </button>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+    <div class="admin-toolbar">
+        <input type="text" id="events-search" class="admin-search" placeholder="Search events...">
+        <div class="admin-pill-group">
+            <button class="admin-pill active" data-status="all">All</button>
+            <button class="admin-pill" data-status="active">Active</button>
+            <button class="admin-pill" data-status="draft">Draft</button>
+            <button class="admin-pill" data-status="closed">Closed</button>
+        </div>
+        <div class="admin-toolbar-spacer"></div>
+        <span class="admin-count" id="event-count">0</span>
+    </div>
+
+    <div id="events-table" class="admin-table tabulator-config"></div>
 </div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_social_events.js') }}?v={{ range(1000000) | random }}"></script>
 {% endblock %}

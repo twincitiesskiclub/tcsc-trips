@@ -60,38 +60,38 @@
     <h1 class="text-xl font-semibold text-tcsc-navy mb-3">Payments</h1>
 
     <!-- Toolbar -->
-    <div class="flex items-center gap-2.5 mb-4 flex-nowrap">
-        <input type="text" id="payments-search" class="tbl-search" placeholder="Search...">
-        <select id="type-filter" class="tbl-select">
+    <div class="admin-toolbar">
+        <input type="text" id="payments-search" class="admin-search" placeholder="Search...">
+        <select id="type-filter" class="admin-select">
             <option value="">All Types</option>
             <option value="trip">Trip</option>
             <option value="season">Season</option>
         </select>
-        <select id="status-filter" class="tbl-select">
+        <select id="status-filter" class="admin-select">
             <option value="">All Statuses</option>
             <option value="pending">Pending</option>
             <option value="success">Success</option>
             <option value="refunded">Refunded</option>
             <option value="canceled">Canceled</option>
         </select>
-        <span id="payment-count" class="h-8 inline-flex items-center px-3 bg-gray-100 border border-gray-200 rounded-md text-sm font-medium text-gray-600 whitespace-nowrap">0 payments</span>
-        <div class="flex-1"></div>
-        <div class="flex gap-2 items-center">
-            <button id="bulk-accept" class="toolbar-btn toolbar-btn-success" disabled>Accept Selected</button>
-            <button id="bulk-refund" class="toolbar-btn toolbar-btn-danger" disabled>Refund Selected</button>
+        <span id="payment-count" class="admin-count">0</span>
+        <div class="admin-toolbar-spacer"></div>
+        <div class="flex gap-2">
+            <button id="bulk-accept" class="admin-btn admin-btn-md admin-btn-success" disabled>Accept Selected</button>
+            <button id="bulk-refund" class="admin-btn admin-btn-md admin-btn-danger" disabled>Refund Selected</button>
         </div>
     </div>
 
     <div id="payments-table" class="tabulator-data"></div>
 
     <div class="flex justify-end mt-4 pt-4 border-t border-gray-200">
-        <button id="export-csv" class="toolbar-btn toolbar-btn-secondary">Export CSV</button>
+        <button id="export-csv" class="admin-btn admin-btn-md admin-btn-secondary">Export CSV</button>
     </div>
 </div>
 
 <!-- Bulk Action Confirmation Modal -->
 <div id="bulk-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
-    <div class="absolute inset-0"></div>
+    <div class="absolute inset-0 modal-overlay"></div>
     <div class="relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl">
         <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
             <h2 id="modal-title" class="text-lg font-semibold text-tcsc-navy">Confirm Action</h2>
@@ -101,8 +101,8 @@
             <!-- Dynamic content -->
         </div>
         <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" id="cancel-action">Cancel</button>
-            <button type="button" class="bg-green-100 text-green-700 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-green-200 transition-all" id="confirm-action">Confirm</button>
+            <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" id="cancel-action">Cancel</button>
+            <button type="button" class="admin-btn admin-btn-md admin-btn-success" id="confirm-action">Confirm</button>
         </div>
     </div>
 </div>

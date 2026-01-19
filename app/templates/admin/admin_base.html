@@ -6,20 +6,92 @@
     <title>TCSC Admin - {% block title %}{{ title }}{% endblock %}</title>
     <!-- Tabulator CSS (load first so our overrides take precedence) -->
     <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
-    <!-- CSS Loading Order: Tailwind with custom Tabulator themes, then legacy -->
+    <!-- Pure Tailwind CSS (no legacy CSS) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/components/_admin.css') }}">
+    <!-- Alpine.js for mobile menu -->
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     {% block extra_css %}{% endblock %}
 </head>
-<body class="bg-tcsc-gray-50 min-h-screen">
-    <div class="admin-container">
-        {% include 'admin/partials/header.html' %}
-        <!-- Child templates may add new fields such as registration limit and description -->
-        <div class="admin-content">
-            {% block content %}{% endblock %}
+<body class="bg-zinc-100 min-h-screen font-sans text-tcsc-navy antialiased" x-data="{ sidebarOpen: false }">
+    <!-- Main Layout Container -->
+    <div class="relative isolate flex min-h-svh w-full bg-white max-lg:flex-col lg:bg-zinc-100">
+
+        <!-- Desktop Sidebar (fixed) -->
+        <div class="fixed inset-y-0 left-0 w-64 max-lg:hidden">
+            {% include 'admin/partials/sidebar.html' %}
         </div>
+
+        <!-- Mobile Sidebar Overlay -->
+        <div x-show="sidebarOpen"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0"
+             x-transition:enter-end="opacity-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100"
+             x-transition:leave-end="opacity-0"
+             class="fixed inset-0 z-40 bg-black/30 lg:hidden"
+             @click="sidebarOpen = false">
+        </div>
+
+        <!-- Mobile Sidebar Panel -->
+        <div x-show="sidebarOpen"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="-translate-x-full"
+             x-transition:enter-end="translate-x-0"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="translate-x-0"
+             x-transition:leave-end="-translate-x-full"
+             class="fixed inset-y-0 left-0 z-50 w-72 p-2 lg:hidden">
+            <div class="flex h-full flex-col rounded-lg bg-white shadow-sm ring-1 ring-zinc-950/5">
+                <!-- Close button -->
+                <div class="flex justify-end p-2">
+                    <button @click="sidebarOpen = false"
+                            class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700">
+                        <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" d="M6 18 18 6M6 6l12 12" />
+                        </svg>
+                    </button>
+                </div>
+                {% include 'admin/partials/sidebar.html' %}
+            </div>
+        </div>
+
+        <!-- Mobile Header -->
+        <header class="flex items-center gap-4 border-b border-zinc-200 bg-white px-4 py-3 lg:hidden">
+            <button @click="sidebarOpen = true"
+                    class="rounded-lg p-2 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-700">
+                <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+                </svg>
+            </button>
+            <span class="font-semibold text-tcsc-navy">TCSC Admin</span>
+        </header>
+
+        <!-- Main Content Area -->
+        <main class="flex flex-1 flex-col pb-2 lg:min-w-0 lg:pt-2 lg:pr-2 lg:pl-64">
+            <div class="grow p-4 lg:p-6">
+                <div class="mx-auto max-w-6xl">
+                    <!-- Flash Messages -->
+                    {% with messages = get_flashed_messages(with_categories=true) %}
+                        {% if messages %}
+                            {% for category, message in messages %}
+                                <div class="px-4 py-3 rounded-tcsc mb-4 animate-slide-in
+                                    {% if category == 'success' %}bg-green-50 text-green-700 border border-green-200
+                                    {% elif category == 'error' %}bg-red-50 text-red-700 border border-red-200
+                                    {% elif category == 'warning' %}bg-amber-50 text-amber-700 border border-amber-200
+                                    {% else %}bg-blue-50 text-blue-700 border border-blue-200{% endif %}">
+                                    {{ message }}
+                                </div>
+                            {% endfor %}
+                        {% endif %}
+                    {% endwith %}
+
+                    {% block content %}{% endblock %}
+                </div>
+            </div>
+        </main>
     </div>
+
     <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
     <!-- Shared toast notifications -->
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
@@ -27,4 +99,4 @@
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
     {% block extra_js %}{% endblock %}
 </body>
-</html> 
+</html>
