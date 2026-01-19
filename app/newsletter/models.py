@@ -15,6 +15,7 @@ from typing import Optional
 
 from app.models import db
 from app.newsletter.interfaces import (
+    CoachStatus,
     NewsletterStatus,
     SubmissionStatus,
     SubmissionType,
@@ -586,7 +587,7 @@ class CoachRotation(db.Model):
     content = db.Column(db.Text)
 
     # Status
-    status = db.Column(db.String(20), default='assigned')  # assigned, submitted, declined
+    status = db.Column(db.String(20), default=CoachStatus.ASSIGNED.value)  # assigned, submitted, declined
 
     # Timestamps
     assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
