@@ -356,7 +356,7 @@ if _bot_token:
             return
 
         with get_app_context():
-            from app.practices.models import Practice, PracticeLocation
+            from app.practices.models import Practice, PracticeLocation, PracticeActivity, PracticeType
             from app.practices.service import convert_practice_to_info
             from app.slack.modals import build_practice_edit_full_modal
             from app.models import Tag, User
@@ -395,13 +395,27 @@ if _bot_token:
                 if u.slack_user and u.slack_user.slack_uid
             ]
 
+            # Get all activities for multi-select
+            all_activities = [
+                (a.id, a.name)
+                for a in PracticeActivity.query.order_by(PracticeActivity.name).all()
+            ]
+
+            # Get all types for multi-select
+            all_types = [
+                (t.id, t.name)
+                for t in PracticeType.query.order_by(PracticeType.name).all()
+            ]
+
             # Convert to PracticeInfo and build modal
             practice_info = convert_practice_to_info(practice)
             modal = build_practice_edit_full_modal(
                 practice_info,
                 locations=locations,
                 eligible_coaches=eligible_coaches,
-                eligible_leads=eligible_leads
+                eligible_leads=eligible_leads,
+                all_activities=all_activities,
+                all_types=all_types
             )
 
             # Open the modal
@@ -761,7 +775,7 @@ if _bot_token:
         values = _safe_get(view, "state", "values", default={})
 
         with get_app_context():
-            from app.practices.models import Practice, PracticeLead
+            from app.practices.models import Practice, PracticeLead, PracticeActivity, PracticeType
             from app.models import db
             from app.slack.practices import (
                 update_practice_post,
@@ -801,6 +815,13 @@ if _bot_token:
             selected_leads = _safe_get(values, "leads_block", "lead_ids", "selected_options", default=[])
             lead_user_ids = [int(opt["value"]) for opt in selected_leads if opt.get("value")]
 
+            # Extract activity/type selections (if blocks were present)
+            selected_activities = _safe_get(values, "activities_block", "activity_ids", "selected_options", default=[])
+            activity_ids = [int(opt["value"]) for opt in selected_activities if opt.get("value")]
+
+            selected_types = _safe_get(values, "types_block", "type_ids", "selected_options", default=[])
+            type_ids = [int(opt["value"]) for opt in selected_types if opt.get("value")]
+
             # Update database
             if location_id:
                 practice.location_id = int(location_id)
@@ -823,6 +844,18 @@ if _bot_token:
                 PracticeLead.query.filter_by(practice_id=practice.id, role='lead').delete()
                 for uid in lead_user_ids:
                     db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='lead'))
+
+            # Update activities if the block was present in the modal
+            if "activities_block" in values:
+                practice.activities.clear()
+                for activity in PracticeActivity.query.filter(PracticeActivity.id.in_(activity_ids)).all():
+                    practice.activities.append(activity)
+
+            # Update types if the block was present in the modal
+            if "types_block" in values:
+                practice.practice_types.clear()
+                for ptype in PracticeType.query.filter(PracticeType.id.in_(type_ids)).all():
+                    practice.practice_types.append(ptype)
 
             db.session.commit()
             logger.info(f"Practice {practice_id} fully updated by {user_id}")

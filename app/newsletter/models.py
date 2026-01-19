@@ -15,12 +15,17 @@ from typing import Optional
 
 from app.models import db
 from app.newsletter.interfaces import (
+    CoachStatus,
+    HighlightStatus,
+    HostStatus,
     NewsletterStatus,
     SubmissionStatus,
     SubmissionType,
     VersionTrigger,
     MessageVisibility,
     NewsSource,
+    SectionType,
+    SectionStatus,
 )
 
 
@@ -37,6 +42,13 @@ class Newsletter(db.Model):
     # Week boundaries
     week_start = db.Column(db.DateTime, nullable=False)
     week_end = db.Column(db.DateTime, nullable=False)
+
+    # Monthly dispatch fields (nullable for migration)
+    month_year = db.Column(db.String(7))  # e.g., "2026-01"
+    period_start = db.Column(db.DateTime)  # Generic, works for weekly or monthly
+    period_end = db.Column(db.DateTime)
+    publish_target_date = db.Column(db.DateTime)  # 15th of month
+    qotm_question = db.Column(db.Text)  # Question of the Month
 
     # Current state
     status = db.Column(
@@ -135,6 +147,61 @@ class Newsletter(db.Model):
     def is_published(self) -> bool:
         """Check if newsletter has been published."""
         return self.status == NewsletterStatus.PUBLISHED.value
+
+    @classmethod
+    def get_or_create_current_month(cls, month_year: str = None) -> 'Newsletter':
+        """Get or create newsletter for the specified or current month.
+
+        Args:
+            month_year: Month in YYYY-MM format, or None for current month
+
+        Returns:
+            Newsletter instance for the month
+        """
+        from calendar import monthrange
+
+        if month_year is None:
+            now = datetime.utcnow()
+            month_year = now.strftime('%Y-%m')
+
+        # Parse month_year
+        year, month = map(int, month_year.split('-'))
+
+        # Check for existing
+        newsletter = cls.query.filter_by(month_year=month_year).first()
+        if newsletter:
+            return newsletter
+
+        # Create new
+        period_start = datetime(year, month, 1)
+        _, last_day = monthrange(year, month)
+        period_end = datetime(year, month, last_day, 23, 59, 59)
+        publish_target = datetime(year, month, 15, 12, 0, 0)  # 15th at noon
+
+        newsletter = cls(
+            month_year=month_year,
+            period_start=period_start,
+            period_end=period_end,
+            publish_target_date=publish_target,
+            # Set week_start/week_end for compatibility (required fields)
+            # Monthly newsletters use period_start/period_end for date range logic
+            week_start=period_start,
+            week_end=period_end,
+            status=NewsletterStatus.BUILDING.value
+        )
+        db.session.add(newsletter)
+        db.session.flush()
+
+        return newsletter
+
+    @property
+    def has_highlight_nomination(self) -> bool:
+        """Check if newsletter has a member highlight nomination.
+
+        Note: Requires 'highlight' relationship to be added by MemberHighlight model.
+        Returns False until that relationship exists.
+        """
+        return hasattr(self, 'highlight') and self.highlight is not None
 
 
 class NewsletterVersion(db.Model):
@@ -389,5 +456,301 @@ class NewsletterPrompt(db.Model):
         db.UniqueConstraint(
             'name', 'version',
             name='uq_newsletter_prompt_version'
+        ),
+    )
+
+
+class NewsletterSection(db.Model):
+    """Per-section content with status and Slack thread reference.
+
+    Each section of the newsletter has its own status and can be
+    edited independently via Slack modals.
+    """
+    __tablename__ = 'newsletter_sections'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False
+    )
+
+    # Section identification
+    section_type = db.Column(db.String(50), nullable=False)
+    section_order = db.Column(db.Integer, default=0)
+
+    # Content
+    content = db.Column(db.Text)
+    ai_draft = db.Column(db.Text)  # Original AI draft (for AI-assisted sections)
+
+    # Status state machine
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default=SectionStatus.AWAITING_CONTENT.value
+    )
+
+    # Slack thread reference (each section is a thread reply)
+    slack_thread_ts = db.Column(db.String(50))
+
+    # Edit tracking
+    edited_by = db.Column(db.String(100))
+    edited_at = db.Column(db.DateTime)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('sections', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<NewsletterSection {self.section_type} newsletter={self.newsletter_id}>'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'newsletter_id', 'section_type',
+            name='uq_newsletter_section_type'
+        ),
+    )
+
+
+class QOTMResponse(db.Model):
+    """Question of the Month response from a member.
+
+    Stores member responses to the monthly question. Each user can
+    only submit one response per newsletter (upsert on resubmit).
+    """
+    __tablename__ = 'qotm_responses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False
+    )
+
+    # Submitter info (Slack user)
+    slack_user_id = db.Column(db.String(50), nullable=False)  # Slack user ID
+    user_name = db.Column(db.String(255))
+
+    # Response content
+    response = db.Column(db.Text, nullable=False)
+
+    # Admin curation
+    selected = db.Column(db.Boolean, default=False)
+
+    # Timestamps
+    submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('qotm_responses', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<QOTMResponse user={self.slack_user_id} newsletter={self.newsletter_id}>'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'newsletter_id', 'slack_user_id',
+            name='uq_qotm_response'
+        ),
+    )
+
+
+class CoachRotation(db.Model):
+    """Coach assignment and content for Coaches Corner section.
+
+    Tracks which coach is assigned each month and their submitted content.
+    Used to implement fair rotation through coaches.
+    """
+    __tablename__ = 'coach_rotations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False,
+        unique=True  # One coach per newsletter
+    )
+
+    # Coach info (links to User model)
+    coach_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    # Content
+    content = db.Column(db.Text)
+
+    # Status
+    status = db.Column(db.String(20), default=CoachStatus.ASSIGNED.value)  # assigned, submitted, declined
+
+    # Timestamps
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+
+    # Relationships
+    newsletter = db.relationship('Newsletter', backref=db.backref('coach_rotation', uselist=False))
+    coach = db.relationship('User', backref=db.backref('coach_rotations', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<CoachRotation coach={self.coach_user_id} newsletter={self.newsletter_id}>'
+
+
+class MemberHighlight(db.Model):
+    """Member spotlight with template-based questions and AI composition.
+
+    Admin nominates a member, member answers structured questions,
+    AI composes into polished prose, editor reviews/edits.
+    """
+    __tablename__ = 'member_highlights'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False,
+        unique=True  # One highlight per newsletter
+    )
+
+    # Member info (links to User model)
+    member_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    # Who nominated them
+    nominated_by = db.Column(db.String(100))  # Admin email
+
+    # Raw answers from member (structured JSON)
+    raw_answers = db.Column(db.JSON)
+
+    # AI-composed version from raw_answers
+    ai_composed_content = db.Column(db.Text)
+
+    # Final edited version (what appears in newsletter)
+    content = db.Column(db.Text)
+
+    # Status
+    status = db.Column(db.String(20), default=HighlightStatus.NOMINATED.value)  # nominated, submitted, declined
+
+    # Timestamps
+    nominated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+
+    # Relationships
+    newsletter = db.relationship('Newsletter', backref=db.backref('highlight', uselist=False))
+    member = db.relationship('User', backref=db.backref('highlights', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<MemberHighlight member={self.member_user_id} newsletter={self.newsletter_id}>'
+
+
+class NewsletterHost(db.Model):
+    """Newsletter host assignment for opener and closer content.
+
+    The host is manually assigned by admin and writes both the opener
+    and closer sections. Can be a Slack member or external guest.
+    """
+    __tablename__ = 'newsletter_hosts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False,
+        unique=True  # One host per newsletter
+    )
+
+    # Host info (could be member or external)
+    slack_user_id = db.Column(db.String(20))  # If Slack member
+    external_name = db.Column(db.String(100))  # If external guest
+    external_email = db.Column(db.String(200))  # For external contact
+
+    # Content
+    opener_content = db.Column(db.Text)
+    closer_content = db.Column(db.Text)
+
+    # Status
+    status = db.Column(db.String(20), default=HostStatus.ASSIGNED.value)
+
+    # Timestamps
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('host', uselist=False))
+
+    def __repr__(self):
+        host_id = self.slack_user_id or self.external_name or 'unknown'
+        return f'<NewsletterHost {host_id} newsletter={self.newsletter_id}>'
+
+    @property
+    def display_name(self) -> str:
+        """Get display name for the host."""
+        if self.external_name:
+            return self.external_name
+        # For Slack members, would need to look up - return user_id for now
+        return self.slack_user_id or 'Unknown Host'
+
+    @property
+    def is_external(self) -> bool:
+        """Check if host is external (not a Slack member)."""
+        return bool(self.external_name or self.external_email) and not self.slack_user_id
+
+
+class PhotoSubmission(db.Model):
+    """Curated photo from #photos channel for Photo Gallery.
+
+    Photos are collected from the channel and ranked by reactions.
+    Admin selects which photos to include in the newsletter.
+    """
+    __tablename__ = 'photo_submissions'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False
+    )
+
+    # Slack file info
+    slack_file_id = db.Column(db.String(20), nullable=False)
+    slack_permalink = db.Column(db.String(500))
+
+    # Fallback if permalink expires
+    fallback_description = db.Column(db.Text)
+
+    # Who posted the photo
+    submitted_by_user_id = db.Column(db.String(20))
+
+    # Photo metadata
+    caption = db.Column(db.Text)
+    reaction_count = db.Column(db.Integer, default=0)
+
+    # Admin curation
+    selected = db.Column(db.Boolean, default=False)
+
+    # Timestamps
+    posted_at = db.Column(db.DateTime)  # When originally posted to Slack
+    collected_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('photo_submissions', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<PhotoSubmission {self.slack_file_id} newsletter={self.newsletter_id}>'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'newsletter_id', 'slack_file_id',
+            name='uq_photo_submission_file'
         ),
     )

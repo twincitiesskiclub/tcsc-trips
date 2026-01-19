@@ -86,6 +86,50 @@ def _build_person_multi_select(
     return element
 
 
+def _build_activity_type_multi_select(
+    action_id: str,
+    placeholder: str,
+    all_options: list,
+    current_selections: list
+) -> dict:
+    """Build multi-select element for activities or types.
+
+    Args:
+        action_id: Slack action ID for the element
+        placeholder: Placeholder text
+        all_options: List of (id, name) tuples
+        current_selections: List of current activity/type objects with .id and .name
+
+    Returns:
+        Slack multi_static_select element dict
+    """
+    options = [
+        {
+            "text": {"type": "plain_text", "text": name},
+            "value": str(id)
+        }
+        for id, name in all_options
+    ]
+
+    current_ids = {item.id for item in current_selections}
+    initial_options = [
+        opt for opt in options
+        if int(opt["value"]) in current_ids
+    ]
+
+    element = {
+        "type": "multi_static_select",
+        "action_id": action_id,
+        "placeholder": {"type": "plain_text", "text": placeholder},
+        "options": options
+    }
+
+    if initial_options:
+        element["initial_options"] = initial_options
+
+    return element
+
+
 def build_practice_edit_modal(practice: PracticeInfo) -> dict:
     """Build modal for editing practice details.
 
@@ -432,7 +476,9 @@ def build_practice_edit_full_modal(
     practice: PracticeInfo,
     locations: list = None,
     eligible_coaches: list = None,
-    eligible_leads: list = None
+    eligible_leads: list = None,
+    all_activities: list = None,
+    all_types: list = None
 ) -> dict:
     """Build modal for full practice editing from collab channel.
 
@@ -444,6 +490,8 @@ def build_practice_edit_full_modal(
         locations: List of (id, name) tuples for location dropdown
         eligible_coaches: List of (user_id, name, slack_uid) tuples for coach selection
         eligible_leads: List of (user_id, name, slack_uid) tuples for lead selection
+        all_activities: List of (id, name) tuples for activity multi-select
+        all_types: List of (id, name) tuples for type multi-select
 
     Returns:
         Slack modal view payload
@@ -494,7 +542,61 @@ def build_practice_edit_full_modal(
                 "text": f"*{date_str}*\n:round_pushpin: {location_name} | {practice_types}"
             }
         },
-        {"type": "divider"},
+        {"type": "divider"}
+    ]
+
+    # Add activities multi-select if provided
+    if all_activities:
+        blocks.append({
+            "type": "input",
+            "block_id": "activities_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Activities"},
+            "element": _build_activity_type_multi_select(
+                "activity_ids", "Select activities", all_activities, practice.activities
+            )
+        })
+
+    # Add types multi-select if provided
+    if all_types:
+        blocks.append({
+            "type": "input",
+            "block_id": "types_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Practice Types"},
+            "element": _build_activity_type_multi_select(
+                "type_ids", "Select practice types", all_types, practice.practice_types
+            )
+        })
+
+    # Add coach multi-select if eligible coaches provided
+    if eligible_coaches:
+        current_coaches = [l for l in practice.leads if l.role == LeadRole.COACH]
+        blocks.append({
+            "type": "input",
+            "block_id": "coaches_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Coaches"},
+            "element": _build_person_multi_select(
+                "coach_ids", "Select coach(es)", eligible_coaches, current_coaches
+            )
+        })
+
+    # Add lead multi-select if eligible leads provided
+    if eligible_leads:
+        current_leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
+        blocks.append({
+            "type": "input",
+            "block_id": "leads_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Practice Leads"},
+            "element": _build_person_multi_select(
+                "lead_ids", "Select lead(s)", eligible_leads, current_leads
+            )
+        })
+
+    # Add location and workout description blocks
+    blocks.extend([
         {
             "type": "input",
             "block_id": "location_block",
@@ -540,33 +642,7 @@ def build_practice_edit_full_modal(
                 "initial_value": practice.cooldown_description or ""
             }
         }
-    ]
-
-    # Add coach multi-select if eligible coaches provided
-    if eligible_coaches:
-        current_coaches = [l for l in practice.leads if l.role == LeadRole.COACH]
-        blocks.append({
-            "type": "input",
-            "block_id": "coaches_block",
-            "optional": True,
-            "label": {"type": "plain_text", "text": "Coaches"},
-            "element": _build_person_multi_select(
-                "coach_ids", "Select coach(es)", eligible_coaches, current_coaches
-            )
-        })
-
-    # Add lead multi-select if eligible leads provided
-    if eligible_leads:
-        current_leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
-        blocks.append({
-            "type": "input",
-            "block_id": "leads_block",
-            "optional": True,
-            "label": {"type": "plain_text", "text": "Practice Leads"},
-            "element": _build_person_multi_select(
-                "lead_ids", "Select lead(s)", eligible_leads, current_leads
-            )
-        })
+    ])
 
     # Add flags and notification blocks
     blocks.extend([
