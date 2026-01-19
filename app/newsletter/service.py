@@ -642,6 +642,500 @@ def regenerate_newsletter(
     return result
 
 
+def run_monthly_orchestrator(day_of_month: int) -> dict[str, Any]:
+    """Run the monthly orchestrator for the Monthly Dispatch newsletter.
+
+    Executes day-of-month-specific actions for newsletter production.
+    Each action is wrapped in try/except to ensure one failure doesn't
+    stop others from running.
+
+    Monthly Schedule:
+    - Day 1: Send host DM (if assigned), assign coach + DM, post QOTM
+    - Day 5: Send member highlight request (if nominated)
+    - Day 10: Coach reminder, host reminder
+    - Day 12: Generate AI drafts, create/update living post
+    - Day 13: Final reminders
+    - Day 14: Add review buttons
+    - Day 15+: Manual publish (admin approval required)
+
+    Args:
+        day_of_month: Day of the month (1-31)
+
+    Returns:
+        Dict with keys:
+        - success: bool (True if all actions completed without critical errors)
+        - newsletter_id: int (ID of the newsletter being processed)
+        - day: int (day of month processed)
+        - actions: list of dicts describing actions taken
+        - errors: list of error strings
+    """
+    result = {
+        'success': False,
+        'newsletter_id': None,
+        'day': day_of_month,
+        'actions': [],
+        'errors': []
+    }
+
+    # Get or create newsletter for current month
+    try:
+        newsletter = Newsletter.get_or_create_current_month()
+        db.session.commit()
+        result['newsletter_id'] = newsletter.id
+        result['actions'].append({
+            'action': 'get_newsletter',
+            'success': True,
+            'detail': f'Newsletter {newsletter.id} for {newsletter.month_year}'
+        })
+    except Exception as e:
+        logger.error(f"Failed to get/create newsletter: {e}", exc_info=True)
+        result['errors'].append(f"Failed to get/create newsletter: {e}")
+        return result
+
+    # ========================================================================
+    # Day 1: Host DM, Coach assignment, QOTM post
+    # ========================================================================
+    if day_of_month == 1:
+        # Send host request DM (if host has been assigned manually)
+        try:
+            if newsletter.host:
+                from app.newsletter.host import send_host_request
+                host_result = send_host_request(newsletter.id)
+                if host_result.get('success'):
+                    result['actions'].append({
+                        'action': 'send_host_request',
+                        'success': True,
+                        'detail': f"channel_id={host_result.get('channel_id')}"
+                    })
+                elif host_result.get('error'):
+                    result['actions'].append({
+                        'action': 'send_host_request',
+                        'success': False,
+                        'detail': host_result.get('error')
+                    })
+                    result['errors'].append(f"Host request failed: {host_result.get('error')}")
+            else:
+                result['actions'].append({
+                    'action': 'send_host_request',
+                    'success': True,
+                    'detail': 'Skipped - no host assigned yet'
+                })
+        except Exception as e:
+            logger.error(f"Host request failed: {e}", exc_info=True)
+            result['errors'].append(f"Host request error: {e}")
+
+        # Assign coach (automated rotation)
+        try:
+            from app.newsletter.coach_rotation import (
+                assign_coach_for_month,
+                send_coach_request,
+            )
+            assign_result = assign_coach_for_month(newsletter.id)
+            if assign_result.get('success'):
+                result['actions'].append({
+                    'action': 'assign_coach',
+                    'success': True,
+                    'detail': f"coach={assign_result.get('coach_name')}"
+                })
+                # Send coach request DM
+                dm_result = send_coach_request(newsletter.id)
+                if dm_result.get('success'):
+                    result['actions'].append({
+                        'action': 'send_coach_request',
+                        'success': True,
+                        'detail': f"channel_id={dm_result.get('channel_id')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'send_coach_request',
+                        'success': False,
+                        'detail': dm_result.get('error')
+                    })
+                    result['errors'].append(f"Coach request DM failed: {dm_result.get('error')}")
+            else:
+                result['actions'].append({
+                    'action': 'assign_coach',
+                    'success': False,
+                    'detail': assign_result.get('error')
+                })
+                result['errors'].append(f"Coach assignment failed: {assign_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Coach assignment failed: {e}", exc_info=True)
+            result['errors'].append(f"Coach assignment error: {e}")
+
+        # Post QOTM to #chat
+        try:
+            if newsletter.qotm_question:
+                from app.newsletter.qotm import post_qotm_to_channel
+                qotm_result = post_qotm_to_channel(
+                    newsletter.id,
+                    newsletter.qotm_question,
+                    channel='chat'
+                )
+                if qotm_result.get('success'):
+                    result['actions'].append({
+                        'action': 'post_qotm',
+                        'success': True,
+                        'detail': f"message_ts={qotm_result.get('message_ts')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'post_qotm',
+                        'success': False,
+                        'detail': qotm_result.get('error')
+                    })
+                    result['errors'].append(f"QOTM post failed: {qotm_result.get('error')}")
+            else:
+                result['actions'].append({
+                    'action': 'post_qotm',
+                    'success': True,
+                    'detail': 'Skipped - no QOTM question set'
+                })
+        except Exception as e:
+            logger.error(f"QOTM post failed: {e}", exc_info=True)
+            result['errors'].append(f"QOTM post error: {e}")
+
+    # ========================================================================
+    # Day 5: Member highlight request (if nominated)
+    # ========================================================================
+    elif day_of_month == 5:
+        try:
+            if newsletter.has_highlight_nomination:
+                from app.newsletter.member_highlight import send_highlight_request
+                highlight_result = send_highlight_request(newsletter.id)
+                if highlight_result.get('success'):
+                    result['actions'].append({
+                        'action': 'send_highlight_request',
+                        'success': True,
+                        'detail': f"channel_id={highlight_result.get('channel_id')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'send_highlight_request',
+                        'success': False,
+                        'detail': highlight_result.get('error')
+                    })
+                    result['errors'].append(f"Highlight request failed: {highlight_result.get('error')}")
+            else:
+                result['actions'].append({
+                    'action': 'send_highlight_request',
+                    'success': True,
+                    'detail': 'Skipped - no member highlight nomination'
+                })
+        except Exception as e:
+            logger.error(f"Highlight request failed: {e}", exc_info=True)
+            result['errors'].append(f"Highlight request error: {e}")
+
+    # ========================================================================
+    # Day 10: Reminders for coach and host
+    # ========================================================================
+    elif day_of_month == 10:
+        # Send coach reminder if not submitted
+        try:
+            from app.newsletter.coach_rotation import send_coach_reminder
+            coach_reminder_result = send_coach_reminder(newsletter.id)
+            if coach_reminder_result.get('success'):
+                if coach_reminder_result.get('skipped'):
+                    result['actions'].append({
+                        'action': 'send_coach_reminder',
+                        'success': True,
+                        'detail': f"Skipped - {coach_reminder_result.get('reason')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'send_coach_reminder',
+                        'success': True,
+                        'detail': f"channel_id={coach_reminder_result.get('channel_id')}"
+                    })
+            else:
+                result['actions'].append({
+                    'action': 'send_coach_reminder',
+                    'success': False,
+                    'detail': coach_reminder_result.get('error')
+                })
+                result['errors'].append(f"Coach reminder failed: {coach_reminder_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Coach reminder failed: {e}", exc_info=True)
+            result['errors'].append(f"Coach reminder error: {e}")
+
+        # Send host reminder if not submitted
+        try:
+            from app.newsletter.host import send_host_reminder
+            host_reminder_result = send_host_reminder(newsletter.id)
+            if host_reminder_result.get('success'):
+                if host_reminder_result.get('skipped'):
+                    result['actions'].append({
+                        'action': 'send_host_reminder',
+                        'success': True,
+                        'detail': f"Skipped - {host_reminder_result.get('reason')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'send_host_reminder',
+                        'success': True,
+                        'detail': f"channel_id={host_reminder_result.get('channel_id')}"
+                    })
+            else:
+                result['actions'].append({
+                    'action': 'send_host_reminder',
+                    'success': False,
+                    'detail': host_reminder_result.get('error')
+                })
+                result['errors'].append(f"Host reminder failed: {host_reminder_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Host reminder failed: {e}", exc_info=True)
+            result['errors'].append(f"Host reminder error: {e}")
+
+    # ========================================================================
+    # Day 12: Generate AI drafts and create living post
+    # ========================================================================
+    elif day_of_month == 12:
+        # Generate AI drafts (including Member Highlight AI composition)
+        try:
+            from app.newsletter.member_highlight import compose_highlight_with_ai
+            from app.newsletter.interfaces import HighlightStatus
+
+            highlight = newsletter.highlight if hasattr(newsletter, 'highlight') else None
+            if highlight and highlight.status == HighlightStatus.SUBMITTED.value:
+                compose_result = compose_highlight_with_ai(newsletter.id)
+                if compose_result.get('success'):
+                    result['actions'].append({
+                        'action': 'compose_highlight_ai',
+                        'success': True,
+                        'detail': f"highlight_id={compose_result.get('highlight_id')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'compose_highlight_ai',
+                        'success': False,
+                        'detail': compose_result.get('error')
+                    })
+                    result['errors'].append(f"AI highlight composition failed: {compose_result.get('error')}")
+            else:
+                result['actions'].append({
+                    'action': 'compose_highlight_ai',
+                    'success': True,
+                    'detail': 'Skipped - no submitted highlight to compose'
+                })
+        except Exception as e:
+            logger.error(f"AI draft generation failed: {e}", exc_info=True)
+            result['errors'].append(f"AI draft generation error: {e}")
+
+        # Create/update living post
+        try:
+            from app.newsletter.slack_actions import (
+                create_living_post,
+                update_living_post,
+                is_dry_run,
+            )
+
+            if is_dry_run():
+                result['actions'].append({
+                    'action': 'living_post',
+                    'success': True,
+                    'detail': '[DRY RUN] Would create/update living post'
+                })
+            else:
+                # Build content dict for the living post
+                content = _build_monthly_dispatch_content(newsletter)
+
+                if not newsletter.slack_main_message_ts:
+                    post_ref = create_living_post(newsletter, content)
+                    result['actions'].append({
+                        'action': 'create_living_post',
+                        'success': True,
+                        'detail': f"message_ts={post_ref.message_ts if post_ref else 'None'}"
+                    })
+                else:
+                    post_ref = update_living_post(newsletter, content)
+                    result['actions'].append({
+                        'action': 'update_living_post',
+                        'success': True,
+                        'detail': f"message_ts={post_ref.message_ts if post_ref else 'None'}"
+                    })
+        except Exception as e:
+            logger.error(f"Living post creation failed: {e}", exc_info=True)
+            result['errors'].append(f"Living post error: {e}")
+
+    # ========================================================================
+    # Day 13: Final reminders
+    # ========================================================================
+    elif day_of_month == 13:
+        # Coach final reminder
+        try:
+            from app.newsletter.coach_rotation import send_coach_reminder
+            coach_reminder_result = send_coach_reminder(newsletter.id)
+            if coach_reminder_result.get('success'):
+                if coach_reminder_result.get('skipped'):
+                    result['actions'].append({
+                        'action': 'send_coach_final_reminder',
+                        'success': True,
+                        'detail': f"Skipped - {coach_reminder_result.get('reason')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'send_coach_final_reminder',
+                        'success': True,
+                        'detail': f"channel_id={coach_reminder_result.get('channel_id')}"
+                    })
+            else:
+                result['actions'].append({
+                    'action': 'send_coach_final_reminder',
+                    'success': False,
+                    'detail': coach_reminder_result.get('error')
+                })
+                result['errors'].append(f"Final coach reminder failed: {coach_reminder_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Final coach reminder failed: {e}", exc_info=True)
+            result['errors'].append(f"Final coach reminder error: {e}")
+
+        # Host final reminder
+        try:
+            from app.newsletter.host import send_host_reminder
+            host_reminder_result = send_host_reminder(newsletter.id)
+            if host_reminder_result.get('success'):
+                if host_reminder_result.get('skipped'):
+                    result['actions'].append({
+                        'action': 'send_host_final_reminder',
+                        'success': True,
+                        'detail': f"Skipped - {host_reminder_result.get('reason')}"
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'send_host_final_reminder',
+                        'success': True,
+                        'detail': f"channel_id={host_reminder_result.get('channel_id')}"
+                    })
+            else:
+                result['actions'].append({
+                    'action': 'send_host_final_reminder',
+                    'success': False,
+                    'detail': host_reminder_result.get('error')
+                })
+                result['errors'].append(f"Final host reminder failed: {host_reminder_result.get('error')}")
+        except Exception as e:
+            logger.error(f"Final host reminder failed: {e}", exc_info=True)
+            result['errors'].append(f"Final host reminder error: {e}")
+
+    # ========================================================================
+    # Day 14: Add review/edit buttons
+    # ========================================================================
+    elif day_of_month == 14:
+        try:
+            from app.newsletter.slack_actions import add_review_buttons, is_dry_run
+
+            if is_dry_run():
+                result['actions'].append({
+                    'action': 'add_review_buttons',
+                    'success': True,
+                    'detail': '[DRY RUN] Would add review buttons'
+                })
+            else:
+                success = add_review_buttons(newsletter)
+                if success:
+                    result['actions'].append({
+                        'action': 'add_review_buttons',
+                        'success': True,
+                        'detail': 'Review/edit buttons added to living post'
+                    })
+                else:
+                    result['actions'].append({
+                        'action': 'add_review_buttons',
+                        'success': False,
+                        'detail': 'Failed to add review buttons'
+                    })
+                    result['errors'].append("Failed to add review buttons to living post")
+        except Exception as e:
+            logger.error(f"Add review buttons failed: {e}", exc_info=True)
+            result['errors'].append(f"Add review buttons error: {e}")
+
+    # ========================================================================
+    # Other days: No automated actions
+    # ========================================================================
+    else:
+        result['actions'].append({
+            'action': 'no_action',
+            'success': True,
+            'detail': f'No automated actions scheduled for day {day_of_month}'
+        })
+
+    # Determine overall success (no critical errors)
+    result['success'] = len(result['errors']) == 0
+
+    return result
+
+
+def _build_monthly_dispatch_content(newsletter: Newsletter) -> dict:
+    """Build content dict for Monthly Dispatch living post.
+
+    Aggregates content from all newsletter sections into a structured
+    dict that can be rendered by the Block Kit templates.
+
+    Args:
+        newsletter: Newsletter instance
+
+    Returns:
+        Dict with section content for template rendering
+    """
+    from app.newsletter.qotm import get_selected_qotm_for_newsletter
+
+    content = {
+        'month_year': newsletter.month_year,
+        'status': newsletter.status,
+        'sections': {}
+    }
+
+    # Opener from host
+    if newsletter.host and newsletter.host.opener_content:
+        content['sections']['opener'] = {
+            'content': newsletter.host.opener_content,
+            'author': newsletter.host.display_name,
+        }
+
+    # Coaches Corner
+    if newsletter.coach_rotation and newsletter.coach_rotation.content:
+        coach = newsletter.coach_rotation.coach
+        content['sections']['coaches_corner'] = {
+            'content': newsletter.coach_rotation.content,
+            'author': coach.full_name if coach else 'Anonymous Coach',
+        }
+
+    # Member Highlight
+    highlight = newsletter.highlight if hasattr(newsletter, 'highlight') else None
+    if highlight:
+        # Prefer final edited content, then AI composed, then raw
+        highlight_content = (
+            highlight.content or
+            highlight.ai_composed_content or
+            str(highlight.raw_answers)
+        )
+        member = highlight.member
+        content['sections']['member_highlight'] = {
+            'content': highlight_content,
+            'member_name': member.full_name if member else 'Featured Member',
+        }
+
+    # QOTM and responses
+    if newsletter.qotm_question:
+        selected_responses = get_selected_qotm_for_newsletter(newsletter.id)
+        content['sections']['qotm'] = {
+            'question': newsletter.qotm_question,
+            'responses': [
+                {'user_name': r.user_name, 'response': r.response}
+                for r in selected_responses
+            ]
+        }
+
+    # Closer from host
+    if newsletter.host and newsletter.host.closer_content:
+        content['sections']['closer'] = {
+            'content': newsletter.host.closer_content,
+            'author': newsletter.host.display_name,
+        }
+
+    return content
+
+
 def get_newsletter_status(newsletter_id: Optional[int] = None) -> dict[str, Any]:
     """Get status information about a newsletter or current week.
 

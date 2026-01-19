@@ -656,6 +656,9 @@ def run_newsletter_monthly_orchestrator_job(app: Flask):
     Runs daily at 8am CT to check what day-of-month-specific actions
     need to happen for the Monthly Dispatch newsletter.
 
+    This function delegates to run_monthly_orchestrator() in the service
+    module, which encapsulates all the day-specific orchestration logic.
+
     Monthly Schedule:
     - Day 1: Send host DM (if assigned), assign coach (automated), post QOTM
     - Day 5: Send member highlight request (if nominated)
@@ -671,7 +674,7 @@ def run_newsletter_monthly_orchestrator_job(app: Flask):
     from zoneinfo import ZoneInfo
 
     with app.app_context():
-        from app.newsletter.models import Newsletter
+        from app.newsletter.service import run_monthly_orchestrator
 
         # Use Central timezone to determine day of month
         central_tz = ZoneInfo('America/Chicago')
@@ -684,346 +687,30 @@ def run_newsletter_monthly_orchestrator_job(app: Flask):
         app.logger.info(f"Day of month: {today}")
         app.logger.info("=" * 60)
 
-        # Get or create newsletter for current month
-        try:
-            newsletter = Newsletter.get_or_create_current_month()
-            from app.models import db
-            db.session.commit()
+        # Delegate to service function
+        result = run_monthly_orchestrator(today)
+
+        # Log results
+        if result.get('newsletter_id'):
             app.logger.info(
-                f"Newsletter: id={newsletter.id}, "
-                f"month={newsletter.month_year}, "
-                f"status={newsletter.status}"
+                f"Newsletter: id={result['newsletter_id']}"
             )
-        except Exception as e:
-            app.logger.error(f"Failed to get/create newsletter: {e}", exc_info=True)
-            return
 
-        # ====================================================================
-        # Day 1: Host DM, Coach assignment, QOTM post
-        # ====================================================================
-        if today == 1:
-            app.logger.info("Day 1 actions: Host DM, Coach assignment, QOTM post")
+        app.logger.info(f"Orchestrator complete: {len(result.get('actions', []))} actions")
+        for action in result.get('actions', []):
+            status = "OK" if action.get('success') else "FAILED"
+            app.logger.info(f"  [{status}] {action.get('action')}: {action.get('detail')}")
 
-            # Send host request DM (if host has been assigned manually)
-            try:
-                if newsletter.host:
-                    from app.newsletter.host import send_host_request
-                    result = send_host_request(newsletter.id)
-                    if result.get('success'):
-                        app.logger.info(
-                            f"Sent host request DM (channel={result.get('channel_id')})"
-                        )
-                    elif result.get('error'):
-                        app.logger.warning(f"Host request DM failed: {result.get('error')}")
-                else:
-                    app.logger.info("No host assigned yet, skipping host DM")
-            except Exception as e:
-                app.logger.error(f"Host request failed: {e}", exc_info=True)
-
-            # Assign coach (automated rotation)
-            try:
-                from app.newsletter.coach_rotation import (
-                    assign_coach_for_month,
-                    send_coach_request,
-                )
-                assign_result = assign_coach_for_month(newsletter.id)
-                if assign_result.get('success'):
-                    app.logger.info(
-                        f"Assigned coach: {assign_result.get('coach_name')}"
-                    )
-                    # Send coach request DM
-                    dm_result = send_coach_request(newsletter.id)
-                    if dm_result.get('success'):
-                        app.logger.info(
-                            f"Sent coach request DM (channel={dm_result.get('channel_id')})"
-                        )
-                    else:
-                        app.logger.warning(
-                            f"Coach request DM failed: {dm_result.get('error')}"
-                        )
-                else:
-                    app.logger.warning(
-                        f"Coach assignment failed: {assign_result.get('error')}"
-                    )
-            except Exception as e:
-                app.logger.error(f"Coach assignment failed: {e}", exc_info=True)
-
-            # Post QOTM to #chat
-            try:
-                if newsletter.qotm_question:
-                    from app.newsletter.qotm import post_qotm_to_channel
-                    result = post_qotm_to_channel(
-                        newsletter.id,
-                        newsletter.qotm_question,
-                        channel='chat'
-                    )
-                    if result.get('success'):
-                        app.logger.info(
-                            f"Posted QOTM to #chat (ts={result.get('message_ts')})"
-                        )
-                    else:
-                        app.logger.warning(f"QOTM post failed: {result.get('error')}")
-                else:
-                    app.logger.info("No QOTM question set, skipping QOTM post")
-            except Exception as e:
-                app.logger.error(f"QOTM post failed: {e}", exc_info=True)
-
-        # ====================================================================
-        # Day 5: Member highlight request (if nominated)
-        # ====================================================================
-        elif today == 5:
-            app.logger.info("Day 5 actions: Member highlight request")
-
-            try:
-                if newsletter.has_highlight_nomination:
-                    from app.newsletter.member_highlight import send_highlight_request
-                    result = send_highlight_request(newsletter.id)
-                    if result.get('success'):
-                        app.logger.info(
-                            f"Sent highlight request DM (channel={result.get('channel_id')})"
-                        )
-                    else:
-                        app.logger.warning(
-                            f"Highlight request failed: {result.get('error')}"
-                        )
-                else:
-                    app.logger.info("No member highlight nomination, skipping")
-            except Exception as e:
-                app.logger.error(f"Highlight request failed: {e}", exc_info=True)
-
-        # ====================================================================
-        # Day 10: Reminders for coach and host
-        # ====================================================================
-        elif today == 10:
-            app.logger.info("Day 10 actions: Coach and host reminders")
-
-            # Send coach reminder if not submitted
-            try:
-                from app.newsletter.coach_rotation import send_coach_reminder
-                result = send_coach_reminder(newsletter.id)
-                if result.get('success'):
-                    if result.get('skipped'):
-                        app.logger.info(f"Coach reminder skipped: {result.get('reason')}")
-                    else:
-                        app.logger.info(
-                            f"Sent coach reminder (channel={result.get('channel_id')})"
-                        )
-                else:
-                    app.logger.warning(f"Coach reminder failed: {result.get('error')}")
-            except Exception as e:
-                app.logger.error(f"Coach reminder failed: {e}", exc_info=True)
-
-            # Send host reminder if not submitted
-            try:
-                from app.newsletter.host import send_host_reminder
-                result = send_host_reminder(newsletter.id)
-                if result.get('success'):
-                    if result.get('skipped'):
-                        app.logger.info(f"Host reminder skipped: {result.get('reason')}")
-                    else:
-                        app.logger.info(
-                            f"Sent host reminder (channel={result.get('channel_id')})"
-                        )
-                else:
-                    app.logger.warning(f"Host reminder failed: {result.get('error')}")
-            except Exception as e:
-                app.logger.error(f"Host reminder failed: {e}", exc_info=True)
-
-        # ====================================================================
-        # Day 12: Generate AI drafts and create living post
-        # ====================================================================
-        elif today == 12:
-            app.logger.info("Day 12 actions: Generate AI drafts, create living post")
-
-            # Generate AI drafts (including Member Highlight AI composition)
-            # Note: generate_ai_drafts() doesn't exist yet - wrap in try/except
-            try:
-                # Try to compose member highlight with AI if submitted
-                from app.newsletter.member_highlight import compose_highlight_with_ai
-                from app.newsletter.interfaces import HighlightStatus
-
-                highlight = newsletter.highlight if hasattr(newsletter, 'highlight') else None
-                if highlight and highlight.status == HighlightStatus.SUBMITTED.value:
-                    result = compose_highlight_with_ai(newsletter.id)
-                    if result.get('success'):
-                        app.logger.info(
-                            f"Composed member highlight with AI "
-                            f"(highlight_id={result.get('highlight_id')})"
-                        )
-                    else:
-                        app.logger.warning(
-                            f"AI highlight composition failed: {result.get('error')}"
-                        )
-                else:
-                    app.logger.info("No submitted highlight to compose with AI")
-            except Exception as e:
-                app.logger.error(f"AI draft generation failed: {e}", exc_info=True)
-
-            # Create/update living post
-            # Note: This uses the existing slack_actions module
-            try:
-                from app.newsletter.slack_actions import (
-                    create_living_post,
-                    update_living_post,
-                    is_dry_run,
-                )
-
-                if is_dry_run():
-                    app.logger.info("[DRY RUN] Would create/update living post")
-                else:
-                    # Build content dict for the living post
-                    # This is a simplified version - real implementation would
-                    # aggregate all section content
-                    content = _build_monthly_dispatch_content(newsletter, app)
-
-                    if not newsletter.slack_main_message_ts:
-                        post_ref = create_living_post(newsletter, content)
-                        app.logger.info(
-                            f"Created living post (ts={post_ref.message_ts})"
-                        )
-                    else:
-                        post_ref = update_living_post(newsletter, content)
-                        app.logger.info(
-                            f"Updated living post (ts={post_ref.message_ts})"
-                        )
-            except Exception as e:
-                app.logger.error(f"Living post creation failed: {e}", exc_info=True)
-
-        # ====================================================================
-        # Day 13: Final reminders
-        # ====================================================================
-        elif today == 13:
-            app.logger.info("Day 13 actions: Final reminders")
-
-            # Send final reminders for any missing content
-            # Re-use the reminder functions from day 10
-
-            # Coach final reminder
-            try:
-                from app.newsletter.coach_rotation import send_coach_reminder
-                result = send_coach_reminder(newsletter.id)
-                if result.get('success') and not result.get('skipped'):
-                    app.logger.info(
-                        f"Sent final coach reminder (channel={result.get('channel_id')})"
-                    )
-                elif result.get('skipped'):
-                    app.logger.info(f"Coach reminder skipped: {result.get('reason')}")
-            except Exception as e:
-                app.logger.error(f"Final coach reminder failed: {e}", exc_info=True)
-
-            # Host final reminder
-            try:
-                from app.newsletter.host import send_host_reminder
-                result = send_host_reminder(newsletter.id)
-                if result.get('success') and not result.get('skipped'):
-                    app.logger.info(
-                        f"Sent final host reminder (channel={result.get('channel_id')})"
-                    )
-                elif result.get('skipped'):
-                    app.logger.info(f"Host reminder skipped: {result.get('reason')}")
-            except Exception as e:
-                app.logger.error(f"Final host reminder failed: {e}", exc_info=True)
-
-        # ====================================================================
-        # Day 14: Add review/edit buttons
-        # ====================================================================
-        elif today == 14:
-            app.logger.info("Day 14 actions: Add review buttons")
-
-            try:
-                from app.newsletter.slack_actions import add_review_buttons, is_dry_run
-
-                if is_dry_run():
-                    app.logger.info("[DRY RUN] Would add review buttons")
-                else:
-                    success = add_review_buttons(newsletter)
-                    if success:
-                        app.logger.info("Added review/edit buttons to living post")
-                    else:
-                        app.logger.warning("Failed to add review buttons")
-            except Exception as e:
-                app.logger.error(f"Add review buttons failed: {e}", exc_info=True)
-
-        # ====================================================================
-        # Other days: No automated actions
-        # ====================================================================
-        else:
-            app.logger.info(f"No automated actions scheduled for day {today}")
+        if result.get('errors'):
+            app.logger.warning(f"Orchestrator errors ({len(result['errors'])}):")
+            for error in result['errors'][:5]:
+                app.logger.warning(f"  - {error}")
+            if len(result['errors']) > 5:
+                app.logger.warning(f"  ... and {len(result['errors']) - 5} more errors")
 
         app.logger.info("=" * 60)
         app.logger.info("Newsletter monthly orchestrator job complete")
         app.logger.info("=" * 60)
-
-
-def _build_monthly_dispatch_content(newsletter, app) -> dict:
-    """Build content dict for Monthly Dispatch living post.
-
-    Aggregates content from all newsletter sections into a structured
-    dict that can be rendered by the Block Kit templates.
-
-    Args:
-        newsletter: Newsletter instance
-        app: Flask app for logging
-
-    Returns:
-        Dict with section content for template rendering
-    """
-    content = {
-        'month_year': newsletter.month_year,
-        'status': newsletter.status,
-        'sections': {}
-    }
-
-    # Opener from host
-    if newsletter.host and newsletter.host.opener_content:
-        content['sections']['opener'] = {
-            'content': newsletter.host.opener_content,
-            'author': newsletter.host.display_name,
-        }
-
-    # Coaches Corner
-    if newsletter.coach_rotation and newsletter.coach_rotation.content:
-        coach = newsletter.coach_rotation.coach
-        content['sections']['coaches_corner'] = {
-            'content': newsletter.coach_rotation.content,
-            'author': coach.full_name if coach else 'Anonymous Coach',
-        }
-
-    # Member Highlight
-    highlight = newsletter.highlight if hasattr(newsletter, 'highlight') else None
-    if highlight:
-        # Prefer final edited content, then AI composed, then raw
-        highlight_content = (
-            highlight.content or
-            highlight.ai_composed_content or
-            str(highlight.raw_answers)
-        )
-        member = highlight.member
-        content['sections']['member_highlight'] = {
-            'content': highlight_content,
-            'member_name': member.full_name if member else 'Featured Member',
-        }
-
-    # QOTM and responses
-    if newsletter.qotm_question:
-        from app.newsletter.qotm import get_selected_qotm_for_newsletter
-        selected_responses = get_selected_qotm_for_newsletter(newsletter.id)
-        content['sections']['qotm'] = {
-            'question': newsletter.qotm_question,
-            'responses': [
-                {'user_name': r.user_name, 'response': r.response}
-                for r in selected_responses
-            ]
-        }
-
-    # Closer from host
-    if newsletter.host and newsletter.host.closer_content:
-        content['sections']['closer'] = {
-            'content': newsletter.host.closer_content,
-            'author': newsletter.host.display_name,
-        }
-
-    return content
 
 
 def init_scheduler(app: Flask) -> bool:
