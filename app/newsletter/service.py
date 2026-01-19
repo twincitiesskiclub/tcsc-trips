@@ -1136,6 +1136,99 @@ def _build_monthly_dispatch_content(newsletter: Newsletter) -> dict:
     return content
 
 
+def generate_ai_drafts(newsletter_id: int) -> dict:
+    """Generate AI drafts for all AI-assisted sections.
+
+    Called on day 12 of the month to generate initial drafts
+    for editor review.
+
+    Collects context data:
+    1. Slack messages from the month using collect_all_messages()
+    2. Leadership channel messages (placeholder for now)
+    3. Events (placeholder for now)
+    4. Member highlight answers if available
+
+    Args:
+        newsletter_id: Newsletter ID
+
+    Returns:
+        dict with 'success', 'sections', 'errors' keys
+    """
+    logger.info(f"Generating AI drafts for newsletter {newsletter_id}")
+
+    result = {
+        'success': False,
+        'sections': [],
+        'errors': []
+    }
+
+    # Get the newsletter
+    try:
+        newsletter = Newsletter.query.get(newsletter_id)
+        if not newsletter:
+            result['errors'].append(f"Newsletter {newsletter_id} not found")
+            return result
+    except Exception as e:
+        logger.error(f"Error fetching newsletter {newsletter_id}: {e}")
+        result['errors'].append(f"Error fetching newsletter: {e}")
+        return result
+
+    # Build context data for AI generation
+    context_data = {
+        'slack_messages': [],
+        'leadership_messages': [],  # Placeholder for now
+        'events': [],  # Placeholder for now
+        'member_highlight_answers': None
+    }
+
+    # Collect Slack messages from the month
+    if newsletter.period_start and newsletter.period_end:
+        try:
+            from app.newsletter.collector import collect_all_messages
+
+            messages = collect_all_messages(since=newsletter.period_start)
+            context_data['slack_messages'] = messages
+            logger.info(f"Collected {len(messages)} Slack messages for AI draft generation")
+        except Exception as e:
+            logger.error(f"Failed to collect Slack messages: {e}")
+            result['errors'].append(f"Failed to collect Slack messages: {e}")
+            # Continue with empty messages - AI can still generate with limited context
+    else:
+        logger.warning(f"Newsletter {newsletter_id} has no period_start/period_end set")
+
+    # Get member highlight answers if available
+    highlight = getattr(newsletter, 'highlight', None)
+    if highlight and getattr(highlight, 'raw_answers', None):
+        try:
+            # raw_answers is stored as JSON dict
+            context_data['member_highlight_answers'] = highlight.raw_answers
+            logger.info("Loaded member highlight answers for AI draft generation")
+        except Exception as e:
+            logger.warning(f"Failed to load member highlight answers: {e}")
+
+    # Generate all AI sections
+    try:
+        from app.newsletter.monthly_generator import generate_all_ai_sections
+
+        gen_result = generate_all_ai_sections(newsletter, context_data)
+
+        result['success'] = gen_result.get('success', False)
+        result['sections'] = gen_result.get('sections', [])
+
+        if gen_result.get('errors'):
+            result['errors'].extend(gen_result['errors'])
+
+        successful_count = sum(1 for s in result['sections'] if s.get('success'))
+        total_count = len(result['sections'])
+        logger.info(f"AI draft generation complete: {successful_count}/{total_count} sections generated")
+
+    except Exception as e:
+        logger.error(f"AI draft generation failed: {e}", exc_info=True)
+        result['errors'].append(f"AI draft generation failed: {e}")
+
+    return result
+
+
 def get_newsletter_status(newsletter_id: Optional[int] = None) -> dict[str, Any]:
     """Get status information about a newsletter or current week.
 
