@@ -17,6 +17,7 @@ from app.models import db
 from app.newsletter.interfaces import (
     CoachStatus,
     HighlightStatus,
+    HostStatus,
     NewsletterStatus,
     SubmissionStatus,
     SubmissionType,
@@ -650,3 +651,56 @@ class MemberHighlight(db.Model):
 
     def __repr__(self):
         return f'<MemberHighlight member={self.member_user_id} newsletter={self.newsletter_id}>'
+
+
+class NewsletterHost(db.Model):
+    """Newsletter host assignment for opener and closer content.
+
+    The host is manually assigned by admin and writes both the opener
+    and closer sections. Can be a Slack member or external guest.
+    """
+    __tablename__ = 'newsletter_hosts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False,
+        unique=True  # One host per newsletter
+    )
+
+    # Host info (could be member or external)
+    slack_user_id = db.Column(db.String(20))  # If Slack member
+    external_name = db.Column(db.String(100))  # If external guest
+    external_email = db.Column(db.String(200))  # For external contact
+
+    # Content
+    opener_content = db.Column(db.Text)
+    closer_content = db.Column(db.Text)
+
+    # Status
+    status = db.Column(db.String(20), default=HostStatus.ASSIGNED.value)
+
+    # Timestamps
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('host', uselist=False))
+
+    def __repr__(self):
+        host_id = self.slack_user_id or self.external_name or 'unknown'
+        return f'<NewsletterHost {host_id} newsletter={self.newsletter_id}>'
+
+    @property
+    def display_name(self) -> str:
+        """Get display name for the host."""
+        if self.external_name:
+            return self.external_name
+        # For Slack members, would need to look up - return user_id for now
+        return self.slack_user_id or 'Unknown Host'
+
+    @property
+    def is_external(self) -> bool:
+        """Check if host is external (not a Slack member)."""
+        return bool(self.external_name or self.external_email) and not self.slack_user_id
