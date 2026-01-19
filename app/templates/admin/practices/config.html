@@ -23,52 +23,40 @@
 
     <!-- Tab Content: Locations -->
     <div id="locations-tab" class="tab-content">
-        <div class="flex items-center gap-3 mb-4">
+        <div class="toolbar">
             <button class="toolbar-btn toolbar-btn-primary" onclick="addNewLocation()">Add Location</button>
-            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
-                <span>Total:</span>
-                <strong id="location-count" class="text-tcsc-navy">0</strong>
-                <span>locations</span>
-            </div>
+            <div class="toolbar-spacer"></div>
+            <span class="toolbar-count">Total: <strong id="location-count">0</strong> locations</span>
         </div>
         <div id="locations-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Activities -->
     <div id="activities-tab" class="tab-content hidden">
-        <div class="flex items-center gap-3 mb-4">
+        <div class="toolbar">
             <button class="toolbar-btn toolbar-btn-primary" onclick="addNewActivity()">Add Activity</button>
-            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
-                <span>Total:</span>
-                <strong id="activity-count" class="text-tcsc-navy">0</strong>
-                <span>activities</span>
-            </div>
+            <div class="toolbar-spacer"></div>
+            <span class="toolbar-count">Total: <strong id="activity-count">0</strong> activities</span>
         </div>
         <div id="activities-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Types -->
     <div id="types-tab" class="tab-content hidden">
-        <div class="flex items-center gap-3 mb-4">
+        <div class="toolbar">
             <button class="toolbar-btn toolbar-btn-primary" onclick="addNewType()">Add Type</button>
-            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
-                <span>Total:</span>
-                <strong id="type-count" class="text-tcsc-navy">0</strong>
-                <span>types</span>
-            </div>
+            <div class="toolbar-spacer"></div>
+            <span class="toolbar-count">Total: <strong id="type-count">0</strong> types</span>
         </div>
         <div id="types-table" class="tabulator-config"></div>
     </div>
 
     <!-- Tab Content: Social Locations -->
     <div id="social-locations-tab" class="tab-content hidden">
-        <div class="flex items-center gap-3 mb-4">
+        <div class="toolbar">
             <button class="toolbar-btn toolbar-btn-primary" onclick="addNewSocialLocation()">Add Social Location</button>
-            <div class="inline-flex items-center gap-1.5 py-1.5 px-3 bg-gray-100 rounded-md text-sm font-medium text-gray-700 ml-auto">
-                <span>Total:</span>
-                <strong id="social-location-count" class="text-tcsc-navy">0</strong>
-                <span>social locations</span>
-            </div>
+            <div class="toolbar-spacer"></div>
+            <span class="toolbar-count">Total: <strong id="social-location-count">0</strong> social locations</span>
         </div>
         <div id="social-locations-table" class="tabulator-config"></div>
     </div>

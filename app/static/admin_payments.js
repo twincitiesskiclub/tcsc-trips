@@ -70,9 +70,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                 const status = data.status;
                 const acceptDisabled = status !== 'requires_capture' ? 'disabled' : '';
                 const refundDisabled = !['requires_capture', 'succeeded'].includes(status) ? 'disabled' : '';
-                return `<div class="tbl-actions">
-                    <button class="tbl-btn tbl-btn-success" onclick="capturePayment(${data.id}); event.stopPropagation();" ${acceptDisabled}>Accept</button>
-                    <button class="tbl-btn tbl-btn-danger" onclick="refundPayment(${data.id}); event.stopPropagation();" ${refundDisabled}>Refund</button>
+                return `<div class="admin-actions">
+                    <button class="admin-btn admin-btn-sm admin-btn-success" onclick="capturePayment(${data.id}); event.stopPropagation();" ${acceptDisabled}>Accept</button>
+                    <button class="admin-btn admin-btn-sm admin-btn-danger" onclick="refundPayment(${data.id}); event.stopPropagation();" ${refundDisabled}>Refund</button>
                 </div>`;
             }, headerSort: false, width: 180, hozAlign: "center", frozen: true}
         ],
@@ -144,7 +144,7 @@ function applyFilters() {
 }
 
 function updatePaymentCount(count) {
-    document.getElementById('payment-count').textContent = `${count} payment${count !== 1 ? 's' : ''}`;
+    document.getElementById('payment-count').textContent = count;
 }
 
 function updateBulkButtons() {
@@ -184,11 +184,11 @@ function showBulkConfirmation(action) {
 
     // Build modal content
     const actionText = action === 'accept' ? 'Accept' : 'Refund';
-    const actionClass = action === 'accept' ? 'button-success' : 'button-danger';
+    const actionClass = action === 'accept' ? 'admin-btn-success' : 'admin-btn-danger';
 
     document.getElementById('modal-title').textContent = `${actionText} ${actionablePayments.length} Payment${actionablePayments.length > 1 ? 's' : ''}`;
     document.getElementById('confirm-action').textContent = `${actionText} All`;
-    document.getElementById('confirm-action').className = `button ${actionClass}`;
+    document.getElementById('confirm-action').className = `admin-btn admin-btn-md ${actionClass}`;
 
     let bodyHtml = `<p>You are about to <strong>${action}</strong> the following payments:</p>`;
     bodyHtml += `<div class="bulk-summary">`;

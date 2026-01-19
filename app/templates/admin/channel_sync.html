@@ -31,15 +31,15 @@
 }
 
 /* Loading state for buttons */
-.action-btn.loading {
+.admin-btn.loading {
     pointer-events: none;
 }
 
-.action-btn.loading .btn-icon {
+.admin-btn.loading .btn-icon {
     display: none;
 }
 
-.action-btn.loading .btn-text::after {
+.admin-btn.loading .btn-text::after {
     content: '...';
 }
 </style>
@@ -51,11 +51,11 @@
     <div class="flex flex-wrap justify-between items-center gap-3 mb-5">
         <h1 class="text-2xl font-semibold text-tcsc-navy m-0">Channel Sync</h1>
         <div class="flex items-center gap-3">
-            <button class="action-btn bg-gray-200 text-gray-600 border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="dry-run-btn" onclick="runSync(true)">
+            <button class="admin-btn admin-btn-md admin-btn-secondary" id="dry-run-btn" onclick="runSync(true)">
                 <span class="btn-icon">🔍</span>
                 <span class="btn-text">Dry Run</span>
             </button>
-            <button class="action-btn bg-amber-500 text-white border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="live-run-btn" onclick="runSync(false)">
+            <button class="admin-btn admin-btn-md admin-btn-primary" id="live-run-btn" onclick="runSync(false)" style="background-color: #f59e0b;">
                 <span class="btn-icon">⚡</span>
                 <span class="btn-text">Live Run</span>
             </button>
@@ -86,7 +86,7 @@
     <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
         <div class="flex justify-between items-center mb-5">
             <h3 class="text-base font-semibold text-tcsc-navy m-0">Configuration</h3>
-            <button class="bg-gray-200 text-gray-600 border-none px-4 py-2 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all hover:bg-gray-300" onclick="loadStatus()">
+            <button class="admin-btn admin-btn-md admin-btn-secondary" onclick="loadStatus()">
                 <span class="btn-icon">↻</span>
                 <span class="btn-text">Refresh</span>
             </button>
@@ -116,11 +116,11 @@
         <div class="flex flex-wrap justify-between items-center mb-5 gap-3">
             <h3 class="text-base font-semibold text-tcsc-navy m-0">ExpertVoice Sync</h3>
             <div class="flex items-center gap-3">
-                <button class="action-btn bg-gray-200 text-gray-600 border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="ev-dry-run-btn" onclick="runExpertVoice(true)">
+                <button class="admin-btn admin-btn-md admin-btn-secondary" id="ev-dry-run-btn" onclick="runExpertVoice(true)">
                     <span class="btn-icon">🔍</span>
                     <span class="btn-text">Dry Run</span>
                 </button>
-                <button class="action-btn bg-emerald-500 text-white border-none px-5 py-2.5 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all whitespace-nowrap hover:opacity-90 hover:-translate-y-px disabled:opacity-60 disabled:cursor-not-allowed disabled:transform-none" id="ev-live-btn" onclick="runExpertVoice(false)">
+                <button class="admin-btn admin-btn-md admin-btn-primary" id="ev-live-btn" onclick="runExpertVoice(false)" style="background-color: #10b981;">
                     <span class="btn-icon">📤</span>
                     <span class="btn-text">Upload</span>
                 </button>
@@ -144,7 +144,7 @@
     <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-5 mb-6">
         <div class="flex justify-between items-center mb-5">
             <h3 class="text-base font-semibold text-tcsc-navy m-0">Activity Log</h3>
-            <button class="bg-gray-200 text-gray-600 border-none px-4 py-2 rounded-tcsc text-sm font-medium cursor-pointer inline-flex items-center gap-2 transition-all hover:bg-gray-300" onclick="clearLog()">
+            <button class="admin-btn admin-btn-md admin-btn-secondary" onclick="clearLog()">
                 <span class="btn-icon">🗑</span>
                 <span class="btn-text">Clear</span>
             </button>

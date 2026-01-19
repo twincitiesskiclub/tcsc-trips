@@ -79,7 +79,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             // Frozen columns on left (always visible)
             {title: "", formatter: function(cell) {
                 const id = cell.getRow().getData().id;
-                return `<button class="tbl-btn tbl-btn-primary" onclick="openEditModal(${id}); event.stopPropagation();">Edit</button>`;
+                return `<button class="admin-btn admin-btn-sm admin-btn-primary" onclick="openEditModal(${id}); event.stopPropagation();">Edit</button>`;
             }, headerSort: false, width: 60, hozAlign: "center", frozen: true},
             {title: "Name", field: "full_name", frozen: true, minWidth: 150,
              formatter: function(cell) {
@@ -188,9 +188,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     });
 
     // View button handlers
-    document.querySelectorAll('.seg-btn').forEach(btn => {
+    document.querySelectorAll('.admin-pill').forEach(btn => {
         btn.addEventListener('click', () => {
-            document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.admin-pill').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.getElementById('global-season-select').value = '';
             currentView = btn.dataset.view;
@@ -203,7 +203,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('global-season-select').addEventListener('change', (e) => {
         const seasonId = e.target.value;
         if (seasonId) {
-            document.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.admin-pill').forEach(b => b.classList.remove('active'));
             selectedSeasonId = parseInt(seasonId);
             currentView = 'season';
             applyGlobalView();
@@ -358,7 +358,7 @@ function applyFilters() {
 }
 
 function updateMemberCount(count) {
-    document.getElementById('member-count').textContent = `${count} member${count !== 1 ? 's' : ''}`;
+    document.getElementById('member-count').textContent = count;
 }
 
 function openEditModal(userId) {

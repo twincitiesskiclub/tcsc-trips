@@ -10,32 +10,7 @@
     position: relative;
 }
 
-.role-filter-btn {
-    height: 32px;
-    padding: 0 28px 0 10px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
-    background: white url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5l3.5 3.5 3.5-3.5'/%3E%3C/svg%3E") no-repeat right 10px center;
-    font-size: 13px;
-    color: #344054;
-    cursor: pointer;
-    appearance: none;
-    -webkit-appearance: none;
-    display: inline-block;
-    width: auto;
-    margin-top: 0;
-}
-
-.role-filter-btn:hover {
-    border-color: #98a2b3;
-}
-
-.role-filter-btn:focus {
-    outline: none;
-    border-color: #1c2c44;
-}
-
-.role-filter-btn.has-selection {
+#role-filter-btn.has-selection {
     border-color: #1c2c44;
     background-color: rgba(28,44,68,0.03);
 }
@@ -372,21 +347,21 @@
     <h1 class="text-xl font-semibold text-tcsc-navy mb-3" id="view-title">Members</h1>
 
     <!-- Toolbar -->
-    <div class="flex items-center gap-2.5 mb-4 flex-wrap">
-        <div class="seg-group">
-            <button class="seg-btn active" data-view="all">All</button>
-            <button class="seg-btn" data-view="current">Current</button>
-            <button class="seg-btn" data-view="alumni">Alumni</button>
+    <div class="admin-toolbar">
+        <!-- View switcher -->
+        <div class="admin-pill-group">
+            <button class="admin-pill active" data-view="all">All</button>
+            <button class="admin-pill" data-view="current">Current</button>
+            <button class="admin-pill" data-view="alumni">Alumni</button>
         </div>
-        <select id="global-season-select" class="tbl-select">
+        <!-- Filters -->
+        <select id="global-season-select" class="admin-select">
             <option value="">Season...</option>
             {% for season in all_seasons %}
             <option value="{{ season.id }}">{{ season.name }}</option>
             {% endfor %}
         </select>
-        <span id="member-count" class="h-8 inline-flex items-center px-3 bg-gray-100 border border-gray-200 rounded-md text-sm font-medium text-gray-600 whitespace-nowrap">0 members</span>
-        <input type="text" id="users-search" class="tbl-search" placeholder="Search...">
-        <select id="status-filter" class="tbl-select">
+        <select id="status-filter" class="admin-select">
             <option value="">Status</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING">Pending</option>
@@ -394,7 +369,7 @@
             <option value="DROPPED">Dropped</option>
         </select>
         <div class="role-filter-dropdown relative" id="role-filter-dropdown">
-            <button type="button" class="role-filter-btn" id="role-filter-btn" onclick="toggleRoleDropdown()">
+            <button type="button" class="admin-select text-left" id="role-filter-btn" onclick="toggleRoleDropdown()">
                 <span id="role-filter-label">Roles</span>
             </button>
             <div class="role-filter-menu" id="role-filter-menu">
@@ -407,7 +382,7 @@
                 </div>
             </div>
         </div>
-        <select id="season-filter" class="tbl-select">
+        <select id="season-filter" class="admin-select">
             <option value="">Season Status</option>
             <option value="ACTIVE">Active</option>
             <option value="PENDING_LOTTERY">Pending Lottery</option>
@@ -417,12 +392,16 @@
             <option value="registered">Registered</option>
             <option value="not_registered">Not Registered</option>
         </select>
+        <!-- Count and search pushed right -->
+        <div class="admin-toolbar-spacer"></div>
+        <span id="member-count" class="admin-count">0</span>
+        <input type="text" id="users-search" class="admin-search" placeholder="Search...">
     </div>
 
     <div id="users-table" class="tabulator-data"></div>
 
     <div class="flex justify-end mt-4 pt-4 border-t border-gray-200">
-        <button id="export-csv" class="toolbar-btn toolbar-btn-secondary">Export CSV</button>
+        <button id="export-csv" class="admin-btn admin-btn-md admin-btn-secondary">Export CSV</button>
     </div>
 </div>
 
@@ -441,9 +420,9 @@
             </form>
         </div>
         <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeModal()">Cancel</button>
-            <a href="#" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" id="view-details-link">View Details</a>
-            <button type="submit" form="edit-user-form" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Changes</button>
+            <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" onclick="closeModal()">Cancel</button>
+            <a href="#" class="admin-btn admin-btn-md admin-btn-secondary" id="view-details-link">View Details</a>
+            <button type="submit" form="edit-user-form" class="admin-btn admin-btn-md admin-btn-primary">Save Changes</button>
         </div>
     </div>
 </div>
@@ -460,8 +439,8 @@
             <div id="tag-checkboxes"></div>
         </div>
         <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeTagModal()">Cancel</button>
-            <button type="button" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all" onclick="saveUserTags()">Save Tags</button>
+            <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" onclick="closeTagModal()">Cancel</button>
+            <button type="button" class="admin-btn admin-btn-md admin-btn-primary" onclick="saveUserTags()">Save Tags</button>
         </div>
     </div>
 </div>

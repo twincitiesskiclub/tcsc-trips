@@ -48,21 +48,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold text-tcsc-navy">Role Management</h1>
-    <div class="flex gap-3">
-        <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
-    </div>
-</div>
-
 <div class="bg-white rounded-tcsc p-5">
-    <div class="flex items-center gap-3 mb-4">
-        <button class="toolbar-btn toolbar-btn-primary" onclick="addNewRole()">Add New Role</button>
-        <div class="ml-auto inline-flex items-center gap-1.5 px-3 py-1.5 bg-gray-100 rounded-md text-sm font-medium text-gray-700">
-            <span>Total:</span>
-            <strong id="role-count" class="text-tcsc-navy">0</strong>
-            <span>roles</span>
-        </div>
+    <div class="admin-header">
+        <h1>Role Management</h1>
+        <button class="admin-btn admin-btn-lg admin-btn-primary" onclick="addNewRole()">+ Add New Role</button>
+    </div>
+
+    <div class="admin-toolbar">
+        <div class="admin-toolbar-spacer"></div>
+        <span class="admin-count" id="role-count">0</span>
     </div>
 
     <div id="roles-table" class="tabulator-config"></div>
@@ -157,9 +151,9 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const data = cell.getRow().getData();
                     const canDelete = !data.user_count || data.user_count === 0;
                     const deleteBtn = canDelete
-                        ? `<button class="tbl-btn tbl-btn-danger" onclick="deleteRole(${data.id}, '${data.display_name}')">Delete</button>`
-                        : `<button class="tbl-btn tbl-btn-danger" disabled title="Cannot delete - has users">Delete</button>`;
-                    return `<div class="tbl-actions">${deleteBtn}</div>`;
+                        ? `<button class="admin-btn admin-btn-sm admin-btn-danger" onclick="deleteRole(${data.id}, '${data.display_name}')">Delete</button>`
+                        : `<button class="admin-btn admin-btn-sm admin-btn-danger" disabled title="Cannot delete - has users">Delete</button>`;
+                    return `<div class="admin-actions">${deleteBtn}</div>`;
                 },
                 headerSort: false
             }
