@@ -59,6 +59,49 @@ class NewsSource(str, Enum):
     THREE_RIVERS = 'three_rivers'
 
 
+class SectionType(str, Enum):
+    """Newsletter section types."""
+    OPENER = 'opener'
+    QOTM = 'qotm'
+    COACHES_CORNER = 'coaches_corner'
+    MEMBER_HEADS_UP = 'member_heads_up'
+    UPCOMING_EVENTS = 'upcoming_events'
+    MEMBER_HIGHLIGHT = 'member_highlight'
+    MONTH_IN_REVIEW = 'month_in_review'
+    FROM_THE_BOARD = 'from_the_board'
+    CLOSER = 'closer'
+    PHOTO_GALLERY = 'photo_gallery'
+
+
+class SectionStatus(str, Enum):
+    """Newsletter section status state machine."""
+    AWAITING_CONTENT = 'awaiting_content'  # Waiting for human input
+    HAS_AI_DRAFT = 'has_ai_draft'          # AI generated, needs edit
+    HUMAN_EDITED = 'human_edited'          # Human has modified
+    FINAL = 'final'                        # No more edits expected
+
+
+class HostStatus(str, Enum):
+    """Newsletter host submission status."""
+    ASSIGNED = 'assigned'
+    SUBMITTED = 'submitted'
+    DECLINED = 'declined'
+
+
+class CoachStatus(str, Enum):
+    """Coach rotation submission status."""
+    ASSIGNED = 'assigned'
+    SUBMITTED = 'submitted'
+    DECLINED = 'declined'
+
+
+class HighlightStatus(str, Enum):
+    """Member highlight submission status."""
+    NOMINATED = 'nominated'
+    SUBMITTED = 'submitted'
+    DECLINED = 'declined'
+
+
 # =============================================================================
 # Collection Dataclasses
 # =============================================================================
