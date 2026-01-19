@@ -557,3 +557,44 @@ class QOTMResponse(db.Model):
             name='uq_qotm_response'
         ),
     )
+
+
+class CoachRotation(db.Model):
+    """Coach assignment and content for Coaches Corner section.
+
+    Tracks which coach is assigned each month and their submitted content.
+    Used to implement fair rotation through coaches.
+    """
+    __tablename__ = 'coach_rotations'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False,
+        unique=True  # One coach per newsletter
+    )
+
+    # Coach info (links to User model)
+    coach_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    # Content
+    content = db.Column(db.Text)
+
+    # Status
+    status = db.Column(db.String(20), default='assigned')  # assigned, submitted, declined
+
+    # Timestamps
+    assigned_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+
+    # Relationships
+    newsletter = db.relationship('Newsletter', backref=db.backref('coach_rotation', uselist=False))
+    coach = db.relationship('User', backref=db.backref('coach_rotations', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<CoachRotation coach={self.coach_user_id} newsletter={self.newsletter_id}>'
