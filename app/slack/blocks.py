@@ -611,6 +611,28 @@ def build_coach_weekly_summary_blocks(
                     }]
                 })
 
+            # Coach/Lead display
+            coach_lead_parts = []
+            coaches = [l for l in practice.leads if l.role == LeadRole.COACH]
+            leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
+
+            if coaches:
+                coach_names = [f"<@{c.slack_user_id}>" if c.slack_user_id else c.display_name for c in coaches]
+                coach_lead_parts.append(f":male-teacher: {', '.join(coach_names)}")
+
+            if leads:
+                lead_names = [f"<@{l.slack_user_id}>" if l.slack_user_id else l.display_name for l in leads]
+                coach_lead_parts.append(f":people_holding_hands: {', '.join(lead_names)}")
+
+            if coach_lead_parts:
+                blocks.append({
+                    "type": "context",
+                    "elements": [{
+                        "type": "mrkdwn",
+                        "text": " | ".join(coach_lead_parts)
+                    }]
+                })
+
             # Edit button
             blocks.append({
                 "type": "actions",

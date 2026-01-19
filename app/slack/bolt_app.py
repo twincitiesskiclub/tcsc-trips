@@ -359,6 +359,7 @@ if _bot_token:
             from app.practices.models import Practice, PracticeLocation
             from app.practices.service import convert_practice_to_info
             from app.slack.modals import build_practice_edit_full_modal
+            from app.models import Tag, User
 
             practice = Practice.query.get(practice_id)
             if not practice:
@@ -376,9 +377,32 @@ if _bot_token:
                 display_name = f"{loc.name} - {loc.spot}" if loc.spot else loc.name
                 locations.append((loc.id, display_name))
 
+            # Get eligible coaches (users with HEAD_COACH or ASSISTANT_COACH tags)
+            coach_tags = Tag.query.filter(Tag.name.in_(['HEAD_COACH', 'ASSISTANT_COACH'])).all()
+            coach_tag_ids = [t.id for t in coach_tags]
+            eligible_coaches = [
+                (u.id, f"{u.first_name} {u.last_name}", u.slack_user.slack_uid if u.slack_user else None)
+                for u in User.query.filter(User.tags.any(Tag.id.in_(coach_tag_ids))).order_by(User.first_name).all()
+                if u.slack_user and u.slack_user.slack_uid
+            ]
+
+            # Get eligible leads (users with PRACTICES_LEAD tag)
+            lead_tags = Tag.query.filter(Tag.name.in_(['PRACTICES_LEAD'])).all()
+            lead_tag_ids = [t.id for t in lead_tags]
+            eligible_leads = [
+                (u.id, f"{u.first_name} {u.last_name}", u.slack_user.slack_uid if u.slack_user else None)
+                for u in User.query.filter(User.tags.any(Tag.id.in_(lead_tag_ids))).order_by(User.first_name).all()
+                if u.slack_user and u.slack_user.slack_uid
+            ]
+
             # Convert to PracticeInfo and build modal
             practice_info = convert_practice_to_info(practice)
-            modal = build_practice_edit_full_modal(practice_info, locations=locations)
+            modal = build_practice_edit_full_modal(
+                practice_info,
+                locations=locations,
+                eligible_coaches=eligible_coaches,
+                eligible_leads=eligible_leads
+            )
 
             # Open the modal
             client.views_open(trigger_id=trigger_id, view=modal)
@@ -737,7 +761,7 @@ if _bot_token:
         values = _safe_get(view, "state", "values", default={})
 
         with get_app_context():
-            from app.practices.models import Practice
+            from app.practices.models import Practice, PracticeLead
             from app.models import db
             from app.slack.practices import (
                 update_practice_post,
@@ -770,6 +794,13 @@ if _bot_token:
             notify_options = _safe_get(values, "notify_block", "notify_update", "selected_options", default=[])
             should_notify = any(opt.get("value") == "notify" for opt in notify_options)
 
+            # Extract coach/lead selections (if blocks were present)
+            selected_coaches = _safe_get(values, "coaches_block", "coach_ids", "selected_options", default=[])
+            coach_user_ids = [int(opt["value"]) for opt in selected_coaches if opt.get("value")]
+
+            selected_leads = _safe_get(values, "leads_block", "lead_ids", "selected_options", default=[])
+            lead_user_ids = [int(opt["value"]) for opt in selected_leads if opt.get("value")]
+
             # Update database
             if location_id:
                 practice.location_id = int(location_id)
@@ -780,6 +811,18 @@ if _bot_token:
             # has_social is a computed property - clear social_location_id if unchecked
             if not has_social:
                 practice.social_location_id = None
+
+            # Update coaches if the block was present in the modal
+            if "coaches_block" in values:
+                PracticeLead.query.filter_by(practice_id=practice.id, role='coach').delete()
+                for uid in coach_user_ids:
+                    db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='coach'))
+
+            # Update leads if the block was present in the modal
+            if "leads_block" in values:
+                PracticeLead.query.filter_by(practice_id=practice.id, role='lead').delete()
+                for uid in lead_user_ids:
+                    db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='lead'))
 
             db.session.commit()
             logger.info(f"Practice {practice_id} fully updated by {user_id}")
