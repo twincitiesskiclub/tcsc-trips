@@ -1,7 +1,7 @@
 """Slack modal view builders for practice interactions."""
 
 from typing import Optional
-from app.practices.interfaces import PracticeInfo
+from app.practices.interfaces import PracticeInfo, LeadRole
 
 
 def _build_practice_flags_element(practice: PracticeInfo) -> dict:
@@ -44,6 +44,44 @@ def _build_practice_flags_element(practice: PracticeInfo) -> dict:
     # Only add initial_options key if there are selected options (Slack rejects null/empty)
     if initial_options:
         element["initial_options"] = initial_options
+
+    return element
+
+
+def _build_person_multi_select(
+    action_id: str,
+    placeholder: str,
+    eligible_users: list,
+    current_assignments: list
+) -> dict:
+    """Build multi_static_select element for coach/lead selection.
+
+    Args:
+        action_id: Unique action ID for the element
+        placeholder: Placeholder text when nothing selected
+        eligible_users: List of (user_id, name, slack_uid) tuples
+        current_assignments: List of PracticeLeadInfo for current assignments
+
+    Returns:
+        multi_static_select element dict
+    """
+    options = [
+        {"text": {"type": "plain_text", "text": name[:75]}, "value": str(uid)}
+        for uid, name, _ in eligible_users
+    ]
+
+    element = {
+        "type": "multi_static_select",
+        "action_id": action_id,
+        "placeholder": {"type": "plain_text", "text": placeholder},
+        "options": options
+    }
+
+    # Set initial selections from current assignments
+    current_ids = {str(a.user_id) for a in current_assignments}
+    initial = [opt for opt in options if opt["value"] in current_ids]
+    if initial:
+        element["initial_options"] = initial
 
     return element
 
@@ -390,7 +428,12 @@ def build_workout_modal(practice: PracticeInfo) -> dict:
     }
 
 
-def build_practice_edit_full_modal(practice: PracticeInfo, locations: list = None) -> dict:
+def build_practice_edit_full_modal(
+    practice: PracticeInfo,
+    locations: list = None,
+    eligible_coaches: list = None,
+    eligible_leads: list = None
+) -> dict:
     """Build modal for full practice editing from collab channel.
 
     Includes all editable fields except date/time and practice types.
@@ -399,6 +442,8 @@ def build_practice_edit_full_modal(practice: PracticeInfo, locations: list = Non
     Args:
         practice: Practice information
         locations: List of (id, name) tuples for location dropdown
+        eligible_coaches: List of (user_id, name, slack_uid) tuples for coach selection
+        eligible_leads: List of (user_id, name, slack_uid) tuples for lead selection
 
     Returns:
         Slack modal view payload
@@ -440,137 +485,132 @@ def build_practice_edit_full_modal(practice: PracticeInfo, locations: list = Non
             "initial_value": location_name
         }
 
+    # Build blocks dynamically
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*{date_str}*\n:round_pushpin: {location_name} | {practice_types}"
+            }
+        },
+        {"type": "divider"},
+        {
+            "type": "input",
+            "block_id": "location_block",
+            "label": {"type": "plain_text", "text": "Location"},
+            "element": location_element
+        },
+        {
+            "type": "input",
+            "block_id": "warmup_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Warmup"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "warmup_description",
+                "multiline": True,
+                "placeholder": {"type": "plain_text", "text": "e.g., 15 min easy ski, focus on balance"},
+                "initial_value": practice.warmup_description or ""
+            }
+        },
+        {
+            "type": "input",
+            "block_id": "workout_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Main Workout"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "workout_description",
+                "multiline": True,
+                "placeholder": {"type": "plain_text", "text": "e.g., 5 x 4min @ threshold (2min rest)"},
+                "initial_value": practice.workout_description or ""
+            }
+        },
+        {
+            "type": "input",
+            "block_id": "cooldown_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Cooldown"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "cooldown_description",
+                "multiline": True,
+                "placeholder": {"type": "plain_text", "text": "e.g., 10 min easy, stretching"},
+                "initial_value": practice.cooldown_description or ""
+            }
+        }
+    ]
+
+    # Add coach multi-select if eligible coaches provided
+    if eligible_coaches:
+        current_coaches = [l for l in practice.leads if l.role == LeadRole.COACH]
+        blocks.append({
+            "type": "input",
+            "block_id": "coaches_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Coaches"},
+            "element": _build_person_multi_select(
+                "coach_ids", "Select coach(es)", eligible_coaches, current_coaches
+            )
+        })
+
+    # Add lead multi-select if eligible leads provided
+    if eligible_leads:
+        current_leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
+        blocks.append({
+            "type": "input",
+            "block_id": "leads_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Practice Leads"},
+            "element": _build_person_multi_select(
+                "lead_ids", "Select lead(s)", eligible_leads, current_leads
+            )
+        })
+
+    # Add flags and notification blocks
+    blocks.extend([
+        {
+            "type": "input",
+            "block_id": "flags_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Options"},
+            "element": _build_practice_flags_element(practice)
+        },
+        {
+            "type": "input",
+            "block_id": "notify_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Notification"},
+            "element": {
+                "type": "checkboxes",
+                "action_id": "notify_update",
+                "options": [
+                    {
+                        "text": {"type": "mrkdwn", "text": "*Post update notification*"},
+                        "description": {"type": "plain_text", "text": "Notify the thread about this change"},
+                        "value": "notify"
+                    }
+                ],
+                "initial_options": [
+                    {
+                        "text": {"type": "mrkdwn", "text": "*Post update notification*"},
+                        "description": {"type": "plain_text", "text": "Notify the thread about this change"},
+                        "value": "notify"
+                    }
+                ]
+            }
+        }
+    ])
+
     return {
         "type": "modal",
         "callback_id": "practice_edit_full",
         "private_metadata": str(practice.id),
-        "title": {
-            "type": "plain_text",
-            "text": "Edit Practice"
-        },
-        "submit": {
-            "type": "plain_text",
-            "text": "Save Changes"
-        },
-        "close": {
-            "type": "plain_text",
-            "text": "Cancel"
-        },
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*{date_str}*\n📍 {location_name} • {practice_types}"
-                }
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "input",
-                "block_id": "location_block",
-                "label": {
-                    "type": "plain_text",
-                    "text": "Location"
-                },
-                "element": location_element
-            },
-            {
-                "type": "input",
-                "block_id": "warmup_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Warmup"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "warmup_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 15 min easy ski, focus on balance"
-                    },
-                    "initial_value": practice.warmup_description or ""
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "workout_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Main Workout"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "workout_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 5 x 4min @ threshold (2min rest)"
-                    },
-                    "initial_value": practice.workout_description or ""
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "cooldown_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Cooldown"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "cooldown_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 10 min easy, stretching"
-                    },
-                    "initial_value": practice.cooldown_description or ""
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "flags_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Options"
-                },
-                "element": _build_practice_flags_element(practice)
-            },
-            {
-                "type": "input",
-                "block_id": "notify_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Notification"
-                },
-                "element": {
-                    "type": "checkboxes",
-                    "action_id": "notify_update",
-                    "options": [
-                        {
-                            "text": {"type": "mrkdwn", "text": "*Post update notification*"},
-                            "description": {"type": "plain_text", "text": "Notify the thread about this change"},
-                            "value": "notify"
-                        }
-                    ],
-                    "initial_options": [
-                        {
-                            "text": {"type": "mrkdwn", "text": "*Post update notification*"},
-                            "description": {"type": "plain_text", "text": "Notify the thread about this change"},
-                            "value": "notify"
-                        }
-                    ]
-                }
-            }
-        ]
+        "title": {"type": "plain_text", "text": "Edit Practice"},
+        "submit": {"type": "plain_text", "text": "Save Changes"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks
     }
 
 
