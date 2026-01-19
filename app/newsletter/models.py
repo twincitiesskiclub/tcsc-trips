@@ -21,6 +21,8 @@ from app.newsletter.interfaces import (
     VersionTrigger,
     MessageVisibility,
     NewsSource,
+    SectionType,
+    SectionStatus,
 )
 
 
@@ -451,5 +453,65 @@ class NewsletterPrompt(db.Model):
         db.UniqueConstraint(
             'name', 'version',
             name='uq_newsletter_prompt_version'
+        ),
+    )
+
+
+class NewsletterSection(db.Model):
+    """Per-section content with status and Slack thread reference.
+
+    Each section of the newsletter has its own status and can be
+    edited independently via Slack modals.
+    """
+    __tablename__ = 'newsletter_sections'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False
+    )
+
+    # Section identification
+    section_type = db.Column(db.String(50), nullable=False)
+    section_order = db.Column(db.Integer, default=0)
+
+    # Content
+    content = db.Column(db.Text)
+    ai_draft = db.Column(db.Text)  # Original AI draft (for AI-assisted sections)
+
+    # Status state machine
+    status = db.Column(
+        db.String(20),
+        nullable=False,
+        default=SectionStatus.AWAITING_CONTENT.value
+    )
+
+    # Slack thread reference (each section is a thread reply)
+    slack_thread_ts = db.Column(db.String(50))
+
+    # Edit tracking
+    edited_by = db.Column(db.String(100))
+    edited_at = db.Column(db.DateTime)
+
+    # Timestamps
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('sections', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<NewsletterSection {self.section_type} newsletter={self.newsletter_id}>'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'newsletter_id', 'section_type',
+            name='uq_newsletter_section_type'
         ),
     )
