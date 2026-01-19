@@ -62,7 +62,7 @@
 
   /* === Tabulator Table Cell Buttons === */
   .tbl-btn {
-    @apply px-2.5 py-1 text-xs font-medium rounded transition-all;
+    @apply px-2.5 py-1 text-xs font-medium rounded transition-all inline-flex items-center;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
@@ -84,7 +84,7 @@
 
   /* === Tabulator Toolbar Buttons === */
   .toolbar-btn {
-    @apply h-9 px-4 rounded-tcsc text-sm font-medium transition-all;
+    @apply h-9 px-4 rounded-tcsc text-sm font-medium transition-all shrink-0;
     @apply inline-flex items-center gap-2 whitespace-nowrap;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
@@ -107,36 +107,269 @@
 
   /* === Tabulator Filter Dropdowns === */
   .tbl-select {
-    @apply h-8 px-3 pr-8 border border-gray-300 rounded-md bg-white text-sm text-gray-700;
-    @apply focus:outline-none focus:border-tcsc-navy cursor-pointer;
+    @apply h-9 px-3 pr-8 rounded-md bg-white text-sm text-gray-700;
+    @apply border border-tcsc-gray-100 shadow-sm;
+    @apply focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10;
+    @apply cursor-pointer shrink-0 transition-all;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23667085' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231c2c44' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 0.5rem center;
+    background-position: right 0.75rem center;
   }
 
   /* === Tabulator Search Input === */
   .tbl-search {
-    @apply h-8 w-40 px-2.5 border border-gray-300 rounded-md bg-white text-sm text-gray-700;
-    @apply placeholder:text-gray-400 focus:outline-none focus:border-tcsc-navy;
+    @apply h-9 w-44 px-3 rounded-md bg-white text-sm text-gray-700 shrink-0;
+    @apply border border-tcsc-gray-100 shadow-sm;
+    @apply placeholder:text-gray-400;
+    @apply focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10;
+    @apply transition-all;
   }
 
   /* === Segmented Button Groups === */
   .seg-group {
-    @apply inline-flex border border-gray-300 rounded-md bg-white overflow-hidden;
+    @apply inline-flex rounded-md bg-white overflow-hidden shrink-0;
+    @apply border border-tcsc-gray-100 shadow-sm;
   }
 
   .seg-btn {
-    @apply px-3 py-1.5 text-sm font-medium text-gray-700 border-r border-gray-300 bg-white;
-    @apply last:border-r-0 hover:bg-gray-50 transition-all cursor-pointer;
+    @apply h-9 px-4 text-sm font-medium text-gray-600 bg-white;
+    @apply border-r border-tcsc-gray-100 last:border-r-0;
+    @apply hover:bg-gray-50 transition-all cursor-pointer;
+    @apply inline-flex items-center;
   }
 
   .seg-btn.active {
-    @apply bg-tcsc-navy text-white;
+    @apply bg-tcsc-navy text-white hover:bg-tcsc-navy border-tcsc-navy;
+  }
+
+  /* === Toolbar Count Badge === */
+  .toolbar-count {
+    @apply h-9 inline-flex items-center gap-1.5 px-3;
+    @apply bg-gray-50 border border-tcsc-gray-100 rounded-md shadow-sm;
+    @apply text-sm text-gray-600 whitespace-nowrap shrink-0;
+  }
+
+  .toolbar-count strong {
+    @apply font-semibold text-tcsc-navy;
+  }
+
+  /* === Toolbar Layout Helpers === */
+  .toolbar {
+    @apply flex items-center gap-2.5 mb-4 flex-wrap;
+  }
+
+  .toolbar-spacer {
+    @apply flex-1 min-w-[2rem];
+  }
+
+  .toolbar-group {
+    @apply flex items-center gap-2 shrink-0 ml-auto;
   }
 
   /* === Action Button Container (for multiple buttons in a cell) === */
   .tbl-actions {
+    @apply flex items-center gap-1.5;
+  }
+
+  /* ===========================================
+     ADMIN UI COMPONENT SYSTEM
+     =========================================== */
+
+  /* --- Base Button --- */
+  .admin-btn {
+    @apply inline-flex items-center justify-center font-medium
+           transition-all duration-150 ease-in-out
+           focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20;
+  }
+
+  .admin-btn:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  /* --- Button Sizes --- */
+  .admin-btn-sm {
+    @apply text-xs px-3 py-1 rounded-full;
+  }
+
+  .admin-btn-md {
+    @apply text-sm px-4 py-2 rounded-tcsc;
+  }
+
+  .admin-btn-lg {
+    @apply text-sm px-5 py-2.5 rounded-tcsc;
+  }
+
+  /* --- Button Variants --- */
+  .admin-btn-primary {
+    @apply bg-tcsc-navy text-white hover:bg-tcsc-navy/90 hover:shadow-md;
+  }
+
+  .admin-btn-secondary {
+    @apply bg-white text-tcsc-gray-600 border border-tcsc-gray-100
+           hover:bg-tcsc-gray-50 hover:border-tcsc-gray-200;
+  }
+
+  .admin-btn-danger {
+    @apply bg-status-error-bg text-status-error-text hover:bg-red-200;
+  }
+
+  .admin-btn-success {
+    @apply bg-status-success-bg text-status-success-text hover:bg-green-200;
+  }
+
+  /* --- Pill Filter Group --- */
+  .admin-pill-group {
+    @apply inline-flex rounded-tcsc border border-tcsc-gray-100
+           overflow-hidden shadow-sm;
+  }
+
+  .admin-pill {
+    @apply px-3 py-1.5 text-sm font-medium bg-white text-tcsc-gray-600
+           border-r border-tcsc-gray-100 last:border-r-0
+           transition-colors duration-150 cursor-pointer;
+  }
+
+  .admin-pill:hover:not(.active) {
+    @apply bg-tcsc-gray-50;
+  }
+
+  .admin-pill.active {
+    @apply bg-tcsc-navy text-white;
+  }
+
+  /* --- Form Inputs --- */
+  .admin-select {
+    @apply h-9 px-3 pr-8 text-sm rounded-tcsc
+           border border-tcsc-gray-100 bg-white shadow-sm
+           focus:outline-none focus:border-tcsc-navy
+           focus:ring-2 focus:ring-tcsc-navy/10 cursor-pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%231c2c44' d='M2.5 4.5L6 8l3.5-3.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+  }
+
+  .admin-search {
+    @apply h-9 px-3 pl-9 text-sm rounded-tcsc w-44
+           border border-tcsc-gray-100 bg-white shadow-sm
+           placeholder:text-tcsc-gray-400
+           focus:outline-none focus:border-tcsc-navy
+           focus:ring-2 focus:ring-tcsc-navy/10;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%231c2c44' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cpath d='m21 21-4.35-4.35'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: 0.75rem center;
+  }
+
+  /* --- Layout --- */
+  .admin-header {
+    @apply flex items-center justify-between mb-6;
+  }
+
+  .admin-header h1 {
+    @apply text-xl font-semibold text-tcsc-gray-800 m-0;
+  }
+
+  .admin-toolbar {
+    @apply flex flex-wrap items-center gap-3 mb-4;
+  }
+
+  .admin-toolbar-spacer {
+    @apply flex-1 min-w-[1rem];
+  }
+
+  .admin-count {
+    @apply px-2.5 py-1 text-xs font-semibold rounded-full
+           bg-tcsc-navy text-white tabular-nums;
+  }
+
+  /* --- Badges --- */
+  .admin-badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5
+           text-xs font-medium rounded-full;
+  }
+
+  .admin-badge-active {
+    @apply bg-status-success-bg text-status-success-text;
+  }
+
+  .admin-badge-pending {
+    @apply bg-status-warning-bg text-status-warning-text;
+  }
+
+  .admin-badge-inactive {
+    @apply bg-status-neutral-bg text-status-neutral-text;
+  }
+
+  .admin-badge-error {
+    @apply bg-status-error-bg text-status-error-text;
+  }
+
+  /* --- Modal --- */
+  .admin-modal-backdrop {
+    @apply fixed inset-0 bg-black/50 flex items-center justify-center z-50;
+  }
+
+  .admin-modal {
+    @apply relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl animate-fade-in;
+  }
+
+  .admin-modal-header {
+    @apply flex items-center justify-between px-5 py-4 border-b border-tcsc-gray-100;
+  }
+
+  .admin-modal-header h2 {
+    @apply text-base font-semibold text-tcsc-gray-800 m-0;
+  }
+
+  .admin-modal-close {
+    @apply text-2xl text-tcsc-gray-400 hover:text-tcsc-gray-600 leading-none cursor-pointer;
+  }
+
+  .admin-modal-body {
+    @apply p-5;
+  }
+
+  .admin-modal-footer {
+    @apply flex justify-end gap-3 px-5 py-4 border-t border-tcsc-gray-100;
+  }
+
+  /* --- Table Enhancements for admin-table wrapper --- */
+  .admin-table .tabulator-header {
+    background-color: rgba(28,44,68,0.03);
+    border-bottom: 1px solid rgba(28,44,68,0.15);
+  }
+
+  .admin-table .tabulator-header .tabulator-col {
+    background-color: transparent;
+  }
+
+  .admin-table .tabulator-header .tabulator-col-title {
+    @apply text-sm font-semibold text-tcsc-navy;
+  }
+
+  .admin-table .tabulator-row {
+    border-bottom: 1px solid rgba(28,44,68,0.08);
+  }
+
+  .admin-table .tabulator-row:hover {
+    background-color: rgba(28,44,68,0.03);
+  }
+
+  .admin-table .tabulator-row.tabulator-selected {
+    background-color: rgba(28,44,68,0.08);
+  }
+
+  .admin-table .tabulator-frozen-left {
+    box-shadow: 2px 0 4px -2px rgba(0,0,0,0.1);
+  }
+
+  .admin-table .tabulator-frozen-right {
+    box-shadow: -2px 0 4px -2px rgba(0,0,0,0.1);
+  }
+
+  /* Actions cell helper */
+  .admin-actions {
     @apply flex items-center gap-1.5;
   }
 }
@@ -261,4 +494,78 @@
 .tabulator-config .tabulator-cell.tabulator-editing input:focus {
   outline: none;
   box-shadow: 0 0 0 3px rgba(28, 44, 68, 0.1);
+}
+
+/* ============================================
+   STATUS BADGES (for Tabulator cells)
+   ============================================ */
+
+.status-badge {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Member/General statuses */
+.status-active {
+  background: #d4f5e9;
+  color: #166534;
+}
+
+.status-alumni {
+  background: #e2e8f0;
+  color: #4a5568;
+}
+
+.status-pending {
+  background: #fff3dc;
+  color: #b07b2c;
+}
+
+.status-draft {
+  background: #e4e7ec;
+  color: #667085;
+}
+
+/* Payment statuses */
+.status-success {
+  background: #c6f6d5;
+  color: #166534;
+}
+
+.status-requires_capture {
+  background: #faf5ff;
+  color: #5521b5;
+}
+
+.status-refunded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-canceled {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status-processing,
+.status-info {
+  background: #e8f0fe;
+  color: #174ea6;
+}
+
+.status-requires_payment_method,
+.status-requires_confirmation,
+.status-requires_action {
+  background: #fff3dc;
+  color: #b07b2c;
+}
+
+.status-unknown,
+.status-completed {
+  background: #e2e8f0;
+  color: #4a5568;
 }
