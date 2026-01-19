@@ -1,81 +1,149 @@
-# TCSC Weekly Dispatch Newsletter Configuration
+# TCSC Monthly Dispatch Newsletter Configuration
 # See docs/WEEKLY_DISPATCH.md for full documentation
 
 newsletter:
   enabled: true
   dry_run: false  # Set false for production - logs actions without posting
 
-  schedule:
-    daily_update: "08:00"       # 8am daily regeneration
-    sunday_finalize: "18:00"    # 6pm Sunday final version
-    timezone: "America/Chicago"
+dispatch:
+  frequency: monthly
+  publish_day: 15
+  timezone: America/Chicago
 
-  channels:
-    # Where the living post is maintained
-    living_post_channel: "tcsc-logging"
+sections:
+  - id: opener
+    name: Opener
+    ai_generated: false
+    owner: newsletter_host
+    required: true
 
-    # Where final newsletter is published
-    publish_channel: "announcements-tcsc"
+  - id: qotm
+    name: Quote of the Month
+    ai_generated: false
+    owner: coach
+    required: true
 
-    # Public channels to exclude from collection
-    public_exclude:
-      - "tcsc-logging"
-      - "tcsc-devs"
+  - id: coaches_corner
+    name: Coaches Corner
+    ai_generated: false
+    owner: coach
+    required: true
 
-    # Private channels to include (bot must be member)
-    private_include:
-      - "coord-board"
+  - id: member_heads_up
+    name: Member Heads-Up
+    ai_generated: true
+    source: slack_messages
+    required: true
 
-  news_sources:
-    skinnyski:
-      enabled: true
-      news_url: "https://www.skinnyski.com/"
-      max_articles: 5
+  - id: upcoming_events
+    name: Upcoming Events
+    ai_generated: true
+    source: events_calendar
+    required: true
 
-    loppet:
-      enabled: true
-      url: "https://www.loppet.org/"
-      max_articles: 3
+  - id: member_highlight
+    name: Member Highlight
+    ai_generated: false
+    owner: featured_member
+    required: false
 
-    three_rivers:
-      enabled: true
-      url: "https://www.threeriversparks.org/"
-      max_articles: 3
+  - id: month_in_review
+    name: Month in Review
+    ai_generated: true
+    source: slack_messages
+    required: true
 
-  trail_conditions:
+  - id: from_the_board
+    name: From the Board
+    ai_generated: true
+    source: board_channel
+    required: false
+
+  - id: closer
+    name: Closer
+    ai_generated: false
+    owner: newsletter_host
+    required: true
+
+  - id: photo_gallery
+    name: Photo Gallery
+    ai_generated: false
+    source: photos_channel
+    required: false
+
+schedule:
+  host_dm: 1
+  coach_assignment: 1
+  qotm_send: 1
+  highlight_request: 5
+  host_reminder: 10
+  coach_reminder: 10
+  ai_draft_generation: 12
+  living_post_creation: 12
+  final_reminders: 13
+  review_buttons: 14
+  publish_deadline: 15
+
+channels:
+  living_post: tcsc-logging
+  publish: announcements-tcsc
+  admin_review: newsletter-admin
+  photos: photos
+  qotm_post: chat
+
+private_channels:
+  - pattern: "leadership-*"
+
+news_sources:
+  skinnyski:
     enabled: true
-    locations:
-      - "Theodore Wirth"
-      - "Elm Creek"
-      - "Hyland Lake"
-      - "Lebanon Hills"
+    news_url: "https://www.skinnyski.com/"
+    max_articles: 5
 
-  generation:
-    model: "claude-opus-4-5-20251101"
-    max_tokens: 64000  # Maximum output for Opus 4.5
-    temperature: 1.0  # Required for extended thinking
-    extended_thinking:
-      enabled: true
-      budget_tokens: 32000  # Half of max for deep thinking
+  loppet:
+    enabled: true
+    url: "https://www.loppet.org/"
+    max_articles: 3
 
-  # Submission types shown in /dispatch modal
-  submission_types:
-    - value: "spotlight"
-      label: "Member Spotlight"
-      description: "Highlight a fellow member's achievement or contribution"
-    - value: "content"
-      label: "Story or Content"
-      description: "Share a story, tip, or interesting content"
-    - value: "event"
-      label: "Event Announcement"
-      description: "Announce an upcoming club or community event"
-    - value: "announcement"
-      label: "Official Announcement"
-      description: "Official club news or policy updates"
+  three_rivers:
+    enabled: true
+    url: "https://www.threeriversparks.org/"
+    max_articles: 3
 
-  # Review workflow
-  review:
-    # How long to wait for approval before auto-publishing (hours)
-    approval_timeout_hours: 4
-    # Maximum regeneration attempts after feedback
-    max_feedback_iterations: 3
+trail_conditions:
+  enabled: true
+  locations:
+    - "Theodore Wirth"
+    - "Elm Creek"
+    - "Hyland Lake"
+    - "Lebanon Hills"
+
+generation:
+  model: "claude-opus-4-5-20251101"
+  max_tokens: 64000  # Maximum output for Opus 4.5
+  temperature: 1.0  # Required for extended thinking
+  extended_thinking:
+    enabled: true
+    budget_tokens: 32000  # Half of max for deep thinking
+
+# Submission types shown in /dispatch modal
+submission_types:
+  - value: "spotlight"
+    label: "Member Spotlight"
+    description: "Highlight a fellow member's achievement or contribution"
+  - value: "content"
+    label: "Story or Content"
+    description: "Share a story, tip, or interesting content"
+  - value: "event"
+    label: "Event Announcement"
+    description: "Announce an upcoming club or community event"
+  - value: "announcement"
+    label: "Official Announcement"
+    description: "Official club news or policy updates"
+
+# Review workflow
+review:
+  # How long to wait for approval before auto-publishing (hours)
+  approval_timeout_hours: 4
+  # Maximum regeneration attempts after feedback
+  max_feedback_iterations: 3
