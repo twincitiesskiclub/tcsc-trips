@@ -533,8 +533,8 @@ class QOTMResponse(db.Model):
     )
 
     # Submitter info (Slack user)
-    user_id = db.Column(db.String(20), nullable=False)  # Slack user ID
-    user_name = db.Column(db.String(100))
+    slack_user_id = db.Column(db.String(50), nullable=False)  # Slack user ID
+    user_name = db.Column(db.String(255))
 
     # Response content
     response = db.Column(db.Text, nullable=False)
@@ -549,11 +549,11 @@ class QOTMResponse(db.Model):
     newsletter = db.relationship('Newsletter', backref=db.backref('qotm_responses', lazy='dynamic'))
 
     def __repr__(self):
-        return f'<QOTMResponse user={self.user_id} newsletter={self.newsletter_id}>'
+        return f'<QOTMResponse user={self.slack_user_id} newsletter={self.newsletter_id}>'
 
     __table_args__ = (
         db.UniqueConstraint(
-            'newsletter_id', 'user_id',
+            'newsletter_id', 'slack_user_id',
             name='uq_qotm_response'
         ),
     )
