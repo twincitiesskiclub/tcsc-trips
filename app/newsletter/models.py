@@ -178,7 +178,8 @@ class Newsletter(db.Model):
             period_start=period_start,
             period_end=period_end,
             publish_target_date=publish_target,
-            # Keep week_start/week_end as None for monthly newsletters
+            # Set week_start/week_end for compatibility (required fields)
+            # Monthly newsletters use period_start/period_end for date range logic
             week_start=period_start,
             week_end=period_end,
             status=NewsletterStatus.BUILDING.value
@@ -190,7 +191,11 @@ class Newsletter(db.Model):
 
     @property
     def has_highlight_nomination(self) -> bool:
-        """Check if newsletter has a member highlight nomination."""
+        """Check if newsletter has a member highlight nomination.
+
+        Note: Requires 'highlight' relationship to be added by MemberHighlight model.
+        Returns False until that relationship exists.
+        """
         return hasattr(self, 'highlight') and self.highlight is not None
 
 
