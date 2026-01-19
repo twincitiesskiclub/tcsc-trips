@@ -616,3 +616,82 @@ def create_newsletter():
         'qotm_question': newsletter.qotm_question,
         'status': newsletter.status
     })
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/review', methods=['POST'])
+@admin_required
+def trigger_review():
+    """Add review buttons to the living post.
+
+    Adds approve/request changes buttons to enable final review workflow.
+    Requires the living post to exist.
+    """
+    from app.newsletter.models import Newsletter
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Check if living post exists
+    if not newsletter.slack_main_message_ts:
+        return jsonify({
+            'success': False,
+            'error': 'Living post must exist before adding review buttons',
+            'newsletter_id': newsletter.id
+        }), 400
+
+    # Try to import add_review_buttons if it exists
+    try:
+        from app.newsletter.slack_actions import add_review_buttons
+        result = add_review_buttons(newsletter_id=newsletter.id)
+        return jsonify(result)
+    except ImportError:
+        # Function not yet implemented - return stub response
+        current_app.logger.warning("add_review_buttons not yet implemented")
+        return jsonify({
+            'success': False,
+            'error': 'add_review_buttons function not yet implemented',
+            'newsletter_id': newsletter.id
+        }), 501
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/publish', methods=['POST'])
+@admin_required
+def trigger_publish():
+    """Publish the newsletter to the announcements channel.
+
+    Copies the finalized newsletter to the public announcements channel.
+    Requires all sections to be approved/finalized.
+    """
+    from app.newsletter.models import Newsletter
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Check if newsletter is ready for publish
+    if newsletter.status not in ['approved', 'ready']:
+        current_app.logger.warning(
+            f"Publishing newsletter with status '{newsletter.status}' - "
+            "expected 'approved' or 'ready'"
+        )
+
+    # Try to import publish_newsletter if it exists
+    try:
+        from app.newsletter.service import publish_newsletter
+        result = publish_newsletter(newsletter_id=newsletter.id)
+        return jsonify(result)
+    except ImportError:
+        # Function not yet implemented - return stub response
+        current_app.logger.warning("publish_newsletter not yet implemented")
+        return jsonify({
+            'success': False,
+            'error': 'publish_newsletter function not yet implemented',
+            'newsletter_id': newsletter.id
+        }), 501

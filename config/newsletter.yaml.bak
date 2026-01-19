@@ -1,0 +1,81 @@
+# TCSC Weekly Dispatch Newsletter Configuration
+# See docs/WEEKLY_DISPATCH.md for full documentation
+
+newsletter:
+  enabled: true
+  dry_run: false  # Set false for production - logs actions without posting
+
+  schedule:
+    daily_update: "08:00"       # 8am daily regeneration
+    sunday_finalize: "18:00"    # 6pm Sunday final version
+    timezone: "America/Chicago"
+
+  channels:
+    # Where the living post is maintained
+    living_post_channel: "tcsc-logging"
+
+    # Where final newsletter is published
+    publish_channel: "announcements-tcsc"
+
+    # Public channels to exclude from collection
+    public_exclude:
+      - "tcsc-logging"
+      - "tcsc-devs"
+
+    # Private channels to include (bot must be member)
+    private_include:
+      - "coord-board"
+
+  news_sources:
+    skinnyski:
+      enabled: true
+      news_url: "https://www.skinnyski.com/"
+      max_articles: 5
+
+    loppet:
+      enabled: true
+      url: "https://www.loppet.org/"
+      max_articles: 3
+
+    three_rivers:
+      enabled: true
+      url: "https://www.threeriversparks.org/"
+      max_articles: 3
+
+  trail_conditions:
+    enabled: true
+    locations:
+      - "Theodore Wirth"
+      - "Elm Creek"
+      - "Hyland Lake"
+      - "Lebanon Hills"
+
+  generation:
+    model: "claude-opus-4-5-20251101"
+    max_tokens: 64000  # Maximum output for Opus 4.5
+    temperature: 1.0  # Required for extended thinking
+    extended_thinking:
+      enabled: true
+      budget_tokens: 32000  # Half of max for deep thinking
+
+  # Submission types shown in /dispatch modal
+  submission_types:
+    - value: "spotlight"
+      label: "Member Spotlight"
+      description: "Highlight a fellow member's achievement or contribution"
+    - value: "content"
+      label: "Story or Content"
+      description: "Share a story, tip, or interesting content"
+    - value: "event"
+      label: "Event Announcement"
+      description: "Announce an upcoming club or community event"
+    - value: "announcement"
+      label: "Official Announcement"
+      description: "Official club news or policy updates"
+
+  # Review workflow
+  review:
+    # How long to wait for approval before auto-publishing (hours)
+    approval_timeout_hours: 4
+    # Maximum regeneration attempts after feedback
+    max_feedback_iterations: 3
