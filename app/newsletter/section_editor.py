@@ -5,12 +5,15 @@ and saving edits. Each section can be edited independently with content
 preserved and tracked.
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
 from app.models import db
 from app.newsletter.models import Newsletter, NewsletterSection
 from app.newsletter.interfaces import SectionType, SectionStatus
+
+logger = logging.getLogger(__name__)
 
 
 # Maximum content length for Slack modal text input
@@ -181,8 +184,11 @@ def get_section_for_editing(
     Returns:
         NewsletterSection instance or None if newsletter doesn't exist
     """
+    logger.debug(f"Getting section for editing: newsletter_id={newsletter_id}, section_type={section_type}")
+
     newsletter = Newsletter.query.get(newsletter_id)
     if not newsletter:
+        logger.warning(f"Newsletter {newsletter_id} not found for section editing")
         return None
 
     section = NewsletterSection.query.filter_by(
@@ -191,6 +197,7 @@ def get_section_for_editing(
     ).first()
 
     if not section:
+        logger.info(f"Creating new section: newsletter_id={newsletter_id}, section_type={section_type}")
         section = NewsletterSection(
             newsletter_id=newsletter_id,
             section_type=section_type,
@@ -218,31 +225,41 @@ def save_section_edit(
     Returns:
         Dict with success status and section info
     """
+    logger.debug(f"Saving section edit: section_id={section_id}, editor={editor_slack_uid}")
+
     section = NewsletterSection.query.get(section_id)
     if not section:
+        logger.warning(f"Section {section_id} not found for editing")
         return {
             'success': False,
             'error': 'Section not found'
         }
 
-    # Preserve AI draft if this is first human edit
-    if section.status == SectionStatus.HAS_AI_DRAFT.value and not section.ai_draft:
-        section.ai_draft = section.content
+    try:
+        # Preserve AI draft if this is first human edit
+        if section.status == SectionStatus.HAS_AI_DRAFT.value and not section.ai_draft:
+            section.ai_draft = section.content
 
-    # Update content and status
-    section.content = new_content
-    section.status = SectionStatus.HUMAN_EDITED.value
-    section.edited_by = editor_slack_uid
-    section.edited_at = datetime.utcnow()
+        # Update content and status
+        section.content = new_content
+        section.status = SectionStatus.HUMAN_EDITED.value
+        section.edited_by = editor_slack_uid
+        section.edited_at = datetime.utcnow()
 
-    db.session.commit()
+        db.session.commit()
+        logger.info(f"Saved section edit for section {section_id} (type={section.section_type})")
 
-    return {
-        'success': True,
-        'section_id': section.id,
-        'section_type': section.section_type,
-        'status': section.status
-    }
+        return {
+            'success': True,
+            'section_id': section.id,
+            'section_type': section.section_type,
+            'status': section.status
+        }
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error saving section edit for section {section_id}: {e}")
+        return {'success': False, 'error': str(e)}
 
 
 def get_all_sections_for_newsletter(newsletter_id: int) -> list[NewsletterSection]:
@@ -271,26 +288,40 @@ def initialize_sections_for_newsletter(newsletter_id: int) -> list[NewsletterSec
     Returns:
         List of all sections (new and existing) for the newsletter
     """
+    logger.debug(f"Initializing sections for newsletter {newsletter_id}")
+
     newsletter = Newsletter.query.get(newsletter_id)
     if not newsletter:
+        logger.warning(f"Newsletter {newsletter_id} not found for section initialization")
         return []
 
-    existing_types = {
-        s.section_type for s in
-        NewsletterSection.query.filter_by(newsletter_id=newsletter_id).all()
-    }
+    try:
+        existing_types = {
+            s.section_type for s in
+            NewsletterSection.query.filter_by(newsletter_id=newsletter_id).all()
+        }
 
-    # Create missing sections
-    for section_type in SectionType:
-        if section_type.value not in existing_types:
-            section = NewsletterSection(
-                newsletter_id=newsletter_id,
-                section_type=section_type.value,
-                section_order=SECTION_ORDER.get(section_type.value, 99),
-                status=SectionStatus.AWAITING_CONTENT.value
-            )
-            db.session.add(section)
+        # Create missing sections
+        created_count = 0
+        for section_type in SectionType:
+            if section_type.value not in existing_types:
+                section = NewsletterSection(
+                    newsletter_id=newsletter_id,
+                    section_type=section_type.value,
+                    section_order=SECTION_ORDER.get(section_type.value, 99),
+                    status=SectionStatus.AWAITING_CONTENT.value
+                )
+                db.session.add(section)
+                created_count += 1
 
-    db.session.flush()
+        db.session.flush()
 
-    return get_all_sections_for_newsletter(newsletter_id)
+        if created_count > 0:
+            logger.info(f"Created {created_count} new sections for newsletter {newsletter_id}")
+
+        return get_all_sections_for_newsletter(newsletter_id)
+
+    except Exception as e:
+        db.session.rollback()
+        logger.error(f"Error initializing sections for newsletter {newsletter_id}: {e}")
+        return []
