@@ -515,3 +515,45 @@ class NewsletterSection(db.Model):
             name='uq_newsletter_section_type'
         ),
     )
+
+
+class QOTMResponse(db.Model):
+    """Question of the Month response from a member.
+
+    Stores member responses to the monthly question. Each user can
+    only submit one response per newsletter (upsert on resubmit).
+    """
+    __tablename__ = 'qotm_responses'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False
+    )
+
+    # Submitter info (Slack user)
+    user_id = db.Column(db.String(20), nullable=False)  # Slack user ID
+    user_name = db.Column(db.String(100))
+
+    # Response content
+    response = db.Column(db.Text, nullable=False)
+
+    # Admin curation
+    selected = db.Column(db.Boolean, default=False)
+
+    # Timestamps
+    submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    # Relationship
+    newsletter = db.relationship('Newsletter', backref=db.backref('qotm_responses', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<QOTMResponse user={self.user_id} newsletter={self.newsletter_id}>'
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            'newsletter_id', 'user_id',
+            name='uq_qotm_response'
+        ),
+    )
