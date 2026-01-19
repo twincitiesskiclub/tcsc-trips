@@ -16,6 +16,7 @@ from typing import Optional
 from app.models import db
 from app.newsletter.interfaces import (
     CoachStatus,
+    HighlightStatus,
     NewsletterStatus,
     SubmissionStatus,
     SubmissionType,
@@ -599,3 +600,53 @@ class CoachRotation(db.Model):
 
     def __repr__(self):
         return f'<CoachRotation coach={self.coach_user_id} newsletter={self.newsletter_id}>'
+
+
+class MemberHighlight(db.Model):
+    """Member spotlight with template-based questions and AI composition.
+
+    Admin nominates a member, member answers structured questions,
+    AI composes into polished prose, editor reviews/edits.
+    """
+    __tablename__ = 'member_highlights'
+
+    id = db.Column(db.Integer, primary_key=True)
+    newsletter_id = db.Column(
+        db.Integer,
+        db.ForeignKey('newsletters.id'),
+        nullable=False,
+        unique=True  # One highlight per newsletter
+    )
+
+    # Member info (links to User model)
+    member_user_id = db.Column(
+        db.Integer,
+        db.ForeignKey('users.id'),
+        nullable=False
+    )
+
+    # Who nominated them
+    nominated_by = db.Column(db.String(100))  # Admin email
+
+    # Raw answers from member (structured JSON)
+    raw_answers = db.Column(db.JSON)
+
+    # AI-composed version from raw_answers
+    ai_composed_content = db.Column(db.Text)
+
+    # Final edited version (what appears in newsletter)
+    content = db.Column(db.Text)
+
+    # Status
+    status = db.Column(db.String(20), default=HighlightStatus.NOMINATED.value)  # nominated, submitted, declined
+
+    # Timestamps
+    nominated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    submitted_at = db.Column(db.DateTime)
+
+    # Relationships
+    newsletter = db.relationship('Newsletter', backref=db.backref('highlight', uselist=False))
+    member = db.relationship('User', backref=db.backref('highlights', lazy='dynamic'))
+
+    def __repr__(self):
+        return f'<MemberHighlight member={self.member_user_id} newsletter={self.newsletter_id}>'
