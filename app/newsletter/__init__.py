@@ -98,6 +98,24 @@ from app.newsletter.modals import (
     build_dispatch_confirmation_blocks,
 )
 
+# Section editor
+from app.newsletter.section_editor import (
+    build_section_edit_modal,
+    get_section_for_editing,
+    save_section_edit,
+    get_all_sections_for_newsletter,
+    initialize_sections_for_newsletter,
+    get_section_display_name,
+)
+
+# Monthly generator
+from app.newsletter.monthly_generator import (
+    generate_section_draft,
+    generate_all_ai_sections,
+    build_section_context,
+    AI_DRAFTED_SECTIONS,
+)
+
 from app.newsletter.mcp_server import (
     # Tool definitions
     NEWSLETTER_TOOLS,
@@ -193,4 +211,16 @@ __all__ = [
     'execute_tool',
     'run_newsletter_agent',
     'generate_newsletter_with_mcp',
+    # Section Editor
+    'build_section_edit_modal',
+    'get_section_for_editing',
+    'save_section_edit',
+    'get_all_sections_for_newsletter',
+    'initialize_sections_for_newsletter',
+    'get_section_display_name',
+    # Monthly Generator
+    'generate_section_draft',
+    'generate_all_ai_sections',
+    'build_section_context',
+    'AI_DRAFTED_SECTIONS',
 ]
