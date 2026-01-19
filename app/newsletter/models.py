@@ -38,6 +38,13 @@ class Newsletter(db.Model):
     week_start = db.Column(db.DateTime, nullable=False)
     week_end = db.Column(db.DateTime, nullable=False)
 
+    # Monthly dispatch fields (nullable for migration)
+    month_year = db.Column(db.String(7))  # e.g., "2026-01"
+    period_start = db.Column(db.DateTime)  # Generic, works for weekly or monthly
+    period_end = db.Column(db.DateTime)
+    publish_target_date = db.Column(db.DateTime)  # 15th of month
+    qotm_question = db.Column(db.Text)  # Question of the Month
+
     # Current state
     status = db.Column(
         db.String(50),
@@ -135,6 +142,56 @@ class Newsletter(db.Model):
     def is_published(self) -> bool:
         """Check if newsletter has been published."""
         return self.status == NewsletterStatus.PUBLISHED.value
+
+    @classmethod
+    def get_or_create_current_month(cls, month_year: str = None) -> 'Newsletter':
+        """Get or create newsletter for the specified or current month.
+
+        Args:
+            month_year: Month in YYYY-MM format, or None for current month
+
+        Returns:
+            Newsletter instance for the month
+        """
+        from calendar import monthrange
+
+        if month_year is None:
+            now = datetime.utcnow()
+            month_year = now.strftime('%Y-%m')
+
+        # Parse month_year
+        year, month = map(int, month_year.split('-'))
+
+        # Check for existing
+        newsletter = cls.query.filter_by(month_year=month_year).first()
+        if newsletter:
+            return newsletter
+
+        # Create new
+        period_start = datetime(year, month, 1)
+        _, last_day = monthrange(year, month)
+        period_end = datetime(year, month, last_day, 23, 59, 59)
+        publish_target = datetime(year, month, 15, 12, 0, 0)  # 15th at noon
+
+        newsletter = cls(
+            month_year=month_year,
+            period_start=period_start,
+            period_end=period_end,
+            publish_target_date=publish_target,
+            # Keep week_start/week_end as None for monthly newsletters
+            week_start=period_start,
+            week_end=period_end,
+            status=NewsletterStatus.BUILDING.value
+        )
+        db.session.add(newsletter)
+        db.session.flush()
+
+        return newsletter
+
+    @property
+    def has_highlight_nomination(self) -> bool:
+        """Check if newsletter has a member highlight nomination."""
+        return hasattr(self, 'highlight') and self.highlight is not None
 
 
 class NewsletterVersion(db.Model):
