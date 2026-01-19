@@ -887,75 +887,62 @@ def run_monthly_orchestrator(day_of_month: int) -> dict[str, Any]:
             result['errors'].append(f"Host reminder error: {e}")
 
     # ========================================================================
-    # Day 12: Generate AI drafts and create living post
+    # Day 12: Generate AI drafts and create living post with sections
     # ========================================================================
     elif day_of_month == 12:
-        # Generate AI drafts (including Member Highlight AI composition)
-        try:
-            from app.newsletter.member_highlight import compose_highlight_with_ai
-            from app.newsletter.interfaces import HighlightStatus
+        # Generate AI drafts for AI-assisted sections
+        result['actions'].append({
+            'action': 'start_day_12_ai_drafts',
+            'success': True,
+            'detail': 'Starting AI draft generation'
+        })
 
-            highlight = newsletter.highlight if hasattr(newsletter, 'highlight') else None
-            if highlight and highlight.status == HighlightStatus.SUBMITTED.value:
-                compose_result = compose_highlight_with_ai(newsletter.id)
-                if compose_result.get('success'):
-                    result['actions'].append({
-                        'action': 'compose_highlight_ai',
-                        'success': True,
-                        'detail': f"highlight_id={compose_result.get('highlight_id')}"
-                    })
-                else:
-                    result['actions'].append({
-                        'action': 'compose_highlight_ai',
-                        'success': False,
-                        'detail': compose_result.get('error')
-                    })
-                    result['errors'].append(f"AI highlight composition failed: {compose_result.get('error')}")
-            else:
-                result['actions'].append({
-                    'action': 'compose_highlight_ai',
-                    'success': True,
-                    'detail': 'Skipped - no submitted highlight to compose'
-                })
+        try:
+            ai_result = generate_ai_drafts(newsletter.id)
+            result['actions'].append({
+                'action': 'generate_ai_drafts',
+                'success': ai_result.get('success', False),
+                'detail': f"Generated {len(ai_result.get('sections', []))} sections"
+            })
+            if ai_result.get('errors'):
+                result['errors'].extend([
+                    f"AI draft error: {e.get('section_type') if isinstance(e, dict) else str(e)}: {e.get('error') if isinstance(e, dict) else ''}"
+                    for e in ai_result['errors']
+                ])
         except Exception as e:
             logger.error(f"AI draft generation failed: {e}", exc_info=True)
             result['errors'].append(f"AI draft generation error: {e}")
+            result['actions'].append({
+                'action': 'generate_ai_drafts',
+                'success': False,
+                'detail': str(e)
+            })
 
-        # Create/update living post
+        # Create/update living post with sections
         try:
-            from app.newsletter.slack_actions import (
-                create_living_post,
-                update_living_post,
-                is_dry_run,
-            )
+            from app.newsletter.slack_actions import create_living_post_with_sections, is_dry_run
 
             if is_dry_run():
                 result['actions'].append({
-                    'action': 'living_post',
+                    'action': 'create_living_post_with_sections',
                     'success': True,
-                    'detail': '[DRY RUN] Would create/update living post'
+                    'detail': '[DRY RUN] Would create living post with sections'
                 })
             else:
-                # Build content dict for the living post
-                content = _build_monthly_dispatch_content(newsletter)
-
-                if not newsletter.slack_main_message_ts:
-                    post_ref = create_living_post(newsletter, content)
-                    result['actions'].append({
-                        'action': 'create_living_post',
-                        'success': True,
-                        'detail': f"message_ts={post_ref.message_ts if post_ref else 'None'}"
-                    })
-                else:
-                    post_ref = update_living_post(newsletter, content)
-                    result['actions'].append({
-                        'action': 'update_living_post',
-                        'success': True,
-                        'detail': f"message_ts={post_ref.message_ts if post_ref else 'None'}"
-                    })
+                post_ref = create_living_post_with_sections(newsletter)
+                result['actions'].append({
+                    'action': 'create_living_post_with_sections',
+                    'success': True,
+                    'detail': f"message_ts={post_ref.message_ts if post_ref else 'None'}"
+                })
         except Exception as e:
             logger.error(f"Living post creation failed: {e}", exc_info=True)
             result['errors'].append(f"Living post error: {e}")
+            result['actions'].append({
+                'action': 'create_living_post_with_sections',
+                'success': False,
+                'detail': str(e)
+            })
 
     # ========================================================================
     # Day 13: Final reminders
