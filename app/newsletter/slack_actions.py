@@ -20,8 +20,14 @@ from app.newsletter.interfaces import (
     PublishResult,
     VersionTrigger,
     NewsletterStatus,
+    SectionStatus,
 )
-from app.newsletter.models import Newsletter, NewsletterVersion
+from app.newsletter.models import Newsletter, NewsletterVersion, NewsletterSection
+from app.newsletter.section_editor import (
+    get_section_display_name,
+    get_all_sections_for_newsletter,
+    initialize_sections_for_newsletter,
+)
 from app.slack.client import get_slack_client, get_channel_id_by_name
 from app.newsletter.templates import (
     build_newsletter_blocks as build_structured_blocks,
@@ -314,9 +320,234 @@ def _build_version_thread_blocks(version: NewsletterVersion) -> list[dict]:
     return blocks
 
 
+def build_section_blocks_with_edit_buttons(
+    newsletter: Newsletter,
+    sections: list[NewsletterSection]
+) -> list[dict]:
+    """Build Block Kit blocks showing sections with status and edit buttons.
+
+    Creates a visual display of all newsletter sections with:
+    - Header with month/year
+    - Status context (building, ready_for_review, etc.)
+    - Per-section rows with status emoji, name, content preview, and Edit button
+
+    Args:
+        newsletter: Newsletter model for header and status
+        sections: List of NewsletterSection models to display
+
+    Returns:
+        List of Block Kit block dicts
+    """
+    blocks = []
+
+    # Status emoji mapping for newsletter status
+    newsletter_status_emoji = {
+        NewsletterStatus.BUILDING.value: ':hammer_and_wrench:',
+        NewsletterStatus.READY_FOR_REVIEW.value: ':eyes:',
+        NewsletterStatus.APPROVED.value: ':white_check_mark:',
+        NewsletterStatus.PUBLISHED.value: ':mega:',
+    }.get(newsletter.status, ':newspaper:')
+
+    # Format month/year for header
+    if newsletter.month_year:
+        # Parse YYYY-MM format
+        year, month = newsletter.month_year.split('-')
+        month_name = datetime(int(year), int(month), 1).strftime('%B %Y')
+    else:
+        month_name = newsletter.week_start.strftime('%B %Y')
+
+    # Header with month/year
+    blocks.append({
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": f"{newsletter_status_emoji} Monthly Dispatch - {month_name}",
+            "emoji": True
+        }
+    })
+
+    # Status context
+    status_text = {
+        NewsletterStatus.BUILDING.value: 'Building - sections can be edited',
+        NewsletterStatus.READY_FOR_REVIEW.value: 'Ready for Review',
+        NewsletterStatus.APPROVED.value: 'Approved - awaiting publication',
+        NewsletterStatus.PUBLISHED.value: 'Published',
+    }.get(newsletter.status, newsletter.status)
+
+    blocks.append({
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": f"*Status:* {status_text} | *Last updated:* <!date^{int(datetime.utcnow().timestamp())}^{{date_short_pretty}} at {{time}}|just now>"
+        }]
+    })
+
+    blocks.append({"type": "divider"})
+
+    # Section status emoji mapping
+    section_status_emoji = {
+        SectionStatus.AWAITING_CONTENT.value: ':hourglass:',
+        SectionStatus.HAS_AI_DRAFT.value: ':robot_face:',
+        SectionStatus.HUMAN_EDITED.value: ':pencil2:',
+        SectionStatus.FINAL.value: ':white_check_mark:',
+    }
+
+    # Per-section rows
+    for section in sections:
+        # Get status emoji
+        status_emoji = section_status_emoji.get(section.status, ':question:')
+
+        # Get display name
+        display_name = get_section_display_name(section.section_type)
+
+        # Content preview (truncated to 150 chars)
+        content = section.content or ''
+        if len(content) > 150:
+            preview = content[:150].rsplit(' ', 1)[0] + '...'
+        elif content:
+            preview = content
+        else:
+            preview = '_No content yet_'
+
+        # Build button value: newsletter_id:section_id:section_type
+        button_value = f"{newsletter.id}:{section.id}:{section.section_type}"
+
+        # Section block with Edit button accessory
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"{status_emoji} *{display_name}*\n{preview}"
+            },
+            "accessory": {
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": "Edit",
+                    "emoji": True
+                },
+                "action_id": "section_edit",
+                "value": button_value
+            }
+        })
+
+    return blocks
+
+
 # =============================================================================
 # Living Post Management
 # =============================================================================
+
+def create_living_post_with_sections(newsletter: Newsletter) -> SlackPostReference:
+    """Create living post showing all sections with edit buttons.
+
+    Posts to configured living post channel with per-section status and
+    Edit buttons. Initializes sections if they don't exist.
+
+    Args:
+        newsletter: Newsletter model to create post for
+
+    Returns:
+        SlackPostReference with channel_id and message_ts
+
+    Raises:
+        SlackApiError: If Slack API call fails
+        ValueError: If channel cannot be found
+    """
+    channel_id = get_living_post_channel()
+    if not channel_id:
+        raise ValueError("Could not find living post channel")
+
+    dry_run = is_dry_run()
+
+    # Get or initialize sections
+    sections = get_all_sections_for_newsletter(newsletter.id)
+    if not sections:
+        sections = initialize_sections_for_newsletter(newsletter.id)
+        db.session.commit()
+
+    # Build section blocks
+    blocks = build_section_blocks_with_edit_buttons(newsletter, sections)
+
+    # Add review buttons if status is READY_FOR_REVIEW
+    if newsletter.status == NewsletterStatus.READY_FOR_REVIEW.value:
+        blocks.append({"type": "divider"})
+        blocks.append({
+            "type": "actions",
+            "elements": [
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Approve & Publish",
+                        "emoji": True
+                    },
+                    "style": "primary",
+                    "action_id": "newsletter_approve",
+                    "value": str(newsletter.id)
+                },
+                {
+                    "type": "button",
+                    "text": {
+                        "type": "plain_text",
+                        "text": "Request Changes",
+                        "emoji": True
+                    },
+                    "action_id": "newsletter_request_changes",
+                    "value": str(newsletter.id)
+                }
+            ]
+        })
+
+    if dry_run:
+        logger.info(
+            f"[DRY RUN] Would create section-based living post for newsletter #{newsletter.id} "
+            f"in channel {channel_id} with {len(sections)} sections"
+        )
+        return SlackPostReference(
+            channel_id=channel_id,
+            message_ts="dry_run_ts"
+        )
+
+    client = get_slack_client()
+
+    # Create fallback text
+    if newsletter.month_year:
+        fallback_text = f"Monthly Dispatch ({newsletter.month_year}) - Section Editor"
+    else:
+        week_str = f"{newsletter.week_start.strftime('%b %d')} - {newsletter.week_end.strftime('%b %d')}"
+        fallback_text = f"Weekly Dispatch ({week_str}) - Section Editor"
+
+    try:
+        response = client.chat_postMessage(
+            channel=channel_id,
+            blocks=blocks,
+            text=fallback_text,
+            unfurl_links=False,
+            unfurl_media=False
+        )
+
+        message_ts = response.get('ts')
+        logger.info(
+            f"Created section-based living post for newsletter #{newsletter.id} "
+            f"(channel: {channel_id}, ts: {message_ts}, sections: {len(sections)})"
+        )
+
+        # Save Slack references to newsletter
+        newsletter.slack_channel_id = channel_id
+        newsletter.slack_main_message_ts = message_ts
+        db.session.commit()
+
+        return SlackPostReference(
+            channel_id=channel_id,
+            message_ts=message_ts
+        )
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        logger.error(f"Error creating section-based living post for newsletter #{newsletter.id}: {error_msg}")
+        raise
+
 
 def create_living_post(
     newsletter: Newsletter,

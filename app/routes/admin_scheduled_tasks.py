@@ -270,3 +270,428 @@ def get_result():
         })
 
     return jsonify({'status': 'idle'})
+
+
+# =============================================================================
+# Newsletter Trigger Endpoints
+# =============================================================================
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/qotm', methods=['POST'])
+@admin_required
+def trigger_qotm():
+    """Trigger QOTM (Question of the Month) post to #chat channel.
+
+    Expects JSON body with optional:
+    - question: str (uses newsletter.qotm_question if not provided)
+    - channel: str (defaults to 'chat')
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.qotm import post_qotm_to_channel
+
+    data = request.get_json() or {}
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    # Get question from request or newsletter
+    question = data.get('question') or newsletter.qotm_question
+    if not question:
+        return jsonify({
+            'success': False,
+            'error': 'No question provided and no qotm_question set on newsletter'
+        }), 400
+
+    channel = data.get('channel', 'chat')
+
+    result = post_qotm_to_channel(
+        newsletter_id=newsletter.id,
+        question=question,
+        channel=channel
+    )
+
+    return jsonify(result)
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/coach', methods=['POST'])
+@admin_required
+def trigger_coach():
+    """Trigger coach assignment and DM.
+
+    Auto-selects the next coach in rotation and sends them a DM
+    requesting their Coaches Corner content.
+
+    Expects JSON body with optional:
+    - coach_user_id: int (auto-selects if not provided)
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.coach_rotation import assign_coach_for_month, send_coach_request
+    from app.models import db
+
+    data = request.get_json() or {}
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Assign coach (auto-select if not provided)
+    coach_user_id = data.get('coach_user_id')
+    assign_result = assign_coach_for_month(
+        newsletter_id=newsletter.id,
+        coach_user_id=coach_user_id
+    )
+
+    if not assign_result.get('success'):
+        return jsonify(assign_result)
+
+    # Send request DM to coach
+    dm_result = send_coach_request(newsletter_id=newsletter.id)
+
+    return jsonify({
+        'success': dm_result.get('success', False),
+        'assignment': assign_result,
+        'dm': dm_result
+    })
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/host', methods=['POST'])
+@admin_required
+def trigger_host():
+    """Trigger host DM to request opener/closer content.
+
+    Requires a host to already be assigned to the newsletter.
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.host import send_host_request
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    result = send_host_request(newsletter_id=newsletter.id)
+
+    return jsonify(result)
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/highlight', methods=['POST'])
+@admin_required
+def trigger_highlight():
+    """Trigger member highlight request DM.
+
+    Requires a member to already be nominated for the highlight.
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.member_highlight import send_highlight_request
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    result = send_highlight_request(newsletter_id=newsletter.id)
+
+    return jsonify(result)
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/ai-drafts', methods=['POST'])
+@admin_required
+def trigger_ai_drafts():
+    """Trigger AI draft generation for newsletter sections.
+
+    Generates AI drafts for sections that need content.
+    Note: This is a placeholder - the generate_ai_drafts function
+    may need to be implemented in the service module.
+    """
+    from app.newsletter.models import Newsletter
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Try to import generate_ai_drafts if it exists
+    try:
+        from app.newsletter.service import generate_ai_drafts
+        result = generate_ai_drafts(newsletter_id=newsletter.id)
+        return jsonify(result)
+    except ImportError:
+        # Function not yet implemented - return stub response
+        current_app.logger.warning("generate_ai_drafts not yet implemented")
+        return jsonify({
+            'success': False,
+            'error': 'generate_ai_drafts function not yet implemented',
+            'newsletter_id': newsletter.id
+        }), 501
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/living-post', methods=['POST'])
+@admin_required
+def trigger_living_post():
+    """Trigger living post creation or update.
+
+    Creates a new living post if none exists, or updates the existing one.
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.slack_actions import create_living_post, update_living_post
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Determine content to post
+    content = newsletter.current_content or f"Monthly Dispatch for {newsletter.month_year} - Building..."
+
+    try:
+        if not newsletter.slack_main_message_ts:
+            # Create new living post
+            post_ref = create_living_post(newsletter, content)
+            action = 'created'
+        else:
+            # Update existing post
+            post_ref = update_living_post(newsletter, content)
+            action = 'updated'
+
+        return jsonify({
+            'success': True,
+            'action': action,
+            'channel_id': post_ref.channel_id if post_ref else None,
+            'message_ts': post_ref.message_ts if post_ref else None,
+            'newsletter_id': newsletter.id
+        })
+
+    except Exception as e:
+        current_app.logger.error(f"Error with living post: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e),
+            'newsletter_id': newsletter.id
+        }), 500
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/reminders', methods=['POST'])
+@admin_required
+def trigger_reminders():
+    """Trigger all pending reminders for the current newsletter.
+
+    Sends reminders to:
+    - Host (if not submitted)
+    - Coach (if not submitted)
+    - Member highlight (if nominated but not submitted)
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.host import send_host_reminder
+    from app.newsletter.coach_rotation import send_coach_reminder
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    results = {
+        'newsletter_id': newsletter.id,
+        'reminders_sent': []
+    }
+
+    # Send host reminder
+    host_result = send_host_reminder(newsletter_id=newsletter.id)
+    results['host_reminder'] = host_result
+    if host_result.get('success') and not host_result.get('skipped'):
+        results['reminders_sent'].append('host')
+
+    # Send coach reminder
+    coach_result = send_coach_reminder(newsletter_id=newsletter.id)
+    results['coach_reminder'] = coach_result
+    if coach_result.get('success') and not coach_result.get('skipped'):
+        results['reminders_sent'].append('coach')
+
+    # Note: Member highlight reminders could be added here if needed
+
+    results['success'] = True
+    results['total_sent'] = len(results['reminders_sent'])
+
+    return jsonify(results)
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/photo-thread', methods=['POST'])
+@admin_required
+def trigger_photo_thread():
+    """Trigger photo gallery thread creation.
+
+    Posts selected photos as a thread reply to the published newsletter.
+    Requires the newsletter to be published (has publish_message_ts and publish_channel_id).
+    """
+    from app.newsletter.models import Newsletter
+    from app.newsletter.photos import post_photo_gallery_thread
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Check if newsletter has been published
+    if not newsletter.publish_message_ts or not newsletter.publish_channel_id:
+        return jsonify({
+            'success': False,
+            'error': 'Newsletter must be published before posting photo gallery thread',
+            'newsletter_id': newsletter.id,
+            'has_publish_message_ts': bool(newsletter.publish_message_ts),
+            'has_publish_channel_id': bool(newsletter.publish_channel_id)
+        }), 400
+
+    result = post_photo_gallery_thread(
+        newsletter_id=newsletter.id,
+        parent_message_ts=newsletter.publish_message_ts,
+        channel_id=newsletter.publish_channel_id
+    )
+
+    return jsonify(result)
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/create', methods=['POST'])
+@admin_required
+def create_newsletter():
+    """Create a newsletter for a specific month.
+
+    Expects JSON body with:
+    - month_year: str in YYYY-MM format (e.g., "2026-01")
+    - qotm_question: str (optional) - Question of the Month
+    """
+    from app.newsletter.models import Newsletter
+    from app.models import db
+
+    data = request.get_json() or {}
+
+    month_year = data.get('month_year')
+    if not month_year:
+        return jsonify({
+            'success': False,
+            'error': 'month_year is required (format: YYYY-MM)'
+        }), 400
+
+    # Validate format
+    try:
+        year, month = map(int, month_year.split('-'))
+        if not (1 <= month <= 12):
+            raise ValueError("Invalid month")
+        if year < 2020 or year > 2100:
+            raise ValueError("Invalid year")
+    except (ValueError, AttributeError) as e:
+        return jsonify({
+            'success': False,
+            'error': f'Invalid month_year format: {e}. Expected YYYY-MM'
+        }), 400
+
+    # Get or create newsletter
+    newsletter = Newsletter.get_or_create_current_month(month_year)
+
+    # Set QOTM question if provided
+    if data.get('qotm_question'):
+        newsletter.qotm_question = data['qotm_question']
+
+    db.session.commit()
+
+    return jsonify({
+        'success': True,
+        'newsletter_id': newsletter.id,
+        'month_year': newsletter.month_year,
+        'period_start': newsletter.period_start.isoformat() if newsletter.period_start else None,
+        'period_end': newsletter.period_end.isoformat() if newsletter.period_end else None,
+        'publish_target_date': newsletter.publish_target_date.isoformat() if newsletter.publish_target_date else None,
+        'qotm_question': newsletter.qotm_question,
+        'status': newsletter.status
+    })
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/review', methods=['POST'])
+@admin_required
+def trigger_review():
+    """Add review buttons to the living post.
+
+    Adds approve/request changes buttons to enable final review workflow.
+    Requires the living post to exist.
+    """
+    from app.newsletter.models import Newsletter
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Check if living post exists
+    if not newsletter.slack_main_message_ts:
+        return jsonify({
+            'success': False,
+            'error': 'Living post must exist before adding review buttons',
+            'newsletter_id': newsletter.id
+        }), 400
+
+    # Try to import add_review_buttons if it exists
+    try:
+        from app.newsletter.slack_actions import add_review_buttons
+        result = add_review_buttons(newsletter_id=newsletter.id)
+        return jsonify(result)
+    except ImportError:
+        # Function not yet implemented - return stub response
+        current_app.logger.warning("add_review_buttons not yet implemented")
+        return jsonify({
+            'success': False,
+            'error': 'add_review_buttons function not yet implemented',
+            'newsletter_id': newsletter.id
+        }), 501
+
+
+@admin_scheduled_tasks.route('/admin/scheduled-tasks/newsletter/trigger/publish', methods=['POST'])
+@admin_required
+def trigger_publish():
+    """Publish the newsletter to the announcements channel.
+
+    Copies the finalized newsletter to the public announcements channel.
+    Requires all sections to be approved/finalized.
+    """
+    from app.newsletter.models import Newsletter
+    from app.models import db
+
+    newsletter = Newsletter.get_or_create_current_month()
+    if not newsletter:
+        return jsonify({'success': False, 'error': 'Could not get or create newsletter'}), 500
+
+    db.session.commit()
+
+    # Check if newsletter is ready for publish
+    if newsletter.status not in ['approved', 'ready']:
+        current_app.logger.warning(
+            f"Publishing newsletter with status '{newsletter.status}' - "
+            "expected 'approved' or 'ready'"
+        )
+
+    # Try to import publish_newsletter if it exists
+    try:
+        from app.newsletter.service import publish_newsletter
+        result = publish_newsletter(newsletter_id=newsletter.id)
+        return jsonify(result)
+    except ImportError:
+        # Function not yet implemented - return stub response
+        current_app.logger.warning("publish_newsletter not yet implemented")
+        return jsonify({
+            'success': False,
+            'error': 'publish_newsletter function not yet implemented',
+            'newsletter_id': newsletter.id
+        }), 501

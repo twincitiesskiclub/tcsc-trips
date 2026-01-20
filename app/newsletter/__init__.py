@@ -56,6 +56,9 @@ from app.newsletter.slack_actions import (
     add_version_to_thread,
     add_review_buttons,
     remove_review_buttons,
+    # Section-based Living Post
+    create_living_post_with_sections,
+    build_section_blocks_with_edit_buttons,
     # Publishing
     publish_to_announcement_channel,
     # Feedback
@@ -96,6 +99,24 @@ from app.newsletter.generator import (
 from app.newsletter.modals import (
     build_dispatch_submission_modal,
     build_dispatch_confirmation_blocks,
+)
+
+# Section editor
+from app.newsletter.section_editor import (
+    build_section_edit_modal,
+    get_section_for_editing,
+    save_section_edit,
+    get_all_sections_for_newsletter,
+    initialize_sections_for_newsletter,
+    get_section_display_name,
+)
+
+# Monthly generator
+from app.newsletter.monthly_generator import (
+    generate_section_draft,
+    generate_all_ai_sections,
+    build_section_context,
+    AI_DRAFTED_SECTIONS,
 )
 
 from app.newsletter.mcp_server import (
@@ -151,6 +172,9 @@ __all__ = [
     'add_version_to_thread',
     'add_review_buttons',
     'remove_review_buttons',
+    # Slack Actions - Section-based Living Post
+    'create_living_post_with_sections',
+    'build_section_blocks_with_edit_buttons',
     # Slack Actions - Publishing
     'publish_to_announcement_channel',
     # Slack Actions - Feedback
@@ -193,4 +217,16 @@ __all__ = [
     'execute_tool',
     'run_newsletter_agent',
     'generate_newsletter_with_mcp',
+    # Section Editor
+    'build_section_edit_modal',
+    'get_section_for_editing',
+    'save_section_edit',
+    'get_all_sections_for_newsletter',
+    'initialize_sections_for_newsletter',
+    'get_section_display_name',
+    # Monthly Generator
+    'generate_section_draft',
+    'generate_all_ai_sections',
+    'build_section_context',
+    'AI_DRAFTED_SECTIONS',
 ]

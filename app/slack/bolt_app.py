@@ -547,6 +547,57 @@ if _bot_token:
 
         client.views_open(trigger_id=trigger_id, view=modal)
 
+    @bolt_app.action("section_edit")
+    def handle_section_edit_button(ack, body, client, logger):
+        """Handle click on section Edit button.
+
+        Opens modal with current section content for editing.
+        Button value format: "newsletter_id:section_id:section_type"
+        """
+        ack()
+
+        try:
+            value = body['actions'][0]['value']
+            newsletter_id, section_id, section_type = value.split(':')
+            newsletter_id = int(newsletter_id)
+            # Note: section_id is parsed for validation but not used for the query.
+            # Sections are fetched by newsletter_id + section_type, not by ID,
+            # since section_type is unique per newsletter.
+            _ = int(section_id)  # Validate it's a valid integer
+        except (KeyError, ValueError) as e:
+            logger.error(f"Invalid section edit button value: {e}")
+            return
+
+        trigger_id = body.get('trigger_id')
+        if not trigger_id:
+            logger.error("No trigger_id for section edit")
+            return
+
+        with get_app_context():
+            from app.newsletter.section_editor import (
+                build_section_edit_modal,
+                get_section_for_editing,
+            )
+
+            section = get_section_for_editing(newsletter_id, section_type)
+            if not section:
+                client.chat_postEphemeral(
+                    channel=body['channel']['id'],
+                    user=body['user']['id'],
+                    text=":x: Could not find section to edit"
+                )
+                return
+
+            modal = build_section_edit_modal(
+                section_type=section.section_type,
+                current_content=section.content or "",
+                newsletter_id=newsletter_id,
+                section_id=section.id,
+                ai_draft=section.ai_draft
+            )
+
+            client.views_open(trigger_id=trigger_id, view=modal)
+
     @bolt_app.action("create_practice_from_summary")
     def handle_create_practice_from_summary(ack, body, action, client, logger):
         """Handle Add Practice button click from weekly summary placeholder.
@@ -1191,6 +1242,52 @@ if _bot_token:
                 )
             except Exception as e:
                 logger.warning(f"Could not send feedback confirmation DM to {user_id}: {e}")
+
+    @bolt_app.view("section_edit_submit")
+    def handle_section_edit_submit(ack, body, client, view, logger):
+        """Handle section edit modal submission.
+
+        Saves the edited content and updates the living post.
+        """
+        ack()
+
+        try:
+            # Parse metadata
+            metadata = view.get('private_metadata', '')
+            newsletter_id, section_id, section_type = metadata.split(':')
+            newsletter_id = int(newsletter_id)
+            section_id = int(section_id)
+
+            # Get submitted content
+            values = view.get('state', {}).get('values', {})
+            new_content = values.get('content_block', {}).get('section_content', {}).get('value', '')
+
+            editor_uid = body['user']['id']
+
+        except (KeyError, ValueError) as e:
+            logger.error(f"Error parsing section edit submission: {e}")
+            return
+
+        with get_app_context():
+            from app.newsletter.section_editor import save_section_edit
+
+            # Save the edit
+            result = save_section_edit(section_id, new_content, editor_uid)
+
+            if not result.get('success'):
+                logger.error(f"Failed to save section edit: {result.get('error')}")
+                return
+
+            # Notify user
+            try:
+                client.chat_postMessage(
+                    channel=editor_uid,
+                    text=f":white_check_mark: *{result['section_type'].replace('_', ' ').title()}* section updated!"
+                )
+            except Exception as e:
+                logger.warning(f"Could not send edit confirmation DM to {editor_uid}: {e}")
+
+            logger.info(f"Section {section_type} edited by {editor_uid}")
 
     # =========================================================================
     # Events

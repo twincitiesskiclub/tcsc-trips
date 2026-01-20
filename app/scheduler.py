@@ -16,7 +16,8 @@ Scheduled Jobs:
 - 7:30 AM: Skipper 24h check → DISABLED (replaced by 4pm/10pm lead checks)
 - 4:00 PM: Evening lead check (noon-midnight today) → weather + lead verification
 - 10:00 PM: Morning lead check (before noon tomorrow) → weather + lead verification
-- 8:00 AM: Newsletter daily update → regenerates living post
+- 8:00 AM: Newsletter daily update → regenerates living post (weekly dispatch)
+- 8:00 AM: Newsletter monthly orchestrator → day-of-month-based actions
 - 8:00 AM Sunday: Coach weekly review summary (collab-coaches-practices)
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
@@ -649,6 +650,69 @@ def run_newsletter_sunday_job(app: Flask):
         app.logger.info("=" * 60)
 
 
+def run_newsletter_monthly_orchestrator_job(app: Flask):
+    """Execute the newsletter monthly orchestrator job within app context.
+
+    Runs daily at 8am CT to check what day-of-month-specific actions
+    need to happen for the Monthly Dispatch newsletter.
+
+    This function delegates to run_monthly_orchestrator() in the service
+    module, which encapsulates all the day-specific orchestration logic.
+
+    Monthly Schedule:
+    - Day 1: Send host DM (if assigned), assign coach (automated), post QOTM
+    - Day 5: Send member highlight request (if nominated)
+    - Day 10: Coach reminder (if not submitted), host reminder (if not submitted)
+    - Day 12: Generate AI drafts, create living post
+    - Day 13: Send final reminders
+    - Day 14: Add review/edit buttons
+    - Day 15: Manual publish (admin approval required)
+
+    Args:
+        app: Flask application instance for context.
+    """
+    from zoneinfo import ZoneInfo
+
+    with app.app_context():
+        from app.newsletter.service import run_monthly_orchestrator
+
+        # Use Central timezone to determine day of month
+        central_tz = ZoneInfo('America/Chicago')
+        now_central = datetime.now(central_tz)
+        today = now_central.day
+
+        app.logger.info("=" * 60)
+        app.logger.info("Starting newsletter monthly orchestrator job")
+        app.logger.info(f"Time: {now_central.strftime('%Y-%m-%d %H:%M %Z')}")
+        app.logger.info(f"Day of month: {today}")
+        app.logger.info("=" * 60)
+
+        # Delegate to service function
+        result = run_monthly_orchestrator(today)
+
+        # Log results
+        if result.get('newsletter_id'):
+            app.logger.info(
+                f"Newsletter: id={result['newsletter_id']}"
+            )
+
+        app.logger.info(f"Orchestrator complete: {len(result.get('actions', []))} actions")
+        for action in result.get('actions', []):
+            status = "OK" if action.get('success') else "FAILED"
+            app.logger.info(f"  [{status}] {action.get('action')}: {action.get('detail')}")
+
+        if result.get('errors'):
+            app.logger.warning(f"Orchestrator errors ({len(result['errors'])}):")
+            for error in result['errors'][:5]:
+                app.logger.warning(f"  - {error}")
+            if len(result['errors']) > 5:
+                app.logger.warning(f"  ... and {len(result['errors']) - 5} more errors")
+
+        app.logger.info("=" * 60)
+        app.logger.info("Newsletter monthly orchestrator job complete")
+        app.logger.info("=" * 60)
+
+
 def init_scheduler(app: Flask) -> bool:
     """Initialize the scheduler within the Flask application.
 
@@ -900,6 +964,33 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=3600
     )
 
+    # ========================================================================
+    # Newsletter Jobs (Monthly Dispatch)
+    # ========================================================================
+
+    # Newsletter monthly orchestrator: 8:00 AM daily
+    # Runs day-of-month-specific actions for the Monthly Dispatch:
+    # Day 1: Host DM, coach assignment, QOTM post
+    # Day 5: Member highlight request
+    # Day 10: Reminders for coach and host
+    # Day 12: AI drafts and living post creation
+    # Day 13: Final reminders
+    # Day 14: Add review buttons
+    # Day 15: Manual publish (admin approval)
+    scheduler.add_job(
+        func=run_newsletter_monthly_orchestrator_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=8,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='newsletter_monthly_orchestrator',
+        name='Newsletter Monthly Orchestrator',
+        replace_existing=True,
+        misfire_grace_time=3600  # 1 hour grace
+    )
+
     scheduler.start()
 
     app.logger.info("=" * 60)
@@ -977,7 +1068,7 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         job_type: One of 'morning_check', '48h_check', '24h_check',
                   'weekly_summary', 'coach_weekly_summary', 'expire_proposals',
                   'practice_announcements', 'newsletter_daily_update',
-                  'newsletter_sunday_finalize'
+                  'newsletter_sunday_finalize', 'newsletter_monthly_orchestrator'
         channel_override: Optional channel name to override default for Slack posts.
 
     Returns:
@@ -995,6 +1086,7 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         'practice_announcements': run_practice_announcements_job,
         'newsletter_daily_update': run_newsletter_daily_job,
         'newsletter_sunday_finalize': run_newsletter_sunday_job,
+        'newsletter_monthly_orchestrator': run_newsletter_monthly_orchestrator_job,
     }
 
     # Jobs that support channel_override
