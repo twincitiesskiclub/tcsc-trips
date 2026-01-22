@@ -583,6 +583,12 @@ def build_coach_weekly_summary_blocks(
 
             # Header line with date/time/location
             header_text = f":calendar: *{day_full}, {month_short} {day_num}{day_suffix} at {time_str}*"
+
+            # Add warning badge if incomplete
+            needs_attention = _practice_needs_attention(practice)
+            if needs_attention:
+                header_text += " :warning:"
+
             context_parts = [f":round_pushpin: {full_location}"]
 
             # Show activities (ski technique: Classic, Skate, etc.)
@@ -594,12 +600,24 @@ def build_coach_weekly_summary_blocks(
             if type_names:
                 context_parts.append(f":snowflake: {type_names}")
 
+            # Build Edit button accessory with danger style if needs attention
+            edit_button = {
+                "type": "button",
+                "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
+                "action_id": "edit_practice_full",
+                "value": str(practice.id)
+            }
+            if needs_attention:
+                edit_button["style"] = "danger"
+
+            # Section with accessory Edit button (inline, no scrolling needed)
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": f"{header_text}\n{' | '.join(context_parts)}"
-                }
+                },
+                "accessory": edit_button
             })
 
             # Workout details (combined into one block)
@@ -669,17 +687,6 @@ def build_coach_weekly_summary_blocks(
                         "text": " | ".join(coach_lead_parts)
                     }]
                 })
-
-            # Edit button
-            blocks.append({
-                "type": "actions",
-                "elements": [{
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
-                    "action_id": "edit_practice_full",
-                    "value": str(practice.id)
-                }]
-            })
 
         else:
             # ==========================================================

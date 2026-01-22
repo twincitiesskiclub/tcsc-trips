@@ -133,3 +133,87 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         assert ":warning:" in header_text
         assert "1 need" in header_text
+
+    def test_edit_button_is_section_accessory(self):
+        """Edit button should be inline with header as section accessory."""
+        week_start = datetime(2026, 1, 19)  # Monday
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+
+        practices = [
+            _make_practice(
+                id=1,
+                date=datetime(2026, 1, 20, 18, 0),  # Tuesday
+                workout_description="Workout",
+                leads=[
+                    _make_lead(role=LeadRole.COACH),
+                    _make_lead(role=LeadRole.LEAD),
+                ],
+            ),
+        ]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Find section with accessory button
+        sections_with_accessory = [
+            b for b in blocks
+            if b.get('type') == 'section' and b.get('accessory')
+        ]
+
+        assert len(sections_with_accessory) >= 1
+
+        # First should be the date header with Edit button
+        header_section = sections_with_accessory[0]
+        assert header_section['accessory']['type'] == 'button'
+        assert header_section['accessory']['action_id'] == 'edit_practice_full'
+        assert 'Edit' in header_section['accessory']['text']['text']
+
+    def test_edit_button_danger_style_when_incomplete(self):
+        """Edit button should have danger style when practice needs attention."""
+        week_start = datetime(2026, 1, 19)  # Monday
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+
+        # Incomplete practice (no workout, no leads)
+        practices = [
+            _make_practice(
+                id=1,
+                date=datetime(2026, 1, 20, 18, 0),  # Tuesday
+                workout_description=None,
+                leads=[]
+            ),
+        ]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Find section with accessory button
+        header_section = next(
+            b for b in blocks
+            if b.get('type') == 'section' and b.get('accessory')
+        )
+
+        assert header_section['accessory'].get('style') == 'danger'
+
+    def test_practice_header_has_warning_badge_when_incomplete(self):
+        """Practice header should show :warning: badge when needs attention."""
+        week_start = datetime(2026, 1, 19)  # Monday
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+
+        # Incomplete practice
+        practices = [
+            _make_practice(
+                id=1,
+                date=datetime(2026, 1, 20, 18, 0),  # Tuesday
+                workout_description=None,
+                leads=[]
+            ),
+        ]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Find section with accessory button (the practice header)
+        header_section = next(
+            b for b in blocks
+            if b.get('type') == 'section' and b.get('accessory')
+        )
+
+        header_text = header_section['text']['text']
+        assert ":warning:" in header_text
