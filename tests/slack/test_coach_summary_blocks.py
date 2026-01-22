@@ -189,8 +189,8 @@ class TestBuildCoachWeeklySummaryBlocks:
         assert ":warning:" in header_text
         assert "1 need" in header_text
 
-    def test_edit_button_is_section_accessory(self):
-        """Edit button should be inline with header as section accessory."""
+    def test_edit_button_is_actions_block_at_bottom(self):
+        """Edit button should be in actions block at bottom for better mobile UX."""
         week_start = datetime(2026, 1, 19)  # Monday
         expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
 
@@ -208,19 +208,20 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
 
-        # Find section with accessory button
-        sections_with_accessory = [
+        # Find actions blocks with Edit button
+        actions_blocks = [
             b for b in blocks
-            if b.get('type') == 'section' and b.get('accessory')
+            if b.get('type') == 'actions'
         ]
 
-        assert len(sections_with_accessory) >= 1
+        assert len(actions_blocks) >= 1
 
-        # First should be the date header with Edit button
-        header_section = sections_with_accessory[0]
-        assert header_section['accessory']['type'] == 'button'
-        assert header_section['accessory']['action_id'] == 'edit_practice_full'
-        assert 'Edit' in header_section['accessory']['text']['text']
+        # Should have Edit button
+        edit_actions = actions_blocks[0]
+        edit_button = edit_actions['elements'][0]
+        assert edit_button['type'] == 'button'
+        assert edit_button['action_id'] == 'edit_practice_full'
+        assert 'Edit' in edit_button['text']['text']
 
     def test_edit_button_danger_style_when_incomplete(self):
         """Edit button should have danger style when practice needs attention."""
@@ -239,13 +240,13 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
 
-        # Find section with accessory button
-        header_section = next(
+        # Find actions block with Edit button
+        actions_block = next(
             b for b in blocks
-            if b.get('type') == 'section' and b.get('accessory')
+            if b.get('type') == 'actions'
         )
 
-        assert header_section['accessory'].get('style') == 'danger'
+        assert actions_block['elements'][0].get('style') == 'danger'
 
     def test_practice_header_has_warning_badge_when_incomplete(self):
         """Practice header should show :warning: badge when needs attention."""
@@ -264,10 +265,10 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
 
-        # Find section with accessory button (the practice header)
+        # Find section with :calendar: (the practice header)
         header_section = next(
             b for b in blocks
-            if b.get('type') == 'section' and b.get('accessory')
+            if b.get('type') == 'section' and ':calendar:' in b.get('text', {}).get('text', '')
         )
 
         header_text = header_section['text']['text']
@@ -349,12 +350,11 @@ class TestBuildCoachWeeklySummaryBlocks:
     def test_block_count_is_optimized(self):
         """Verify block count is optimized for typical week.
 
-        Expected blocks per practice: 5 (header+fields+workout+context+divider)
+        Expected blocks per practice: 6 (header+fields+workout+context+actions+divider)
         Expected blocks per empty day: 2 (section+divider)
         Plus: header + initial divider + footer context = 3
 
-        3 practices + 2 empty days = 15 + 4 + 3 = 22 blocks
-        (Down from ~27 before optimization)
+        3 practices + 2 empty days = 18 + 4 + 3 = 25 blocks
         """
         from app.slack.blocks import build_coach_weekly_summary_blocks
         from app.practices.interfaces import PracticeLocationInfo
@@ -408,13 +408,13 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
 
-        # Should be around 22 blocks (not 27+)
-        # 3 practices × 5 = 15
+        # Should be around 25 blocks
+        # 3 practices × 6 = 18
         # 2 empty days × 2 = 4
         # header + divider + footer = 3
-        assert len(blocks) <= 25, f"Block count {len(blocks)} exceeds target of 25"
-        assert len(blocks) >= 20, f"Block count {len(blocks)} unexpectedly low"
+        assert len(blocks) <= 28, f"Block count {len(blocks)} exceeds target of 28"
+        assert len(blocks) >= 22, f"Block count {len(blocks)} unexpectedly low"
 
-        # Should have no separate actions blocks (buttons are section accessories)
+        # Practices should have Edit buttons in actions blocks
         actions_blocks = [b for b in blocks if b.get('type') == 'actions']
-        assert len(actions_blocks) == 0, "Found separate actions blocks - buttons should be section accessories"
+        assert len(actions_blocks) == 3, f"Expected 3 actions blocks (one per practice), got {len(actions_blocks)}"
