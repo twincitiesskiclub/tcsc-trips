@@ -581,24 +581,13 @@ def build_coach_weekly_summary_blocks(
 
             type_names = ", ".join([t.name for t in practice.practice_types]) if practice.practice_types else ""
 
-            # Header line with date/time/location
+            # Header line with date/time only (location/activities/types shown in fields section below)
             header_text = f":calendar: *{day_full}, {month_short} {day_num}{day_suffix} at {time_str}*"
 
             # Add warning badge if incomplete
             needs_attention = _practice_needs_attention(practice)
             if needs_attention:
                 header_text += " :warning:"
-
-            context_parts = [f":round_pushpin: {full_location}"]
-
-            # Show activities (ski technique: Classic, Skate, etc.)
-            if practice.activities:
-                activity_names = ", ".join([a.name for a in practice.activities])
-                context_parts.append(f":skier: {activity_names}")
-
-            # Show practice types (workout type: Intervals, Distance, etc.)
-            if type_names:
-                context_parts.append(f":snowflake: {type_names}")
 
             # Build Edit button accessory with danger style if needs attention
             edit_button = {
@@ -615,30 +604,54 @@ def build_coach_weekly_summary_blocks(
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"{header_text}\n{' | '.join(context_parts)}"
+                    "text": header_text
                 },
                 "accessory": edit_button
             })
 
-            # Workout details (combined into one block)
-            workout_lines = []
-            if practice.warmup_description:
-                # Truncate long descriptions
-                warmup = practice.warmup_description[:100] + "..." if len(practice.warmup_description) > 100 else practice.warmup_description
-                workout_lines.append(f":fire: *Warmup:* {warmup}")
-            if practice.workout_description:
-                workout = practice.workout_description[:150] + "..." if len(practice.workout_description) > 150 else practice.workout_description
-                workout_lines.append(f":nerd_face: *Workout:* {workout}")
-            if practice.cooldown_description:
-                cooldown = practice.cooldown_description[:100] + "..." if len(practice.cooldown_description) > 100 else practice.cooldown_description
-                workout_lines.append(f":ice_cube: *Cooldown:* {cooldown}")
+            # ==========================================================
+            # TWO-COLUMN FIELDS: Location/Types + Warmup/Cooldown
+            # ==========================================================
+            fields = []
 
-            if workout_lines:
+            # LEFT COLUMN: Location + Activities + Types
+            location_col = f"*:round_pushpin: Location*\n{full_location}"
+            if practice.activities:
+                activity_names = ", ".join([a.name for a in practice.activities])
+                location_col += f"\n:skier: {activity_names}"
+            if type_names:
+                location_col += f" | :snowflake: {type_names}"
+            fields.append({"type": "mrkdwn", "text": location_col})
+
+            # RIGHT COLUMN: Warmup + Cooldown (truncated to 40 chars each)
+            warmup_cooldown = "*:fire: Warmup / :ice_cube: Cooldown*\n"
+            if practice.warmup_description:
+                warmup = practice.warmup_description[:40] + "..." if len(practice.warmup_description) > 40 else practice.warmup_description
+                warmup_cooldown += f"{warmup}\n"
+            else:
+                warmup_cooldown += "_No warmup_\n"
+
+            if practice.cooldown_description:
+                cooldown = practice.cooldown_description[:40] + "..." if len(practice.cooldown_description) > 40 else practice.cooldown_description
+                warmup_cooldown += cooldown
+            else:
+                warmup_cooldown += "_No cooldown_"
+            fields.append({"type": "mrkdwn", "text": warmup_cooldown})
+
+            blocks.append({
+                "type": "section",
+                "fields": fields
+            })
+
+            # ==========================================================
+            # FULL-WIDTH WORKOUT SECTION (no truncation)
+            # ==========================================================
+            if practice.workout_description:
                 blocks.append({
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "\n".join(workout_lines)
+                        "text": f"*:nerd_face: Workout*\n{practice.workout_description}"
                     }
                 })
             else:
@@ -646,7 +659,7 @@ def build_coach_weekly_summary_blocks(
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "_No workout details yet. Click Edit to add._"
+                        "text": ":warning: *Workout:* _Not entered yet - click Edit to add_"
                     }
                 })
 

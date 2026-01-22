@@ -98,6 +98,60 @@ class TestPracticeNeedsAttention:
 class TestBuildCoachWeeklySummaryBlocks:
     """Tests for build_coach_weekly_summary_blocks function."""
 
+    def test_location_and_warmup_in_fields(self):
+        """Location/types and warmup/cooldown should be in 2-column fields."""
+        from app.slack.blocks import build_coach_weekly_summary_blocks
+        from app.practices.interfaces import (
+            PracticeLocationInfo,
+            PracticeActivityInfo,
+            PracticeTypeInfo,
+        )
+
+        # 2026-01-19 is a Monday, 2026-01-20 is a Tuesday
+        week_start = datetime(2026, 1, 19)
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+
+        # Add location, activities, warmup, cooldown
+        practice = PracticeInfo(
+            id=1,
+            date=datetime(2026, 1, 20, 18, 0),  # Tuesday Jan 20, 2026
+            day_of_week="tuesday",
+            status=PracticeStatus.SCHEDULED,
+            location=PracticeLocationInfo(id=1, name="Wirth Park", spot="Trailhead 4"),
+            activities=[
+                PracticeActivityInfo(id=1, name="Classic"),
+                PracticeActivityInfo(id=2, name="Skate"),
+            ],
+            practice_types=[PracticeTypeInfo(id=1, name="Intervals")],
+            warmup_description="10 min easy ski around the lake",
+            cooldown_description="5 min easy cool-down",
+            workout_description="4x3min",
+            leads=[
+                _make_lead(role=LeadRole.COACH),
+                _make_lead(role=LeadRole.LEAD),
+            ]
+        )
+        practices = [practice]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Find section with fields
+        fields_section = next(
+            (b for b in blocks if b.get('type') == 'section' and b.get('fields')),
+            None
+        )
+
+        assert fields_section is not None, "Should have a section with fields"
+        assert len(fields_section['fields']) == 2, "Should have 2 columns"
+
+        # Left column should have location info
+        left_col = fields_section['fields'][0]['text']
+        assert 'Location' in left_col or 'Wirth Park' in left_col
+
+        # Right column should have warmup/cooldown
+        right_col = fields_section['fields'][1]['text']
+        assert 'Warmup' in right_col or 'Cooldown' in right_col
+
     def test_header_shows_attention_count(self):
         """Header should show count of practices needing attention."""
         week_start = datetime(2026, 1, 20)  # Monday
