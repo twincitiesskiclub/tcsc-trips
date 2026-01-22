@@ -589,24 +589,13 @@ def build_coach_weekly_summary_blocks(
             if needs_attention:
                 header_text += " :warning:"
 
-            # Build Edit button accessory with danger style if needs attention
-            edit_button = {
-                "type": "button",
-                "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
-                "action_id": "edit_practice_full",
-                "value": str(practice.id)
-            }
-            if needs_attention:
-                edit_button["style"] = "danger"
-
-            # Section with accessory Edit button (inline, no scrolling needed)
+            # Header section (no accessory - Edit button moved to bottom for mobile)
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": header_text
-                },
-                "accessory": edit_button
+                }
             })
 
             # ==========================================================
@@ -693,6 +682,23 @@ def build_coach_weekly_summary_blocks(
             blocks.append({
                 "type": "context",
                 "elements": [{"type": "mrkdwn", "text": " | ".join(combined_parts)}]
+            })
+
+            # ==========================================================
+            # EDIT BUTTON (at bottom for better mobile UX)
+            # ==========================================================
+            edit_button = {
+                "type": "button",
+                "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
+                "action_id": "edit_practice_full",
+                "value": str(practice.id)
+            }
+            if needs_attention:
+                edit_button["style"] = "danger"
+
+            blocks.append({
+                "type": "actions",
+                "elements": [edit_button]
             })
 
         else:
