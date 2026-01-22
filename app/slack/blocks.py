@@ -521,11 +521,18 @@ def build_coach_weekly_summary_blocks(
     # ==========================================================================
     # HEADER
     # ==========================================================================
+    # Count practices needing attention
+    incomplete_count = sum(1 for p in practices if _practice_needs_attention(p))
+
+    header_text = f":clipboard: Coach Review: Week of {week_range}"
+    if incomplete_count > 0:
+        header_text += f" | :warning: {incomplete_count} need attention"
+
     blocks.append({
         "type": "header",
         "text": {
             "type": "plain_text",
-            "text": f":clipboard: Coach Review: Week of {week_range}",
+            "text": header_text,
             "emoji": True
         }
     })

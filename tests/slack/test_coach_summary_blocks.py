@@ -10,18 +10,22 @@ from app.practices.interfaces import (
     PracticeLeadInfo,
     PracticeStatus,
 )
-from app.slack.blocks import _practice_needs_attention
+from app.slack.blocks import _practice_needs_attention, build_coach_weekly_summary_blocks
 
 
 def _make_practice(
+    id: int = 1,
+    date: datetime | None = None,
     workout_description: str | None = None,
     leads: list[PracticeLeadInfo] | None = None,
 ) -> PracticeInfo:
     """Create a minimal PracticeInfo for testing."""
+    if date is None:
+        date = datetime(2025, 1, 14, 18, 0)
     return PracticeInfo(
-        id=1,
-        date=datetime(2025, 1, 14, 18, 0),
-        day_of_week="Tuesday",
+        id=id,
+        date=date,
+        day_of_week=date.strftime('%A'),
         status=PracticeStatus.SCHEDULED,
         workout_description=workout_description,
         leads=leads or [],
@@ -89,3 +93,43 @@ class TestPracticeNeedsAttention:
             leads=[],
         )
         assert _practice_needs_attention(practice) is True
+
+
+class TestBuildCoachWeeklySummaryBlocks:
+    """Tests for build_coach_weekly_summary_blocks function."""
+
+    def test_header_shows_attention_count(self):
+        """Header should show count of practices needing attention."""
+        week_start = datetime(2026, 1, 20)  # Monday
+        expected_days = [
+            {"day": "tuesday", "time": "18:00", "active": True},
+            {"day": "thursday", "time": "18:00", "active": True},
+        ]
+
+        # One complete, one incomplete
+        practices = [
+            _make_practice(
+                id=1,
+                date=datetime(2026, 1, 21, 18, 0),
+                workout_description="Workout",
+                leads=[
+                    _make_lead(role=LeadRole.COACH),
+                    _make_lead(role=LeadRole.LEAD),
+                ],
+            ),
+            _make_practice(
+                id=2,
+                date=datetime(2026, 1, 23, 18, 0),
+                workout_description=None,  # Missing!
+                leads=[],
+            ),
+        ]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Find header block
+        header = next(b for b in blocks if b.get("type") == "header")
+        header_text = header["text"]["text"]
+
+        assert ":warning:" in header_text
+        assert "1 need" in header_text
