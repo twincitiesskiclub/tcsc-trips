@@ -1519,7 +1519,7 @@ def _process_cancellation_decision(
     from app.models import db, User
     from app.practices.models import CancellationRequest, Practice
     from app.practices.interfaces import CancellationStatus, PracticeStatus
-    from app.slack.practices import update_cancellation_decision, post_cancellation_notice
+    from app.slack.practices import update_practice_as_cancelled
 
     proposal = CancellationRequest.query.get(proposal_id)
     if not proposal:
@@ -1544,10 +1544,10 @@ def _process_cancellation_decision(
     db.session.commit()
 
     decided_by_name = f"<@{user_id}>"
-    update_cancellation_decision(proposal, approved, decided_by_name)
 
     if approved:
-        post_cancellation_notice(practice)
+        # Update the original practice post and add thread reply
+        update_practice_as_cancelled(practice, decided_by_name)
 
     return {"success": True}
 
