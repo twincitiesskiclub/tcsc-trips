@@ -58,16 +58,23 @@ def build_practice_announcement_blocks(
     header_text = f":clipboard: _TCSC_ • {day}, {short_month} {day_num}{day_suffix} at {time_str}"
 
     blocks.append({
-        "type": "header",
-        "text": {"type": "plain_text", "text": header_text, "emoji": True}
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": f"*{header_text}*"}
     })
 
     # ==========================================================================
     # CONTEXT: Location | Practice Types | Social (if applicable)
     # ==========================================================================
     context_parts = [f":round_pushpin: {full_location}"]
+
+    # Show activities (ski technique: Classic, Skate, etc.)
+    if practice.activities:
+        activity_names = ", ".join([a.name for a in practice.activities])
+        context_parts.append(f":skier: {activity_names}")
+
+    # Show practice types (workout type: Intervals, Distance, etc.)
     if type_names:
-        context_parts.append(f":ski: {type_names}")
+        context_parts.append(f":snowflake: {type_names}")
 
     # Add social info to context line if there's a social
     if practice.has_social:
@@ -554,8 +561,15 @@ def build_coach_weekly_summary_blocks(
             # Header line with date/time/location
             header_text = f":calendar: *{day_full}, {month_short} {day_num}{day_suffix} at {time_str}*"
             context_parts = [f":round_pushpin: {full_location}"]
+
+            # Show activities (ski technique: Classic, Skate, etc.)
+            if practice.activities:
+                activity_names = ", ".join([a.name for a in practice.activities])
+                context_parts.append(f":skier: {activity_names}")
+
+            # Show practice types (workout type: Intervals, Distance, etc.)
             if type_names:
-                context_parts.append(f":ski: {type_names}")
+                context_parts.append(f":snowflake: {type_names}")
 
             blocks.append({
                 "type": "section",

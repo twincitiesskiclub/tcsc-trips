@@ -54,6 +54,9 @@ def format_datetime_central(dt: datetime, fmt: str = '%b %d, %Y %I:%M %p %Z') ->
     """
     if dt is None:
         return ''
+    # If naive datetime, assume it's UTC (per database storage convention)
+    if dt.tzinfo is None:
+        dt = pytz.utc.localize(dt)
     return dt.astimezone(CENTRAL_TZ).strftime(fmt)
 
 

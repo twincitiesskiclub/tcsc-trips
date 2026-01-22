@@ -27,6 +27,7 @@ from app.slack.practices import (
     post_cancellation_proposal,
     update_cancellation_decision,
     post_cancellation_notice,
+    update_practice_as_cancelled,
     send_lead_availability_request,
     update_practice_announcement
 )
@@ -42,6 +43,7 @@ __all__ = [
     'post_cancellation_proposal',
     'update_cancellation_decision',
     'post_cancellation_notice',
+    'update_practice_as_cancelled',
     'send_lead_availability_request',
     'update_practice_announcement',
     'handle_tcsc_command'

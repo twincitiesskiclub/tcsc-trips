@@ -411,6 +411,85 @@ def post_cancellation_notice(practice: Practice) -> dict:
         return {'success': False, 'error': error_msg}
 
 
+def update_practice_as_cancelled(practice: Practice, decided_by_name: str) -> dict:
+    """Update practice announcement to show cancelled status.
+
+    Instead of posting a new cancellation notice, this:
+    1. Updates the original practice post with cancelled styling
+    2. Posts a thread reply with cancellation details
+
+    Args:
+        practice: Cancelled practice (with cancellation_reason set)
+        decided_by_name: Slack mention of person who approved cancellation
+
+    Returns:
+        dict with keys:
+        - success: bool
+        - error: str (only if success=False)
+    """
+    # Must have original message to update
+    if not practice.slack_message_ts or not practice.slack_channel_id:
+        return {'success': False, 'error': 'No original practice post to update'}
+
+    client = get_slack_client()
+
+    # Build cancelled header block
+    cancelled_header = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": ":x: *CANCELLED* :x:"
+        }
+    }
+
+    # Build info about the cancelled practice
+    date_str = practice.date.strftime('%A, %B %-d at %-I:%M %p')
+    location = practice.location.name if practice.location else "TBD"
+
+    cancelled_info = f"~{date_str} at {location}~"
+    if practice.cancellation_reason:
+        cancelled_info += f"\n\n*Reason:* {practice.cancellation_reason}"
+
+    cancelled_details = {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": cancelled_info
+        }
+    }
+
+    blocks = [cancelled_header, {"type": "divider"}, cancelled_details]
+
+    try:
+        # Update the original practice post
+        client.chat_update(
+            channel=practice.slack_channel_id,
+            ts=practice.slack_message_ts,
+            blocks=blocks,
+            text=f"CANCELLED: Practice on {practice.date.strftime('%A, %B %d')}"
+        )
+
+        # Post a thread reply with cancellation notice
+        thread_text = f":x: This practice has been cancelled"
+        if practice.cancellation_reason:
+            thread_text += f": {practice.cancellation_reason}"
+        thread_text += f"\n\nDecision by {decided_by_name}"
+
+        client.chat_postMessage(
+            channel=practice.slack_channel_id,
+            thread_ts=practice.slack_message_ts,
+            text=thread_text
+        )
+
+        current_app.logger.info(f"Updated practice #{practice.id} as cancelled")
+        return {'success': True}
+
+    except SlackApiError as e:
+        error_msg = e.response.get('error', str(e))
+        current_app.logger.error(f"Error updating practice as cancelled: {error_msg}")
+        return {'success': False, 'error': error_msg}
+
+
 def send_lead_availability_request(practice: Practice, user_slack_id: str) -> dict:
     """Send DM to practice lead requesting confirmation.
 
