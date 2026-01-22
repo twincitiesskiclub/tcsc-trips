@@ -464,6 +464,22 @@ def build_combined_lift_blocks(
     return blocks
 
 
+def _practice_needs_attention(practice: PracticeInfo) -> bool:
+    """Check if practice needs attention (missing coach, lead, or workout).
+
+    Args:
+        practice: PracticeInfo to check
+
+    Returns:
+        True if practice is missing coach, lead, or workout description
+    """
+    has_coach = any(l.role == LeadRole.COACH for l in (practice.leads or []))
+    has_lead = any(l.role == LeadRole.LEAD for l in (practice.leads or []))
+    has_workout = bool(practice.workout_description)
+
+    return not (has_coach and has_lead and has_workout)
+
+
 def build_coach_weekly_summary_blocks(
     practices: list[PracticeInfo],
     expected_days: list[dict],
