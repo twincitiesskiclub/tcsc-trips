@@ -464,6 +464,22 @@ def build_combined_lift_blocks(
     return blocks
 
 
+def _practice_needs_attention(practice: PracticeInfo) -> bool:
+    """Check if practice needs attention (missing coach, lead, or workout).
+
+    Args:
+        practice: PracticeInfo to check
+
+    Returns:
+        True if practice is missing coach, lead, or workout description
+    """
+    has_coach = any(l.role == LeadRole.COACH for l in (practice.leads or []))
+    has_lead = any(l.role == LeadRole.LEAD for l in (practice.leads or []))
+    has_workout = bool(practice.workout_description)
+
+    return not (has_coach and has_lead and has_workout)
+
+
 def build_coach_weekly_summary_blocks(
     practices: list[PracticeInfo],
     expected_days: list[dict],
@@ -505,11 +521,18 @@ def build_coach_weekly_summary_blocks(
     # ==========================================================================
     # HEADER
     # ==========================================================================
+    # Count practices needing attention
+    incomplete_count = sum(1 for p in practices if _practice_needs_attention(p))
+
+    header_text = f":clipboard: Coach Review: Week of {week_range}"
+    if incomplete_count > 0:
+        header_text += f" | :warning: {incomplete_count} need attention"
+
     blocks.append({
         "type": "header",
         "text": {
             "type": "plain_text",
-            "text": f":clipboard: Coach Review: Week of {week_range}",
+            "text": header_text,
             "emoji": True
         }
     })
@@ -558,46 +581,77 @@ def build_coach_weekly_summary_blocks(
 
             type_names = ", ".join([t.name for t in practice.practice_types]) if practice.practice_types else ""
 
-            # Header line with date/time/location
+            # Header line with date/time only (location/activities/types shown in fields section below)
             header_text = f":calendar: *{day_full}, {month_short} {day_num}{day_suffix} at {time_str}*"
-            context_parts = [f":round_pushpin: {full_location}"]
 
-            # Show activities (ski technique: Classic, Skate, etc.)
-            if practice.activities:
-                activity_names = ", ".join([a.name for a in practice.activities])
-                context_parts.append(f":skier: {activity_names}")
+            # Add warning badge if incomplete
+            needs_attention = _practice_needs_attention(practice)
+            if needs_attention:
+                header_text += " :warning:"
 
-            # Show practice types (workout type: Intervals, Distance, etc.)
-            if type_names:
-                context_parts.append(f":snowflake: {type_names}")
+            # Build Edit button accessory with danger style if needs attention
+            edit_button = {
+                "type": "button",
+                "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
+                "action_id": "edit_practice_full",
+                "value": str(practice.id)
+            }
+            if needs_attention:
+                edit_button["style"] = "danger"
 
+            # Section with accessory Edit button (inline, no scrolling needed)
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f"{header_text}\n{' | '.join(context_parts)}"
-                }
+                    "text": header_text
+                },
+                "accessory": edit_button
             })
 
-            # Workout details (combined into one block)
-            workout_lines = []
-            if practice.warmup_description:
-                # Truncate long descriptions
-                warmup = practice.warmup_description[:100] + "..." if len(practice.warmup_description) > 100 else practice.warmup_description
-                workout_lines.append(f":fire: *Warmup:* {warmup}")
-            if practice.workout_description:
-                workout = practice.workout_description[:150] + "..." if len(practice.workout_description) > 150 else practice.workout_description
-                workout_lines.append(f":nerd_face: *Workout:* {workout}")
-            if practice.cooldown_description:
-                cooldown = practice.cooldown_description[:100] + "..." if len(practice.cooldown_description) > 100 else practice.cooldown_description
-                workout_lines.append(f":ice_cube: *Cooldown:* {cooldown}")
+            # ==========================================================
+            # TWO-COLUMN FIELDS: Location/Types + Warmup/Cooldown
+            # ==========================================================
+            fields = []
 
-            if workout_lines:
+            # LEFT COLUMN: Location + Activities + Types
+            location_col = f"*:round_pushpin: Location*\n{full_location}"
+            if practice.activities:
+                activity_names = ", ".join([a.name for a in practice.activities])
+                location_col += f"\n:skier: {activity_names}"
+            if type_names:
+                location_col += f" | :snowflake: {type_names}"
+            fields.append({"type": "mrkdwn", "text": location_col})
+
+            # RIGHT COLUMN: Warmup + Cooldown (truncated to 40 chars each)
+            warmup_cooldown = "*:fire: Warmup / :ice_cube: Cooldown*\n"
+            if practice.warmup_description:
+                warmup = practice.warmup_description[:40] + "..." if len(practice.warmup_description) > 40 else practice.warmup_description
+                warmup_cooldown += f"{warmup}\n"
+            else:
+                warmup_cooldown += "_No warmup_\n"
+
+            if practice.cooldown_description:
+                cooldown = practice.cooldown_description[:40] + "..." if len(practice.cooldown_description) > 40 else practice.cooldown_description
+                warmup_cooldown += cooldown
+            else:
+                warmup_cooldown += "_No cooldown_"
+            fields.append({"type": "mrkdwn", "text": warmup_cooldown})
+
+            blocks.append({
+                "type": "section",
+                "fields": fields
+            })
+
+            # ==========================================================
+            # FULL-WIDTH WORKOUT SECTION (no truncation)
+            # ==========================================================
+            if practice.workout_description:
                 blocks.append({
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "\n".join(workout_lines)
+                        "text": f"*:nerd_face: Workout*\n{practice.workout_description}"
                     }
                 })
             else:
@@ -605,57 +659,40 @@ def build_coach_weekly_summary_blocks(
                     "type": "section",
                     "text": {
                         "type": "mrkdwn",
-                        "text": "_No workout details yet. Click Edit to add._"
+                        "text": ":warning: *Workout:* _Not entered yet - click Edit to add_"
                     }
                 })
 
-            # Flags (dark practice, social)
-            flags = []
+            # ==========================================================
+            # CONTEXT: Flags + Coaches + Leads (de-emphasized, combined)
+            # ==========================================================
+            combined_parts = []
+
+            # Flags
             if practice.is_dark_practice:
-                flags.append(":new_moon: Dark practice")
-            if practice.social_location:
-                flags.append(f":tropical_drink: Social after")
+                combined_parts.append(":new_moon: Dark")
+            if practice.has_social:
+                combined_parts.append(":tropical_drink: Social")
 
-            if flags:
-                blocks.append({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": " | ".join(flags)
-                    }]
-                })
-
-            # Coach/Lead display
-            coach_lead_parts = []
+            # Coaches (with warning if missing)
             coaches = [l for l in practice.leads if l.role == LeadRole.COACH]
-            leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
-
             if coaches:
                 coach_names = [f"<@{c.slack_user_id}>" if c.slack_user_id else c.display_name for c in coaches]
-                coach_lead_parts.append(f":male-teacher: {', '.join(coach_names)}")
+                combined_parts.append(f":male-teacher: {', '.join(coach_names)}")
+            else:
+                combined_parts.append(":warning: No coach")
 
+            # Leads (with warning if missing)
+            leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
             if leads:
                 lead_names = [f"<@{l.slack_user_id}>" if l.slack_user_id else l.display_name for l in leads]
-                coach_lead_parts.append(f":people_holding_hands: {', '.join(lead_names)}")
+                combined_parts.append(f":people_holding_hands: {', '.join(lead_names)}")
+            else:
+                combined_parts.append(":warning: No lead")
 
-            if coach_lead_parts:
-                blocks.append({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": " | ".join(coach_lead_parts)
-                    }]
-                })
-
-            # Edit button
             blocks.append({
-                "type": "actions",
-                "elements": [{
-                    "type": "button",
-                    "text": {"type": "plain_text", "text": ":pencil2: Edit", "emoji": True},
-                    "action_id": "edit_practice_full",
-                    "value": str(practice.id)
-                }]
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": " | ".join(combined_parts)}]
             })
 
         else:
@@ -667,23 +704,20 @@ def build_coach_weekly_summary_blocks(
             day_full = day_date.strftime('%A')
             month_short = day_date.strftime('%b')
 
+            # Section with accessory Add Practice button (single block, not section + actions)
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": f":calendar: *{day_full}, {month_short} {day_num}{day_suffix}* — _No practice scheduled_"
-                }
-            })
-
-            # Add Practice button with date as value
-            blocks.append({
-                "type": "actions",
-                "elements": [{
+                },
+                "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": ":heavy_plus_sign: Add Practice", "emoji": True},
                     "action_id": "create_practice_from_summary",
-                    "value": day_date.strftime('%Y-%m-%d')
-                }]
+                    "value": day_date.strftime('%Y-%m-%d'),
+                    "style": "primary"
+                }
             })
 
         blocks.append({"type": "divider"})
