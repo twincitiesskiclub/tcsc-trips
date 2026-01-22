@@ -32,13 +32,14 @@ def _make_practice(
     )
 
 
-def _make_lead(role: LeadRole) -> PracticeLeadInfo:
+def _make_lead(role: LeadRole, slack_user_id: str | None = None) -> PracticeLeadInfo:
     """Create a minimal PracticeLeadInfo for testing."""
     return PracticeLeadInfo(
         id=1,
         practice_id=1,
         user_id=1,
         display_name="Test User",
+        slack_user_id=slack_user_id,
         role=role,
     )
 
@@ -271,3 +272,149 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         header_text = header_section['text']['text']
         assert ":warning:" in header_text
+
+    def test_flags_and_assignments_in_single_context(self):
+        """Flags and coach/lead should be combined in one context block."""
+        from app.slack.blocks import build_coach_weekly_summary_blocks
+        from app.practices.interfaces import SocialLocationInfo
+
+        # Jan 19, 2026 is Monday (week_start must be Monday)
+        week_start = datetime(2026, 1, 19)
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+
+        practice = PracticeInfo(
+            id=1,
+            date=datetime(2026, 1, 20, 18, 0),  # Jan 20, 2026 is Tuesday
+            day_of_week="tuesday",
+            status="scheduled",
+            is_dark_practice=True,
+            has_social=True,
+            social_location=SocialLocationInfo(id=1, name="Bar"),
+            workout_description="Workout",
+            leads=[
+                _make_lead(role=LeadRole.COACH, slack_user_id="U123"),
+                _make_lead(role=LeadRole.LEAD, slack_user_id="U456"),
+            ]
+        )
+        practices = [practice]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Count non-footer context blocks
+        context_blocks = [b for b in blocks if b.get('type') == 'context']
+        non_footer = [c for c in context_blocks if ':bulb:' not in c.get('elements', [{}])[0].get('text', '')]
+
+        # Should be exactly 1 combined context
+        assert len(non_footer) == 1
+
+        combined_text = non_footer[0]['elements'][0]['text']
+        assert ':new_moon:' in combined_text  # Dark
+        assert ':tropical_drink:' in combined_text  # Social
+        assert '<@U123>' in combined_text or 'U123' in combined_text  # Coach
+        assert '<@U456>' in combined_text or 'U456' in combined_text  # Lead
+
+    def test_empty_day_uses_section_accessory(self):
+        """Empty day placeholder has Add Practice button as section accessory."""
+        from app.slack.blocks import build_coach_weekly_summary_blocks
+
+        # Jan 19, 2026 is Monday (week_start must be Monday)
+        week_start = datetime(2026, 1, 19)
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+        practices = []  # No practices = empty day
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Find section blocks (excluding header)
+        section_blocks = [b for b in blocks if b.get('type') == 'section']
+
+        # Should have exactly 1 section (empty day placeholder)
+        assert len(section_blocks) == 1
+
+        empty_day = section_blocks[0]
+        # Should have "No practice scheduled" text
+        assert "No practice scheduled" in empty_day.get('text', {}).get('text', '')
+
+        # Should have accessory button (not separate actions block)
+        accessory = empty_day.get('accessory')
+        assert accessory is not None
+        assert accessory.get('type') == 'button'
+        assert "Add Practice" in accessory.get('text', {}).get('text', '')
+        assert accessory.get('action_id') == 'create_practice_from_summary'
+        assert accessory.get('style') == 'primary'
+
+        # Verify no separate actions block
+        actions_blocks = [b for b in blocks if b.get('type') == 'actions']
+        assert len(actions_blocks) == 0
+
+    def test_block_count_is_optimized(self):
+        """Verify block count is optimized for typical week.
+
+        Expected blocks per practice: 5 (header+fields+workout+context+divider)
+        Expected blocks per empty day: 2 (section+divider)
+        Plus: header + initial divider + footer context = 3
+
+        3 practices + 2 empty days = 15 + 4 + 3 = 22 blocks
+        (Down from ~27 before optimization)
+        """
+        from app.slack.blocks import build_coach_weekly_summary_blocks
+        from app.practices.interfaces import PracticeLocationInfo
+
+        # Jan 19, 2026 is Monday (week_start must be Monday)
+        week_start = datetime(2026, 1, 19)
+        expected_days = [
+            {"day": "tuesday", "active": True},
+            {"day": "wednesday", "active": True},
+            {"day": "thursday", "active": True},
+            {"day": "friday", "active": True},
+            {"day": "saturday", "active": True},
+        ]
+
+        # 3 practices (Tue, Wed, Sat) + 2 empty days (Thu, Fri)
+        practices = [
+            PracticeInfo(
+                id=1,
+                date=datetime(2026, 1, 20, 18, 0),
+                day_of_week="tuesday",
+                status="scheduled",
+                workout_description="Workout 1",
+                leads=[
+                    _make_lead(LeadRole.COACH, "U1"),
+                    _make_lead(LeadRole.LEAD, "U2"),
+                ],
+            ),
+            PracticeInfo(
+                id=2,
+                date=datetime(2026, 1, 21, 18, 0),
+                day_of_week="wednesday",
+                status="scheduled",
+                workout_description="Workout 2",
+                leads=[
+                    _make_lead(LeadRole.COACH, "U3"),
+                    _make_lead(LeadRole.LEAD, "U4"),
+                ],
+            ),
+            PracticeInfo(
+                id=3,
+                date=datetime(2026, 1, 24, 9, 0),
+                day_of_week="saturday",
+                status="scheduled",
+                workout_description="Workout 3",
+                leads=[
+                    _make_lead(LeadRole.COACH, "U5"),
+                    _make_lead(LeadRole.LEAD, "U6"),
+                ],
+            ),
+        ]
+
+        blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
+
+        # Should be around 22 blocks (not 27+)
+        # 3 practices × 5 = 15
+        # 2 empty days × 2 = 4
+        # header + divider + footer = 3
+        assert len(blocks) <= 25, f"Block count {len(blocks)} exceeds target of 25"
+        assert len(blocks) >= 20, f"Block count {len(blocks)} unexpectedly low"
+
+        # Should have no separate actions blocks (buttons are section accessories)
+        actions_blocks = [b for b in blocks if b.get('type') == 'actions']
+        assert len(actions_blocks) == 0, "Found separate actions blocks - buttons should be section accessories"

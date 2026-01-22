@@ -663,43 +663,37 @@ def build_coach_weekly_summary_blocks(
                     }
                 })
 
-            # Flags (dark practice, social)
-            flags = []
+            # ==========================================================
+            # CONTEXT: Flags + Coaches + Leads (de-emphasized, combined)
+            # ==========================================================
+            combined_parts = []
+
+            # Flags
             if practice.is_dark_practice:
-                flags.append(":new_moon: Dark practice")
-            if practice.social_location:
-                flags.append(f":tropical_drink: Social after")
+                combined_parts.append(":new_moon: Dark")
+            if practice.has_social:
+                combined_parts.append(":tropical_drink: Social")
 
-            if flags:
-                blocks.append({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": " | ".join(flags)
-                    }]
-                })
-
-            # Coach/Lead display
-            coach_lead_parts = []
+            # Coaches (with warning if missing)
             coaches = [l for l in practice.leads if l.role == LeadRole.COACH]
-            leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
-
             if coaches:
                 coach_names = [f"<@{c.slack_user_id}>" if c.slack_user_id else c.display_name for c in coaches]
-                coach_lead_parts.append(f":male-teacher: {', '.join(coach_names)}")
+                combined_parts.append(f":male-teacher: {', '.join(coach_names)}")
+            else:
+                combined_parts.append(":warning: No coach")
 
+            # Leads (with warning if missing)
+            leads = [l for l in practice.leads if l.role == LeadRole.LEAD]
             if leads:
                 lead_names = [f"<@{l.slack_user_id}>" if l.slack_user_id else l.display_name for l in leads]
-                coach_lead_parts.append(f":people_holding_hands: {', '.join(lead_names)}")
+                combined_parts.append(f":people_holding_hands: {', '.join(lead_names)}")
+            else:
+                combined_parts.append(":warning: No lead")
 
-            if coach_lead_parts:
-                blocks.append({
-                    "type": "context",
-                    "elements": [{
-                        "type": "mrkdwn",
-                        "text": " | ".join(coach_lead_parts)
-                    }]
-                })
+            blocks.append({
+                "type": "context",
+                "elements": [{"type": "mrkdwn", "text": " | ".join(combined_parts)}]
+            })
 
         else:
             # ==========================================================
@@ -710,23 +704,20 @@ def build_coach_weekly_summary_blocks(
             day_full = day_date.strftime('%A')
             month_short = day_date.strftime('%b')
 
+            # Section with accessory Add Practice button (single block, not section + actions)
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
                     "text": f":calendar: *{day_full}, {month_short} {day_num}{day_suffix}* — _No practice scheduled_"
-                }
-            })
-
-            # Add Practice button with date as value
-            blocks.append({
-                "type": "actions",
-                "elements": [{
+                },
+                "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": ":heavy_plus_sign: Add Practice", "emoji": True},
                     "action_id": "create_practice_from_summary",
-                    "value": day_date.strftime('%Y-%m-%d')
-                }]
+                    "value": day_date.strftime('%Y-%m-%d'),
+                    "style": "primary"
+                }
             })
 
         blocks.append({"type": "divider"})
