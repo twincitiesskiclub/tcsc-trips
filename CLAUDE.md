@@ -475,6 +475,24 @@ Used for determining member access level in club Slack workspace:
   - `app/static/admin_payments.js` - Payment management Tabulator grid
   - `app/static/admin_slack.js` - Slack user sync Tabulator grid
 - **Slack Integration:**
+  - `app/slack/practices/` - Practice Slack operations (sub-package with barrel re-exports)
+    - `_config.py` - Shared constants, config cache, channel helpers
+    - `announcements.py` - Post/update practice announcements
+    - `cancellations.py` - Cancellation proposals, decisions, notices
+    - `leads.py` - Lead availability, check-ins, substitutions
+    - `coach_review.py` - Collab review, escalation, weekly summary, logging
+    - `rsvp.py` - RSVP threads, going lists, counts
+    - `app_home.py` - App Home view, daily practice recaps
+  - `app/slack/blocks/` - Block Kit builders for practice messages (sub-package with barrel re-exports)
+    - `announcements.py` - Announcement block builders
+    - `cancellations.py` - Cancellation block builders
+    - `leads.py` - Lead confirmation/substitution blocks
+    - `coach_review.py` - Coach summary, collab review blocks
+    - `rsvp.py` - RSVP buttons and summary context blocks
+    - `summary.py` - Weekly summary blocks
+    - `app_home.py` - App Home blocks + practice card helper
+    - `recap.py` - Daily recap blocks
+    - `dispatch.py` - Newsletter dispatch section (non-practice)
   - `app/slack/channel_sync.py` - Main channel sync orchestration
   - `app/slack/admin_api.py` - Undocumented Slack admin APIs (cookie-based)
   - `app/slack/client.py` - Slack WebClient wrapper
