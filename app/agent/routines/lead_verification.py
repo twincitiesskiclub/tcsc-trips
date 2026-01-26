@@ -10,7 +10,6 @@ Additionally sends a group DM to practices directors + lead if lead hasn't confi
 """
 
 import logging
-import pytz
 from datetime import datetime, timedelta
 
 from app.models import db
@@ -23,7 +22,7 @@ from app.agent.decision_engine import (
 )
 from app.agent.proposals import create_cancellation_proposal
 from app.agent.brain import generate_evaluation_summary
-from app.utils import CENTRAL_TZ
+from app.utils import now_central_naive
 
 logger = logging.getLogger(__name__)
 
@@ -47,20 +46,16 @@ def run_evening_lead_check(channel_override: str = None) -> dict:
     logger.info("=" * 60)
 
     # Calculate time range: noon to midnight Central time TODAY
-    now_central = datetime.now(CENTRAL_TZ)
-    noon_central = now_central.replace(hour=12, minute=0, second=0, microsecond=0)
-    midnight_central = now_central.replace(hour=23, minute=59, second=59, microsecond=0)
+    # Practice.date is stored as naive Central, so compare directly
+    now = now_central_naive()
+    noon = now.replace(hour=12, minute=0, second=0, microsecond=0)
+    midnight = now.replace(hour=23, minute=59, second=59, microsecond=0)
 
-    # Convert to UTC for database query (Practice.date is naive UTC)
-    noon_utc = noon_central.astimezone(pytz.UTC).replace(tzinfo=None)
-    midnight_utc = midnight_central.astimezone(pytz.UTC).replace(tzinfo=None)
-
-    logger.info(f"Checking practices from {noon_central.strftime('%I:%M %p')} to midnight Central")
-    logger.info(f"UTC range: {noon_utc.isoformat()} to {midnight_utc.isoformat()}")
+    logger.info(f"Checking practices from {noon.strftime('%I:%M %p')} to midnight Central")
 
     return _run_lead_verification_check(
-        start_utc=noon_utc,
-        end_utc=midnight_utc,
+        start=noon,
+        end=midnight,
         check_name="evening",
         channel_override=channel_override
     )
@@ -85,29 +80,25 @@ def run_morning_lead_check(channel_override: str = None) -> dict:
     logger.info("=" * 60)
 
     # Calculate time range: midnight to noon Central time TOMORROW
-    now_central = datetime.now(CENTRAL_TZ)
-    tomorrow_central = now_central + timedelta(days=1)
-    midnight_central = tomorrow_central.replace(hour=0, minute=0, second=0, microsecond=0)
-    noon_central = tomorrow_central.replace(hour=12, minute=0, second=0, microsecond=0)
+    # Practice.date is stored as naive Central, so compare directly
+    now = now_central_naive()
+    tomorrow = now + timedelta(days=1)
+    midnight = tomorrow.replace(hour=0, minute=0, second=0, microsecond=0)
+    noon = tomorrow.replace(hour=12, minute=0, second=0, microsecond=0)
 
-    # Convert to UTC for database query (Practice.date is naive UTC)
-    midnight_utc = midnight_central.astimezone(pytz.UTC).replace(tzinfo=None)
-    noon_utc = noon_central.astimezone(pytz.UTC).replace(tzinfo=None)
-
-    logger.info(f"Checking practices from midnight to {noon_central.strftime('%I:%M %p')} Central tomorrow")
-    logger.info(f"UTC range: {midnight_utc.isoformat()} to {noon_utc.isoformat()}")
+    logger.info(f"Checking practices from midnight to {noon.strftime('%I:%M %p')} Central tomorrow")
 
     return _run_lead_verification_check(
-        start_utc=midnight_utc,
-        end_utc=noon_utc,
+        start=midnight,
+        end=noon,
         check_name="morning",
         channel_override=channel_override
     )
 
 
 def _run_lead_verification_check(
-    start_utc: datetime,
-    end_utc: datetime,
+    start: datetime,
+    end: datetime,
     check_name: str,
     channel_override: str = None
 ) -> dict:
@@ -117,8 +108,8 @@ def _run_lead_verification_check(
     Only posts to #practices-core if there are issues (silent if all good).
 
     Args:
-        start_utc: Start of time range (naive UTC datetime)
-        end_utc: End of time range (naive UTC datetime)
+        start: Start of time range (naive Central datetime, matching Practice.date)
+        end: End of time range (naive Central datetime, matching Practice.date)
         check_name: Name for logging ("evening" or "morning")
         channel_override: Optional channel name to override default for Slack posts
 
@@ -141,8 +132,8 @@ def _run_lead_verification_check(
 
     # Find practices in the time range
     practices = Practice.query.filter(
-        Practice.date >= start_utc,
-        Practice.date < end_utc,
+        Practice.date >= start,
+        Practice.date < end,
         Practice.status.in_([
             PracticeStatus.SCHEDULED.value,
             PracticeStatus.CONFIRMED.value
@@ -242,7 +233,7 @@ def _run_lead_verification_check(
                 # Check if we've already sent a nudge today
                 if practice.lead_nudge_sent_at:
                     nudge_date = practice.lead_nudge_sent_at.date()
-                    today = datetime.utcnow().date()
+                    today = now_central_naive().date()
                     if nudge_date == today:
                         logger.info(f"Already sent DM for practice {practice.id} today, skipping")
                         continue
@@ -252,7 +243,7 @@ def _run_lead_verification_check(
                 if dm_result.get('success'):
                     results['dms_sent'] += 1
                     # Mark that we sent the nudge
-                    practice.lead_nudge_sent_at = datetime.utcnow()
+                    practice.lead_nudge_sent_at = now_central_naive()
                     db.session.commit()
                     logger.info(f"Sent lead check-in DM for practice {practice.id}")
                 else:

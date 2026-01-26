@@ -87,7 +87,8 @@ def build_cancellation_proposal_blocks(
 
     # Timeout warning
     if proposal.expires_at:
-        expires_str = proposal.expires_at.strftime('%I:%M %p')
+        from app.utils import format_datetime_central
+        expires_str = format_datetime_central(proposal.expires_at, '%I:%M %p')
         blocks.append({
             "type": "context",
             "elements": [{

@@ -1,6 +1,5 @@
 """App Home view operations."""
 
-from datetime import datetime
 from flask import current_app
 from slack_sdk.errors import SlackApiError
 
@@ -27,7 +26,8 @@ def publish_app_home(user_slack_id: str) -> dict:
     client = get_slack_client()
 
     # Get upcoming practices (next 14 days)
-    now = datetime.utcnow()
+    from app.utils import now_central_naive
+    now = now_central_naive()
     end_date = now + timedelta(days=14)
 
     practices = Practice.query.filter(

@@ -42,8 +42,20 @@ def get_current_times() -> dict:
     }
 
 
+def now_central_naive() -> datetime:
+    """Get current datetime as naive Central time.
+
+    Use this when comparing against Practice.date and other fields
+    stored as naive Central datetimes.
+    """
+    return datetime.now(CENTRAL_TZ).replace(tzinfo=None)
+
+
 def format_datetime_central(dt: datetime, fmt: str = '%b %d, %Y %I:%M %p %Z') -> str:
     """Format a datetime in Central timezone.
+
+    For naive datetimes, assumes UTC (correct for created_at, updated_at,
+    expires_at). Do NOT use for Practice.date which is stored as naive Central.
 
     Args:
         dt: datetime object (timezone-aware or naive UTC)

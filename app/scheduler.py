@@ -32,6 +32,8 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from flask import Flask
 
+from app.utils import now_central_naive
+
 
 # Lock file for single-worker guard
 LOCK_FILE = '/tmp/tcsc_scheduler.lock'
@@ -91,7 +93,7 @@ def run_channel_sync_job(app: Flask):
 
         app.logger.info("=" * 60)
         app.logger.info("Starting scheduled channel sync job")
-        app.logger.info(f"Time: {datetime.now().isoformat()}")
+        app.logger.info(f"Time: {now_central_naive().isoformat()}")
         app.logger.info("=" * 60)
 
         try:
@@ -154,7 +156,7 @@ def run_skipper_morning_check_job(app: Flask, channel_override: str = None):
 
         app.logger.info("=" * 60)
         app.logger.info("Starting Skipper morning check job")
-        app.logger.info(f"Time: {datetime.now().isoformat()}")
+        app.logger.info(f"Time: {now_central_naive().isoformat()}")
         if channel_override:
             app.logger.info(f"Channel override: {channel_override}")
         app.logger.info("=" * 60)
@@ -335,7 +337,7 @@ def run_coach_weekly_summary_job(app: Flask, channel_override: str = None):
 
         try:
             # Calculate the start of the upcoming week (Monday)
-            today = datetime.now()
+            today = now_central_naive()
             days_until_monday = (7 - today.weekday()) % 7
             if days_until_monday == 0:
                 days_until_monday = 7  # If today is Monday, get next Monday
@@ -607,7 +609,7 @@ def run_newsletter_daily_job(app: Flask):
 
         app.logger.info("=" * 60)
         app.logger.info("Starting newsletter daily update job")
-        app.logger.info(f"Time: {datetime.now().isoformat()}")
+        app.logger.info(f"Time: {now_central_naive().isoformat()}")
         app.logger.info("=" * 60)
 
         try:
@@ -650,7 +652,7 @@ def run_newsletter_sunday_job(app: Flask):
 
         app.logger.info("=" * 60)
         app.logger.info("Starting newsletter Sunday finalization job")
-        app.logger.info(f"Time: {datetime.now().isoformat()}")
+        app.logger.info(f"Time: {now_central_naive().isoformat()}")
         app.logger.info("=" * 60)
 
         try:
