@@ -2,6 +2,39 @@
 {% block title %}Practices Configuration{% endblock %}
 
 
+{% block extra_css %}
+<style>
+/* Toggle slider for defaults editor */
+.defaults-toggle-slider {
+    position: relative;
+    width: 40px;
+    height: 22px;
+    background: #d1d5db;
+    border-radius: 11px;
+    transition: background 0.2s;
+    flex-shrink: 0;
+}
+.defaults-toggle-slider::after {
+    content: '';
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: white;
+    border-radius: 50%;
+    transition: transform 0.2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.defaults-toggle-input:checked + .defaults-toggle-slider {
+    background: #1c2c44;
+}
+.defaults-toggle-input:checked + .defaults-toggle-slider::after {
+    transform: translateX(18px);
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="flex items-center justify-between mb-6">
     <h1 class="text-2xl font-semibold text-tcsc-navy">Practices Configuration</h1>
@@ -63,16 +96,16 @@
 
     <!-- Tab Content: Settings -->
     <div id="settings-tab" class="tab-content hidden">
-        <div class="max-w-[900px]">
-            <h3 class="font-semibold text-base text-gray-800 mb-2">Practice Days</h3>
-            <p class="text-sm text-gray-500 mb-5 leading-relaxed">Configure which days of the week practices are expected. This is used by the weekly coach summary to show placeholders for days without scheduled practices.</p>
+        <div class="max-w-[1100px]">
+            <h3 class="font-semibold text-base text-tcsc-navy mb-2">Practice Days</h3>
+            <p class="text-sm text-gray-500 mb-5 leading-relaxed">Configure which days practices are expected and set default values that auto-fill the Slack create modal.</p>
 
             <div id="practice-days-editor">
-                <div class="flex flex-col gap-3 mb-4" id="practice-days-list"></div>
-                <button class="toolbar-btn toolbar-btn-secondary" onclick="addPracticeDay()">Add Day</button>
+                <div class="flex flex-col gap-4 mb-4" id="practice-days-list"></div>
+                <button class="toolbar-btn toolbar-btn-secondary" onclick="addPracticeDay()">+ Add Day</button>
             </div>
 
-            <div class="mt-6 pt-5 border-t border-gray-200">
+            <div class="mt-6 pt-5 border-t border-tcsc-gray-100">
                 <button class="toolbar-btn toolbar-btn-primary" onclick="savePracticeDays()">Save Changes</button>
             </div>
         </div>
@@ -787,149 +820,190 @@ function renderPracticeDays() {
     if (!container) return;
 
     if (practiceDays.length === 0) {
-        container.innerHTML = '<p class="text-gray-500 italic">No practice days configured. Click "Add Day" to add one.</p>';
+        container.innerHTML = '<p class="text-gray-500 italic text-sm">No practice days configured. Click "+ Add Day" to add one.</p>';
         return;
     }
 
-    container.innerHTML = practiceDays.map((day, index) => `
-        <div class="practice-day-row bg-gray-50 rounded-lg border border-gray-200" data-index="${index}">
-            <div class="flex items-center gap-3 p-3">
-                <select onchange="updatePracticeDay(${index}, 'day', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white min-w-[140px]">
+    container.innerHTML = practiceDays.map((day, index) => {
+        const dayLabel = (day.day || 'monday').charAt(0).toUpperCase() + (day.day || 'monday').slice(1);
+        const timeLabel = day.time || '18:00';
+        const hasDefaults = day.defaults && Object.keys(day.defaults).length > 0;
+        const isExpanded = day._expanded;
+
+        return `
+        <div class="bg-white rounded-tcsc border border-tcsc-gray-100 overflow-hidden" data-index="${index}">
+            <!-- Day header row -->
+            <div class="flex items-center gap-3 px-4 py-3 bg-gray-50/50">
+                <select onchange="updatePracticeDay(${index}, 'day', this.value)"
+                    class="py-2 px-3 border border-tcsc-gray-100 rounded-tcsc text-sm bg-white min-w-[140px] focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
                     ${['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d =>
                         `<option value="${d}" ${day.day?.toLowerCase() === d ? 'selected' : ''}>${d.charAt(0).toUpperCase() + d.slice(1)}</option>`
                     ).join('')}
                 </select>
-                <input type="time" value="${day.time || '18:00'}" onchange="updatePracticeDay(${index}, 'time', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white w-[120px]">
-                <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                    <input type="checkbox" ${day.active !== false ? 'checked' : ''} onchange="updatePracticeDay(${index}, 'active', this.checked)" class="w-[18px] h-[18px] cursor-pointer">
+                <input type="time" value="${timeLabel}" onchange="updatePracticeDay(${index}, 'time', this.value)"
+                    class="py-2 px-3 border border-tcsc-gray-100 rounded-tcsc text-sm bg-white w-[120px] focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
+                <label class="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
+                    <input type="checkbox" ${day.active !== false ? 'checked' : ''} onchange="updatePracticeDay(${index}, 'active', this.checked)"
+                        class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
                     Active
                 </label>
-                <button type="button" class="ml-auto bg-transparent border-none text-red-600 font-medium text-sm cursor-pointer py-1 px-2 hover:underline" onclick="removePracticeDay(${index})">Remove</button>
+                <div class="ml-auto flex items-center gap-2">
+                    ${hasDefaults ? '<span class="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-tcsc-navy/5 text-tcsc-navy">Defaults set</span>' : ''}
+                    <button type="button" onclick="removePracticeDay(${index})"
+                        class="tbl-btn tbl-btn-danger">Remove</button>
+                </div>
             </div>
-            <div class="px-3 pb-1">
-                <button type="button" onclick="toggleDefaults(${index})" class="text-xs text-tcsc-navy font-medium cursor-pointer bg-transparent border-none hover:underline flex items-center gap-1">
-                    <span id="defaults-chevron-${index}" class="transition-transform ${day._expanded ? 'rotate-90' : ''}">&rsaquo;</span>
-                    Defaults: <span class="font-normal text-gray-500">${renderDefaultsSummary(day.defaults)}</span>
-                </button>
+
+            <!-- Defaults toggle -->
+            <button type="button" onclick="toggleDefaults(${index})"
+                class="w-full flex items-center gap-2 px-4 py-2.5 text-left text-sm font-medium text-tcsc-navy bg-transparent border-none border-t border-tcsc-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                style="border-top: 1px solid rgba(28,44,68,0.08);">
+                <svg id="defaults-chevron-${index}" class="w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
+                </svg>
+                <span>Workout Defaults</span>
+                <span class="font-normal text-xs text-gray-400 ml-1">${renderDefaultsSummary(day.defaults)}</span>
+            </button>
+
+            <!-- Defaults editor panel -->
+            <div id="defaults-editor-${index}" class="${isExpanded ? '' : 'hidden'}">
+                <div class="px-5 py-4 bg-white border-t border-tcsc-gray-100">
+                    ${renderDefaultsEditor(index, day.defaults)}
+                </div>
             </div>
-            <div id="defaults-editor-${index}" class="${day._expanded ? '' : 'hidden'} border-t border-gray-200 p-3 bg-white rounded-b-lg">
-                ${renderDefaultsEditor(index, day.defaults)}
-            </div>
-        </div>
-    `).join('');
+        </div>`;
+    }).join('');
 }
 
 function renderDefaultsSummary(defaults) {
-    if (!defaults) return 'None';
+    if (!defaults) return '— not configured';
     const parts = [];
     if (defaults.location_id) {
         const loc = locationsData.find(l => l.id === defaults.location_id);
         if (loc) parts.push(loc.name);
     }
-    if (defaults.activity_ids?.length) {
-        const names = defaults.activity_ids
-            .map(id => activitiesData.find(a => a.id === id)?.name)
-            .filter(Boolean);
-        if (names.length) parts.push(names.join(', '));
-    }
-    if (defaults.type_ids?.length) {
-        const names = defaults.type_ids
-            .map(id => typesData.find(t => t.id === id)?.name)
-            .filter(Boolean);
-        if (names.length) parts.push(names.join(', '));
-    }
-    if (defaults.coach_ids?.length) {
-        parts.push(`${defaults.coach_ids.length} coach${defaults.coach_ids.length > 1 ? 'es' : ''}`);
-    }
+    const actNames = (defaults.activity_ids || []).map(id => activitiesData.find(a => a.id === id)?.name).filter(Boolean);
+    if (actNames.length) parts.push(actNames.join(', '));
+    const typeNames = (defaults.type_ids || []).map(id => typesData.find(t => t.id === id)?.name).filter(Boolean);
+    if (typeNames.length) parts.push(typeNames.join(', '));
+    if (defaults.coach_ids?.length) parts.push(`${defaults.coach_ids.length} coach${defaults.coach_ids.length > 1 ? 'es' : ''}`);
     if (defaults.is_dark_practice) parts.push('Dark');
-    if (defaults.warmup || defaults.workout || defaults.cooldown) parts.push('Workout');
-    return parts.length ? parts.join(', ') : 'None';
+    if (defaults.warmup || defaults.workout || defaults.cooldown) parts.push('Workout template');
+    return parts.length ? '— ' + parts.join(' · ') : '— not configured';
 }
 
 function renderDefaultsEditor(index, defaults) {
     const d = defaults || {};
     return `
-        <div class="grid grid-cols-2 gap-4 mb-4">
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Location</label>
-                <select onchange="updateDefault(${index}, 'location_id', this.value ? parseInt(this.value) : null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm bg-white">
-                    <option value="">— None —</option>
-                    ${locationsData.map(l => `<option value="${l.id}" ${d.location_id === l.id ? 'selected' : ''}>${l.name}${l.spot ? ' - ' + l.spot : ''}</option>`).join('')}
-                </select>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Social Location</label>
-                <select onchange="updateDefault(${index}, 'social_location_id', this.value ? parseInt(this.value) : null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm bg-white">
-                    <option value="">— None —</option>
-                    ${socialLocationsData.map(l => `<option value="${l.id}" ${d.social_location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
-                </select>
+        <!-- Section: Location & Options -->
+        <div class="mb-5 pb-5 border-b border-tcsc-gray-100">
+            <h4 class="text-xs font-semibold text-tcsc-navy uppercase tracking-wide mb-3">Location & Options</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Location</label>
+                    <select onchange="updateDefault(${index}, 'location_id', this.value ? parseInt(this.value) : null)"
+                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
+                        <option value="">None</option>
+                        ${locationsData.map(l => `<option value="${l.id}" ${d.location_id === l.id ? 'selected' : ''}>${l.name}${l.spot ? ' — ' + l.spot : ''}</option>`).join('')}
+                    </select>
+                </div>
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Social Location</label>
+                    <select onchange="updateDefault(${index}, 'social_location_id', this.value ? parseInt(this.value) : null)"
+                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
+                        <option value="">None</option>
+                        ${socialLocationsData.map(l => `<option value="${l.id}" ${d.social_location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
+                    </select>
+                </div>
+                <div class="flex items-end pb-1">
+                    <label class="toggle flex items-center gap-3 cursor-pointer px-3 py-2 bg-gray-50 border border-gray-200 rounded-md transition-all hover:bg-gray-100 w-full">
+                        <input type="checkbox" ${d.is_dark_practice ? 'checked' : ''} onchange="updateDefault(${index}, 'is_dark_practice', this.checked)" class="hidden defaults-toggle-input">
+                        <span class="defaults-toggle-slider"></span>
+                        <span class="text-sm text-gray-700">Dark practice</span>
+                    </label>
+                </div>
             </div>
         </div>
+
+        <!-- Section: Workout Template -->
+        <div class="mb-5 pb-5 border-b border-tcsc-gray-100">
+            <h4 class="text-xs font-semibold text-tcsc-navy uppercase tracking-wide mb-3">Workout Template</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Warmup</label>
+                    <textarea onchange="updateDefault(${index}, 'warmup', this.value || null)"
+                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10"
+                        placeholder="e.g., 15 min easy ski, focus on balance">${(d.warmup || '').replace(/</g, '&lt;')}</textarea>
+                </div>
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Workout</label>
+                    <textarea onchange="updateDefault(${index}, 'workout', this.value || null)"
+                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10"
+                        placeholder="e.g., 5 stations, 6 exercises per station, 2 sets">${(d.workout || '').replace(/</g, '&lt;')}</textarea>
+                </div>
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Cooldown</label>
+                    <textarea onchange="updateDefault(${index}, 'cooldown', this.value || null)"
+                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10"
+                        placeholder="e.g., 10 min easy, stretching">${(d.cooldown || '').replace(/</g, '&lt;')}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <!-- Section: Tags & Staff -->
         <div class="mb-4">
-            <label class="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer">
-                <input type="checkbox" ${d.is_dark_practice ? 'checked' : ''} onchange="updateDefault(${index}, 'is_dark_practice', this.checked)" class="w-4 h-4 cursor-pointer">
-                Dark Practice
-            </label>
-        </div>
-        <div class="grid grid-cols-3 gap-3 mb-4">
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Warmup</label>
-                <input type="text" value="${(d.warmup || '').replace(/"/g, '&quot;')}" onchange="updateDefault(${index}, 'warmup', this.value || null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm" placeholder="e.g., Skiathlon Warmup">
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Workout</label>
-                <textarea onchange="updateDefault(${index}, 'workout', this.value || null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm resize-y" rows="2" placeholder="e.g., 5 stations...">${(d.workout || '').replace(/</g, '&lt;')}</textarea>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Cooldown</label>
-                <input type="text" value="${(d.cooldown || '').replace(/"/g, '&quot;')}" onchange="updateDefault(${index}, 'cooldown', this.value || null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm" placeholder="e.g., Stretching">
-            </div>
-        </div>
-        <div class="grid grid-cols-3 gap-3 mb-4">
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Activities</label>
-                <div class="max-h-[120px] overflow-y-auto border border-gray-200 rounded p-2 bg-white">
-                    ${activitiesData.map(a => `
-                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer py-0.5">
-                            <input type="checkbox" ${(d.activity_ids || []).includes(a.id) ? 'checked' : ''}
-                                onchange="updateDefaultArray(${index}, 'activity_ids', ${a.id}, this.checked)"
-                                class="w-3.5 h-3.5 cursor-pointer">
-                            ${a.name}
-                        </label>
-                    `).join('')}
-                    ${activitiesData.length === 0 ? '<span class="text-xs text-gray-400">No activities</span>' : ''}
+            <h4 class="text-xs font-semibold text-tcsc-navy uppercase tracking-wide mb-3">Tags & Staff</h4>
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Activities</label>
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
+                        ${activitiesData.map(a => `
+                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
+                                <input type="checkbox" ${(d.activity_ids || []).includes(a.id) ? 'checked' : ''}
+                                    onchange="updateDefaultArray(${index}, 'activity_ids', ${a.id}, this.checked)"
+                                    class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
+                                <span class="text-sm text-gray-700">${a.name}</span>
+                            </label>
+                        `).join('')}
+                        ${activitiesData.length === 0 ? '<span class="text-sm text-gray-400 italic">No activities configured</span>' : ''}
+                    </div>
                 </div>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Types</label>
-                <div class="max-h-[120px] overflow-y-auto border border-gray-200 rounded p-2 bg-white">
-                    ${typesData.map(t => `
-                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer py-0.5">
-                            <input type="checkbox" ${(d.type_ids || []).includes(t.id) ? 'checked' : ''}
-                                onchange="updateDefaultArray(${index}, 'type_ids', ${t.id}, this.checked)"
-                                class="w-3.5 h-3.5 cursor-pointer">
-                            ${t.name}
-                        </label>
-                    `).join('')}
-                    ${typesData.length === 0 ? '<span class="text-xs text-gray-400">No types</span>' : ''}
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Practice Types</label>
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
+                        ${typesData.map(t => `
+                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
+                                <input type="checkbox" ${(d.type_ids || []).includes(t.id) ? 'checked' : ''}
+                                    onchange="updateDefaultArray(${index}, 'type_ids', ${t.id}, this.checked)"
+                                    class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
+                                <span class="text-sm text-gray-700">${t.name}</span>
+                            </label>
+                        `).join('')}
+                        ${typesData.length === 0 ? '<span class="text-sm text-gray-400 italic">No types configured</span>' : ''}
+                    </div>
                 </div>
-            </div>
-            <div>
-                <label class="block text-xs font-medium text-gray-600 mb-1">Coaches</label>
-                <div class="max-h-[120px] overflow-y-auto border border-gray-200 rounded p-2 bg-white">
-                    ${coachesData.map(c => `
-                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer py-0.5">
-                            <input type="checkbox" ${(d.coach_ids || []).includes(c.id) ? 'checked' : ''}
-                                onchange="updateDefaultArray(${index}, 'coach_ids', ${c.id}, this.checked)"
-                                class="w-3.5 h-3.5 cursor-pointer">
-                            ${c.name}
-                        </label>
-                    `).join('')}
-                    ${coachesData.length === 0 ? '<span class="text-xs text-gray-400">No coaches</span>' : ''}
+                <div>
+                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Coaches</label>
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
+                        ${coachesData.map(c => `
+                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
+                                <input type="checkbox" ${(d.coach_ids || []).includes(c.id) ? 'checked' : ''}
+                                    onchange="updateDefaultArray(${index}, 'coach_ids', ${c.id}, this.checked)"
+                                    class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
+                                <span class="text-sm text-gray-700">${c.name}</span>
+                            </label>
+                        `).join('')}
+                        ${coachesData.length === 0 ? '<span class="text-sm text-gray-400 italic">No coaches configured</span>' : ''}
+                    </div>
                 </div>
             </div>
         </div>
-        <button type="button" onclick="clearDefaults(${index})" class="text-xs text-red-600 font-medium cursor-pointer bg-transparent border-none hover:underline">Clear Defaults</button>
+
+        <!-- Clear button -->
+        <div class="pt-3 border-t border-tcsc-gray-100 flex justify-end">
+            <button type="button" onclick="clearDefaults(${index})"
+                class="tbl-btn tbl-btn-danger">Clear All Defaults</button>
+        </div>
     `;
 }
 
@@ -952,12 +1026,15 @@ function updateDefault(index, field, value) {
     } else {
         practiceDays[index].defaults[field] = value;
     }
-    // If defaults object is empty, set to null
     if (Object.keys(practiceDays[index].defaults).length === 0) {
         practiceDays[index].defaults = null;
     }
-    // Update summary text
-    renderPracticeDays();
+    // Update summary without full re-render to preserve focus
+    const summaryEl = document.querySelector(`[data-index="${index}"] .defaults-summary-text`);
+    // Full re-render only on dropdown/toggle changes (not text)
+    if (['location_id', 'social_location_id', 'is_dark_practice'].includes(field)) {
+        renderPracticeDays();
+    }
 }
 
 function updateDefaultArray(index, field, id, checked) {
@@ -976,11 +1053,9 @@ function updateDefaultArray(index, field, id, checked) {
     } else {
         delete practiceDays[index].defaults[field];
     }
-    // If defaults object is empty, set to null
     if (Object.keys(practiceDays[index].defaults).length === 0) {
         practiceDays[index].defaults = null;
     }
-    // Don't re-render to preserve checkbox state and scroll position
 }
 
 function clearDefaults(index) {
