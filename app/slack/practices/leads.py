@@ -1,6 +1,5 @@
 """Lead coordination and reminder operations."""
 
-from datetime import datetime
 from typing import Optional
 from flask import current_app
 from slack_sdk.errors import SlackApiError
@@ -158,7 +157,8 @@ def send_lead_checkin_dm(practice: Practice) -> dict:
     director_mention_text = ", ".join(f"<@{uid}>" for uid in director_slack_ids)
 
     # Determine if evening or morning practice for message
-    is_tonight = practice.date.date() == datetime.utcnow().date()
+    from app.utils import now_central_naive
+    is_tonight = practice.date.date() == now_central_naive().date()
     time_label = "Tonight" if is_tonight else "Tomorrow"
 
     message = (

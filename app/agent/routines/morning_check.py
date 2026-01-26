@@ -6,7 +6,7 @@ If conditions are unsafe, proposes cancellations with Approve/Reject buttons.
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.models import db
 from app.practices.interfaces import PracticeStatus
@@ -55,8 +55,9 @@ def run_morning_check(channel_override: str = None) -> dict:
     if dry_run:
         logger.info("DRY RUN MODE - No database changes will be made")
 
-    # Get today's date range (midnight to midnight UTC)
-    today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # Get today's date range (midnight to midnight Central, matching Practice.date storage)
+    from app.utils import now_central_naive
+    today_start = now_central_naive().replace(hour=0, minute=0, second=0, microsecond=0)
     today_end = today_start + timedelta(days=1)
 
     # Find all scheduled or confirmed practices today

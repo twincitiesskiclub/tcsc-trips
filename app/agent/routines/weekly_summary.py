@@ -7,7 +7,7 @@ weather outlook and participation information.
 
 import logging
 import yaml
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
@@ -40,7 +40,8 @@ def run_weekly_summary(channel_override: str = None) -> dict:
 
     # Get practices for the upcoming week (next 7 days from now)
     # When run on Sunday evening, this captures Mon-Sun of the coming week
-    now = datetime.utcnow()
+    from app.utils import now_central_naive
+    now = now_central_naive()
     week_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = week_start + timedelta(days=7)
 

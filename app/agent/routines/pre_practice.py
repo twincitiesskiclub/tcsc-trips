@@ -6,7 +6,7 @@ Pre-practice check routines (48h and 24h before practice).
 """
 
 import logging
-from datetime import datetime, timedelta
+from datetime import timedelta
 
 from app.models import db
 from app.practices.interfaces import PracticeStatus
@@ -18,6 +18,7 @@ from app.slack.practices import (
     post_24h_lead_confirmation,
     update_practice_announcement
 )
+from app.utils import now_central_naive
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ def run_48h_check(channel_override: str = None) -> dict:
     dry_run = config.get('agent', {}).get('dry_run', True)
 
     # Calculate 48-hour window (between 46-50 hours from now)
-    now = datetime.utcnow()
+    now = now_central_naive()
     window_start = now + timedelta(hours=46)
     window_end = now + timedelta(hours=50)
 
@@ -144,7 +145,7 @@ def run_24h_check(channel_override: str = None) -> dict:
     dry_run = config.get('agent', {}).get('dry_run', True)
 
     # Calculate 24-hour window (between 22-26 hours from now)
-    now = datetime.utcnow()
+    now = now_central_naive()
     window_start = now + timedelta(hours=22)
     window_end = now + timedelta(hours=26)
 

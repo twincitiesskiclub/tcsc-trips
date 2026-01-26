@@ -1,6 +1,5 @@
 """Block Kit builders for daily practice recap."""
 
-from datetime import datetime
 from typing import Optional
 
 
@@ -28,7 +27,8 @@ def build_daily_practice_recap_blocks(
     blocks = []
 
     # Header
-    today_str = datetime.now().strftime('%A, %B %-d')
+    from app.utils import now_central_naive
+    today_str = now_central_naive().strftime('%A, %B %-d')
     header_emoji = ":warning:" if has_proposals else ":clipboard:"
     blocks.append({
         "type": "header",

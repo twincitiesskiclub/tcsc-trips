@@ -1,6 +1,5 @@
 """RSVP thread management operations."""
 
-from datetime import datetime
 from typing import Optional
 from flask import current_app
 from slack_sdk.errors import SlackApiError
@@ -253,11 +252,10 @@ def log_rsvp_action(practice: Practice, slack_user_id: str, action: str) -> dict
     client = get_slack_client()
 
     # Format the log message
-    timestamp = datetime.now().strftime('%-I:%M %p')
     if action == 'going':
-        log_text = f":white_check_mark: <@{slack_user_id}> RSVP'd going ({timestamp})"
+        log_text = f":white_check_mark: <@{slack_user_id}> RSVP'd going"
     else:
-        log_text = f":wave: <@{slack_user_id}> removed their RSVP ({timestamp})"
+        log_text = f":wave: <@{slack_user_id}> removed their RSVP"
 
     try:
         client.chat_postMessage(

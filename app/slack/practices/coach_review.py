@@ -350,8 +350,7 @@ def log_collab_edit(practice: Practice, slack_user_id: str) -> dict:
         return {'success': False, 'error': 'No collab message to add thread to'}
 
     client = get_slack_client()
-    timestamp = datetime.now().strftime('%-I:%M %p')
-    log_text = f":pencil2: <@{slack_user_id}> updated this practice at {timestamp}"
+    log_text = f":pencil2: <@{slack_user_id}> updated this practice"
 
     try:
         client.chat_postMessage(
@@ -520,9 +519,8 @@ def log_coach_summary_edit(practice: Practice, slack_user_id: str) -> dict:
         return {'success': False, 'error': 'No summary message to add thread to'}
 
     client = get_slack_client()
-    timestamp = datetime.now().strftime('%-I:%M %p')
     date_str = practice.date.strftime('%A, %b %-d')
-    log_text = f":pencil2: <@{slack_user_id}> updated *{date_str}* practice at {timestamp}"
+    log_text = f":pencil2: <@{slack_user_id}> updated *{date_str}* practice"
 
     try:
         client.chat_postMessage(
