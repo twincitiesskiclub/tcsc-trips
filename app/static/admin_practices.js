@@ -374,60 +374,175 @@ function populateEditForm(practice = null) {
         typesContainer.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No types defined</span>';
     }
 
-    // Populate coaches as clickable pills (from Users with HEAD_COACH or ASSISTANT_COACH tags)
-    const coachesContainer = document.getElementById('edit-coaches');
-    coachesContainer.innerHTML = '';
-    const practiceCoaches = (practice && practice.coaches) || [];
-    const practiceCoachIds = practiceCoaches.map(c => c.user_id);
-    for (const coach of coachesData) {
-        const isSelected = practiceCoachIds.includes(coach.id);
-        const label = document.createElement('label');
-        label.className = isSelected ? 'selected' : '';
-        label.dataset.value = coach.id;
-        label.textContent = coach.name;
-        label.onclick = () => label.classList.toggle('selected');
-        coachesContainer.appendChild(label);
-    }
-    if (coachesData.length === 0) {
-        coachesContainer.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No coaches defined (add HEAD_COACH or ASSISTANT_COACH tags)</span>';
+    // Populate coaches as person pills
+    renderPersonPills('edit-coaches', 'coaches-summary', coachesData,
+        (practice && practice.coaches || []).map(c => c.user_id));
+
+    // Populate leads as person pills
+    renderPersonPills('edit-leads', 'leads-summary', leadsData,
+        (practice && practice.leads || []).map(l => l.user_id));
+
+    // Populate assists as person pills (collapsible)
+    const assistSelectedIds = (practice && practice.assists || []).map(a => a.user_id);
+    renderPersonPills('edit-assists', 'assists-summary', assistsData, assistSelectedIds);
+
+    // Auto-expand assists if any are pre-selected, otherwise collapse
+    const assistsCollapsible = document.getElementById('assists-collapsible');
+    const assistsChevron = document.getElementById('assists-chevron');
+    const assistsToggleText = document.getElementById('assists-toggle-text');
+    if (assistSelectedIds.length > 0) {
+        assistsCollapsible.classList.remove('hidden');
+        assistsChevron.classList.add('expanded');
+        assistsToggleText.textContent = 'Hide';
+    } else {
+        assistsCollapsible.classList.add('hidden');
+        assistsChevron.classList.remove('expanded');
+        assistsToggleText.textContent = 'Show';
     }
 
-    // Populate leads as clickable pills (from Users with PRACTICES_LEAD tag)
-    const leadsContainer = document.getElementById('edit-leads');
-    leadsContainer.innerHTML = '';
-    const practiceLeads = (practice && practice.leads) || [];
-    const practiceLeadIds = practiceLeads.map(l => l.user_id);
-    for (const lead of leadsData) {
-        const isSelected = practiceLeadIds.includes(lead.id);
-        const label = document.createElement('label');
-        label.className = isSelected ? 'selected' : '';
-        label.dataset.value = lead.id;
-        label.textContent = lead.name;
-        label.onclick = () => label.classList.toggle('selected');
-        leadsContainer.appendChild(label);
+    // Reset search input
+    const searchInput = document.getElementById('people-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.oninput = filterPeopleBySearch;
     }
-    if (leadsData.length === 0) {
-        leadsContainer.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No leads defined (add PRACTICES_LEAD tag)</span>';
+}
+
+function createPersonPill(person, isSelected, containerId, summaryId) {
+    const label = document.createElement('label');
+    label.className = 'person-pill' + (isSelected ? ' selected' : '');
+    label.dataset.value = person.id;
+    label.dataset.name = person.name.toLowerCase();
+
+    // Checkmark circle
+    const check = document.createElement('span');
+    check.className = 'check-icon';
+    check.innerHTML = '<svg viewBox="0 0 10 10" fill="none"><path d="M2 5.5L4 7.5L8 3" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    label.appendChild(check);
+
+    // Name
+    const nameSpan = document.createElement('span');
+    nameSpan.textContent = person.name;
+    label.appendChild(nameSpan);
+
+    // Role emoji from tags
+    const roleEmoji = getPersonRoleEmoji(person);
+    if (roleEmoji) {
+        const emojiSpan = document.createElement('span');
+        emojiSpan.className = 'role-emoji';
+        emojiSpan.textContent = roleEmoji;
+        label.appendChild(emojiSpan);
     }
 
-    // Populate assists as clickable pills (combined pool of coaches and leads)
-    const assistsContainer = document.getElementById('edit-assists');
-    if (assistsContainer) {
-        assistsContainer.innerHTML = '';
-        const practiceAssists = (practice && practice.assists) || [];
-        const practiceAssistIds = practiceAssists.map(a => a.user_id);
-        for (const assist of assistsData) {
-            const isSelected = practiceAssistIds.includes(assist.id);
-            const label = document.createElement('label');
-            label.className = isSelected ? 'selected' : '';
-            label.dataset.value = assist.id;
-            label.textContent = assist.name;
-            label.onclick = () => label.classList.toggle('selected');
-            assistsContainer.appendChild(label);
-        }
-        if (assistsData.length === 0) {
-            assistsContainer.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No assists available</span>';
-        }
+    label.onclick = () => {
+        label.classList.toggle('selected');
+        updateSelectedSummary(containerId, summaryId);
+    };
+
+    return label;
+}
+
+function getPersonRoleEmoji(person) {
+    if (!person.tags || person.tags.length === 0) return null;
+    // Prefer practice-relevant tags
+    const preferred = ['HEAD_COACH', 'ASSISTANT_COACH', 'PRACTICES_LEAD', 'PRACTICES_DIRECTOR'];
+    for (const tagName of preferred) {
+        const tag = person.tags.find(t => t.name === tagName);
+        if (tag && tag.emoji) return tag.emoji;
+    }
+    // Fall back to first tag with emoji
+    const withEmoji = person.tags.find(t => t.emoji);
+    return withEmoji ? withEmoji.emoji : null;
+}
+
+function renderPersonPills(containerId, summaryId, data, selectedIds) {
+    const container = document.getElementById(containerId);
+    if (!container) return;
+    container.innerHTML = '';
+    for (const person of data) {
+        const isSelected = selectedIds.includes(person.id);
+        container.appendChild(createPersonPill(person, isSelected, containerId, summaryId));
+    }
+    if (data.length === 0) {
+        container.innerHTML = '<span style="color: #9ca3af; font-size: 13px;">No people available</span>';
+    }
+    updateSelectedSummary(containerId, summaryId);
+}
+
+function updateSelectedSummary(containerId, summaryId) {
+    const summary = document.getElementById(summaryId);
+    if (!summary) return;
+    const container = document.getElementById(containerId);
+    const selected = container.querySelectorAll('label.selected');
+
+    summary.innerHTML = '';
+    if (selected.length === 0) {
+        const none = document.createElement('span');
+        none.className = 'none-text';
+        none.textContent = 'None selected';
+        summary.appendChild(none);
+        return;
+    }
+
+    selected.forEach(label => {
+        const chip = document.createElement('span');
+        chip.className = 'selected-chip';
+        const nameText = label.querySelector('span:nth-child(2)').textContent;
+        chip.textContent = nameText;
+
+        const removeBtn = document.createElement('button');
+        removeBtn.type = 'button';
+        removeBtn.innerHTML = '&times;';
+        removeBtn.onclick = (e) => {
+            e.stopPropagation();
+            label.classList.remove('selected');
+            updateSelectedSummary(containerId, summaryId);
+        };
+        chip.appendChild(removeBtn);
+        summary.appendChild(chip);
+    });
+}
+
+function deselectPerson(containerId, summaryId, userId) {
+    const container = document.getElementById(containerId);
+    const label = container.querySelector(`label[data-value="${userId}"]`);
+    if (label) {
+        label.classList.remove('selected');
+        updateSelectedSummary(containerId, summaryId);
+    }
+}
+
+function filterPeopleBySearch() {
+    const query = document.getElementById('people-search').value.toLowerCase().trim();
+    const sections = ['edit-coaches', 'edit-leads', 'edit-assists'];
+    for (const sectionId of sections) {
+        const container = document.getElementById(sectionId);
+        if (!container) continue;
+        const pills = container.querySelectorAll('.person-pill');
+        pills.forEach(pill => {
+            const name = pill.dataset.name || '';
+            if (!query || name.includes(query)) {
+                pill.classList.remove('hidden');
+            } else {
+                pill.classList.add('hidden');
+            }
+        });
+    }
+}
+
+function toggleAssistsSection() {
+    const collapsible = document.getElementById('assists-collapsible');
+    const chevron = document.getElementById('assists-chevron');
+    const toggleText = document.getElementById('assists-toggle-text');
+    const isHidden = collapsible.classList.contains('hidden');
+    if (isHidden) {
+        collapsible.classList.remove('hidden');
+        chevron.classList.add('expanded');
+        toggleText.textContent = 'Hide';
+    } else {
+        collapsible.classList.add('hidden');
+        chevron.classList.remove('expanded');
+        toggleText.textContent = 'Show';
     }
 }
 

@@ -434,13 +434,13 @@ def people_data():
     # For assistants, we include all users with PRACTICES_LEAD tag since they can assist
     # as well as coaches who might help as assistants
 
-    # Query users with coach tags
-    coaches = User.query.filter(
+    # Query users with coach tags (eager-load tags to avoid N+1)
+    coaches = User.query.options(joinedload(User.tags)).filter(
         User.tags.any(Tag.id.in_(coach_tag_ids))
     ).order_by(User.first_name).all()
 
-    # Query users with lead tags
-    leads = User.query.filter(
+    # Query users with lead tags (eager-load tags to avoid N+1)
+    leads = User.query.options(joinedload(User.tags)).filter(
         User.tags.any(Tag.id.in_(lead_tag_ids))
     ).order_by(User.first_name).all()
 
@@ -453,19 +453,17 @@ def people_data():
             assists.append(u)
     assists.sort(key=lambda u: u.first_name)
 
+    def serialize_person(u):
+        return {
+            'id': u.id,
+            'name': f"{u.first_name} {u.last_name}",
+            'tags': [{'name': t.name, 'emoji': t.emoji} for t in u.tags],
+        }
+
     return jsonify({
-        'coaches': [{
-            'id': u.id,
-            'name': f"{u.first_name} {u.last_name}",
-        } for u in coaches],
-        'leads': [{
-            'id': u.id,
-            'name': f"{u.first_name} {u.last_name}",
-        } for u in leads],
-        'assists': [{
-            'id': u.id,
-            'name': f"{u.first_name} {u.last_name}",
-        } for u in assists]
+        'coaches': [serialize_person(u) for u in coaches],
+        'leads': [serialize_person(u) for u in leads],
+        'assists': [serialize_person(u) for u in assists],
     })
 
 

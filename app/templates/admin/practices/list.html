@@ -1,7 +1,7 @@
 {% extends 'admin/admin_base.html' %}
 {% block extra_css %}
 <style>
-/* Pill grid needs custom hover behavior */
+/* Pill grid for activities & types */
 .pill-grid label:hover {
     background: #e5e7eb;
     border-color: #d1d5db;
@@ -16,6 +16,147 @@
 .pill-grid label.selected:hover {
     background: #1e3a8a;
     border-color: #1e3a8a;
+}
+
+/* Person pills for coaches, leads, assists */
+.person-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border: 1.5px solid #e4e7ec;
+    border-radius: 6px;
+    font-size: 13px;
+    color: #344054;
+    background: white;
+    cursor: pointer;
+    transition: all 0.15s;
+    user-select: none;
+}
+
+.person-pill:hover {
+    background: #f9fafb;
+    border-color: #d0d5dd;
+}
+
+.person-pill.selected {
+    border-color: rgb(var(--color-tcsc-navy));
+    border-width: 2px;
+    padding: 5px 11px; /* offset 2px border */
+    background: rgba(28, 44, 68, 0.06);
+    color: rgb(var(--color-tcsc-navy));
+    font-weight: 600;
+}
+
+.person-pill.selected:hover {
+    background: rgba(28, 44, 68, 0.10);
+}
+
+.person-pill .check-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    border: 1.5px solid #d0d5dd;
+    flex-shrink: 0;
+    transition: all 0.15s;
+}
+
+.person-pill.selected .check-icon {
+    background: rgb(var(--color-tcsc-navy));
+    border-color: rgb(var(--color-tcsc-navy));
+}
+
+.person-pill.selected .check-icon svg {
+    display: block;
+}
+
+.person-pill .check-icon svg {
+    display: none;
+    width: 10px;
+    height: 10px;
+}
+
+.person-pill .role-emoji {
+    font-size: 12px;
+    line-height: 1;
+}
+
+.person-pill.hidden {
+    display: none;
+}
+
+/* Selected summary chips */
+.selected-summary {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-height: 24px;
+    margin-bottom: 6px;
+}
+
+.selected-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 2px 8px;
+    background: rgb(var(--color-tcsc-navy));
+    color: white;
+    border-radius: 9999px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 1.5;
+}
+
+.selected-chip button {
+    background: none;
+    border: none;
+    color: rgba(255,255,255,0.7);
+    cursor: pointer;
+    padding: 0;
+    font-size: 13px;
+    line-height: 1;
+    display: flex;
+    align-items: center;
+}
+
+.selected-chip button:hover {
+    color: white;
+}
+
+.selected-summary .none-text {
+    font-size: 11px;
+    color: #9ca3af;
+    font-style: italic;
+    line-height: 24px;
+}
+
+/* Collapsible assists */
+.assists-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 12px;
+    color: #6b7280;
+    padding: 0;
+}
+
+.assists-toggle:hover {
+    color: #374151;
+}
+
+.assists-toggle .chevron {
+    transition: transform 0.2s;
+    font-size: 10px;
+}
+
+.assists-toggle .chevron.expanded {
+    transform: rotate(90deg);
 }
 
 /* Toggle slider needs pseudo-element styling */
@@ -145,18 +286,32 @@
 
             <!-- Section: Coaches, Leads & Assists -->
             <div class="mb-6 pb-5 border-b border-gray-200">
-                <h3 class="text-sm font-semibold text-tcsc-navy mb-4 uppercase tracking-wide">Coaches, Leads & Assists</h3>
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-sm font-semibold text-tcsc-navy uppercase tracking-wide m-0">Coaches, Leads & Assists</h3>
+                    <input type="text" id="people-search" placeholder="Filter by name..." class="py-1.5 px-3 border border-gray-300 rounded-md text-sm w-48 focus:outline-none focus:border-tcsc-navy">
+                </div>
                 <div class="mb-4">
                     <label class="block mb-1.5 font-medium text-sm text-tcsc-navy">Coaches <span class="font-normal text-gray-400">(click to select)</span></label>
-                    <div id="edit-coaches" class="pill-grid flex flex-wrap gap-2"></div>
+                    <div id="coaches-summary" class="selected-summary"></div>
+                    <div id="edit-coaches" class="flex flex-wrap gap-2"></div>
                 </div>
                 <div class="mt-4">
                     <label class="block mb-1.5 font-medium text-sm text-tcsc-navy">Leads <span class="font-normal text-gray-400">(click to select)</span></label>
-                    <div id="edit-leads" class="pill-grid flex flex-wrap gap-2"></div>
+                    <div id="leads-summary" class="selected-summary"></div>
+                    <div id="edit-leads" class="flex flex-wrap gap-2"></div>
                 </div>
                 <div class="mt-4">
-                    <label class="block mb-1.5 font-medium text-sm text-tcsc-navy">Assists <span class="font-normal text-gray-400">(click to select)</span></label>
-                    <div id="edit-assists" class="pill-grid flex flex-wrap gap-2"></div>
+                    <div class="flex items-center gap-2 mb-1.5">
+                        <label class="font-medium text-sm text-tcsc-navy m-0">Assists <span class="font-normal text-gray-400">(click to select)</span></label>
+                        <button type="button" id="assists-toggle-btn" class="assists-toggle" onclick="toggleAssistsSection()">
+                            <span class="chevron" id="assists-chevron">&#9654;</span>
+                            <span id="assists-toggle-text">Show</span>
+                        </button>
+                    </div>
+                    <div id="assists-summary" class="selected-summary"></div>
+                    <div id="assists-collapsible" class="hidden">
+                        <div id="edit-assists" class="flex flex-wrap gap-2"></div>
+                    </div>
                 </div>
             </div>
 
