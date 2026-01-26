@@ -603,11 +603,13 @@ if _bot_token:
         """Handle Add Practice button click from weekly summary placeholder.
 
         Opens a modal to create a new practice for the specified date.
+        Button value format: "2025-01-23|thursday|18:00" (date|day|time)
+        or legacy format: "2025-01-23" (date only).
         """
         ack()
 
         user_id = body["user"]["id"]
-        date_str = action["value"]  # e.g., "2025-01-07"
+        action_value = action["value"]
         trigger_id = body.get("trigger_id")
 
         if not trigger_id:
@@ -615,9 +617,14 @@ if _bot_token:
             return
 
         with get_app_context():
-            from app.practices.models import PracticeLocation
             from app.models import AppConfig
             from app.slack.modals import build_practice_create_modal
+
+            # Parse button value: "2025-01-23|thursday|18:00" or legacy "2025-01-23"
+            parts = action_value.split('|')
+            date_str = parts[0]
+            slot_day = parts[1] if len(parts) > 1 else None
+            slot_time = parts[2] if len(parts) > 2 else None
 
             # Parse the date
             try:
@@ -631,29 +638,49 @@ if _bot_token:
                 )
                 return
 
-            # Get default time from config
-            day_name = practice_date.strftime('%A').lower()
+            # Match config entry by (day, time) to find defaults
             expected_days = AppConfig.get('practice_days', [])
             default_time = "18:00"
-            for day_config in expected_days:
-                if day_config.get('day', '').lower() == day_name:
-                    default_time = day_config.get('time', '18:00')
-                    break
+            slot_defaults = None
 
-            # Get all locations for dropdown
-            locations = []
-            for loc in PracticeLocation.query.order_by(PracticeLocation.name).all():
-                display_name = f"{loc.name} - {loc.spot}" if loc.spot else loc.name
-                locations.append((loc.id, display_name))
+            if slot_day and slot_time:
+                for day_config in expected_days:
+                    if (day_config.get('day', '').lower() == slot_day.lower() and
+                            day_config.get('time') == slot_time):
+                        default_time = day_config.get('time', '18:00')
+                        slot_defaults = day_config.get('defaults')
+                        break
+            else:
+                # Legacy button values (date only) -- match by day name, take first match
+                day_name = practice_date.strftime('%A').lower()
+                for day_config in expected_days:
+                    if day_config.get('day', '').lower() == day_name:
+                        default_time = day_config.get('time', '18:00')
+                        slot_defaults = day_config.get('defaults')
+                        break
+
+            # Load ref data (locations, activities, types)
+            locations, all_activities, all_types = _load_modal_ref_data()
 
             # Get channel and message_ts from the source message for updating
             channel_id = body.get("channel", {}).get("id")
             message_ts = body.get("message", {}).get("ts")
 
+            # Pack silent defaults into metadata (social_location_id, coach_ids)
+            silent_defaults = {}
+            if slot_defaults:
+                if slot_defaults.get('social_location_id'):
+                    silent_defaults['social_location_id'] = slot_defaults['social_location_id']
+                if slot_defaults.get('coach_ids'):
+                    silent_defaults['coach_ids'] = slot_defaults['coach_ids']
+
             # Build and open the modal
             modal = build_practice_create_modal(
                 practice_date, default_time, locations,
-                channel_id=channel_id, message_ts=message_ts
+                channel_id=channel_id, message_ts=message_ts,
+                all_activities=all_activities, all_types=all_types,
+                slot_defaults=slot_defaults,
+                silent_defaults=silent_defaults if silent_defaults else None
             )
             client.views_open(trigger_id=trigger_id, view=modal)
 
@@ -703,6 +730,19 @@ if _bot_token:
             selected_flags = _safe_get(values, "flags_block", "practice_flags", "selected_options", default=[])
             flag_values = [opt.get("value") for opt in selected_flags]
             is_dark_practice = "is_dark_practice" in flag_values
+            has_social = "has_social" in flag_values
+
+            # Extract activities and types from modal
+            selected_activities = _safe_get(values, "activities_block", "activity_ids", "selected_options", default=[])
+            activity_ids = [int(opt.get("value")) for opt in selected_activities]
+
+            selected_types = _safe_get(values, "types_block", "type_ids", "selected_options", default=[])
+            type_ids = [int(opt.get("value")) for opt in selected_types]
+
+            # Read silent defaults from metadata
+            silent = metadata.get('silent', {})
+            social_location_id = silent.get('social_location_id')
+            coach_ids = silent.get('coach_ids', [])
 
             # Parse time and combine with date
             try:
@@ -711,12 +751,16 @@ if _bot_token:
             except (ValueError, AttributeError):
                 practice_datetime = practice_date.replace(hour=18, minute=0)
 
+            # Only apply social_location_id from silent defaults if user checked "Social afterwards"
+            effective_social_location_id = social_location_id if has_social else None
+
             # Create the practice
             practice = Practice(
                 date=practice_datetime,
                 day_of_week=practice_datetime.strftime('%A'),
                 status='scheduled',
                 location_id=int(location_id) if location_id else None,
+                social_location_id=effective_social_location_id,
                 warmup_description=warmup,
                 workout_description=workout,
                 cooldown_description=cooldown,
@@ -724,6 +768,31 @@ if _bot_token:
                 slack_coach_summary_ts=message_ts  # Link to summary for edit threading
             )
             db.session.add(practice)
+            db.session.flush()  # Get practice.id for M2M and PracticeLead
+
+            # Assign activities (from modal)
+            if activity_ids:
+                from app.practices.models import PracticeActivity
+                practice.activities = PracticeActivity.query.filter(
+                    PracticeActivity.id.in_(activity_ids)).all()
+
+            # Assign types (from modal)
+            if type_ids:
+                from app.practices.models import PracticeType
+                practice.practice_types = PracticeType.query.filter(
+                    PracticeType.id.in_(type_ids)).all()
+
+            # Apply coach defaults silently (with existence check)
+            if coach_ids:
+                from app.practices.models import PracticeLead
+                from app.models import User
+                existing_users = {u.id for u in User.query.filter(User.id.in_(coach_ids)).all()}
+                for uid in coach_ids:
+                    if uid in existing_users:
+                        db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='coach'))
+                    else:
+                        logger.warning(f"Skipping coach default: user {uid} not found")
+
             db.session.commit()
 
             logger.info(f"Practice #{practice.id} created by {user_id} for {practice_datetime}")
@@ -1377,6 +1446,26 @@ def _safe_get(d: dict, *keys, default=None):
         if d is None:
             return default
     return d if d is not None else default
+
+
+def _load_modal_ref_data():
+    """Load reference data for practice modal dropdowns.
+
+    Returns:
+        Tuple of (locations, all_activities, all_types) where each is a list of (id, name) tuples.
+    """
+    from app.practices.models import PracticeLocation, PracticeActivity, PracticeType
+    locations = [
+        (l.id, f"{l.name} - {l.spot}" if l.spot else l.name)
+        for l in PracticeLocation.query.order_by(PracticeLocation.name).all()
+    ]
+    all_activities = [
+        (a.id, a.name) for a in PracticeActivity.query.order_by(PracticeActivity.name).all()
+    ]
+    all_types = [
+        (t.id, t.name) for t in PracticeType.query.order_by(PracticeType.name).all()
+    ]
+    return locations, all_activities, all_types
 
 
 def _process_rsvp(practice_id: int, status: str, user_id: str, user_name: str) -> dict:

@@ -1129,6 +1129,9 @@ def update_practice_days():
             return jsonify({'error': 'Each entry must have a day field'}), 400
         if entry['day'].lower() not in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']:
             return jsonify({'error': f'Invalid day: {entry["day"]}'}), 400
+        defaults = entry.get('defaults')
+        if defaults is not None and not isinstance(defaults, dict):
+            return jsonify({'error': 'defaults must be an object or null'}), 400
 
     try:
         AppConfig.set(

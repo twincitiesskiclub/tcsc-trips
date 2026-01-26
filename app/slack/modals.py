@@ -4,11 +4,16 @@ from typing import Optional
 from app.practices.interfaces import PracticeInfo, LeadRole
 
 
-def _build_practice_flags_element(practice: PracticeInfo) -> dict:
+def _build_practice_flags_element(practice=None, *, is_dark_practice=False, has_social=False) -> dict:
     """Build checkboxes element for practice flags, properly handling initial_options.
 
+    When practice is provided (edit modal), reads flags from it.
+    When kwargs are provided (create modal), uses them directly.
+
     Args:
-        practice: Practice information
+        practice: Practice information (optional, for edit modal)
+        is_dark_practice: Default dark practice flag (for create modal)
+        has_social: Default has_social flag (for create modal)
 
     Returns:
         Checkboxes element dict with initial_options only if there are selected options
@@ -28,14 +33,18 @@ def _build_practice_flags_element(practice: PracticeInfo) -> dict:
         ]
     }
 
+    # Determine flag values from practice object or kwargs
+    dark_checked = practice.is_dark_practice if practice else is_dark_practice
+    social_checked = practice.has_social if practice else has_social
+
     # Build initial options list - only include if there are selected options
     initial_options = []
-    if practice.is_dark_practice:
+    if dark_checked:
         initial_options.append({
             "text": {"type": "plain_text", "text": "🌙 Dark practice (headlamp required)"},
             "value": "is_dark_practice"
         })
-    if practice.has_social:
+    if social_checked:
         initial_options.append({
             "text": {"type": "plain_text", "text": "🍕 Social afterwards"},
             "value": "has_social"
@@ -111,7 +120,7 @@ def _build_activity_type_multi_select(
         for id, name in all_options
     ]
 
-    current_ids = {item.id for item in current_selections}
+    current_ids = {(item.id if hasattr(item, 'id') else item) for item in current_selections}
     initial_options = [
         opt for opt in options
         if int(opt["value"]) in current_ids
@@ -690,8 +699,12 @@ def build_practice_edit_full_modal(
     }
 
 
-def build_practice_create_modal(practice_date: 'datetime', default_time: str, locations: list = None,
-                                channel_id: str = None, message_ts: str = None) -> dict:
+def build_practice_create_modal(
+    practice_date: 'datetime', default_time: str, locations: list = None,
+    channel_id: str = None, message_ts: str = None,
+    all_activities: list = None, all_types: list = None,
+    slot_defaults: dict = None, silent_defaults: dict = None
+) -> dict:
     """Build modal for creating a new practice from weekly summary.
 
     Args:
@@ -700,19 +713,27 @@ def build_practice_create_modal(practice_date: 'datetime', default_time: str, lo
         locations: List of (id, name) tuples for location dropdown
         channel_id: Channel where the summary post lives (for updating)
         message_ts: Timestamp of the summary post (for updating)
+        all_activities: List of (id, name) tuples for activity multi-select
+        all_types: List of (id, name) tuples for type multi-select
+        slot_defaults: Dict of default field values from config (location_id, warmup, etc.)
+        silent_defaults: Dict of defaults applied silently on submit (social_location_id, coach_ids)
 
     Returns:
         Slack modal view payload
     """
-    date_str = practice_date.strftime('%A, %B %-d')
-
-    # Build metadata with date, channel, and message_ts
     import json
-    metadata = json.dumps({
+    date_str = practice_date.strftime('%A, %B %-d')
+    defaults = slot_defaults or {}
+
+    # Build metadata with date, channel, message_ts, and silent defaults
+    metadata_dict = {
         'date': practice_date.strftime('%Y-%m-%d'),
         'channel_id': channel_id,
         'message_ts': message_ts
-    })
+    }
+    if silent_defaults:
+        metadata_dict['silent'] = silent_defaults
+    metadata = json.dumps(metadata_dict)
 
     # Build location dropdown options
     location_options = []
@@ -724,7 +745,7 @@ def build_practice_create_modal(practice_date: 'datetime', default_time: str, lo
             }
             location_options.append(option)
 
-    # Build location element
+    # Build location element with optional default pre-selection
     if location_options:
         location_element = {
             "type": "static_select",
@@ -732,6 +753,13 @@ def build_practice_create_modal(practice_date: 'datetime', default_time: str, lo
             "placeholder": {"type": "plain_text", "text": "Select a location"},
             "options": location_options
         }
+        # Pre-select location from defaults
+        default_location_id = defaults.get('location_id')
+        if default_location_id:
+            for opt in location_options:
+                if opt["value"] == str(default_location_id):
+                    location_element["initial_option"] = opt
+                    break
     else:
         # Fallback to text input if no locations provided
         location_element = {
@@ -740,134 +768,133 @@ def build_practice_create_modal(practice_date: 'datetime', default_time: str, lo
             "placeholder": {"type": "plain_text", "text": "Enter location name"}
         }
 
+    # Build blocks dynamically
+    blocks = [
+        {
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*Creating practice for {date_str}*"
+            }
+        },
+        {"type": "divider"},
+        {
+            "type": "input",
+            "block_id": "location_block",
+            "label": {"type": "plain_text", "text": "Location"},
+            "element": location_element
+        },
+        {
+            "type": "input",
+            "block_id": "time_block",
+            "label": {"type": "plain_text", "text": "Time"},
+            "element": {
+                "type": "timepicker",
+                "action_id": "practice_time",
+                "initial_time": default_time,
+                "placeholder": {"type": "plain_text", "text": "Select time"}
+            }
+        }
+    ]
+
+    # Warmup (with optional default)
+    warmup_default = defaults.get('warmup', '')
+    warmup_element = {
+        "type": "plain_text_input",
+        "action_id": "warmup_description",
+        "multiline": True,
+        "placeholder": {"type": "plain_text", "text": "e.g., 15 min easy ski, focus on balance"}
+    }
+    if warmup_default:
+        warmup_element["initial_value"] = warmup_default
+    blocks.append({
+        "type": "input",
+        "block_id": "warmup_block",
+        "optional": True,
+        "label": {"type": "plain_text", "text": "Warmup"},
+        "element": warmup_element
+    })
+
+    # Workout (with optional default)
+    workout_default = defaults.get('workout', '')
+    workout_element = {
+        "type": "plain_text_input",
+        "action_id": "workout_description",
+        "multiline": True,
+        "placeholder": {"type": "plain_text", "text": "e.g., 5 x 4min @ threshold (2min rest)"}
+    }
+    if workout_default:
+        workout_element["initial_value"] = workout_default
+    blocks.append({
+        "type": "input",
+        "block_id": "workout_block",
+        "optional": True,
+        "label": {"type": "plain_text", "text": "Main Workout"},
+        "element": workout_element
+    })
+
+    # Cooldown (with optional default)
+    cooldown_default = defaults.get('cooldown', '')
+    cooldown_element = {
+        "type": "plain_text_input",
+        "action_id": "cooldown_description",
+        "multiline": True,
+        "placeholder": {"type": "plain_text", "text": "e.g., 10 min easy, stretching"}
+    }
+    if cooldown_default:
+        cooldown_element["initial_value"] = cooldown_default
+    blocks.append({
+        "type": "input",
+        "block_id": "cooldown_block",
+        "optional": True,
+        "label": {"type": "plain_text", "text": "Cooldown"},
+        "element": cooldown_element
+    })
+
+    # Activities multi-select (with optional defaults)
+    if all_activities:
+        default_activity_ids = defaults.get('activity_ids', [])
+        blocks.append({
+            "type": "input",
+            "block_id": "activities_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Activities"},
+            "element": _build_activity_type_multi_select(
+                "activity_ids", "Select activities", all_activities, default_activity_ids
+            )
+        })
+
+    # Types multi-select (with optional defaults)
+    if all_types:
+        default_type_ids = defaults.get('type_ids', [])
+        blocks.append({
+            "type": "input",
+            "block_id": "types_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Practice Types"},
+            "element": _build_activity_type_multi_select(
+                "type_ids", "Select practice types", all_types, default_type_ids
+            )
+        })
+
+    # Flags (dark practice, social) with optional default
+    default_is_dark = defaults.get('is_dark_practice', False)
+    blocks.append({
+        "type": "input",
+        "block_id": "flags_block",
+        "optional": True,
+        "label": {"type": "plain_text", "text": "Options"},
+        "element": _build_practice_flags_element(is_dark_practice=default_is_dark)
+    })
+
     return {
         "type": "modal",
         "callback_id": "practice_create",
         "private_metadata": metadata,
-        "title": {
-            "type": "plain_text",
-            "text": "Add Practice"
-        },
-        "submit": {
-            "type": "plain_text",
-            "text": "Create Practice"
-        },
-        "close": {
-            "type": "plain_text",
-            "text": "Cancel"
-        },
-        "blocks": [
-            {
-                "type": "section",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": f"*Creating practice for {date_str}*"
-                }
-            },
-            {
-                "type": "divider"
-            },
-            {
-                "type": "input",
-                "block_id": "location_block",
-                "label": {
-                    "type": "plain_text",
-                    "text": "Location"
-                },
-                "element": location_element
-            },
-            {
-                "type": "input",
-                "block_id": "time_block",
-                "label": {
-                    "type": "plain_text",
-                    "text": "Time"
-                },
-                "element": {
-                    "type": "timepicker",
-                    "action_id": "practice_time",
-                    "initial_time": default_time,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "Select time"
-                    }
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "warmup_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Warmup"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "warmup_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 15 min easy ski, focus on balance"
-                    }
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "workout_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Main Workout"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "workout_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 5 x 4min @ threshold (2min rest)"
-                    }
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "cooldown_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Cooldown"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "cooldown_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 10 min easy, stretching"
-                    }
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "flags_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Options"
-                },
-                "element": {
-                    "type": "checkboxes",
-                    "action_id": "practice_flags",
-                    "options": [
-                        {
-                            "text": {"type": "mrkdwn", "text": "*Dark practice*"},
-                            "description": {"type": "plain_text", "text": "Practice after sunset, bring lights"},
-                            "value": "is_dark_practice"
-                        }
-                    ]
-                }
-            }
-        ]
+        "title": {"type": "plain_text", "text": "Add Practice"},
+        "submit": {"type": "plain_text", "text": "Create Practice"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks
     }
 
 

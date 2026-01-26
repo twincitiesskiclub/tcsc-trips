@@ -253,18 +253,26 @@ def build_coach_weekly_summary_blocks(
             day_full = day_date.strftime('%A')
             month_short = day_date.strftime('%b')
 
+            # Format time for display (e.g., "6:00 pm")
+            slot_time = day_config.get('time', '18:00')
+            try:
+                display_time = datetime.strptime(slot_time, '%H:%M').strftime('%-I:%M %p').lower()
+            except ValueError:
+                display_time = slot_time
+
             # Section with accessory Add Practice button (single block, not section + actions)
+            # Button value encodes date|day|time for slot-specific defaults lookup
             blocks.append({
                 "type": "section",
                 "text": {
                     "type": "mrkdwn",
-                    "text": f":calendar: *{day_full}, {month_short} {day_num}{day_suffix}* — _No practice scheduled_"
+                    "text": f":calendar: *{day_full}, {month_short} {day_num}{day_suffix} at {display_time}* — _No practice scheduled_"
                 },
                 "accessory": {
                     "type": "button",
                     "text": {"type": "plain_text", "text": ":heavy_plus_sign: Add Practice", "emoji": True},
                     "action_id": "create_practice_from_summary",
-                    "value": day_date.strftime('%Y-%m-%d'),
+                    "value": f"{day_date.strftime('%Y-%m-%d')}|{day_name}|{slot_time}",
                     "style": "primary"
                 }
             })

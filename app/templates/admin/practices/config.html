@@ -63,7 +63,7 @@
 
     <!-- Tab Content: Settings -->
     <div id="settings-tab" class="tab-content hidden">
-        <div class="max-w-[600px]">
+        <div class="max-w-[900px]">
             <h3 class="font-semibold text-base text-gray-800 mb-2">Practice Days</h3>
             <p class="text-sm text-gray-500 mb-5 leading-relaxed">Configure which days of the week practices are expected. This is used by the weekly coach summary to show placeholders for days without scheduled practices.</p>
 
@@ -107,6 +107,7 @@
 // State
 let locationsTable, activitiesTable, typesTable, socialLocationsTable;
 let locationsData = [], activitiesData = [], typesData = [], socialLocationsData = [];
+let coachesData = [];
 let statusData = {};
 let practiceDays = [];
 
@@ -771,9 +772,14 @@ function renderStatusList(key, elementId) {
 // Settings Tab
 // ============================================================================
 async function loadSettings() {
-    const response = await fetch('/admin/practices/settings/data');
-    const data = await response.json();
-    practiceDays = data.practice_days || [];
+    const [settingsResp, peopleResp] = await Promise.all([
+        fetch('/admin/practices/settings/data'),
+        fetch('/admin/practices/people/data')
+    ]);
+    const settingsData = await settingsResp.json();
+    const peopleData = await peopleResp.json();
+    practiceDays = settingsData.practice_days || [];
+    coachesData = peopleData.coaches || [];
 }
 
 function renderPracticeDays() {
@@ -786,20 +792,200 @@ function renderPracticeDays() {
     }
 
     container.innerHTML = practiceDays.map((day, index) => `
-        <div class="practice-day-row flex items-center gap-3 p-3 bg-gray-50 rounded-lg border border-gray-200" data-index="${index}">
-            <select onchange="updatePracticeDay(${index}, 'day', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white min-w-[140px]">
-                ${['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d =>
-                    `<option value="${d}" ${day.day?.toLowerCase() === d ? 'selected' : ''}>${d.charAt(0).toUpperCase() + d.slice(1)}</option>`
-                ).join('')}
-            </select>
-            <input type="time" value="${day.time || '18:00'}" onchange="updatePracticeDay(${index}, 'time', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white w-[120px]">
-            <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
-                <input type="checkbox" ${day.active !== false ? 'checked' : ''} onchange="updatePracticeDay(${index}, 'active', this.checked)" class="w-[18px] h-[18px] cursor-pointer">
-                Active
-            </label>
-            <button type="button" class="ml-auto bg-transparent border-none text-red-600 font-medium text-sm cursor-pointer py-1 px-2 hover:underline" onclick="removePracticeDay(${index})">Remove</button>
+        <div class="practice-day-row bg-gray-50 rounded-lg border border-gray-200" data-index="${index}">
+            <div class="flex items-center gap-3 p-3">
+                <select onchange="updatePracticeDay(${index}, 'day', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white min-w-[140px]">
+                    ${['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday'].map(d =>
+                        `<option value="${d}" ${day.day?.toLowerCase() === d ? 'selected' : ''}>${d.charAt(0).toUpperCase() + d.slice(1)}</option>`
+                    ).join('')}
+                </select>
+                <input type="time" value="${day.time || '18:00'}" onchange="updatePracticeDay(${index}, 'time', this.value)" class="py-2 px-3 border border-gray-300 rounded-md text-sm bg-white w-[120px]">
+                <label class="flex items-center gap-1.5 text-sm text-gray-700 cursor-pointer">
+                    <input type="checkbox" ${day.active !== false ? 'checked' : ''} onchange="updatePracticeDay(${index}, 'active', this.checked)" class="w-[18px] h-[18px] cursor-pointer">
+                    Active
+                </label>
+                <button type="button" class="ml-auto bg-transparent border-none text-red-600 font-medium text-sm cursor-pointer py-1 px-2 hover:underline" onclick="removePracticeDay(${index})">Remove</button>
+            </div>
+            <div class="px-3 pb-1">
+                <button type="button" onclick="toggleDefaults(${index})" class="text-xs text-tcsc-navy font-medium cursor-pointer bg-transparent border-none hover:underline flex items-center gap-1">
+                    <span id="defaults-chevron-${index}" class="transition-transform ${day._expanded ? 'rotate-90' : ''}">&rsaquo;</span>
+                    Defaults: <span class="font-normal text-gray-500">${renderDefaultsSummary(day.defaults)}</span>
+                </button>
+            </div>
+            <div id="defaults-editor-${index}" class="${day._expanded ? '' : 'hidden'} border-t border-gray-200 p-3 bg-white rounded-b-lg">
+                ${renderDefaultsEditor(index, day.defaults)}
+            </div>
         </div>
     `).join('');
+}
+
+function renderDefaultsSummary(defaults) {
+    if (!defaults) return 'None';
+    const parts = [];
+    if (defaults.location_id) {
+        const loc = locationsData.find(l => l.id === defaults.location_id);
+        if (loc) parts.push(loc.name);
+    }
+    if (defaults.activity_ids?.length) {
+        const names = defaults.activity_ids
+            .map(id => activitiesData.find(a => a.id === id)?.name)
+            .filter(Boolean);
+        if (names.length) parts.push(names.join(', '));
+    }
+    if (defaults.type_ids?.length) {
+        const names = defaults.type_ids
+            .map(id => typesData.find(t => t.id === id)?.name)
+            .filter(Boolean);
+        if (names.length) parts.push(names.join(', '));
+    }
+    if (defaults.coach_ids?.length) {
+        parts.push(`${defaults.coach_ids.length} coach${defaults.coach_ids.length > 1 ? 'es' : ''}`);
+    }
+    if (defaults.is_dark_practice) parts.push('Dark');
+    if (defaults.warmup || defaults.workout || defaults.cooldown) parts.push('Workout');
+    return parts.length ? parts.join(', ') : 'None';
+}
+
+function renderDefaultsEditor(index, defaults) {
+    const d = defaults || {};
+    return `
+        <div class="grid grid-cols-2 gap-4 mb-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Location</label>
+                <select onchange="updateDefault(${index}, 'location_id', this.value ? parseInt(this.value) : null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm bg-white">
+                    <option value="">— None —</option>
+                    ${locationsData.map(l => `<option value="${l.id}" ${d.location_id === l.id ? 'selected' : ''}>${l.name}${l.spot ? ' - ' + l.spot : ''}</option>`).join('')}
+                </select>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Social Location</label>
+                <select onchange="updateDefault(${index}, 'social_location_id', this.value ? parseInt(this.value) : null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm bg-white">
+                    <option value="">— None —</option>
+                    ${socialLocationsData.map(l => `<option value="${l.id}" ${d.social_location_id === l.id ? 'selected' : ''}>${l.name}</option>`).join('')}
+                </select>
+            </div>
+        </div>
+        <div class="mb-4">
+            <label class="flex items-center gap-1.5 text-xs font-medium text-gray-600 cursor-pointer">
+                <input type="checkbox" ${d.is_dark_practice ? 'checked' : ''} onchange="updateDefault(${index}, 'is_dark_practice', this.checked)" class="w-4 h-4 cursor-pointer">
+                Dark Practice
+            </label>
+        </div>
+        <div class="grid grid-cols-3 gap-3 mb-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Warmup</label>
+                <input type="text" value="${(d.warmup || '').replace(/"/g, '&quot;')}" onchange="updateDefault(${index}, 'warmup', this.value || null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm" placeholder="e.g., Skiathlon Warmup">
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Workout</label>
+                <textarea onchange="updateDefault(${index}, 'workout', this.value || null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm resize-y" rows="2" placeholder="e.g., 5 stations...">${(d.workout || '').replace(/</g, '&lt;')}</textarea>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Cooldown</label>
+                <input type="text" value="${(d.cooldown || '').replace(/"/g, '&quot;')}" onchange="updateDefault(${index}, 'cooldown', this.value || null)" class="w-full py-1.5 px-2 border border-gray-300 rounded text-sm" placeholder="e.g., Stretching">
+            </div>
+        </div>
+        <div class="grid grid-cols-3 gap-3 mb-4">
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Activities</label>
+                <div class="max-h-[120px] overflow-y-auto border border-gray-200 rounded p-2 bg-white">
+                    ${activitiesData.map(a => `
+                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer py-0.5">
+                            <input type="checkbox" ${(d.activity_ids || []).includes(a.id) ? 'checked' : ''}
+                                onchange="updateDefaultArray(${index}, 'activity_ids', ${a.id}, this.checked)"
+                                class="w-3.5 h-3.5 cursor-pointer">
+                            ${a.name}
+                        </label>
+                    `).join('')}
+                    ${activitiesData.length === 0 ? '<span class="text-xs text-gray-400">No activities</span>' : ''}
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Types</label>
+                <div class="max-h-[120px] overflow-y-auto border border-gray-200 rounded p-2 bg-white">
+                    ${typesData.map(t => `
+                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer py-0.5">
+                            <input type="checkbox" ${(d.type_ids || []).includes(t.id) ? 'checked' : ''}
+                                onchange="updateDefaultArray(${index}, 'type_ids', ${t.id}, this.checked)"
+                                class="w-3.5 h-3.5 cursor-pointer">
+                            ${t.name}
+                        </label>
+                    `).join('')}
+                    ${typesData.length === 0 ? '<span class="text-xs text-gray-400">No types</span>' : ''}
+                </div>
+            </div>
+            <div>
+                <label class="block text-xs font-medium text-gray-600 mb-1">Coaches</label>
+                <div class="max-h-[120px] overflow-y-auto border border-gray-200 rounded p-2 bg-white">
+                    ${coachesData.map(c => `
+                        <label class="flex items-center gap-1.5 text-xs text-gray-700 cursor-pointer py-0.5">
+                            <input type="checkbox" ${(d.coach_ids || []).includes(c.id) ? 'checked' : ''}
+                                onchange="updateDefaultArray(${index}, 'coach_ids', ${c.id}, this.checked)"
+                                class="w-3.5 h-3.5 cursor-pointer">
+                            ${c.name}
+                        </label>
+                    `).join('')}
+                    ${coachesData.length === 0 ? '<span class="text-xs text-gray-400">No coaches</span>' : ''}
+                </div>
+            </div>
+        </div>
+        <button type="button" onclick="clearDefaults(${index})" class="text-xs text-red-600 font-medium cursor-pointer bg-transparent border-none hover:underline">Clear Defaults</button>
+    `;
+}
+
+function toggleDefaults(index) {
+    const editor = document.getElementById('defaults-editor-' + index);
+    const chevron = document.getElementById('defaults-chevron-' + index);
+    if (!editor) return;
+    const isHidden = editor.classList.contains('hidden');
+    editor.classList.toggle('hidden');
+    if (chevron) chevron.classList.toggle('rotate-90', isHidden);
+    practiceDays[index]._expanded = isHidden;
+}
+
+function updateDefault(index, field, value) {
+    if (!practiceDays[index].defaults) {
+        practiceDays[index].defaults = {};
+    }
+    if (value === null || value === '' || value === false) {
+        delete practiceDays[index].defaults[field];
+    } else {
+        practiceDays[index].defaults[field] = value;
+    }
+    // If defaults object is empty, set to null
+    if (Object.keys(practiceDays[index].defaults).length === 0) {
+        practiceDays[index].defaults = null;
+    }
+    // Update summary text
+    renderPracticeDays();
+}
+
+function updateDefaultArray(index, field, id, checked) {
+    if (!practiceDays[index].defaults) {
+        practiceDays[index].defaults = {};
+    }
+    const arr = practiceDays[index].defaults[field] || [];
+    if (checked && !arr.includes(id)) {
+        arr.push(id);
+    } else if (!checked) {
+        const idx = arr.indexOf(id);
+        if (idx >= 0) arr.splice(idx, 1);
+    }
+    if (arr.length > 0) {
+        practiceDays[index].defaults[field] = arr;
+    } else {
+        delete practiceDays[index].defaults[field];
+    }
+    // If defaults object is empty, set to null
+    if (Object.keys(practiceDays[index].defaults).length === 0) {
+        practiceDays[index].defaults = null;
+    }
+    // Don't re-render to preserve checkbox state and scroll position
+}
+
+function clearDefaults(index) {
+    practiceDays[index].defaults = null;
+    renderPracticeDays();
 }
 
 function updatePracticeDay(index, field, value) {
@@ -824,10 +1010,12 @@ function removePracticeDay(index) {
 
 async function savePracticeDays() {
     try {
+        // Strip internal state (_expanded) before saving
+        const cleanDays = practiceDays.map(({_expanded, ...rest}) => rest);
         const response = await fetch('/admin/practices/settings/practice-days', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ practice_days: practiceDays })
+            body: JSON.stringify({ practice_days: cleanDays })
         });
 
         const result = await response.json();
