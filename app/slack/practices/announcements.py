@@ -81,8 +81,16 @@ def post_practice_announcement(
                 timestamp=message_ts,
                 name="white_check_mark"
             )
+            # Add evergreen tree for interval practices (endurance option)
+            has_intervals = any(t.name.lower() == 'intervals' for t in practice.practice_types) if practice.practice_types else False
+            if has_intervals:
+                client.reactions_add(
+                    channel=channel_id,
+                    timestamp=message_ts,
+                    name="evergreen_tree"
+                )
         except Exception as e:
-            current_app.logger.warning(f"Could not add checkmark reaction: {e}")
+            current_app.logger.warning(f"Could not add reaction: {e}")
 
         # Create logging thread in #tcsc-logging
         try:
