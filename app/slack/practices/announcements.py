@@ -82,7 +82,7 @@ def post_practice_announcement(
                 name="white_check_mark"
             )
             # Add evergreen tree for interval practices (endurance option)
-            has_intervals = any(t.name.lower() == 'intervals' for t in practice.practice_types) if practice.practice_types else False
+            has_intervals = any('intervals' in t.name.lower() for t in practice.practice_types) if practice.practice_types else False
             if has_intervals:
                 client.reactions_add(
                     channel=channel_id,
