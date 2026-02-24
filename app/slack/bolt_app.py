@@ -881,6 +881,9 @@ if _bot_token:
             db.session.commit()
             logger.info(f"Practice {practice_id} updated by {user_id}")
 
+            from app.slack.practices import refresh_practice_posts
+            refresh_practice_posts(practice, change_type='edit', actor_slack_id=user_id)
+
     @bolt_app.view("practice_edit_full")
     def handle_practice_edit_full_submission(ack, body, view, client, logger):
         """Handle full practice edit modal submission from collab channel.
@@ -1039,6 +1042,9 @@ if _bot_token:
 
             db.session.commit()
             logger.info(f"Workout posted for practice {practice_id} by {user_id}")
+
+            from app.slack.practices import refresh_practice_posts
+            refresh_practice_posts(practice, change_type='workout', actor_slack_id=user_id)
 
     @bolt_app.view("lead_substitution")
     def handle_substitution_submission(ack, body, view, client, logger):
@@ -1579,6 +1585,10 @@ def _process_lead_confirmation(practice_id: int, confirmed: bool, slack_user_id:
         lead_assignment.confirmed = True
         lead_assignment.confirmed_at = datetime.utcnow()
         db.session.commit()
+
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='edit')
+
         return {"success": True, "message": "Confirmed"}
     else:
         result = post_substitution_request(
