@@ -63,6 +63,9 @@ from app.slack.practices.rsvp import (
 from app.slack.practices.app_home import (
     publish_app_home,
 )
+from app.slack.practices.refresh import (
+    refresh_practice_posts,
+)
 
 __all__ = [
     # _config
@@ -116,4 +119,6 @@ __all__ = [
     "log_rsvp_action",
     # app_home
     "publish_app_home",
+    # refresh
+    "refresh_practice_posts",
 ]
