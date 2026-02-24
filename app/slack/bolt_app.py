@@ -1526,8 +1526,6 @@ def _process_cancellation_decision(
     from app.models import db, User
     from app.practices.models import CancellationRequest, Practice
     from app.practices.interfaces import CancellationStatus, PracticeStatus
-    from app.slack.practices import update_practice_as_cancelled
-
     proposal = CancellationRequest.query.get(proposal_id)
     if not proposal:
         return {"success": False, "error": "Proposal not found"}
@@ -1553,8 +1551,8 @@ def _process_cancellation_decision(
     decided_by_name = f"<@{user_id}>"
 
     if approved:
-        # Update the original practice post and add thread reply
-        update_practice_as_cancelled(practice, decided_by_name)
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='cancel', actor_slack_id=user_id)
 
     return {"success": True}
 
