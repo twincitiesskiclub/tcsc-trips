@@ -234,7 +234,7 @@ def build_practice_announcement_blocks(
     # RSVP CTA: Encourage emoji reactions
     # ==========================================================================
     # Check if this practice includes intervals
-    has_intervals = any(t.name.lower() == 'intervals' for t in practice.practice_types) if practice.practice_types else False
+    has_intervals = any('intervals' in t.name.lower() for t in practice.practice_types) if practice.practice_types else False
 
     if has_intervals:
         cta_text = "Bop :white_check_mark: so we'll know you'll be there. :evergreen_tree: if you'll be there but doing endurance. Running late? Drop a comment in the thread. <!channel>"
