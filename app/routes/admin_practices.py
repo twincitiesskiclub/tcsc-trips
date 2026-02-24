@@ -294,14 +294,9 @@ def edit_practice(practice_id):
 
         db.session.commit()
 
-        # Update Slack post if one exists
-        if practice.slack_message_ts:
-            from app.slack.practices import update_practice_slack_post
-            result = update_practice_slack_post(practice)
-            if not result.get('success'):
-                current_app.logger.warning(
-                    f"Failed to update Slack post for practice #{practice.id}: {result.get('error')}"
-                )
+        # Update all Slack posts
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='edit')
 
         return jsonify({
             'success': True,
@@ -320,6 +315,10 @@ def delete_practice(practice_id):
     practice = Practice.query.get_or_404(practice_id)
 
     try:
+        # Clean up Slack posts before deleting DB record
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='delete')
+
         db.session.delete(practice)
         db.session.commit()
 
@@ -346,6 +345,10 @@ def cancel_practice(practice_id):
         practice.cancellation_reason = data.get('reason', 'Cancelled by admin')
 
         db.session.commit()
+
+        # Update all Slack posts to show cancelled status
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='cancel')
 
         return jsonify({
             'success': True,

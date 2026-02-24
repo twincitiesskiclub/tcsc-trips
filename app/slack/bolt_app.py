@@ -881,6 +881,9 @@ if _bot_token:
             db.session.commit()
             logger.info(f"Practice {practice_id} updated by {user_id}")
 
+            from app.slack.practices import refresh_practice_posts
+            refresh_practice_posts(practice, change_type='edit', actor_slack_id=user_id)
+
     @bolt_app.view("practice_edit_full")
     def handle_practice_edit_full_submission(ack, body, view, client, logger):
         """Handle full practice edit modal submission from collab channel.
@@ -897,14 +900,7 @@ if _bot_token:
         with get_app_context():
             from app.practices.models import Practice, PracticeLead, PracticeActivity, PracticeType
             from app.models import db
-            from app.slack.practices import (
-                update_practice_post,
-                update_practice_slack_post,
-                update_collab_post,
-                log_practice_edit,
-                log_collab_edit,
-                log_coach_summary_edit
-            )
+            from app.slack.practices import refresh_practice_posts
 
             practice = Practice.query.get(practice_id)
             if not practice:
@@ -980,89 +976,8 @@ if _bot_token:
             db.session.commit()
             logger.info(f"Practice {practice_id} fully updated by {user_id}")
 
-            # Update the coach summary post if this practice is linked to one
-            if practice.slack_coach_summary_ts:
-                try:
-                    from datetime import timedelta
-                    from app.models import AppConfig
-                    from app.practices.service import convert_practice_to_info
-                    from app.slack.blocks import build_coach_weekly_summary_blocks
-                    from app.slack.practices import COLLAB_CHANNEL_ID
-
-                    # Calculate week boundaries from the practice date
-                    practice_date = practice.date
-                    days_since_monday = practice_date.weekday()
-                    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                    week_end = week_start + timedelta(days=7)
-
-                    # Get all practices for the week
-                    practices_for_week = Practice.query.filter(
-                        Practice.date >= week_start,
-                        Practice.date < week_end
-                    ).order_by(Practice.date).all()
-
-                    # Get expected days from config
-                    expected_days = AppConfig.get('practice_days', [
-                        {"day": "tuesday", "time": "18:00", "active": True},
-                        {"day": "thursday", "time": "18:00", "active": True},
-                        {"day": "saturday", "time": "09:00", "active": True}
-                    ])
-
-                    # Rebuild blocks
-                    practice_infos = [convert_practice_to_info(p) for p in practices_for_week]
-                    blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
-
-                    # Try to update the summary message
-                    # First try COLLAB_CHANNEL_ID (production), then fallback channels
-                    channels_to_try = [COLLAB_CHANNEL_ID, 'C053T1AR48Y']  # collab + tcsc-devs
-                    for channel in channels_to_try:
-                        try:
-                            client.chat_update(
-                                channel=channel,
-                                ts=practice.slack_coach_summary_ts,
-                                blocks=blocks,
-                                text=f"Coach Review: Week of {week_start.strftime('%B %-d')}"
-                            )
-                            logger.info(f"Updated coach summary post in {channel}")
-                            break
-                        except Exception:
-                            continue
-                except Exception as e:
-                    logger.warning(f"Could not update coach summary post: {e}")
-
-            # Update the #practices post (handles both individual and combined lift posts)
-            if practice.slack_message_ts:
-                try:
-                    update_practice_slack_post(practice)
-                    if should_notify:
-                        log_practice_edit(practice, user_id)
-                except Exception as e:
-                    logger.warning(f"Could not update #practices post: {e}")
-
-            # Route edit notification based on which thread to use
-            if should_notify:
-                # Prefer coach summary thread if it exists
-                if practice.slack_coach_summary_ts:
-                    try:
-                        log_coach_summary_edit(practice, user_id)
-                    except Exception as e:
-                        logger.warning(f"Could not log to coach summary thread: {e}")
-                # Fall back to individual collab post thread
-                elif practice.slack_collab_message_ts:
-                    try:
-                        update_collab_post(practice)
-                        log_collab_edit(practice, user_id)
-                    except Exception as e:
-                        logger.warning(f"Could not update collab post: {e}")
-            else:
-                # Silent update - just update the collab post without logging
-                if practice.slack_collab_message_ts:
-                    try:
-                        update_collab_post(practice)
-                    except Exception as e:
-                        logger.warning(f"Could not update collab post: {e}")
+            # Refresh all Slack posts
+            refresh_practice_posts(practice, change_type='edit', actor_slack_id=user_id, notify=should_notify)
 
     @bolt_app.view("practice_rsvp")
     def handle_rsvp_modal_submission(ack, body, view, client, logger):
@@ -1127,6 +1042,9 @@ if _bot_token:
 
             db.session.commit()
             logger.info(f"Workout posted for practice {practice_id} by {user_id}")
+
+            from app.slack.practices import refresh_practice_posts
+            refresh_practice_posts(practice, change_type='workout', actor_slack_id=user_id)
 
     @bolt_app.view("lead_substitution")
     def handle_substitution_submission(ack, body, view, client, logger):
@@ -1608,8 +1526,6 @@ def _process_cancellation_decision(
     from app.models import db, User
     from app.practices.models import CancellationRequest, Practice
     from app.practices.interfaces import CancellationStatus, PracticeStatus
-    from app.slack.practices import update_practice_as_cancelled
-
     proposal = CancellationRequest.query.get(proposal_id)
     if not proposal:
         return {"success": False, "error": "Proposal not found"}
@@ -1635,8 +1551,8 @@ def _process_cancellation_decision(
     decided_by_name = f"<@{user_id}>"
 
     if approved:
-        # Update the original practice post and add thread reply
-        update_practice_as_cancelled(practice, decided_by_name)
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='cancel', actor_slack_id=user_id)
 
     return {"success": True}
 
@@ -1667,6 +1583,10 @@ def _process_lead_confirmation(practice_id: int, confirmed: bool, slack_user_id:
         lead_assignment.confirmed = True
         lead_assignment.confirmed_at = datetime.utcnow()
         db.session.commit()
+
+        from app.slack.practices import refresh_practice_posts
+        refresh_practice_posts(practice, change_type='edit')
+
         return {"success": True, "message": "Confirmed"}
     else:
         result = post_substitution_request(

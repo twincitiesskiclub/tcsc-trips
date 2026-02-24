@@ -187,6 +187,14 @@ def run_weekly_summary(channel_override: str = None) -> dict:
                 results['slack_posted'] = True
                 results['slack_message_ts'] = response.get('ts')
                 results['channel_override'] = channel_override
+
+                # Save message_ts to each practice so refresh_practice_posts can find it
+                from app.models import db
+                message_ts = response.get('ts')
+                for practice in practices:
+                    practice.slack_weekly_summary_ts = message_ts
+                db.session.commit()
+                logger.info(f"Linked {len(practices)} practices to weekly summary post")
             else:
                 logger.error(f"Could not find channel #{channel_name}")
                 results['slack_posted'] = False
