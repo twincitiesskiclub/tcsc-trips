@@ -192,6 +192,9 @@ def _handle_rsvp_command(practice_id: int, status: str, user_id: str, user_name:
 
     db.session.commit()
 
+    from app.slack.practices import refresh_practice_posts
+    refresh_practice_posts(practice, change_type='rsvp')
+
     status_emoji = {
         'going': ':white_check_mark:',
         'not_going': ':x:',
