@@ -138,7 +138,6 @@ class User(db.Model):
     notes = db.Column(db.Text)
     user_metadata = db.Column(JSON)
     phone = db.Column(db.String(20))
-    address = db.Column(db.String(255))
     date_of_birth = db.Column(db.Date)
     pronouns = db.Column(db.String(50))
     preferred_technique = db.Column(db.String(50))

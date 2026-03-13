@@ -96,7 +96,6 @@ def season_register(season_id):
                 pronouns=form.get('pronouns'),
                 date_of_birth=None,  # will set below
                 phone=form['phone'],
-                address=form['address'],
                 preferred_technique=form.get('technique'),
                 tshirt_size=form['tshirtSize'],
                 ski_experience=form.get('experience'),
