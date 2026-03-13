@@ -14,10 +14,6 @@ payments = Blueprint('payments', __name__)
 def get_stripe_key():
     return jsonify({'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')})
 
-@payments.route('/get-google-places-key')
-def get_google_places_key():
-    return jsonify({'apiKey': os.getenv('GOOGLE_PLACES_API_KEY', '')})
-
 @payments.route('/create-payment-intent', methods=['POST'])
 def create_payment():
     try:
@@ -164,7 +160,7 @@ def webhook_received():
                 if user_season:
                     user_season.status = UserSeasonStatus.ACTIVE
                     user_season.payment_date = today_central()
-                    user.status = UserStatus.ACTIVE
+                    user.sync_status()
                 elif member_type == MemberType.RETURNING.value:
                     # Create UserSeason for returning member
                     user_season = UserSeason(
@@ -176,7 +172,7 @@ def webhook_received():
                         status=UserSeasonStatus.ACTIVE
                     )
                     db.session.add(user_season)
-                    user.status = UserStatus.ACTIVE
+                    user.sync_status()
 
             # Create or update Payment record
             payment = Payment.get_by_payment_intent(payment_intent.id)
@@ -252,7 +248,7 @@ def capture_payment(payment_id):
                 if user_season:
                     user_season.status = UserSeasonStatus.ACTIVE
                     user_season.payment_date = today_central()
-                    user.status = UserStatus.ACTIVE
+                    user.sync_status()
                 # Link payment to user if not already linked
                 if not payment.user_id:
                     payment.user_id = user.id
@@ -309,7 +305,8 @@ def refund_payment(payment_id):
             if user:
                 user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
                 if user_season:
-                    user_season.status = UserSeasonStatus.DROPPED
+                    user_season.status = UserSeasonStatus.DROPPED_VOLUNTARY
+                    user.sync_status()
 
         db.session.commit()
 
@@ -369,7 +366,7 @@ def bulk_capture_payments():
                         if user_season:
                             user_season.status = UserSeasonStatus.ACTIVE
                             user_season.payment_date = today_central()
-                            user.status = UserStatus.ACTIVE
+                            user.sync_status()
                         if not payment.user_id:
                             payment.user_id = user.id
 
@@ -431,7 +428,8 @@ def bulk_refund_payments():
                     if user:
                         user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
                         if user_season:
-                            user_season.status = UserSeasonStatus.DROPPED
+                            user_season.status = UserSeasonStatus.DROPPED_VOLUNTARY
+                            user.sync_status()
 
                 results.append({'id': payment_id, 'success': True})
 
