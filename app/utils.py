@@ -7,7 +7,7 @@ import re
 from .constants import (
     TIMEZONE, DATE_FORMAT, DATETIME_FORMAT,
     VALID_TSHIRT_SIZES, VALID_TECHNIQUES, VALID_EXPERIENCE_LEVELS, VALID_MEMBER_STATUSES,
-    MAX_NAME_LENGTH, MAX_ADDRESS_LENGTH, MAX_PHONE_LENGTH, MAX_PRONOUNS_LENGTH,
+    MAX_NAME_LENGTH, MAX_PHONE_LENGTH, MAX_PRONOUNS_LENGTH,
     MAX_RELATION_LENGTH, MIN_MEMBER_AGE, MAX_MEMBER_AGE
 )
 
@@ -239,11 +239,6 @@ def validate_registration_form(form: dict, dob: date = None) -> tuple[bool, list
 
     # Phone
     valid, msg = validate_phone(form.get('phone', ''), 'Phone number')
-    if not valid:
-        errors.append(msg)
-
-    # Address
-    valid, msg = validate_required_string(form.get('address', ''), 'Address', MAX_ADDRESS_LENGTH)
     if not valid:
         errors.append(msg)
 
