@@ -331,7 +331,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const STORAGE_KEY = `tcsc-registration-${registrationForm.dataset.seasonId}`;
     const FIELDS_TO_SAVE = [
       'email', 'status', 'firstName', 'lastName', 'pronouns', 'dob',
-      'phone', 'address', 'tshirtSize', 'technique', 'experience',
+      'phone', 'tshirtSize', 'technique', 'experience',
       'emergencyName', 'emergencyRelation', 'emergencyPhone', 'emergencyEmail', 'name'
     ];
 
@@ -401,50 +401,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Restore form state on page load
     restoreFormState();
     // --- End Form State Persistence ---
-
-    // --- Google Places Address Autocomplete (Classic API) ---
-    async function initAddressAutocomplete() {
-      try {
-        // Fetch API key from backend
-        const response = await fetch('/get-google-places-key');
-        const { apiKey } = await response.json();
-        if (!apiKey) return; // Skip if no API key configured
-
-        const addressInput = document.getElementById('address');
-        if (!addressInput) return;
-
-        // Define the callback function globally before loading the script
-        window.initGooglePlaces = function() {
-          const autocomplete = new google.maps.places.Autocomplete(addressInput, {
-            componentRestrictions: { country: 'us' },
-            types: ['address'],
-            fields: ['formatted_address']
-          });
-
-          // Handle place selection
-          autocomplete.addListener('place_changed', () => {
-            const place = autocomplete.getPlace();
-            if (place.formatted_address) {
-              addressInput.value = place.formatted_address;
-              debouncedSave();
-            }
-          });
-        };
-
-        // Load Google Maps script with callback
-        const script = document.createElement('script');
-        script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places&callback=initGooglePlaces`;
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-      } catch (e) {
-        console.warn('Failed to initialize address autocomplete:', e);
-      }
-    }
-
-    // Initialize address autocomplete
-    initAddressAutocomplete();
-    // --- End Address Autocomplete ---
 
     async function fetchStripeKey() {
       const response = await fetch('/get-stripe-key');
