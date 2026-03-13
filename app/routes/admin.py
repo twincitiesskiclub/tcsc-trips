@@ -582,7 +582,6 @@ def export_season_members(season_id):
         'Status',
         'Notes',
         'Phone',
-        'Address',
         'Date of Birth',
         'Pronouns',
         'Preferred Technique',
@@ -608,7 +607,6 @@ def export_season_members(season_id):
             user.status,
             user.notes or '',
             user.phone or '',
-            user.address or '',
             user.date_of_birth or '',
             user.pronouns or '',
             user.preferred_technique or '',
@@ -697,7 +695,6 @@ def get_users_data():
             'full_name': user.full_name,
             'email': user.email,
             'phone': user.phone or '',
-            'address': user.address or '',
             'status': user.status,
             'pronouns': user.pronouns or '',
             'date_of_birth': user.date_of_birth.isoformat() if user.date_of_birth else '',
@@ -812,7 +809,6 @@ def edit_user(user_id):
             update_if_present('email', request.form.get('email'))
             update_if_present('pronouns', request.form.get('pronouns'))
             update_if_present('phone', request.form.get('phone'))
-            update_if_present('address', request.form.get('address'))
             dob = request.form.get('date_of_birth')
             if dob:
                 try:
