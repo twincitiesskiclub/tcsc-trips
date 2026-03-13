@@ -55,8 +55,6 @@
                 <dd class="m-0 mt-1 text-tcsc-navy">{{ user.email }}</dd>
                 <dt class="font-medium text-tcsc-gray-600 text-sm mt-3">Phone</dt>
                 <dd class="m-0 mt-1 text-tcsc-navy">{{ user.phone or '-' }}</dd>
-                <dt class="font-medium text-tcsc-gray-600 text-sm mt-3">Address</dt>
-                <dd class="m-0 mt-1 text-tcsc-navy">{{ user.address or '-' }}</dd>
                 <dt class="font-medium text-tcsc-gray-600 text-sm mt-3">Slack UID</dt>
                 <dd class="m-0 mt-1 text-tcsc-navy">{{ user.slack_user.slack_uid if user.slack_user else '-' }}</dd>
             </dl>

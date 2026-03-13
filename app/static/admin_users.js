@@ -135,7 +135,6 @@ document.addEventListener('DOMContentLoaded', async () => {
             },
             {title: "Phone", field: "phone", minWidth: 120},
             {title: "Slack UID", field: "slack_uid", minWidth: 110},
-            {title: "Address", field: "address", minWidth: 200},
             {title: "Pronouns", field: "pronouns", minWidth: 100},
             {title: "DOB", field: "date_of_birth", minWidth: 110},
             {title: "Technique", field: "preferred_technique", minWidth: 100},
