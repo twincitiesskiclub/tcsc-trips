@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta
 from flask import current_app
 from app.models import db, User
+from app.utils import now_central_naive
 from app.practices.models import Practice, PracticeRSVP, PracticeLead
 from app.practices.interfaces import RSVPStatus
 
@@ -65,7 +66,7 @@ def _handle_practice_command(user_id: str) -> dict:
     Returns:
         Slack response dict
     """
-    now = datetime.utcnow()
+    now = now_central_naive()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
     week_end = today_start + timedelta(days=7)
 
@@ -227,7 +228,7 @@ def _handle_status_command(user_id: str) -> dict:
             'text': 'No account found. RSVP to a practice to create one!'
         }
 
-    now = datetime.utcnow()
+    now = now_central_naive()
     today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
     # Get upcoming RSVPs

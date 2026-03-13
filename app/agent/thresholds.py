@@ -17,6 +17,7 @@ from app.practices.interfaces import (
     EventConflict
 )
 from app.practices.models import Practice
+from app.utils import now_central_naive
 
 logger = logging.getLogger(__name__)
 
@@ -273,9 +274,9 @@ def check_lead_availability(
     if not confirmed_leads:
         # Check if we're within confirmation deadline
         deadline_hours = thresholds.get('lead_confirmation_deadline_hours', 24)
-        # Ensure both datetimes are naive UTC for comparison
+        # Ensure both datetimes are naive Central for comparison
         practice_dt = practice.date.replace(tzinfo=None) if practice.date.tzinfo else practice.date
-        time_until_practice = (practice_dt - datetime.utcnow()).total_seconds() / 3600
+        time_until_practice = (practice_dt - now_central_naive()).total_seconds() / 3600
 
         if time_until_practice <= deadline_hours:
             violations.append(ThresholdViolation(

@@ -446,10 +446,11 @@ def get_lift_practices():
         Practice.date <= datetime.now() + timedelta(days=7)
     ).order_by(Practice.date).all()
 
-    # Filter to practices with 'Strength' practice type
+    # Filter to practices with 'Strength' practice type or activity
     lift_practices = [
         p for p in practices
         if any(pt.name.lower() == 'strength' for pt in p.practice_types)
+        or any(a.name.lower() == 'strength' for a in p.activities)
     ]
 
     return lift_practices
@@ -552,24 +553,38 @@ def update_lift_prod():
         print("="*60)
 
 
-def post_coach_summary():
-    """Post coach weekly review summary to test channel."""
+def post_coach_summary(this_week=False):
+    """Post coach weekly review summary to test channel.
+
+    Args:
+        this_week: If True, post for current week (most recent Monday).
+                   If False (default), post for upcoming week (next Monday).
+    """
     from datetime import datetime, timedelta
     from app.slack.practices import post_coach_weekly_summary
     from app.models import AppConfig
 
     app = create_app()
     with app.app_context():
-        # Calculate start of upcoming week (next Monday)
         today = datetime.now()
-        days_until_monday = (7 - today.weekday()) % 7
-        if days_until_monday == 0:
-            days_until_monday = 7  # If today is Monday, get next Monday
-        week_start = (today + timedelta(days=days_until_monday)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
 
-        print(f"Posting coach weekly summary for week of {week_start.strftime('%B %d, %Y')}")
+        if this_week:
+            # Calculate start of current week (most recent Monday)
+            days_since_monday = today.weekday()  # Monday = 0
+            week_start = (today - timedelta(days=days_since_monday)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        else:
+            # Calculate start of upcoming week (next Monday)
+            days_until_monday = (7 - today.weekday()) % 7
+            if days_until_monday == 0:
+                days_until_monday = 7  # If today is Monday, get next Monday
+            week_start = (today + timedelta(days=days_until_monday)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        week_type = "CURRENT" if this_week else "NEXT"
+        print(f"Posting coach weekly summary for week of {week_start.strftime('%B %d, %Y')} ({week_type} week)")
         print(f"Target channel: #tcsc-devs (TEST)")
 
         # Get expected practice days from config
@@ -627,23 +642,32 @@ def post_coach_summary():
         print("- Click 'Add Practice' to test adding to a placeholder")
 
 
-def post_coach_summary_prod():
+def post_coach_summary_prod(this_week=False):
     """Post coach weekly review summary to production collab channel."""
     from datetime import datetime, timedelta
     from app.slack.practices import post_coach_weekly_summary
 
     app = create_app()
     with app.app_context():
-        # Calculate start of upcoming week (next Monday)
         today = datetime.now()
-        days_until_monday = (7 - today.weekday()) % 7
-        if days_until_monday == 0:
-            days_until_monday = 7  # If today is Monday, get next Monday
-        week_start = (today + timedelta(days=days_until_monday)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
 
-        print(f"Posting coach weekly summary for week of {week_start.strftime('%B %d, %Y')}")
+        if this_week:
+            # Calculate start of current week (most recent Monday)
+            days_since_monday = today.weekday()  # Monday = 0
+            week_start = (today - timedelta(days=days_since_monday)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+        else:
+            # Calculate start of upcoming week (next Monday)
+            days_until_monday = (7 - today.weekday()) % 7
+            if days_until_monday == 0:
+                days_until_monday = 7  # If today is Monday, get next Monday
+            week_start = (today + timedelta(days=days_until_monday)).replace(
+                hour=0, minute=0, second=0, microsecond=0
+            )
+
+        week_type = "CURRENT" if this_week else "NEXT"
+        print(f"Posting coach weekly summary for week of {week_start.strftime('%B %d, %Y')} ({week_type} week)")
         print(f"Target channel: #collab-coaches-practices (PRODUCTION)")
 
         confirm = input("\nPost to production? (y/N): ").strip().lower()
@@ -785,12 +809,110 @@ def update_weekly_summary():
                 blocks=new_blocks,
                 text="Weekly Practice Summary"
             )
+            # Save slack_weekly_summary_ts to all practices so future edits propagate
+            for p in practices:
+                p.slack_weekly_summary_ts = message_ts
+            db.session.commit()
+            print(f"Linked {len(practices)} practice(s) to weekly summary ts")
             print("\n" + "="*60)
             print("WEEKLY SUMMARY UPDATE COMPLETE")
             print("="*60)
             print(f"Updated message ts: {message_ts}")
         except Exception as e:
             print(f"\nFailed to update: {e}")
+
+
+def create_lift(time_str):
+    """Create a new strength practice for today at the given time.
+
+    Clones settings (location, practice types, activities) from an existing
+    strength practice today, if one exists.
+
+    Args:
+        time_str: Time in HH:MM format (24h) or H:MM PM format.
+    """
+    from datetime import datetime
+    from app.practices.interfaces import PracticeStatus
+
+    app = create_app()
+    with app.app_context():
+        # Parse the target time
+        target_time = None
+        for fmt in ('%I:%M %p', '%H:%M'):
+            try:
+                target_time = datetime.strptime(time_str, fmt).time()
+                break
+            except ValueError:
+                continue
+        if not target_time:
+            print(f"Could not parse time: {time_str}")
+            print("Use format like '7:20 PM' or '19:20'")
+            return
+
+        today_start = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        today_end = today_start + timedelta(days=1)
+        target_dt = today_start.replace(hour=target_time.hour, minute=target_time.minute)
+
+        # Check if a practice already exists at this time
+        existing = Practice.query.filter(
+            Practice.date == target_dt
+        ).first()
+        if existing:
+            print(f"Practice already exists at {target_dt.strftime('%I:%M %p')}: #{existing.id}")
+            return
+
+        # Find today's existing strength practices to clone from
+        todays = Practice.query.filter(
+            Practice.date >= today_start,
+            Practice.date < today_end
+        ).order_by(Practice.date).all()
+
+        strength_source = None
+        for p in todays:
+            if any(pt.name.lower() == 'strength' for pt in p.practice_types):
+                strength_source = p
+                break
+
+        # Create new practice
+        new_practice = Practice(
+            date=target_dt,
+            day_of_week=target_dt.strftime('%A'),
+            status=PracticeStatus.SCHEDULED.value,
+        )
+
+        if strength_source:
+            print(f"Cloning from practice #{strength_source.id} ({strength_source.date.strftime('%I:%M %p')})")
+            new_practice.location_id = strength_source.location_id
+            new_practice.social_location_id = strength_source.social_location_id
+            new_practice.warmup_description = strength_source.warmup_description
+            new_practice.workout_description = strength_source.workout_description
+            new_practice.cooldown_description = strength_source.cooldown_description
+            new_practice.is_dark_practice = strength_source.is_dark_practice
+        else:
+            print("No existing strength practice today to clone from")
+
+        db.session.add(new_practice)
+        db.session.flush()  # Get the ID
+
+        # Copy practice types from source (or find Strength type)
+        if strength_source:
+            for pt in strength_source.practice_types:
+                new_practice.practice_types.append(pt)
+            for act in strength_source.activities:
+                new_practice.activities.append(act)
+        else:
+            from app.practices.models import PracticeType as PT
+            strength_type = PT.query.filter(PT.name.ilike('strength')).first()
+            if strength_type:
+                new_practice.practice_types.append(strength_type)
+
+        db.session.commit()
+        print(f"\nCreated practice #{new_practice.id}")
+        print(f"  Date: {new_practice.date.strftime('%A %b %-d, %I:%M %p')}")
+        print(f"  Location: {new_practice.location.name if new_practice.location else 'None'}")
+        print(f"  Types: {[pt.name for pt in new_practice.practice_types]}")
+        print(f"  Status: {new_practice.status}")
+        print(f"\nNext: run 'update-lift-prod' to update the Slack post")
 
 
 def show_status():
@@ -825,8 +947,11 @@ if __name__ == '__main__':
         print("  post-lift-test - Post combined lift to tcsc-devs for testing")
         print("  post-lift-prod - Post combined lift to announcements-practices")
         print("  update-lift-prod - Update existing lift post")
-        print("  post-coach-summary - Post weekly coach summary to tcsc-devs")
-        print("  post-coach-summary-prod - Post weekly coach summary to collab-coaches-practices")
+        print("  create-lift <time> - Create strength practice at given time (e.g. '7:20 PM')")
+        print("  post-coach-summary - Post weekly coach summary to tcsc-devs (next week)")
+        print("  post-coach-summary-this-week - Post weekly coach summary to tcsc-devs (current week)")
+        print("  post-coach-summary-prod - Post weekly coach summary to collab-coaches-practices (next week)")
+        print("  post-coach-summary-prod-this-week - Post weekly coach summary to collab-coaches-practices (current week)")
         print("  update-weekly-summary - Find and update weekly summary in announcements-practices")
         print("  status      - Show current practice status")
         sys.exit(1)
@@ -849,10 +974,19 @@ if __name__ == '__main__':
         post_lift_prod()
     elif command == 'update-lift-prod':
         update_lift_prod()
+    elif command == 'create-lift':
+        if len(sys.argv) < 3:
+            print("Usage: python test_practice_post.py create-lift '7:20 PM'")
+            sys.exit(1)
+        create_lift(' '.join(sys.argv[2:]))
     elif command == 'post-coach-summary':
         post_coach_summary()
+    elif command == 'post-coach-summary-this-week':
+        post_coach_summary(this_week=True)
     elif command == 'post-coach-summary-prod':
         post_coach_summary_prod()
+    elif command == 'post-coach-summary-prod-this-week':
+        post_coach_summary_prod(this_week=True)
     elif command == 'update-weekly-summary':
         update_weekly_summary()
     elif command == 'status':
