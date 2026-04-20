@@ -631,7 +631,7 @@ def export_season_members(season_id):
     )
 
 def get_current_season():
-    """Get the current or next upcoming season."""
+    """Get the current, next upcoming, or most recent season."""
     today = datetime.utcnow().date()
     active_season = Season.query.filter(
         Season.start_date <= today,
@@ -640,9 +640,14 @@ def get_current_season():
 
     if active_season:
         return active_season
-    return Season.query.filter(
+
+    upcoming = Season.query.filter(
         Season.start_date > today
     ).order_by(Season.start_date.asc()).first()
+    if upcoming:
+        return upcoming
+
+    return Season.query.order_by(Season.end_date.desc()).first()
 
 
 @admin.route('/admin/users')
