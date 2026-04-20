@@ -478,7 +478,11 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function toggleLoadingState(isLoading) {
       const btn = document.getElementById('register-btn');
+      const text = document.getElementById('button-text');
+      const spinner = document.getElementById('button-spinner');
       if (btn) btn.disabled = isLoading;
+      if (text) text.style.display = isLoading ? 'none' : 'inline';
+      if (spinner) spinner.style.display = isLoading ? 'inline-flex' : 'none';
     }
 
     async function initStripe() {

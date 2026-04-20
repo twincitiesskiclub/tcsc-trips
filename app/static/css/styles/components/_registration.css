@@ -223,3 +223,18 @@
   border-color: #e53e3e !important;
   box-shadow: 0 0 0 1px #e53e3e;
 }
+
+#button-spinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
