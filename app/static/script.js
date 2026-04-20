@@ -438,9 +438,51 @@ document.addEventListener('DOMContentLoaded', () => {
       }
     }
 
+    function validateRequiredFields() {
+      let valid = true;
+      registrationForm.querySelectorAll('.field-error').forEach(el => {
+        el.classList.remove('field-error');
+      });
+
+      registrationForm.querySelectorAll('input[required], select[required]').forEach(field => {
+        if (field.type === 'radio') return;
+        if (field.type === 'checkbox') {
+          if (!field.checked) {
+            field.classList.add('field-error');
+            valid = false;
+          }
+          return;
+        }
+        if (!field.value.trim()) {
+          field.classList.add('field-error');
+          valid = false;
+        }
+      });
+
+      const radioNames = new Set();
+      registrationForm.querySelectorAll('input[type="radio"][required]').forEach(r => {
+        radioNames.add(r.name);
+      });
+      radioNames.forEach(name => {
+        const checked = registrationForm.querySelector(`input[name="${name}"]:checked`);
+        if (!checked) {
+          registrationForm.querySelectorAll(`input[name="${name}"]`).forEach(r => {
+            r.classList.add('field-error');
+          });
+          valid = false;
+        }
+      });
+
+      return valid;
+    }
+
     function toggleLoadingState(isLoading) {
       const btn = document.getElementById('register-btn');
+      const text = document.getElementById('button-text');
+      const spinner = document.getElementById('button-spinner');
       if (btn) btn.disabled = isLoading;
+      if (text) text.style.display = isLoading ? 'none' : 'inline';
+      if (spinner) spinner.style.display = isLoading ? 'inline-flex' : 'none';
     }
 
     async function initStripe() {
@@ -461,6 +503,13 @@ document.addEventListener('DOMContentLoaded', () => {
       showError('');
       isSubmitting = true;
       toggleLoadingState(true);
+
+      if (!validateRequiredFields()) {
+        showError('Please fill in all required fields before submitting.');
+        isSubmitting = false;
+        toggleLoadingState(false);
+        return;
+      }
 
       try {
         // Get payment info from form

@@ -154,9 +154,14 @@ def season_register(season_id):
                 user_season.status = UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
 
             db.session.commit()
-            # flash('Registration submitted successfully!', 'success')
             payment_hold = not is_returning
-            return render_template('season_success.html', season=season, payment_hold=payment_hold)
+            amount_display = f"${season.price_cents / 100:.2f}" if season.price_cents else None
+            return render_template('season_success.html',
+                season=season,
+                payment_hold=payment_hold,
+                amount_display=amount_display,
+                member_type=member_type
+            )
         except Exception as e:
             flash_error(f'Error submitting registration: {str(e)}')
             return redirect(url_for('registration.season_register', season_id=season_id))
