@@ -153,8 +153,14 @@
               </div>
             </fieldset>
 
-            <button type="submit" class="sr-button" id="register-btn">
-              <span>Register & Pay</span>
+            <button type="submit" class="registration-button" id="register-btn">
+              <span id="button-text">Register & Pay</span>
+              <span id="button-spinner" style="display: none;">
+                <svg width="20" height="20" viewBox="0 0 20 20" class="spin">
+                  <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="40" stroke-dashoffset="10"/>
+                </svg>
+                Processing...
+              </span>
             </button>
           </form>
         </div>
