@@ -315,8 +315,9 @@ function applyFilters() {
                 return false;
             }
         } else if (currentView === 'current' && currentSeason) {
-            // Only show members registered for current season
-            if (!data.seasons || !data.seasons[currentSeason.id]) {
+            // Only show active/pending members for current season (exclude dropped)
+            const seasonStatus = data.seasons && data.seasons[currentSeason.id];
+            if (!seasonStatus || seasonStatus === 'DROPPED_LOTTERY' || seasonStatus === 'DROPPED_VOLUNTARY' || seasonStatus === 'DROPPED_CAUSE') {
                 return false;
             }
         } else if (currentView === 'season' && selectedSeasonId) {
