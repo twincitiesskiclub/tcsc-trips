@@ -1,4 +1,4 @@
-.sr-root {
+.sr-root:has(.registration-form) {
   display: flex;
   flex-direction: column;
   justify-content: center;
@@ -9,11 +9,11 @@
   background: var(--g-l);
 }
 
-.sr-main {
+.sr-root:has(.registration-form) .sr-main {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  max-width: 600px;  /* Increased from default */
+  max-width: 600px;
   width: 100%;
   margin: 0 auto;
   padding: 0;
