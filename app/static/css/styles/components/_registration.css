@@ -6,7 +6,6 @@
   max-width: 700px;
   min-height: 100vh;
   padding: 48px 20px;
-  background: var(--g-l);
 }
 
 .sr-root:has(.registration-form) .sr-main {
