@@ -16,22 +16,29 @@
           </div>
           <h1 class="sr-header__title">Registration Complete</h1>
         </header>
-        <div class="season-card season-card--compact">
-          <h2>Thank you for registering!</h2>
-          <p>Your registration for <strong>{{ season.name }}</strong> has been received.</p>
-          <p>
+        <div class="sr-form-container">
+          <div class="form-section">
+            <h2>Thank you for registering!</h2>
+            <p>Your registration for <strong>{{ season.name }}</strong> has been received.</p>
+
             {% if payment_hold %}
-              A hold has been placed on your card. You will be notified if you are selected and your card will be charged at that time.
+              <p>A hold of <strong>{{ amount_display }}</strong> has been placed on your card. Your card will <strong>not</strong> be charged until your membership is confirmed.</p>
+              <p>You'll receive a receipt email from Stripe once your membership is confirmed and the charge is processed.</p>
+              <p style="background: #f0f4ff; padding: 12px; border-radius: 6px; font-size: 14px;">
+                <strong>Tip:</strong> Save this page or take a screenshot for your records.
+              </p>
             {% else %}
-              Your payment was successful and your membership is confirmed for this season.
+              <p>Your card has been charged <strong>{{ amount_display }}</strong>. Your membership for <strong>{{ season.name }}</strong> is confirmed!</p>
+              <p>You'll receive a receipt from Stripe shortly at the email address you provided.</p>
             {% endif %}
-          </p>
-          <p>If you have any questions, please contact <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a>.</p>
-          <div class="back-link-container--lg">
-            <a href="/" class="sr-button">&larr; Back to Home</a>
+
+            <p>If you have any questions, please contact <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a>.</p>
+          </div>
+          <div style="text-align: center; margin-top: 24px;">
+            <a href="/" class="registration-button" style="display: inline-block; text-decoration: none; max-width: 300px;">&larr; Back to Home</a>
           </div>
         </div>
       </div>
     </div>
   </body>
-</html> 
+</html>

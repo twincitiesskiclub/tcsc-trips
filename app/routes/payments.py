@@ -473,6 +473,7 @@ def create_season_payment_intent():
             currency='usd',
             capture_method=capture_method,
             receipt_email=email,
+            description=f"TCSC {season.name} Membership",
             metadata={
                 'name': name,
                 'email': email,
