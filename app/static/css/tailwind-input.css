@@ -258,7 +258,7 @@
   }
 
   .admin-toolbar {
-    @apply flex flex-wrap items-center gap-3 mb-4;
+    @apply flex items-center gap-3 mb-4;
   }
 
   .admin-toolbar-spacer {
