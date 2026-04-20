@@ -237,6 +237,8 @@ function applyGlobalView() {
         title = `${season ? season.name : 'Season'} Members`;
     } else if (currentView === 'alumni') {
         title = 'Alumni Members';
+    } else if (currentView === 'waitlist') {
+        title = 'Waitlist Members';
     } else {
         title = 'All Members';
     }
@@ -303,6 +305,13 @@ function applyFilters() {
         // Global view filter
         if (currentView === 'alumni') {
             if (data.status !== 'ALUMNI') {
+                return false;
+            }
+        } else if (currentView === 'waitlist') {
+            const statuses = Object.values(data.seasons || {});
+            const hasLotteryStatus = statuses.some(s => s === 'PENDING_LOTTERY' || s === 'DROPPED_LOTTERY');
+            const hasBeenActive = statuses.some(s => s === 'ACTIVE');
+            if (!hasLotteryStatus || hasBeenActive) {
                 return false;
             }
         } else if (currentView === 'current' && currentSeason) {
