@@ -1,22 +1,18 @@
-/*=============================================
-=            Base Styles                      =
-=============================================*/
-
 * { box-sizing: border-box }
 
 body {
-  font: 16px var(--f);
-  color: var(--p);
+  font: 16px var(--font-stack);
+  color: var(--text-primary);
   -webkit-font-smoothing: antialiased;
-  background: var(--w)
+  background: var(--bg-page);
+  margin: 0;
 }
 
-/* Typography */
-h1,h2,h3,h4,h5,h6 {
-  color: var(--p);
-  margin: 2px 0 4px
+h1, h2, h3, h4, h5, h6 {
+  color: var(--text-primary);
+  margin: 0;
 }
 
-h1 { font-size: 27px }
-h3 { font-size: 20px; margin-bottom: 16px }
-h4 { font-size: 14px; font-weight: 500; color: var(--g-l) }
+a { color: inherit; }
+
+img { max-width: 100%; height: auto; }

@@ -4,72 +4,83 @@
     <meta charset="utf-8" />
     <title>TCSC Dryland Triathlon</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   </head>
   <body>
-    <div class="sr-root">
-      <div class="sr-main">
-        <header class="sr-header">
-          <div class="sr-header__logo">
-            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
-          </div>
-          <h1 class="sr-header__title">Dryland Triathlon</h1>
-        </header>
-        <div class="triathlon-hero">
-          <h2>Roll. Ride. Run.</h2>
-          <div class="triathlon-hero__details">
-            <span class="triathlon-hero__date">Saturday, October 25th, 2025</span>
-            <span class="triathlon-hero__separator">•</span>
-            <span class="triathlon-hero__location">Carver Park Reserve, Parley Lake Area</span>
+    <div class="page">
+      <header class="page-header">
+        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
+      </header>
+
+      <div class="page-content page-content--medium">
+        <div style="text-align: center; margin-bottom: 32px;">
+          <h1 style="font-size: 28px; font-weight: 700;">Roll. Ride. Run.</h1>
+          <div style="display: flex; justify-content: center; gap: 16px; font-size: 15px; color: var(--text-muted); flex-wrap: wrap; margin-top: 8px;">
+            <span>📅 Saturday, October 25th, 2025</span>
+            <span>📍 Carver Park Reserve, Parley Lake Area</span>
           </div>
         </div>
-        <section class="triathlon-section">
-          <h3>About the Event</h3>
-          <p>Join us for TCSC's pilot year of the Dryland Triathlon! This fun event combines three common off-season activities for Nordic skiers: rollerskiing, mountain biking, and trail running. Show off your off-season gains before winter arrives!</p>
-          <p>Compete individually or with two teammates. Each leg starts and ends in the Parley Lake lot where your team will have a designated transition zone.</p>
-        </section>
-        <section class="triathlon-section">
-          <h3>Distances &amp; Schedule</h3>
-          <div class="triathlon-courses">
-            <div class="triathlon-course">
-              <strong>Long Course</strong>
-              <span>18K roll • 17K ride • 11K run</span>
-              <span class="triathlon-course__time">9:00 AM start</span>
+
+        <div class="form-section">
+          <h2 class="form-section__title">About the Event</h2>
+          <p style="color: var(--text-muted); line-height: 1.6; margin: 0 0 12px;">Join us for TCSC's pilot year of the Dryland Triathlon! This fun event combines three common off-season activities for Nordic skiers: rollerskiing, mountain biking, and trail running. Show off your off-season gains before winter arrives!</p>
+          <p style="color: var(--text-muted); line-height: 1.6; margin: 0;">Compete individually or with two teammates. Each leg starts and ends in the Parley Lake lot where your team will have a designated transition zone.</p>
+        </div>
+
+        <hr class="form-divider">
+
+        <div class="form-section">
+          <h2 class="form-section__title">Distances & Schedule</h2>
+          <div class="section-grid" style="margin-bottom: 16px;">
+            <div class="card" style="cursor: default;">
+              <span class="card__title">Long Course</span>
+              <p class="card__description">18K roll · 17K ride · 11K run</p>
+              <span class="card__meta-item">🕐 9:00 AM start</span>
             </div>
-            <div class="triathlon-course">
-              <strong>Short Course</strong>
-              <span>9.5K roll • 9K ride • 6K run</span>
-              <span class="triathlon-course__time">9:30 AM start</span>
+            <div class="card" style="cursor: default;">
+              <span class="card__title">Short Course</span>
+              <p class="card__description">9.5K roll · 9K ride · 6K run</p>
+              <span class="card__meta-item">🕐 9:30 AM start</span>
             </div>
           </div>
-          <p class="triathlon-guide-link"><a href="https://docs.google.com/document/d/14DYvbi9gYWKBf5l3jUw5JZHBa_0G9GQvz3l3xZzE3ME/edit?usp=sharing" target="_blank">View Participant Guide</a> for event details, rules, and course maps</p>
-        </section>
-        <section class="triathlon-section triathlon-registration">
-          <h3>Registration</h3>
-          <div class="triathlon-reg-buttons">
-            <a href="https://bit.ly/drytri25solo" target="_blank" class="triathlon-reg-button">
-              <span class="triathlon-reg-button__type">Individual</span>
-              <span class="triathlon-reg-button__price">$55</span>
+          <p style="color: var(--text-muted); font-size: 14px;"><a href="https://docs.google.com/document/d/14DYvbi9gYWKBf5l3jUw5JZHBa_0G9GQvz3l3xZzE3ME/edit?usp=sharing" target="_blank" style="color: var(--text-primary); text-decoration: underline;">View Participant Guide</a> for event details, rules, and course maps</p>
+        </div>
+
+        <hr class="form-divider">
+
+        <div class="form-section">
+          <h2 class="form-section__title">Registration</h2>
+          <div class="section-grid" style="margin-bottom: 12px;">
+            <a href="https://bit.ly/drytri25solo" target="_blank" class="btn btn--full" style="text-decoration: none; flex-direction: column; gap: 4px;">
+              <span style="font-size: 16px;">Individual</span>
+              <span style="font-size: 20px; font-weight: 700;">$55</span>
             </a>
-            <a href="https://bit.ly/drytri25team" target="_blank" class="triathlon-reg-button">
-              <span class="triathlon-reg-button__type">Team</span>
-              <span class="triathlon-reg-button__price">$105</span>
+            <a href="https://bit.ly/drytri25team" target="_blank" class="btn btn--full" style="text-decoration: none; flex-direction: column; gap: 4px;">
+              <span style="font-size: 16px;">Team</span>
+              <span style="font-size: 20px; font-weight: 700;">$105</span>
             </a>
           </div>
-          <p class="triathlon-discount-note">TCSC members receive a discount</p>
-        </section>
-        <section class="triathlon-section">
-          <h3>Team Finder</h3>
-          <p>Looking for teammates? Connect with other participants on the <a href="https://docs.google.com/spreadsheets/d/1h4gkY6P2khJ-ofArl5yBZdihDC98pv02BGN7OGEjWi4/edit?usp=sharing" target="_blank" class="triathlon-link">Team Finder Spreadsheet</a></p>
-        </section>
-        <section class="triathlon-section">
-          <h3>About TCSC</h3>
-          <p>The Twin Cities Ski Club (TCSC) is a welcoming community of Nordic skiers offering training, trips, and fun events for skiers of all abilities. Come meet fellow skiers and join the community!</p>
-        </section>
-        <div class="back-link-container">
-          <a href="/" class="trip-button">&larr; Back to Home</a>
+          <p style="text-align: center; color: var(--text-muted); font-size: 14px; font-style: italic;">TCSC members receive a discount</p>
+        </div>
+
+        <hr class="form-divider">
+
+        <div class="form-section">
+          <h2 class="form-section__title">Team Finder</h2>
+          <p style="color: var(--text-muted); line-height: 1.6; margin: 0;">Looking for teammates? Connect with other participants on the <a href="https://docs.google.com/spreadsheets/d/1h4gkY6P2khJ-ofArl5yBZdihDC98pv02BGN7OGEjWi4/edit?usp=sharing" target="_blank" style="color: var(--text-primary); text-decoration: underline;">Team Finder Spreadsheet</a></p>
+        </div>
+
+        <hr class="form-divider">
+
+        <div class="form-section">
+          <h2 class="form-section__title">About TCSC</h2>
+          <p style="color: var(--text-muted); line-height: 1.6; margin: 0;">The Twin Cities Ski Club (TCSC) is a welcoming community of Nordic skiers offering training, trips, and fun events for skiers of all abilities. Come meet fellow skiers and join the community!</p>
+        </div>
+
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="/" class="btn btn--secondary">&larr; Back to Home</a>
         </div>
       </div>
     </div>

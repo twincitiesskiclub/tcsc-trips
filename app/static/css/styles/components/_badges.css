@@ -1,0 +1,52 @@
+.badge {
+  display: inline-block;
+  font: 600 11px var(--font-stack);
+  padding: 3px 10px;
+  border-radius: var(--radius-badge);
+}
+
+.badge--open {
+  background: var(--status-open-bg);
+  color: var(--status-open-text);
+}
+
+.badge--upcoming {
+  background: var(--status-upcoming-bg);
+  color: var(--status-upcoming-text);
+}
+
+.badge--closed {
+  background: var(--status-closed-bg);
+  color: var(--status-closed-text);
+}
+
+.section-pill {
+  display: inline-block;
+  font: 600 12px var(--font-stack);
+  padding: 5px 14px;
+  border-radius: var(--radius-pill);
+  letter-spacing: 0.3px;
+}
+
+.section-pill--membership {
+  background: var(--pill-membership-bg);
+  color: var(--pill-membership-text);
+}
+
+.section-pill--trips {
+  background: var(--pill-trips-bg);
+  color: var(--pill-trips-text);
+}
+
+.section-pill--social {
+  background: var(--pill-social-bg);
+  color: var(--pill-social-text);
+}
+
+.badge--social {
+  background: var(--pill-social-bg);
+  color: var(--pill-social-text);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}

@@ -2,129 +2,119 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <title>TCSC Trip Registration</title>
+    <title>TCSC Registration</title>
     <meta name="description" content="Twin Cities Ski Club Registration" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   </head>
-
   <body>
-    <div class="sr-root">
-      <div class="sr-main">
-        <header class="sr-header">
-          <div class="sr-header__logo">
-            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
-          </div>
-          <h1 class="sr-header__title">TCSC Registration</h1>
-        </header>
+    <div class="page">
+      <header class="page-header">
+        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
+      </header>
 
-        <div class="trips-container">
-          {% if season %}
-          <div class="season-card">
-            <h2>{{ season.name }}</h2>
-            <div class="trip-details">
-              <div class="trip-detail-item">
-                <i class="fas fa-calendar"></i>
-                <span>{{ season.start_date.strftime('%b %d, %Y') }} to {{ season.end_date.strftime('%b %d, %Y') }}</span>
+      <div class="page-content">
+        {% if season %}
+        <div class="homepage-section">
+          <div class="section-pill section-pill--membership">Membership</div>
+          <div style="margin-top: 16px;">
+            <div class="card">
+              <div class="card__header">
+                <span class="card__title">{{ season.name }}</span>
+                {% if is_season_registration_open %}
+                  <span class="badge badge--open">Open</span>
+                {% elif season.returning_start and season.returning_start > now %}
+                  <span class="badge badge--upcoming">Upcoming</span>
+                {% elif season.new_start and season.new_start > now %}
+                  <span class="badge badge--upcoming">Upcoming</span>
+                {% else %}
+                  <span class="badge badge--closed">Closed</span>
+                {% endif %}
               </div>
-            </div>
-            <div class="season-status">
-              {% set returning_ended = season.returning_end and season.returning_end < now %}
-              {% set new_ended = season.new_end and season.new_end < now %}
-              
+              <div class="card__meta">
+                <span class="card__meta-item">📅 {{ season.start_date.strftime('%b %d, %Y') }} — {{ season.end_date.strftime('%b %d, %Y') }}</span>
+              </div>
               {% if is_season_registration_open %}
-                <span class="status-open">Registration is open!</span>
                 {% if season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end %}
-                    <span class="sub-status">Returning member window closes {{ season.returning_end|central_time }}.</span>
+                  <span class="card__subtext">Returning member window closes {{ season.returning_end|central_time }}.</span>
                 {% endif %}
                 {% if season.new_start and season.new_end and season.new_start <= now <= season.new_end %}
-                    <span class="sub-status">New member window closes {{ season.new_end|central_time }}.</span>
+                  <span class="card__subtext">New member window closes {{ season.new_end|central_time }}.</span>
                 {% endif %}
               {% elif season.returning_start and season.returning_start > now %}
-                <span class="status-upcoming">Registration opens for returning members on {{ season.returning_start|central_time }}.</span>
+                <span class="card__subtext">Registration opens for returning members on {{ season.returning_start|central_time }}.</span>
               {% elif season.new_start and season.new_start > now %}
-                <span class="status-upcoming">Registration opens for new members on {{ season.new_start|central_time }}.</span>
-              {% else %}{# Must be closed (after end dates) #}
-                <span class="status-closed">Registration is currently closed.</span>
+                <span class="card__subtext">Registration opens for new members on {{ season.new_start|central_time }}.</span>
               {% endif %}
+              <div class="card__footer">
+                {% if season.price_cents %}
+                  <span class="card__price">${{ "%.2f"|format(season.price_cents/100) }}</span>
+                {% else %}
+                  <span class="card__price"></span>
+                {% endif %}
+                {% if is_season_registration_open %}
+                  <a href="/seasons/{{ season.id }}" class="btn btn--small">Register</a>
+                {% else %}
+                  <a href="/seasons/{{ season.id }}" class="btn btn--small btn--secondary">Season Info</a>
+                {% endif %}
+              </div>
             </div>
-            {% if is_season_registration_open %}
-              <a href="/seasons/{{ season.id }}" class="trip-button">Season Info & Register</a>
-            {% else %}
-              {# Optionally, show a disabled button or just the status message above #}
-              <a href="/seasons/{{ season.id }}" class="trip-button trip-button--disabled">Season Info</a>
-            {% endif %}
           </div>
-          {% endif %}
-
-          {% for trip in trips %}
-          <div class="trip-card">
-            <h2>{{ trip.name }}</h2>
-            <div class="trip-details">
-              <div class="trip-detail-item">
-                <i class="fas fa-map-marker-alt"></i>
-                <span>{{ trip.destination }}</span>
-              </div>
-              <div class="trip-detail-item">
-                <i class="fas fa-calendar"></i>
-                <span>{{ trip.formatted_date_range }}</span>
-              </div>
-            </div>
-            <p class="trip-description">
-              {{ trip.description }}
-            </p>
-            <div class="trip-price">
-              {% if trip.price_low == trip.price_high %}
-                <span>${{ "%.2f"|format(trip.price_low/100) }}</span>
-              {% else %}
-                <span>${{ "%.2f"|format(trip.price_low/100) }} - ${{ "%.2f"|format(trip.price_high/100) }}</span>
-              {% endif %}
-            </div>
-            <a href="/{{ trip.slug }}" class="trip-button">Sign Up</a>
-          </div>
-          {% endfor %}
-
-          {% for event in social_events %}
-          <div class="trip-card social-event-card">
-            <span class="event-badge">Social Event</span>
-            <h2>{{ event.name }}</h2>
-            <div class="trip-details">
-              <div class="trip-detail-item">
-                <i class="fas fa-map-marker-alt"></i>
-                <span>{{ event.location }}</span>
-              </div>
-              <div class="trip-detail-item">
-                <i class="fas fa-calendar"></i>
-                <span>{{ event.formatted_date }}</span>
-              </div>
-              <div class="trip-detail-item">
-                <i class="fas fa-clock"></i>
-                <span>{{ event.formatted_time }}</span>
-              </div>
-            </div>
-            <p class="trip-description">
-              {{ event.description }}
-            </p>
-            <div class="trip-price">
-              <span>${{ "%.2f"|format(event.price/100) }}</span>
-            </div>
-            <a href="/social/{{ event.slug }}" class="trip-button">Sign Up</a>
-          </div>
-          {% endfor %}
-
-          {% if not trips and not social_events %}
-          <div class="trip-card coming-soon">
-            <h2>More Events Coming Soon</h2>
-            <p class="trip-description">
-              Trips and social events will be available here when sign up opens!
-            </p>
-          </div>
-          {% endif %}
         </div>
+        {% endif %}
+
+        {% if trips %}
+        <div class="homepage-section">
+          <div class="section-pill section-pill--trips">Trips</div>
+          <div class="section-grid" style="margin-top: 16px;">
+            {% for trip in trips %}
+            <a href="/{{ trip.slug }}" class="card" style="text-decoration: none;">
+              <span class="card__title">{{ trip.name }}</span>
+              <div class="card__meta">
+                <span class="card__meta-item">📍 {{ trip.destination }}</span>
+                <span class="card__meta-item">📅 {{ trip.formatted_date_range }}</span>
+              </div>
+              <p class="card__description">{{ trip.description }}</p>
+              <div class="card__footer">
+                <span class="card__price">
+                  {% if trip.price_low == trip.price_high %}
+                    ${{ "%.2f"|format(trip.price_low/100) }}
+                  {% else %}
+                    ${{ "%.2f"|format(trip.price_low/100) }}–${{ "%.2f"|format(trip.price_high/100) }}
+                  {% endif %}
+                </span>
+                <span class="btn btn--small">Sign Up</span>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
+
+        {% if social_events %}
+        <div class="homepage-section">
+          <div class="section-pill section-pill--social">Social Events</div>
+          <div class="section-grid" style="margin-top: 16px;">
+            {% for event in social_events %}
+            <a href="/social/{{ event.slug }}" class="card" style="text-decoration: none;">
+              <span class="card__title">{{ event.name }}</span>
+              <div class="card__meta">
+                <span class="card__meta-item">📍 {{ event.location }}</span>
+                <span class="card__meta-item">📅 {{ event.formatted_date }}</span>
+                <span class="card__meta-item">🕐 {{ event.formatted_time }}</span>
+              </div>
+              <p class="card__description">{{ event.description }}</p>
+              <div class="card__footer">
+                <span class="card__price">${{ "%.2f"|format(event.price/100) }}</span>
+                <span class="btn btn--small">Sign Up</span>
+              </div>
+            </a>
+            {% endfor %}
+          </div>
+        </div>
+        {% endif %}
       </div>
     </div>
   </body>

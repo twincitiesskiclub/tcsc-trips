@@ -5,98 +5,85 @@
     <title>{% block title %}TCSC Trip Registration{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}TCSC Trip Registration and Payment{% endblock %}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
     <script src="https://js.stripe.com/v3/"></script>
     <script src="{{ url_for('static', filename='script.js') }}" defer></script>
   </head>
-
   <body>
-    <div class="sr-root">
-      <div class="sr-main">
-        <header class="sr-header">
-          <div class="sr-header__logo">
-            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
+    <div class="page">
+      <header class="page-header">
+        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
+      </header>
+
+      <div class="page-content page-content--narrow">
+        <div class="form-header payment-view">
+          <h1 class="form-header__title">{{ trip.name }} Registration</h1>
+          <div class="form-header__meta">
+            <span>📍 {{ trip.destination }}</span>
+            <span>📅 {{ trip.formatted_date_range }}</span>
           </div>
-          <h1 class="sr-header__title">{{ trip.name }} Registration</h1>
-          <div class="trip-details">
-            <div class="trip-detail-item">
-              <i class="fas fa-map-marker-alt"></i>
-              <span>{{ trip.destination }}</span>
-            </div>
-            <div class="trip-detail-item">
-              <i class="fas fa-calendar"></i>
-              <span>{{ trip.formatted_date_range }}</span>
-            </div>
-          </div>
-        </header>
+        </div>
 
         {% if trip.price_low != trip.price_high %}
-          <div class="price-selection payment-view">
-            <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_low/100) }}">
-              <input type="radio" id="basic" name="price-choice"
-                     value="{{ "%.2f"|format(trip.price_low/100) }}">
-              <label for="basic">Lower Price - ${{ "%.2f"|format(trip.price_low/100) }}</label>
-            </div>
-            <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_high/100) }}">
-              <input type="radio" id="premium" name="price-choice"
-                     value="{{ "%.2f"|format(trip.price_high/100) }}">
-              <label for="premium">Higher Price - ${{ "%.2f"|format(trip.price_high/100) }}</label>
+          <div class="payment-view">
+            <div class="pill-group__label">Select Price</div>
+            <div class="price-selector">
+              <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_low/100) }}">
+                <input type="radio" id="price-low" name="price-choice" value="{{ "%.2f"|format(trip.price_low/100) }}">
+                <div class="price-option__label">Lower Price</div>
+                <div class="price-option__amount">${{ "%.2f"|format(trip.price_low/100) }}</div>
+              </div>
+              <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_high/100) }}">
+                <input type="radio" id="price-high" name="price-choice" value="{{ "%.2f"|format(trip.price_high/100) }}">
+                <div class="price-option__label">Higher Price</div>
+                <div class="price-option__amount">${{ "%.2f"|format(trip.price_high/100) }}</div>
+              </div>
             </div>
           </div>
         {% else %}
-          <div class="single-price-display payment-view">
-            <div class="price-info">
-              <span class="price-label">Trip Price</span>
-              <span class="price-amount">${{ "%.2f"|format(trip.price_low/100) }}</span>
-            </div>
+          <div class="price-summary payment-view">
+            <span class="price-summary__label">Trip Price</span>
+            <span class="price-summary__amount price-amount">${{ "%.2f"|format(trip.price_low/100) }}</span>
           </div>
         {% endif %}
 
-        <div class="sr-payment-summary payment-view">
-          {% if trip.price_low != trip.price_high %}
-            <h1 class="order-amount">$--.--</h1>
-            <h4>Select a price option above</h4>
-          {% endif %}
-        </div>        
-
         <div class="sr-payment-form payment-view">
-          <div class="sr-form-row">
-            <label for="card-element">Payment Details</label>
-            <div class="sr-combo-inputs">
-              <div class="sr-combo-inputs-row">
-                <input type="text" id="name" placeholder="Full Name" autocomplete="cardholder" class="sr-input"/>
-              </div>
-              <div class="sr-combo-inputs-row">
-                <input type="email" id="email" placeholder="Email Address" autocomplete="email" class="sr-input"/>
-              </div>
-              <div class="sr-combo-inputs-row">
-                <div class="sr-input sr-card-element" id="card-element"></div>
-              </div>
-            </div>
-            <div class="sr-field-error" id="card-errors" role="alert"></div>
+          <div class="form-field">
+            <label class="form-field__label" for="name">Full Name</label>
+            <input type="text" id="name" class="form-input" placeholder="Full Name" autocomplete="name">
           </div>
-          <div class="sr-legal-text">
-            <p>⚠️ Important: A hold will be placed on your card. If selected in the lottery, your card will be charged.</p>
+          <div class="form-field">
+            <label class="form-field__label" for="email">Email Address</label>
+            <input type="email" id="email" class="form-input" placeholder="Email Address" autocomplete="email">
           </div>
-          <button id="submit">
+          <div class="form-field">
+            <label class="form-field__label" for="card-element">Card Details</label>
+            <div class="card-element-wrapper" id="card-element"></div>
+            <div class="card-error" id="card-errors" role="alert"></div>
+          </div>
+
+          <div class="notice notice--warn">
+            A hold will be placed on your card. If selected in the lottery, your card will be charged.
+          </div>
+
+          <button class="btn btn--full" id="submit">
             <div class="spinner hidden" id="spinner"></div>
             <span id="button-text">Register for Trip</span>
           </button>
         </div>
-      </div>
-      <div class="completed-view hidden">
-        <div class="completed-payment-message">
-        <h1>Payment Successful!</h1>
-        </div>
-        <div class="success-message">
-          <p>Your registration has been received and a hold has been placed on your card.</p>
-          <p>If selected in the lottery, your card will be charged.</p>
+
+        <div class="completed-view hidden">
+          <div style="text-align: center; padding: 32px 0;">
+            <h1>Payment Successful!</h1>
+            <div class="notice notice--info" style="margin-top: 20px; text-align: left;">
+              <p style="margin: 0 0 8px;">Your registration has been received and a hold has been placed on your card.</p>
+              <p style="margin: 0;">If selected in the lottery, your card will be charged.</p>
+            </div>
+          </div>
         </div>
       </div>
     </div>
   </body>
-</html> 
+</html>
