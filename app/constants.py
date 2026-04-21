@@ -65,9 +65,9 @@ VALID_MEMBER_STATUSES = {'new', 'returning_former'}
 
 # Field length limits
 MAX_NAME_LENGTH = 100
-MAX_PHONE_LENGTH = 30
+MAX_PHONE_LENGTH = 20
 MAX_PRONOUNS_LENGTH = 50
-MAX_RELATION_LENGTH = 100
+MAX_RELATION_LENGTH = 50
 
 # Age limits for date of birth validation
 MIN_MEMBER_AGE = 16
