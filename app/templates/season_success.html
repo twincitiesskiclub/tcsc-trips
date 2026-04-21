@@ -4,39 +4,43 @@
     <meta charset="utf-8" />
     <title>Registration Successful – TCSC</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
   </head>
   <body>
-    <div class="sr-root">
-      <div class="sr-main">
-        <header class="sr-header">
-          <div class="sr-header__logo">
-            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
-          </div>
-          <h1 class="sr-header__title">Registration Complete</h1>
-        </header>
-        <div class="sr-form-container">
-          <div class="form-section">
-            <h2>Thank you for registering!</h2>
-            <p>Your registration for <strong>{{ season.name }}</strong> has been received.</p>
+    <div class="page">
+      <header class="page-header">
+        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
+      </header>
 
-            {% if payment_hold %}
-              <p>A hold of <strong>{{ amount_display }}</strong> has been placed on your card. Your card will <strong>not</strong> be charged until your membership is confirmed.</p>
-              <p>You'll receive a receipt email from Stripe once your membership is confirmed and the charge is processed.</p>
-              <p style="background: #f0f4ff; padding: 12px; border-radius: 6px; font-size: 14px;">
-                <strong>Tip:</strong> Save this page or take a screenshot for your records.
-              </p>
-            {% else %}
-              <p>Your card has been charged <strong>{{ amount_display }}</strong>. Your membership for <strong>{{ season.name }}</strong> is confirmed!</p>
-              <p>You'll receive a receipt from Stripe shortly at the email address you provided.</p>
-            {% endif %}
+      <div class="page-content page-content--narrow">
+        <div style="text-align: center; margin-bottom: 24px;">
+          <h1>Thank you for registering!</h1>
+          <p style="color: var(--text-muted);">Your registration for <strong>{{ season.name }}</strong> has been received.</p>
+        </div>
 
-            <p>If you have any questions, please contact <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a>.</p>
+        {% if payment_hold %}
+          <div class="notice notice--info">
+            <p style="margin: 0 0 8px;">A hold of <strong>{{ amount_display }}</strong> has been placed on your card. Your card will <strong>not</strong> be charged until your membership is confirmed.</p>
+            <p style="margin: 0;">You'll receive a receipt email from Stripe once your membership is confirmed and the charge is processed.</p>
           </div>
-          <div style="text-align: center; margin-top: 24px;">
-            <a href="/" class="registration-button" style="display: inline-block; text-decoration: none; max-width: 300px;">&larr; Back to Home</a>
+          <div class="notice notice--warn" style="margin-top: 12px;">
+            <strong>Tip:</strong> Save this page or take a screenshot for your records.
           </div>
+        {% else %}
+          <div class="notice notice--info">
+            <p style="margin: 0 0 8px;">Your card has been charged <strong>{{ amount_display }}</strong>. Your membership for <strong>{{ season.name }}</strong> is confirmed!</p>
+            <p style="margin: 0;">You'll receive a receipt from Stripe shortly at the email address you provided.</p>
+          </div>
+        {% endif %}
+
+        <p style="color: var(--text-muted); font-size: 14px; margin-top: 20px;">
+          If you have any questions, please contact <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a>.
+        </p>
+
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="/" class="btn btn--secondary">&larr; Back to Home</a>
         </div>
       </div>
     </div>
