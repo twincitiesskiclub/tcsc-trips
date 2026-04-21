@@ -57,15 +57,15 @@
             {% if is_registration_open %}
               <span class="status-open">Registration is open!</span>
               {% if season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end %}
-                  <span class="sub-status">Returning member window closes {{ season.returning_end.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+                  <span class="sub-status">Returning member window closes {{ season.returning_end|central_time }}.</span>
               {% endif %}
               {% if season.new_start and season.new_end and season.new_start <= now <= season.new_end %}
-                  <span class="sub-status">New member window closes {{ season.new_end.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+                  <span class="sub-status">New member window closes {{ season.new_end|central_time }}.</span>
               {% endif %}
             {% elif season.returning_start and season.returning_start > now %}
-              <span class="status-upcoming">Registration opens for returning members on {{ season.returning_start.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+              <span class="status-upcoming">Registration opens for returning members on {{ season.returning_start|central_time }}.</span>
             {% elif season.new_start and season.new_start > now %}
-              <span class="status-upcoming">Registration opens for new members on {{ season.new_start.strftime('%b %d, %Y %I:%M %p UTC') }}.</span>
+              <span class="status-upcoming">Registration opens for new members on {{ season.new_start|central_time }}.</span>
             {% else %}{# Must be closed (after end dates) #}
               <span class="status-closed">Registration is currently closed.</span>
             {% endif %}
