@@ -10,7 +10,9 @@ from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
+from ..utils import CENTRAL_TZ, format_datetime_central
 from datetime import datetime, timedelta
+import pytz
 import csv
 from io import StringIO
 
@@ -82,11 +84,17 @@ def validate_season_form(form):
         if start_date < week_ago or end_date < week_ago:
             return (False, 'Season start and end dates cannot be more than a week in the past.', None)
 
-        # Parse registration windows
-        returning_start = datetime.strptime(form['returning_start'], DATETIME_FORMAT) if form.get('returning_start') else None
-        returning_end = datetime.strptime(form['returning_end'], DATETIME_FORMAT) if form.get('returning_end') else None
-        new_start = datetime.strptime(form['new_start'], DATETIME_FORMAT) if form.get('new_start') else None
-        new_end = datetime.strptime(form['new_end'], DATETIME_FORMAT) if form.get('new_end') else None
+        # Parse registration windows (admin enters Central time, convert to UTC for storage)
+        def _parse_central_to_utc(value):
+            if not value:
+                return None
+            naive = datetime.strptime(value, DATETIME_FORMAT)
+            return CENTRAL_TZ.localize(naive).astimezone(pytz.utc).replace(tzinfo=None)
+
+        returning_start = _parse_central_to_utc(form.get('returning_start'))
+        returning_end = _parse_central_to_utc(form.get('returning_end'))
+        new_start = _parse_central_to_utc(form.get('new_start'))
+        new_end = _parse_central_to_utc(form.get('new_end'))
 
         # Validate registration start dates are before season start
         if returning_start and returning_start >= start_date:
@@ -383,10 +391,10 @@ def seasons_data():
             'year': s.year,
             'start_date': s.start_date.strftime('%Y-%m-%d') if s.start_date else None,
             'end_date': s.end_date.strftime('%Y-%m-%d') if s.end_date else None,
-            'returning_start': s.returning_start.strftime('%Y-%m-%d %H:%M') if s.returning_start else None,
-            'returning_end': s.returning_end.strftime('%Y-%m-%d %H:%M') if s.returning_end else None,
-            'new_start': s.new_start.strftime('%Y-%m-%d %H:%M') if s.new_start else None,
-            'new_end': s.new_end.strftime('%Y-%m-%d %H:%M') if s.new_end else None,
+            'returning_start': format_datetime_central(s.returning_start, '%Y-%m-%d %H:%M') if s.returning_start else None,
+            'returning_end': format_datetime_central(s.returning_end, '%Y-%m-%d %H:%M') if s.returning_end else None,
+            'new_start': format_datetime_central(s.new_start, '%Y-%m-%d %H:%M') if s.new_start else None,
+            'new_end': format_datetime_central(s.new_end, '%Y-%m-%d %H:%M') if s.new_end else None,
             'price_cents': s.price_cents,
             'registration_limit': s.registration_limit,
             'description': s.description
