@@ -309,7 +309,7 @@ def refund_payment(payment_id):
             )
 
             # Verify the refund was successful
-            if refund.status != 'succeeded':
+            if refund.status not in ('succeeded', 'pending'):
                 return json_error(f'Refund failed - status: {refund.status}')
 
             payment.status = 'refunded'
@@ -432,7 +432,7 @@ def bulk_refund_payments():
                     payment.status = canceled_intent.status
                 else:
                     refund = stripe.Refund.create(payment_intent=payment.payment_intent_id)
-                    if refund.status != 'succeeded':
+                    if refund.status not in ('succeeded', 'pending'):
                         results.append({'id': payment_id, 'success': False, 'error': f'Refund failed - status: {refund.status}'})
                         continue
                     payment.status = 'refunded'
