@@ -45,7 +45,7 @@ class PaymentForm {
       submit: '#submit',
       nameInput: '#name',
       emailInput: '#email',
-      errorDisplay: '.sr-field-error',
+      errorDisplay: '#card-errors',
       amountDisplay: '.order-amount',
       packageType: '.package-type',
       spinner: '#spinner',
@@ -104,14 +104,16 @@ class PaymentForm {
   }
 
   updateUI(amount) {
-    this.elements.amountDisplay.textContent = `$${amount.toFixed(2)}`;
-    
+    if (this.elements.amountDisplay) {
+      this.elements.amountDisplay.textContent = `$${amount.toFixed(2)}`;
+    }
+
     // Only show package type if there are multiple prices
     const packageTypeElement = this.elements.packageType;
     if (packageTypeElement) {
         const priceInputs = document.querySelectorAll('input[name="price-choice"]');
         packageTypeElement.parentElement.style.display = priceInputs.length > 1 ? 'block' : 'none';
-        
+
         // Get all price options to determine if this is the lower or higher price
         const priceOptions = Array.from(priceInputs).map(input => parseFloat(input.value));
         const isLowerPrice = amount === Math.min(...priceOptions);
