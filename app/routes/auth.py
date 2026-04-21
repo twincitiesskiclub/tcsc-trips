@@ -5,9 +5,13 @@ from ..errors import flash_error, flash_success
 
 auth = Blueprint('auth', __name__)
 
+def _is_safe_redirect_url(url):
+    return bool(url) and url.startswith('/') and not url.startswith('//') and '://' not in url
+
 @auth.route('/login')
 def login():
-    session['next_url'] = request.args.get('next') or url_for('admin.get_admin_page')
+    next_url = request.args.get('next')
+    session['next_url'] = next_url if _is_safe_redirect_url(next_url) else url_for('admin.get_admin_page')
     redirect_uri = url_for('auth.authorize', _external=True)
     return oauth.google.authorize_redirect(redirect_uri)
 
