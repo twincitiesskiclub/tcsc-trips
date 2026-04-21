@@ -165,7 +165,8 @@ select.form-input {
   border-color: var(--text-faint);
 }
 
-.price-option-container--selected {
+.price-option-container--selected,
+.price-option-container:has(input[type="radio"]:checked) {
   background: var(--color-primary);
   border-color: var(--color-primary);
 }
@@ -184,7 +185,8 @@ select.form-input {
   margin-bottom: 2px;
 }
 
-.price-option-container--selected .price-option__label {
+.price-option-container--selected .price-option__label,
+.price-option-container:has(input[type="radio"]:checked) .price-option__label {
   color: rgba(255, 255, 255, 0.6);
 }
 
@@ -193,7 +195,8 @@ select.form-input {
   color: var(--text-primary);
 }
 
-.price-option-container--selected .price-option__amount {
+.price-option-container--selected .price-option__amount,
+.price-option-container:has(input[type="radio"]:checked) .price-option__amount {
   color: #fff;
 }
 
