@@ -65,7 +65,6 @@ def webhook_received():
 
     try:
         if webhook_secret:
-            # Verify webhook signature and extract the event
             signature = request.headers.get('stripe-signature')
             event = stripe.Webhook.construct_event(
                 payload=request.data,
@@ -73,9 +72,11 @@ def webhook_received():
                 secret=webhook_secret
             )
             data = event['data']
-        else:
+        elif os.getenv('FLASK_ENV') == 'development':
             data = request_data['data']
             event = request_data
+        else:
+            return json_error('Webhook signature verification not configured', 500)
 
         # Get the type of webhook event sent
         event_type = event['type']
@@ -206,16 +207,22 @@ def webhook_received():
             )
 
         elif event_type == StripeEvent.PAYMENT_CANCELED:
-            # Payment was canceled - update status (don't delete, keep for audit)
             payment = Payment.get_by_payment_intent(data_object.id)
             if payment:
                 payment.status = 'canceled'
+                if payment.payment_type == PaymentType.SEASON and payment.season_id:
+                    user = User.get_by_email(payment.email)
+                    if user:
+                        user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+                        if user_season:
+                            user_season.status = UserSeasonStatus.DROPPED_VOLUNTARY
+                            user.sync_status()
                 db.session.commit()
 
         return json_success()
 
     except Exception as e:
-        return json_error(str(e))
+        return json_error('Webhook processing failed', 500)
 
 @payments.route('/admin/payments/<int:payment_id>/capture', methods=['POST'])
 @admin_required
@@ -461,6 +468,13 @@ def create_season_payment_intent():
         # Derive member_type on the backend
         user = User.get_by_email(email)
         member_type = MemberType.RETURNING.value if user and user.is_returning else MemberType.NEW.value
+        existing_payment = Payment.query.filter(
+            Payment.email == email,
+            Payment.season_id == int(season_id),
+            Payment.status.notin_(['canceled', 'refunded'])
+        ).first()
+        if existing_payment:
+            return json_error('You have already registered for this season.')
         # Determine capture method
         if member_type == MemberType.NEW.value:
             capture_method = 'manual'
