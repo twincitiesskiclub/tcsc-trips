@@ -64,9 +64,10 @@ def season_register(season_id):
 
             # Get payment_intent_id for coordination with webhook
             payment_intent_id = form.get('payment_intent_id')
-            existing_payment = None
-            if payment_intent_id:
-                existing_payment = Payment.get_by_payment_intent(payment_intent_id)
+            if not payment_intent_id:
+                flash_error('Payment is required to complete registration.')
+                return redirect(url_for('registration.season_register', season_id=season_id))
+            existing_payment = Payment.get_by_payment_intent(payment_intent_id)
 
             # Determine member_type from backend only BEFORE checking dates
             # Check user existence first
