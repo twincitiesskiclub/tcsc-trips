@@ -181,7 +181,7 @@ Light polish to match new design language. Same centered layout, same conditiona
 Replace the current fragmented CSS with a single clean file structure:
 
 ### Files to replace
-- `_tokens.css` — update with new token values (keep existing `--p`, `--s`, `--g-*` vars since `_triathlon.css` depends on them)
+- `_tokens.css` — replace entirely with new token values (no backward-compat needed since triathlon page is also being cut over)
 - `_registration.css` — delete, replace with new
 - `_forms.css` — delete, replace with new
 - `_trips.css` — delete, replace with new
@@ -192,12 +192,13 @@ Replace the current fragmented CSS with a single clean file structure:
 - `_animations.css` — delete, replace with new (spinner, form entry animations)
 - `_media-queries.css` — delete (responsive styles will live in each component file)
 
+- `_triathlon.css` — delete, restyle within new design system
+
 ### Files to keep unchanged
 - `_reset.css` — basic box-sizing and body font, still needed
-- `_triathlon.css` — separate triathlon page, not part of this redesign. Depends on `--p`, `--s`, `--g-*` tokens which we'll preserve.
 
 ### New CSS structure
-- `base/_tokens.css` — keep existing vars (`--p`, `--s`, `--g-*`, `--w`, `--r`, `--f`, `--fw`) for triathlon compatibility, add new semantic tokens (`--bg-page`, `--bg-card`, `--border`, `--border-input`, `--radius-card`, `--radius-input`, `--text-primary`, `--text-secondary`, `--text-muted`, `--text-faint`)
+- `base/_tokens.css` — clean slate with new semantic tokens (`--color-primary`, `--color-mint`, `--bg-page`, `--bg-card`, `--border`, `--border-input`, `--radius-card`, `--radius-input`, `--text-primary`, `--text-secondary`, `--text-muted`, `--text-faint`, `--font-stack`)
 - `components/_cards.css` — homepage cards (shared across season/trip/social)
 - `components/_forms.css` — all form inputs, labels, pill selectors, field layout
 - `components/_progress.css` — sticky progress bar component
@@ -219,6 +220,24 @@ Replace the current fragmented CSS with a single clean file structure:
 - BEM-lite naming: `.card`, `.card__title`, `.card__price` (not `.sr-root .sr-main .sr-header__title`)
 - Mobile-first: base styles for mobile, `min-width: 640px` breakpoint for side-by-side fields and 2-column grid
 
+### 6. Dryland Triathlon (`dryland-triathlon.html`)
+
+Static info page with external registration links (Google Forms, not Stripe). Cut over to new design language.
+
+**Layout:** Same logo header as all other pages. Content area `max-width: 560px` centered, `32px 24px` padding.
+
+**Hero:** Event name "Roll. Ride. Run." as a heading (28px, 700 weight) centered, with date and location below (15px, `#64748b`). Contained in a light background section with subtle gradient (using `--bg-page` tones). Remove the Font Awesome dependency — this page was the last to reference it via the shared `sr-header`.
+
+**Course cards:** Two side-by-side cards (same card styling as homepage — white, `1px` border, `12px` radius). Each shows course name (bold), distances, and start time. Stacks on mobile.
+
+**Registration buttons:** Two side-by-side cards styled like the trip price selectors — navy background, white text, clickable. Show "Individual / $55" and "Team / $105". These link to external Google Forms.
+
+**Sections:** Each section (About, Distances, Team Finder, About TCSC) uses the same heading style as season form sections (20px, 600 weight, navy) with body text below (15px, `#64748b`, 1.5 line height).
+
+**Back link:** Styled as a secondary button (outlined or text-style) rather than the current full-width navy button.
+
+**Participant guide link:** Styled as an inline text link, not a special callout box.
+
 ## main.css Import Manifest
 
 The `main.css` file must be updated to import the new file structure:
@@ -233,7 +252,6 @@ The `main.css` file must be updated to import the new file structure:
 @import 'components/_badges.css';
 @import 'components/_notices.css';
 @import 'components/_progress.css';
-@import 'components/_triathlon.css';
 @import 'states/_states.css';
 ```
 
@@ -256,14 +274,14 @@ Small new script for the season registration page only:
 - Social event registration (`socials/registration.html`)
 - Season registration form (`season_register.html`)
 - Season success page (`season_success.html`)
-- All registration-related CSS files
+- Dryland triathlon page (`dryland-triathlon.html`)
+- All CSS files under `css/styles/` (full replacement)
 - New progress bar JS for season form
 
 ### Out of scope
 - Admin pages
 - Route handlers / backend logic
 - Payment JS logic (`script.js`, `social_event.js`) — no changes beyond what's needed to match new class names for the ~5 JS-coupled classes
-- Dryland triathlon page (`dryland-triathlon.html`) — uses same `main.css` but has its own `_triathlon.css` which we keep unchanged
 - Season detail page (`season_detail.html`) — only if it shares CSS that changes
 - Individual trip template overrides (e.g., `birkie.html`) — they extend `base_trip.html` so they get the update automatically
 
