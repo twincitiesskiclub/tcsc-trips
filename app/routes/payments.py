@@ -1,4 +1,5 @@
 from flask import Blueprint, jsonify, request
+import re
 import stripe
 import os
 from ..models import db, Payment, Season, UserSeason, User, Trip, SocialEvent
@@ -9,6 +10,11 @@ from ..utils import normalize_email, today_central
 from ..notifications.slack import send_payment_notification
 
 payments = Blueprint('payments', __name__)
+
+def build_statement_descriptor(payment_type, identifier):
+    prefix = f"TCSC_{payment_type}_"
+    sanitized = re.sub(r'[^A-Z0-9_ .\-]', '', identifier.upper())
+    return (prefix + sanitized)[:22]
 
 @payments.route('/get-stripe-key')
 def get_stripe_key():
@@ -36,6 +42,8 @@ def create_payment():
             currency='usd',
             capture_method='manual',  # Always manual for trips (lottery system)
             receipt_email=email,
+            statement_descriptor=build_statement_descriptor('TRIP', trip.name if trip else 'UNKNOWN'),
+            description=f"TCSC Trip - {trip.name}" if trip else "TCSC Trip Registration",
             metadata={
                 'name': name,
                 'email': email,
@@ -487,6 +495,7 @@ def create_season_payment_intent():
             currency='usd',
             capture_method=capture_method,
             receipt_email=email,
+            statement_descriptor=build_statement_descriptor('SEASON', str(season.year)),
             description=f"TCSC {season.name} Membership",
             metadata={
                 'name': name,
@@ -534,6 +543,8 @@ def create_social_event_payment_intent():
             currency='usd',
             capture_method='automatic',  # Immediate charge - no lottery
             receipt_email=email,
+            statement_descriptor=build_statement_descriptor('SOCIAL', social_event.name),
+            description=f"TCSC Social Event - {social_event.name}",
             metadata={
                 'name': name,
                 'email': email,
