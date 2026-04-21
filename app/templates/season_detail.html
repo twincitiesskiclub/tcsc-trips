@@ -19,10 +19,10 @@
           <p style="margin: 0 0 4px;"><strong>Registration Opens:</strong></p>
           <ul style="margin: 0; padding-left: 20px;">
             {% if season.returning_start %}
-              <li>Returning Members: {{ season.returning_start.strftime('%b %d, %Y %I:%M %p') }}</li>
+              <li>Returning Members: {{ season.returning_start|central_time }}</li>
             {% endif %}
             {% if season.new_start %}
-              <li>New Members: {{ season.new_start.strftime('%b %d, %Y %I:%M %p') }}</li>
+              <li>New Members: {{ season.new_start|central_time }}</li>
             {% endif %}
             {% if not season.returning_start and not season.new_start %}
               <li>Registration dates will be announced soon.</li>
