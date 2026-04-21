@@ -100,3 +100,8 @@ def register_template_filters(app):
         if dt is None:
             return ''
         return dt.strftime(fmt)
+
+    @app.template_filter('central_time')
+    def central_time_filter(dt, fmt='%b %d, %Y %I:%M %p CT'):
+        from .utils import format_datetime_central
+        return format_datetime_central(dt, fmt)
