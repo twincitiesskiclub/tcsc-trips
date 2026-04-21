@@ -4,83 +4,85 @@
     <meta charset="utf-8" />
     <title>{{ season.name }} – TCSC Season Info</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
   </head>
   <body>
-    <div class="sr-root">
-      <div class="sr-main">
-        <header class="sr-header">
-          <div class="sr-header__logo">
-            <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo">
-          </div>
-          <h1 class="sr-header__title">{{ season.name }}</h1>
-        </header>
-        <div class="registration-notice">
-          <p><strong>Registration Opens:</strong></p>
-          <ul class="registration-dates-list">
+    <div class="page">
+      <header class="page-header">
+        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
+      </header>
+
+      <div class="page-content page-content--medium">
+        <div class="notice notice--info">
+          <p style="margin: 0 0 4px;"><strong>Registration Opens:</strong></p>
+          <ul style="margin: 0; padding-left: 20px;">
             {% if season.returning_start %}
-                <li>Returning Members: {{ season.returning_start.strftime('%b %d, %Y %I:%M %p') }}</li>
+              <li>Returning Members: {{ season.returning_start|central_time }}</li>
             {% endif %}
             {% if season.new_start %}
-                <li>New Members: {{ season.new_start.strftime('%b %d, %Y %I:%M %p') }}</li>
+              <li>New Members: {{ season.new_start|central_time }}</li>
             {% endif %}
             {% if not season.returning_start and not season.new_start %}
-                <li>Registration dates will be announced soon.</li>
+              <li>Registration dates will be announced soon.</li>
             {% endif %}
           </ul>
         </div>
-        <div class="season-card">
-          <h2>{{ season.name }}</h2>
-          {% if season.description %}
-            <p class="season-description">{{ season.description }}</p>
-          {% endif %}
-          <div class="trip-details">
-            <div class="trip-detail-item">
-              <i class="fas fa-calendar"></i>
-              <span>{{ season.start_date.strftime('%b %d, %Y') }} to {{ season.end_date.strftime('%b %d, %Y') }}</span>
-            </div>
-            <div class="trip-detail-item">
-              <i class="fas fa-users"></i>
-              <span>Registration Limit: {{ season.registration_limit if season.registration_limit else 'No limit' }}</span>
-            </div>
-            {% if season.price_cents %}
-            <div class="trip-detail-item">
-              <i class="fas fa-dollar-sign"></i>
-              <span>Price: ${{ '%.2f' % (season.price_cents / 100) }}</span>
-            </div>
-            {% endif %}
-          </div>
-          <div class="season-status">
-            {# Use the is_registration_open flag passed from the route #}
+
+        <div class="card" style="margin-top: 20px;">
+          <div class="card__header">
+            <span class="card__title" style="font-size: 20px;">{{ season.name }}</span>
             {% if is_registration_open %}
-              <span class="status-open">Registration is open!</span>
-              {% if season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end %}
-                  <span class="sub-status">Returning member window closes {{ season.returning_end|central_time }}.</span>
-              {% endif %}
-              {% if season.new_start and season.new_end and season.new_start <= now <= season.new_end %}
-                  <span class="sub-status">New member window closes {{ season.new_end|central_time }}.</span>
-              {% endif %}
+              <span class="badge badge--open">Open</span>
             {% elif season.returning_start and season.returning_start > now %}
-              <span class="status-upcoming">Registration opens for returning members on {{ season.returning_start|central_time }}.</span>
+              <span class="badge badge--upcoming">Upcoming</span>
             {% elif season.new_start and season.new_start > now %}
-              <span class="status-upcoming">Registration opens for new members on {{ season.new_start|central_time }}.</span>
-            {% else %}{# Must be closed (after end dates) #}
-              <span class="status-closed">Registration is currently closed.</span>
+              <span class="badge badge--upcoming">Upcoming</span>
+            {% else %}
+              <span class="badge badge--closed">Closed</span>
             {% endif %}
           </div>
-          {# Only show register button if registration is currently open #}
-          {% if is_registration_open %}
-            <a href="{{ url_for('registration.season_register', season_id=season.id) }}" class="trip-button">Register for this Season</a>
-          {% else %}
-            <button class="trip-button trip-button--disabled" disabled>Register for this Season</button>
+
+          {% if season.description %}
+            <p class="card__description">{{ season.description }}</p>
           {% endif %}
-          <div class="back-link-container">
-            <a href="/" class="sr-button sr-button-secondary">&larr; Back to Home</a>
+
+          <div class="card__meta">
+            <span class="card__meta-item">📅 {{ season.start_date.strftime('%b %d, %Y') }} to {{ season.end_date.strftime('%b %d, %Y') }}</span>
+            <span class="card__meta-item">👥 Registration Limit: {{ season.registration_limit if season.registration_limit else 'No limit' }}</span>
+            {% if season.price_cents %}
+              <span class="card__meta-item">💰 Price: ${{ '%.2f' % (season.price_cents / 100) }}</span>
+            {% endif %}
           </div>
+
+          {% if is_registration_open %}
+            {% if season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end %}
+              <span class="card__subtext">Returning member window closes {{ season.returning_end|central_time }}.</span>
+            {% endif %}
+            {% if season.new_start and season.new_end and season.new_start <= now <= season.new_end %}
+              <span class="card__subtext">New member window closes {{ season.new_end|central_time }}.</span>
+            {% endif %}
+          {% elif season.returning_start and season.returning_start > now %}
+            <span class="card__subtext">Registration opens for returning members on {{ season.returning_start|central_time }}.</span>
+          {% elif season.new_start and season.new_start > now %}
+            <span class="card__subtext">Registration opens for new members on {{ season.new_start|central_time }}.</span>
+          {% endif %}
+
+          <div class="card__footer">
+            <span></span>
+            {% if is_registration_open %}
+              <a href="{{ url_for('registration.season_register', season_id=season.id) }}" class="btn btn--small">Register for this Season</a>
+            {% else %}
+              <button class="btn btn--small" disabled>Registration Closed</button>
+            {% endif %}
+          </div>
+        </div>
+
+        <div style="text-align: center; margin-top: 24px;">
+          <a href="/" class="btn btn--secondary">&larr; Back to Home</a>
         </div>
       </div>
     </div>
   </body>
-</html> 
+</html>

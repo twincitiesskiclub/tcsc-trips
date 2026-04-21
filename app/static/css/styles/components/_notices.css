@@ -1,0 +1,31 @@
+.notice {
+  border-radius: var(--radius-input);
+  padding: 14px 16px;
+  font: 13px/1.5 var(--font-stack);
+  margin-bottom: 20px;
+}
+
+.notice--warn {
+  background: var(--notice-warn-bg);
+  border: 1px solid var(--notice-warn-border);
+  color: var(--notice-warn-text);
+}
+
+.notice--error {
+  background: var(--notice-error-bg);
+  border: 1px solid var(--notice-error-border);
+  color: var(--notice-error-text);
+}
+
+.notice--info {
+  background: #f0f4ff;
+  border: 1px solid #c7d2fe;
+  color: #3730a3;
+}
+
+/* Stripe card error display */
+.card-error {
+  color: #e44;
+  font: 13px/1.5 var(--font-stack);
+  margin-top: 8px;
+}
