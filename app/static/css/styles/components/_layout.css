@@ -15,6 +15,31 @@
   height: 48px;
 }
 
+.page-header--home {
+  flex-direction: column;
+  gap: 20px;
+  padding: 24px 32px 28px;
+}
+
+.page-header__logo--small {
+  height: 32px;
+}
+
+.page-header__text {
+  text-align: center;
+}
+
+.page-header__title {
+  font: 700 20px var(--font-stack);
+  color: var(--text-primary);
+}
+
+.page-header__subtitle {
+  font: 14px var(--font-stack);
+  color: var(--text-muted);
+  margin: 3px 0 0;
+}
+
 .page-content {
   max-width: 720px;
   margin: 0 auto;
