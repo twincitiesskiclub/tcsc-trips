@@ -41,16 +41,15 @@
                 <span class="card__meta-item">📅 {{ season.start_date.strftime('%b %d, %Y') }} — {{ season.end_date.strftime('%b %d, %Y') }}</span>
               </div>
               {% if is_season_registration_open %}
-                {% if season.returning_start and season.returning_end and season.returning_start <= now <= season.returning_end %}
-                  <span class="card__subtext">Returning member window closes {{ season.returning_end|central_time }}.</span>
-                {% endif %}
-                {% if season.new_start and season.new_end and season.new_start <= now <= season.new_end %}
-                  <span class="card__subtext">New member window closes {{ season.new_end|central_time }}.</span>
+                {% if season.new_end %}
+                  <span class="card__subtext">Registration closes {{ season.new_end|central_time }}.</span>
+                {% elif season.returning_end %}
+                  <span class="card__subtext">Registration closes {{ season.returning_end|central_time }}.</span>
                 {% endif %}
               {% elif season.returning_start and season.returning_start > now %}
-                <span class="card__subtext">Registration opens for returning members on {{ season.returning_start|central_time }}.</span>
+                <span class="card__subtext">Registration opens {{ season.returning_start|central_time }}.</span>
               {% elif season.new_start and season.new_start > now %}
-                <span class="card__subtext">Registration opens for new members on {{ season.new_start|central_time }}.</span>
+                <span class="card__subtext">Registration opens {{ season.new_start|central_time }}.</span>
               {% endif %}
               <div class="card__footer">
                 {% if season.price_cents %}
