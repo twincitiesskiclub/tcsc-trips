@@ -11,16 +11,20 @@
   </head>
   <body>
     <div class="page">
-      <header class="page-header">
-        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
+      <header class="page-header page-header--home">
+        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo page-header__logo--small">
+        <div class="page-header__text">
+          <h1 class="page-header__title">Twin Cities Ski Club</h1>
+          <p class="page-header__subtitle">Register for seasons, trips, and events</p>
+        </div>
       </header>
 
       <div class="page-content">
         {% if season %}
         <div class="homepage-section">
-          <div class="section-pill section-pill--membership">Membership</div>
+          <div class="section-pill section-pill--membership">Season</div>
           <div style="margin-top: 16px;">
-            <div class="card">
+            <a href="/seasons/{{ season.id }}" class="card" style="text-decoration: none;">
               <div class="card__header">
                 <span class="card__title">{{ season.name }}</span>
                 {% if is_season_registration_open %}
@@ -55,12 +59,12 @@
                   <span class="card__price"></span>
                 {% endif %}
                 {% if is_season_registration_open %}
-                  <a href="/seasons/{{ season.id }}" class="btn btn--small">Register</a>
+                  <span class="btn btn--small">Register</span>
                 {% else %}
-                  <a href="/seasons/{{ season.id }}" class="btn btn--small btn--secondary">Season Info</a>
+                  <span class="btn btn--small btn--secondary">Season Info</span>
                 {% endif %}
               </div>
-            </div>
+            </a>
           </div>
         </div>
         {% endif %}
