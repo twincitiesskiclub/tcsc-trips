@@ -215,4 +215,8 @@ def api_is_returning_member():
     email = normalize_email(data.get('email', ''))
     user = User.get_by_email(email)
     is_returning = bool(user and getattr(user, 'is_returning', False))
-    return jsonify({'is_returning': is_returning}) 
+    result = {'is_returning': is_returning}
+    if not is_returning:
+        season = Season.get_current()
+        result['new_registration_open'] = bool(season and season.is_new_open())
+    return jsonify(result)
