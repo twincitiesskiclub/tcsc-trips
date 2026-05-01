@@ -60,6 +60,48 @@ def season_returning_only(app, db_session):
             db.session.commit()
 
 
+@pytest.fixture
+def returning_member(app, db_session):
+    """Seed a returning user (has an ACTIVE prior UserSeason in another season)."""
+    from app.models import User, UserSeason
+    from app.constants import UserStatus, UserSeasonStatus
+
+    with app.app_context():
+        other_season = Season(
+            name=f'Prior Season {datetime.utcnow().timestamp()}',
+            season_type='winter',
+            year=2024,
+            start_date=datetime(2024, 1, 1).date(),
+            end_date=datetime(2024, 6, 1).date(),
+            price_cents=10000,
+        )
+        db.session.add(other_season)
+        db.session.flush()
+        user = User(
+            email='returning@example.com',
+            first_name='Re',
+            last_name='Turning',
+            status=UserStatus.ACTIVE,
+        )
+        db.session.add(user)
+        db.session.flush()
+        us = UserSeason(
+            user_id=user.id,
+            season_id=other_season.id,
+            registration_type='returning',
+            status=UserSeasonStatus.ACTIVE,
+        )
+        db.session.add(us)
+        db.session.commit()
+        ids = {'user_id': user.id, 'other_season_id': other_season.id}
+    yield ids
+    with app.app_context():
+        UserSeason.query.filter_by(user_id=ids['user_id']).delete()
+        User.query.filter_by(id=ids['user_id']).delete()
+        Season.query.filter_by(id=ids['other_season_id']).delete()
+        db.session.commit()
+
+
 class TestCreateSeasonPaymentIntentWindowGate:
     """Regression tests: do not create a PaymentIntent when the user's
     registration window is closed."""
@@ -86,40 +128,8 @@ class TestCreateSeasonPaymentIntentWindowGate:
 
     @patch('app.routes.payments.stripe')
     def test_returning_member_allowed_when_returning_window_open(
-        self, mock_stripe, client, season_returning_only, db_session, app
+        self, mock_stripe, client, season_returning_only, returning_member
     ):
-        # Seed an existing returning member (has an ACTIVE prior UserSeason).
-        from app.models import User, UserSeason
-        from app.constants import UserStatus, UserSeasonStatus
-
-        with app.app_context():
-            other_season = Season(
-                name='Prior Season for Returning Test',
-                season_type='winter',
-                year=2024,
-                start_date=datetime(2024, 1, 1).date(),
-                end_date=datetime(2024, 6, 1).date(),
-                price_cents=10000,
-            )
-            db.session.add(other_season)
-            db.session.flush()
-            user = User(
-                email='returning@example.com',
-                first_name='Re',
-                last_name='Turning',
-                status=UserStatus.ACTIVE,
-            )
-            db.session.add(user)
-            db.session.flush()
-            us = UserSeason(
-                user_id=user.id,
-                season_id=other_season.id,
-                registration_type='returning',
-                status=UserSeasonStatus.ACTIVE,
-            )
-            db.session.add(us)
-            db.session.commit()
-
         mock_stripe.PaymentIntent.create.return_value = MagicMock(
             client_secret='cs_test_xyz',
             id='pi_test_123',
