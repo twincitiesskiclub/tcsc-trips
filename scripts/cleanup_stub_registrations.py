@@ -29,6 +29,8 @@ Set DATABASE_URL in env (or .env) before running. For production:
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 import stripe
 from dotenv import load_dotenv
 
