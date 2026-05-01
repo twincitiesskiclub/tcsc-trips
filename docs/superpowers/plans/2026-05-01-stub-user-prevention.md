@@ -544,7 +544,28 @@ Expected output (3 rows):
 
 If the row count differs, STOP and reassess before running the cleanup script.
 
-- [ ] **Step 3.3: Run the cleanup script against production**
+- [ ] **Step 3.3: Back up the production database**
+
+`pg_dump` is not installed locally on this Mac, but the postgres:18 Docker image is. Use it to write a SQL dump:
+
+```bash
+mkdir -p ~/tcsc-backups
+docker run --rm postgres:18 pg_dump \
+  'postgresql://heidi:c1y7XzSne5jVDEOVRBy4ODUoHWDJv8jK@dpg-d4nrbauuk2gs73frosqg-a.oregon-postgres.render.com/tcsc_trips_db_6k97' \
+  > ~/tcsc-backups/tcsc_pre_stub_cleanup_$(date +%Y%m%d_%H%M%S).sql
+```
+
+Verify the dump completed:
+
+```bash
+ls -lh ~/tcsc-backups/tcsc_pre_stub_cleanup_*.sql
+```
+
+Expected: a file with non-trivial size (multi-MB). If the file is empty or under 100KB, stop and investigate before proceeding.
+
+Render also takes daily automated snapshots of this database (visible in the Render dashboard under the Postgres service → "Backups" tab); the local pg_dump above is an additional safeguard right before the destructive operation.
+
+- [ ] **Step 3.4: Run the cleanup script against production**
 
 (The script bootstraps its own sys.path so PYTHONPATH does not need to be set.)
 
@@ -561,17 +582,19 @@ For each of the three users, review the printed details and confirm with `y`. Ex
 - After confirmation: `Cancelled. New Stripe status: canceled`.
 - `Deleted User #<id> and UserSeason.`
 
-- [ ] **Step 3.4: Verify cleanup**
+If anything goes wrong, restore from the dump with: `docker run --rm -i postgres:18 psql 'postgresql://heidi:...@dpg-...oregon-postgres.render.com/tcsc_trips_db_6k97' < ~/tcsc-backups/tcsc_pre_stub_cleanup_<timestamp>.sql`
+
+- [ ] **Step 3.5: Verify cleanup**
 
 Re-run the verification query from Step 3.2. Expected output: 0 rows.
 
-- [ ] **Step 3.5: Send outreach emails (manual)**
+- [ ] **Step 3.6: Send outreach emails (manual)**
 
 - Scott (`scottjetsettrainer@gmail.com`): explain that a partial registration attempt was cleaned up, no charge was made, and ask him to register once the new-member window opens (May 2 21:00 CT).
 - Marie (`marie.alundgren@gmail.com`): same message as Scott.
 - Bradley (`waldooutside@gmail.com`): confirm that the duplicate authorization on this email has been voided; his real registration under `bmwaldorf54@gmail.com` is fine, no action needed.
 
-- [ ] **Step 3.6: Mark complete**
+- [ ] **Step 3.7: Mark complete**
 
 Verify in the admin Members grid that no Season-4 user shows up with empty info. The fix is done.
 
