@@ -90,6 +90,7 @@ def returning_member(app, db_session):
             season_id=other_season.id,
             registration_type='returning',
             status=UserSeasonStatus.ACTIVE,
+            registration_date=datetime.utcnow().date(),
         )
         db.session.add(us)
         db.session.commit()
