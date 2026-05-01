@@ -14,6 +14,7 @@ For each stub the script:
   3. On 'y':
      - If a linked Payment exists with Stripe status 'requires_capture',
        cancels the PaymentIntent in Stripe and updates Payment.status.
+     - Deletes the local Payment row.
      - Deletes the UserSeason row.
      - Deletes the User row only if there are no other user_seasons
        and no other payments. Otherwise leaves the User intact.
@@ -118,6 +119,7 @@ def cleanup_one(user_season):
         new_status = cancel_payment_intent(payment)
         if new_status and new_status != payment.status:
             payment.status = new_status
+        db.session.delete(payment)
 
     db.session.delete(user_season)
 
