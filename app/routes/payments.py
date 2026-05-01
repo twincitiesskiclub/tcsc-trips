@@ -2,6 +2,7 @@ from flask import Blueprint, jsonify, request
 import re
 import stripe
 import os
+from datetime import datetime
 from ..models import db, Payment, Season, UserSeason, User, Trip, SocialEvent
 from ..auth import admin_required
 from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, PaymentType
@@ -476,6 +477,13 @@ def create_season_payment_intent():
         # Derive member_type on the backend
         user = User.get_by_email(email)
         member_type = MemberType.RETURNING.value if user and user.is_returning else MemberType.NEW.value
+        # Reject if the registration window for this member_type is closed.
+        # Prevents stub User rows from being created via the webhook when the
+        # form POST would have rejected the registration anyway.
+        if not season.is_open_for(member_type.lower(), datetime.utcnow()):
+            return json_error(
+                f"Registration for {member_type.lower()} members is not currently open."
+            )
         existing_payment = Payment.query.filter(
             Payment.email == email,
             Payment.season_id == int(season_id),
