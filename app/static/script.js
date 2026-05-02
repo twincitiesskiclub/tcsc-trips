@@ -308,13 +308,13 @@ document.addEventListener('DOMContentLoaded', () => {
           const submitBtn = document.getElementById('register-btn');
           if (submitBtn) submitBtn.disabled = false;
         } else if (data.new_registration_open === false) {
-          emailStatusMsg.textContent = '⚠️ Registration for new members is not yet open. Please check back when the new member registration window begins.';
+          emailStatusMsg.textContent = '⚠️ Registration for new members isn\'t currently open. Please check back when the new member registration window opens.';
           emailStatusMsg.style.color = '#b07b2c';
           const submitBtn = document.getElementById('register-btn');
           if (submitBtn) submitBtn.disabled = true;
         } else {
-          emailStatusMsg.textContent = '⚠️ We couldn\'t find your email in our returning member records. Please register as a new member or try a different email address if you believe this is a mistake.';
-          emailStatusMsg.style.color = '#b07b2c';
+          emailStatusMsg.textContent = '👋 Looks like you\'re new here. We\'ll register you as a new member. If you think you\'ve registered before, try a different email.';
+          emailStatusMsg.style.color = '#3730a3';
           if (newMemberRadio) newMemberRadio.checked = true;
         }
       } catch (err) {
