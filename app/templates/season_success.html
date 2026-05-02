@@ -22,12 +22,17 @@
 
         {% if payment_hold %}
           <div class="notice notice--info">
-            <p style="margin: 0 0 8px;">A hold of <strong>{{ amount_display }}</strong> has been placed on your card. Your card will <strong>not</strong> be charged until your membership is confirmed.</p>
-            <p style="margin: 0;">You'll receive a receipt email from Stripe once your membership is confirmed and the charge is processed.</p>
+            <p style="margin: 0 0 8px;"><strong>Your card hasn't been charged yet.</strong></p>
+            <p style="margin: 0 0 8px;">A hold of <strong>{{ amount_display }}</strong> has been placed on your card. We'll only complete the charge once your spot on the team is confirmed, by 1 day after registration closes. You'll get a receipt from Stripe at that point.</p>
           </div>
           <div class="notice notice--info" style="margin-top: 12px;">
-            <p style="margin: 0 0 8px;"><strong>Next up: join us on Slack!</strong></p>
-            <p style="margin: 0;">You'll receive an invite to the TCSC Slack workspace shortly. Please install the <a href="https://slack.com/downloads" target="_blank">Slack app</a> on your phone — it's where all club communication, announcements, and community activity happens.</p>
+            <p style="margin: 0 0 8px;"><strong>How we'll get you on the team</strong></p>
+            <p style="margin: 0 0 8px;">After registration closes, we'll confirm your spot. If signups exceed capacity, folks who applied in a past season and didn't get in are considered first, then everyone else. We do this via a two-round lottery: one for returning signups, then one for new signups.</p>
+            <p style="margin: 0; color: var(--text-muted); font-size: 14px;"><em>For context: summer usually has room for everyone. Winter tends to fill up.</em></p>
+          </div>
+          <div class="notice notice--info" style="margin-top: 12px;">
+            <p style="margin: 0 0 8px;"><strong>Next up: join us on Slack</strong></p>
+            <p style="margin: 0;">Once your spot is confirmed, we'll send you an invite to the TCSC Slack workspace, so keep an eye on your inbox. When it arrives, please install the <a href="https://slack.com/downloads" target="_blank">Slack app</a> on your phone, since that's where all club communication, announcements, and community activity happen.</p>
           </div>
           <div class="notice notice--warn" style="margin-top: 12px;">
             <strong>Tip:</strong> Save this page or take a screenshot for your records.
