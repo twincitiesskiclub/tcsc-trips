@@ -217,6 +217,12 @@ def api_is_returning_member():
     is_returning = bool(user and getattr(user, 'is_returning', False))
     result = {'is_returning': is_returning}
     if not is_returning:
-        season = Season.get_current()
+        season = None
+        season_id = data.get('season_id')
+        if season_id is not None:
+            try:
+                season = Season.query.get(int(season_id))
+            except (TypeError, ValueError):
+                season = None
         result['new_registration_open'] = bool(season and season.is_new_open())
     return jsonify(result)
