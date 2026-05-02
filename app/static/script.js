@@ -292,11 +292,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const newMemberRadio = document.querySelector('input[name="status"][value="new"]');
       const returningRadio = document.querySelector('input[name="status"][value="returning_former"]');
 
+      const seasonId = emailInput.closest('form')?.dataset.seasonId;
+
       try {
         const resp = await fetch('/api/is_returning_member', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email })
+          body: JSON.stringify({ email, season_id: seasonId })
         });
         const data = await resp.json();
         if (data.is_returning) {
