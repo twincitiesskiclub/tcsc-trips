@@ -86,7 +86,7 @@ schedule:
 
 channels:
   living_post: tcsc-logging
-  publish: announcements-tcsc
+  publish: announcements-general
   admin_review: newsletter-admin
   photos: photos
   qotm_post: chat

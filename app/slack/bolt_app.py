@@ -484,7 +484,7 @@ if _bot_token:
                         client.chat_postEphemeral(
                             channel=channel_id,
                             user=user_id,
-                            text=":white_check_mark: Newsletter published to #announcements-tcsc!"
+                            text=":white_check_mark: Newsletter published to #announcements-general!"
                         )
                     logger.info(f"Newsletter {newsletter_id} published by {user_id}")
                 else:
@@ -1351,6 +1351,7 @@ if _bot_token:
         logger.info(f"Reactivation request from {user_id}")
 
         with get_app_context():
+            from datetime import datetime
             from app.models import User, SlackUser, db
             from app.slack.channel_sync import load_channel_config
             from app.slack.client import get_team_id, get_channel_maps
@@ -1388,6 +1389,12 @@ if _bot_token:
                     dry_run=False,
                     channel_ids=mcg_channel_ids,
                 )
+
+                # Grace period: stamp last_slack_activity so the next sync doesn't
+                # immediately re-demote them. The user clicked the reactivation
+                # workflow, which is its own implicit "I'm active" signal.
+                slack_user.last_slack_activity = datetime.utcnow()
+                db.session.commit()
 
                 send_tier_transition_notification(
                     name=user.full_name,

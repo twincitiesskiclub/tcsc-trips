@@ -249,6 +249,7 @@ class User(db.Model):
             if self.seasons_since_active == 1:
                 return 'multi_channel_guest'
             else:  # 2+ seasons alumni — check activity
+                # TODO: read threshold from config activity_threshold_days (currently hardcoded 90)
                 if (self.slack_user
                         and self.slack_user.last_slack_activity
                         and (datetime.utcnow() - self.slack_user.last_slack_activity).days < 90):
