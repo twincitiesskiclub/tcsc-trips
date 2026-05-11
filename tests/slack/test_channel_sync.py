@@ -208,3 +208,157 @@ class TestSyncSingleUserMCGTransition:
 
         assert mock_notify.called
         assert mock_notify.call_args.kwargs['to_tier'] == 'multi_channel_guest'
+
+
+# Channel IDs used across the stable-tier tests
+C_WELCOME = 'C_WELCOME'
+C_REACTIVATE = 'C_REACTIVATE'
+C_CHAT = 'C_CHAT'
+C_ALUMNI = 'C_ALUMNI'
+C_BOOKCLUB = 'C_BOOKCLUB'
+
+
+class TestSyncSingleUserStableTierChannelRepair:
+    """SCG/MCG users whose role doesn't change still get missing channels added."""
+
+    @patch('app.slack.channel_sync.add_user_to_channel', return_value=True)
+    @patch('app.slack.channel_sync.change_user_role')
+    @patch('app.slack.channel_sync.get_user_channels')
+    @patch('app.slack.channel_sync.needs_role_change', return_value=False)
+    @patch('app.slack.channel_sync.User.get_by_email', return_value=None)
+    @patch('app.slack.channel_sync.Season.get_current', return_value=None)
+    def test_scg_missing_target_channel_gets_added(
+        self, mock_season, mock_user, mock_needs, mock_get_chans,
+        mock_change_role, mock_add_channel, app
+    ):
+        """SCG user in welcome-only should be added to tcsc-reactivate-me."""
+        from app.slack.channel_sync import sync_single_user, ChannelSyncResult
+
+        # User is currently only in the workspace default channel
+        mock_get_chans.return_value = {C_WELCOME}
+
+        slack_user = {
+            'id': 'U_SCG',
+            'profile': {'email': 'claire@example.com'},
+            'is_restricted': False,
+            'is_ultra_restricted': True,  # SCG
+        }
+        result = ChannelSyncResult()
+
+        sync_single_user(
+            slack_user=slack_user,
+            target_tier='single_channel_guest',
+            target_channel_ids={C_REACTIVATE},
+            full_member_channel_ids=set(),
+            managed_channel_ids={C_REACTIVATE},
+            channel_id_to_properties={
+                C_REACTIVATE: {'name': 'tcsc-reactivate-me', 'is_public': False},
+                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+            },
+            team_id='T_TEST',
+            dry_run=True,
+            result=result,
+            notify_per_transition=False,
+        )
+
+        # Should add tcsc-reactivate-me
+        mock_add_channel.assert_called_once_with('U_SCG', C_REACTIVATE, 'claire@example.com', True)
+        # Role change must NOT be called
+        mock_change_role.assert_not_called()
+        assert result.channel_adds == 1
+        # No PRESERVE_PRIVATE trace (that's an MCG role-change concept)
+        assert not any('PRESERVE_PRIVATE' in t for t in result.traces)
+
+    @patch('app.slack.channel_sync.add_user_to_channel', return_value=True)
+    @patch('app.slack.channel_sync.change_user_role')
+    @patch('app.slack.channel_sync.get_user_channels')
+    @patch('app.slack.channel_sync.needs_role_change', return_value=False)
+    @patch('app.slack.channel_sync.User.get_by_email', return_value=None)
+    @patch('app.slack.channel_sync.Season.get_current', return_value=None)
+    def test_mcg_missing_managed_channel_gets_added(
+        self, mock_season, mock_user, mock_needs, mock_get_chans,
+        mock_change_role, mock_add_channel, app
+    ):
+        """MCG user missing one managed channel gets it added; private channel untouched."""
+        from app.slack.channel_sync import sync_single_user, ChannelSyncResult
+
+        # User is in two managed MCG channels + one private channel they joined manually
+        mock_get_chans.return_value = {C_WELCOME, C_CHAT, C_BOOKCLUB}
+
+        slack_user = {
+            'id': 'U_MCG',
+            'profile': {'email': 'mcg@example.com'},
+            'is_restricted': True,   # MCG
+            'is_ultra_restricted': False,
+        }
+        managed = {C_WELCOME, C_CHAT, C_ALUMNI}
+        target_mcg = {C_WELCOME, C_CHAT, C_ALUMNI}
+        result = ChannelSyncResult()
+
+        sync_single_user(
+            slack_user=slack_user,
+            target_tier='multi_channel_guest',
+            target_channel_ids=target_mcg,
+            full_member_channel_ids=set(),
+            managed_channel_ids=managed,
+            channel_id_to_properties={
+                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_CHAT: {'name': 'general-chat', 'is_public': False},
+                C_ALUMNI: {'name': 'alumni-corner', 'is_public': False},
+                C_BOOKCLUB: {'name': 'book-club', 'is_public': False},
+            },
+            team_id='T_TEST',
+            dry_run=True,
+            result=result,
+            notify_per_transition=False,
+        )
+
+        # Only C_ALUMNI should be added (the missing managed MCG channel)
+        mock_add_channel.assert_called_once_with('U_MCG', C_ALUMNI, 'mcg@example.com', True)
+        # Role change must NOT be called
+        mock_change_role.assert_not_called()
+        assert result.channel_adds == 1
+
+    @patch('app.slack.channel_sync.add_user_to_channel', return_value=True)
+    @patch('app.slack.channel_sync.change_user_role')
+    @patch('app.slack.channel_sync.get_user_channels')
+    @patch('app.slack.channel_sync.needs_role_change', return_value=False)
+    @patch('app.slack.channel_sync.User.get_by_email', return_value=None)
+    @patch('app.slack.channel_sync.Season.get_current', return_value=None)
+    def test_scg_no_op_when_channels_already_correct(
+        self, mock_season, mock_user, mock_needs, mock_get_chans,
+        mock_change_role, mock_add_channel, app
+    ):
+        """SCG user already in the correct channels — no adds, no role change."""
+        from app.slack.channel_sync import sync_single_user, ChannelSyncResult
+
+        # User already has both expected channels
+        mock_get_chans.return_value = {C_WELCOME, C_REACTIVATE}
+
+        slack_user = {
+            'id': 'U_SCG2',
+            'profile': {'email': 'noop@example.com'},
+            'is_restricted': False,
+            'is_ultra_restricted': True,  # SCG
+        }
+        result = ChannelSyncResult()
+
+        sync_single_user(
+            slack_user=slack_user,
+            target_tier='single_channel_guest',
+            target_channel_ids={C_REACTIVATE},
+            full_member_channel_ids=set(),
+            managed_channel_ids={C_REACTIVATE},
+            channel_id_to_properties={
+                C_REACTIVATE: {'name': 'tcsc-reactivate-me', 'is_public': False},
+                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+            },
+            team_id='T_TEST',
+            dry_run=True,
+            result=result,
+            notify_per_transition=False,
+        )
+
+        mock_add_channel.assert_not_called()
+        mock_change_role.assert_not_called()
+        assert result.channel_adds == 0
