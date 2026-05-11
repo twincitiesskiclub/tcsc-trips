@@ -26,7 +26,7 @@ Announcement channels by audience:
 
 | Channel | Audience | Content | Posting permissions |
 |---|---|---|---|
-| `welcome-to-tcsc` (public) | Everyone in the workspace (workspace-default) | Public landing/orientation channel. NOT managed by the sync. | Board only |
+| `welcome-to-tcsc` (public) | full_member + MCG (the sync re-adds them if they fall out). SCG users are NOT added — they're isolated to the reactivation channel. | Public landing/orientation channel | Board only |
 | `announcements-general` (private) | full_member only | Members-only announcements: trips, adventures, apparel, seasonal info, club news | Board members only |
 | `announcements-practices` | full_member only | Practice schedules, workouts, RSVPs | Board/coaches |
 | `announcements-alumni` (C0B2ZQ4KM0E) | MCG only | Alumni-facing announcements (re-engagement, alumni events, club news appropriate for non-members) | Rob, president, and vice president only |
@@ -42,6 +42,7 @@ Community channels (chat, gear-recs-swap, extra-training-fun, races-information,
 
 | Channel | full_member | MCG | SCG |
 |---|---|---|---|
+| `welcome-to-tcsc` | yes | yes | no |
 | `announcements-general` | yes | no | no |
 | `announcements-practices` | yes | no | no |
 | `announcements-alumni` | no | yes | no |
@@ -183,6 +184,7 @@ Uses the existing `SLACK_WEBHOOK_URL` pattern from `app/notifications/slack.py`.
 ```yaml
 channels:
   full_member:
+    - "welcome-to-tcsc"
     - "announcements-general"
     - "announcements-practices"
     - "chat"
@@ -196,6 +198,7 @@ channels:
     - "race-waxing"
 
   multi_channel_guest:
+    - "welcome-to-tcsc"
     - "announcements-alumni"
     - "chat"
     - "fresh-tracks"
