@@ -246,6 +246,54 @@ def build_user_cache(bot: WebClient) -> dict[str, dict]:
     return cache
 
 
+SYSTEM_SUBTYPES = {
+    "channel_join", "channel_leave", "channel_topic", "channel_purpose",
+    "channel_name", "channel_archive", "channel_unarchive",
+    "pinned_item", "unpinned_item", "channel_convert_to_private",
+    "channel_convert_to_public", "bot_message", "reminder_add",
+    "tombstone",
+}
+
+
+def should_skip(msg: dict) -> str | None:
+    """Return a reason string if the message should be skipped, else None."""
+    subtype = msg.get("subtype")
+    if subtype in SYSTEM_SUBTYPES:
+        return f"subtype={subtype}"
+    if msg.get("bot_id"):
+        return f"bot_message: {msg.get('username', msg.get('bot_id'))}"
+    if not msg.get("user") and not msg.get("user_profile"):
+        return "no_author"
+    return None
+
+
+def fetch_history_oldest_first(
+    bot: WebClient,
+    channel: str,
+    oldest_ts: str | None = None,
+) -> list[dict]:
+    """Fetch all root messages from a channel, in oldest-first order."""
+    messages: list[dict] = []
+    cursor = None
+    page = 0
+    while True:
+        params = {"channel": channel, "limit": 200}
+        if cursor:
+            params["cursor"] = cursor
+        if oldest_ts:
+            params["oldest"] = oldest_ts
+        resp = bot.conversations_history(**params)
+        messages.extend(resp.get("messages", []))
+        page += 1
+        print(f"  history page {page}: {len(messages)} total so far")
+        cursor = resp.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+    # Slack returns newest-first; flip to oldest-first
+    messages.reverse()
+    return messages
+
+
 def resolve_author(msg: dict, user_cache: dict[str, dict]) -> dict:
     """Return {display_name, icon_url, icon_emoji} for the author of msg.
 
@@ -270,6 +318,114 @@ def resolve_author(msg: dict, user_cache: dict[str, dict]) -> dict:
     return {"display_name": "Former member", "icon_url": None, "icon_emoji": ":ghost:"}
 
 
+def post_impersonated(
+    bot: WebClient,
+    channel: str,
+    text: str,
+    author: dict,
+    thread_ts: str | None = None,
+) -> str:
+    """Post text in channel impersonating author; return new ts.
+
+    author is the dict returned by resolve_author().
+    """
+    kwargs = {
+        "channel": channel,
+        "text": text,
+        "username": author["display_name"],
+        # Disable Slack's link unfurling for re-posts so old links don't generate
+        # fresh notification pings or large unfurl previews.
+        "unfurl_links": False,
+        "unfurl_media": False,
+    }
+    if author["icon_url"]:
+        kwargs["icon_url"] = author["icon_url"]
+    elif author["icon_emoji"]:
+        kwargs["icon_emoji"] = author["icon_emoji"]
+    if thread_ts:
+        kwargs["thread_ts"] = thread_ts
+    resp = bot.chat_postMessage(**kwargs)
+    time.sleep(POST_DELAY_SECONDS)
+    return resp["ts"]
+
+
+def parse_since(since: str | None) -> str | None:
+    if not since:
+        return None
+    dt = datetime.strptime(since, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+    return str(dt.timestamp())
+
+
+def copy_root_messages(
+    bot: WebClient,
+    user_cache: dict[str, dict],
+    manifest: dict,
+    limit: int | None,
+    since_ts: str | None,
+) -> None:
+    print(f"Fetching source channel history...")
+    history = fetch_history_oldest_first(bot, SOURCE_CHANNEL, oldest_ts=since_ts)
+    print(f"  fetched {len(history)} total messages from source")
+
+    copied = 0
+    skipped = 0
+    already_done = 0
+    eligible = 0  # human messages seen (already_done + copied); limit applies to this
+    for msg in history:
+        source_ts = msg["ts"]
+
+        # Fast-path: already processed (copied or skipped on a prior run)
+        if source_ts in manifest["messages"] or source_ts in manifest["skipped"]:
+            # Only count previously-copied messages toward the eligible limit, not
+            # previously-skipped system messages, so --limit N stays consistent
+            # across runs (run 2 with --limit 3 terminates at the same 3 messages).
+            if source_ts in manifest["messages"]:
+                already_done += 1
+                eligible += 1
+                if limit is not None and eligible >= limit:
+                    print(f"  --limit {limit} reached; stopping")
+                    break
+            continue
+
+        reason = should_skip(msg)
+        if reason:
+            manifest["skipped"][source_ts] = reason
+            save_manifest(manifest)
+            skipped += 1
+            continue
+
+        # Eligible human message — count it toward the limit before copying
+        eligible += 1
+        author = resolve_author(msg, user_cache)
+        text = build_post_text(msg, include_reactions=True)
+        try:
+            new_ts = post_impersonated(bot, DEST_CHANNEL, text, author)
+        except SlackApiError as e:
+            err = e.response["error"]
+            if err == "not_in_channel":
+                sys.exit("ERROR: bot was removed from DEST during run. Re-add and re-run; manifest will resume.")
+            if err == "restricted_action":
+                sys.exit("ERROR: DEST has posting permissions that exclude the bot. Adjust and re-run.")
+            raise
+
+        manifest["messages"][source_ts] = {
+            "author_slack_id": msg.get("user", ""),
+            "author_display": author["display_name"],
+            "new_ts": new_ts,
+            "files": [],
+            "deleted": False,
+            "replies": {},
+        }
+        save_manifest(manifest)
+        copied += 1
+
+        if limit is not None and eligible >= limit:
+            print(f"  --limit {limit} reached; stopping")
+            break
+
+    print(f"Root copy summary: copied={copied} already_done={already_done} skipped={skipped}")
+
+
 def cmd_copy(args: argparse.Namespace) -> None:
     bot = get_bot_client()
     print(f"Verifying channel access...")
@@ -279,7 +435,9 @@ def cmd_copy(args: argparse.Namespace) -> None:
     user_cache = build_user_cache(bot)
     manifest = load_or_init_manifest()
     save_manifest(manifest)
-    print(f"Manifest loaded: {len(manifest['messages'])} messages already copied.")
+    print(f"Manifest loaded: {len(manifest['messages'])} root messages already copied.")
+    since_ts = parse_since(args.since)
+    copy_root_messages(bot, user_cache, manifest, args.limit, since_ts)
 
 
 def cmd_delete(args: argparse.Namespace) -> None:
