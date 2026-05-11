@@ -16,12 +16,12 @@ Usage:
 import argparse
 import json
 import os
-import requests
 import sys
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import requests
 from dotenv import load_dotenv
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
