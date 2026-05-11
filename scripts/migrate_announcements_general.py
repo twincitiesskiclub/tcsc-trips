@@ -459,13 +459,76 @@ def copy_thread_replies(
     return copied
 
 
+def copy_pins(bot: WebClient, manifest: dict) -> None:
+    """For each pinned source message that was copied, pin the new copy in DEST."""
+    print("Copying pinned messages...")
+    try:
+        resp = bot.pins_list(channel=SOURCE_CHANNEL)
+    except SlackApiError as e:
+        print(f"  [warn] pins.list failed: {e.response['error']}")
+        return
+    pinned_ts = []
+    for item in resp.get("items", []):
+        msg = item.get("message")
+        if msg and msg.get("ts"):
+            pinned_ts.append(msg["ts"])
+    manifest["pinned_source_ts"] = pinned_ts
+    save_manifest(manifest)
+
+    pinned_count = 0
+    for ts in pinned_ts:
+        entry = manifest["messages"].get(ts)
+        if not entry:
+            print(f"  [skip] pinned source ts {ts} was not copied (filtered out)")
+            continue
+        new_ts = entry["new_ts"]
+        try:
+            bot.pins_add(channel=DEST_CHANNEL, timestamp=new_ts)
+            pinned_count += 1
+        except SlackApiError as e:
+            err = e.response["error"]
+            if err == "already_pinned":
+                pinned_count += 1
+            else:
+                print(f"  [warn] pins.add failed for new_ts {new_ts}: {err}")
+    print(f"  pinned {pinned_count} messages in DEST")
+
+
+def write_transcript(bot: WebClient, user_cache: dict[str, dict], history: list[dict]) -> None:
+    """Write a readable transcript of source channel content for the welcome-post subagent."""
+    print(f"Writing transcript to {TRANSCRIPT_PATH}...")
+    lines: list[str] = []
+    for msg in history:
+        if should_skip(msg):
+            continue
+        author = resolve_author(msg, user_cache)
+        ts_str = format_timestamp_central(msg["ts"])
+        text = msg.get("text", "")
+        lines.append(f"[{ts_str}] {author['display_name']}: {text}")
+        files = msg.get("files") or []
+        if files:
+            names = ", ".join(f.get("name", f["id"]) for f in files)
+            lines.append(f"    [files: {names}]")
+        if msg.get("reply_count", 0) > 0:
+            replies = fetch_replies(bot, SOURCE_CHANNEL, msg["ts"])
+            for r in replies:
+                if should_skip(r):
+                    continue
+                r_author = resolve_author(r, user_cache)
+                r_ts = format_timestamp_central(r["ts"])
+                r_text = r.get("text", "")
+                lines.append(f"    [{r_ts}] {r_author['display_name']} (reply): {r_text}")
+    TRANSCRIPT_PATH.write_text("\n".join(lines))
+    print(f"  wrote {len(lines)} lines")
+
+
 def copy_root_messages(
     bot: WebClient,
     user_cache: dict[str, dict],
     manifest: dict,
     limit: int | None,
     since_ts: str | None,
-) -> None:
+) -> list[dict]:
     print(f"Fetching source channel history...")
     history = fetch_history_oldest_first(bot, SOURCE_CHANNEL, oldest_ts=since_ts)
     print(f"  fetched {len(history)} total messages from source")
@@ -552,6 +615,7 @@ def copy_root_messages(
             break
 
     print(f"Root copy summary: copied={copied} already_done={already_done} skipped={skipped}")
+    return history
 
 
 def cmd_copy(args: argparse.Namespace) -> None:
@@ -565,7 +629,17 @@ def cmd_copy(args: argparse.Namespace) -> None:
     save_manifest(manifest)
     print(f"Manifest loaded: {len(manifest['messages'])} root messages already copied.")
     since_ts = parse_since(args.since)
-    copy_root_messages(bot, user_cache, manifest, args.limit, since_ts)
+    history = copy_root_messages(bot, user_cache, manifest, args.limit, since_ts)
+
+    # Only do the post-copy steps when the run was unlimited and complete
+    if args.limit is None:
+        copy_pins(bot, manifest)
+        write_transcript(bot, user_cache, history)
+        manifest["copy_completed_at"] = datetime.now(timezone.utc).isoformat()
+        save_manifest(manifest)
+        print(f"Copy phase complete. Manifest: {MANIFEST_PATH}")
+    else:
+        print(f"Limited run (--limit {args.limit}); pins/transcript/completion-stamp skipped.")
 
 
 def cmd_delete(args: argparse.Namespace) -> None:
