@@ -642,13 +642,98 @@ def cmd_copy(args: argparse.Namespace) -> None:
         print(f"Limited run (--limit {args.limit}); pins/transcript/completion-stamp skipped.")
 
 
+def build_delete_list(manifest: dict) -> tuple[list[tuple[str, str]], list[str]]:
+    """Return (reply_pairs, roots) pending deletion.
+
+    reply_pairs: list of (root_ts, reply_ts) pairs, oldest reply_ts first.
+    roots: list of root_ts, oldest first.
+    Both filtered to entries with deleted == False.
+    Replies are returned first so callers delete them before roots, which
+    avoids leaving orphaned 'thread of deleted message' artifacts in Slack.
+    """
+    reply_pairs: list[tuple[str, str]] = []
+    roots: list[str] = []
+    for root_ts, entry in manifest["messages"].items():
+        if not entry.get("deleted"):
+            roots.append(root_ts)
+        for reply_ts, reply in entry.get("replies", {}).items():
+            if not reply.get("deleted"):
+                reply_pairs.append((root_ts, reply_ts))
+    reply_pairs.sort(key=lambda p: float(p[1]))
+    roots.sort(key=lambda ts: float(ts))
+    return reply_pairs, roots
+
+
+def delete_from_source(user: WebClient, manifest: dict) -> None:
+    reply_pairs, roots = build_delete_list(manifest)
+    print(f"Deleting {len(reply_pairs)} replies, then {len(roots)} roots from {SOURCE_CHANNEL}...")
+
+    # Replies first
+    deleted = 0
+    failed = 0
+    for root_ts, reply_ts in reply_pairs:
+        try:
+            user.chat_delete(channel=SOURCE_CHANNEL, ts=reply_ts)
+            manifest["messages"][root_ts]["replies"][reply_ts]["deleted"] = True
+            save_manifest(manifest)
+            deleted += 1
+        except SlackApiError as e:
+            err = e.response["error"]
+            if err == "message_not_found":
+                manifest["messages"][root_ts]["replies"][reply_ts]["deleted"] = True
+                save_manifest(manifest)
+                deleted += 1
+            else:
+                print(f"  [warn] reply {reply_ts} failed: {err}")
+                failed += 1
+
+    # Then roots
+    for root_ts in roots:
+        try:
+            user.chat_delete(channel=SOURCE_CHANNEL, ts=root_ts)
+            manifest["messages"][root_ts]["deleted"] = True
+            save_manifest(manifest)
+            deleted += 1
+        except SlackApiError as e:
+            err = e.response["error"]
+            if err == "message_not_found":
+                manifest["messages"][root_ts]["deleted"] = True
+                save_manifest(manifest)
+                deleted += 1
+            else:
+                print(f"  [warn] root {root_ts} failed: {err}")
+                failed += 1
+
+    print(f"Delete summary: deleted={deleted} failed={failed}")
+
+
 def cmd_delete(args: argparse.Namespace) -> None:
     bot = get_bot_client()
     user = get_user_client()
     print(f"Verifying channel access...")
     verify_channel_access(bot, SOURCE_CHANNEL, "SOURCE")
     probe_delete_scopes(bot, user)
-    print(f"Scopes OK. Delete implementation pending. (dry_run={not args.no_dry_run})")
+    manifest = load_or_init_manifest()
+    if manifest.get("copy_completed_at") is None:
+        sys.exit("ERROR: manifest.copy_completed_at is null — copy phase did not finish. Run copy without --limit first.")
+    if manifest.get("channel_from") != SOURCE_CHANNEL:
+        sys.exit(f"ERROR: manifest channel_from {manifest.get('channel_from')} != configured SOURCE {SOURCE_CHANNEL}")
+
+    reply_pairs, roots = build_delete_list(manifest)
+    print(f"Pending deletes: {len(reply_pairs)} replies, {len(roots)} root messages in {SOURCE_CHANNEL}.")
+
+    if not args.no_dry_run:
+        print("Dry-run only (default). Pass --no-dry-run to actually delete.")
+        return
+
+    print(f"\nThis will permanently delete {len(reply_pairs) + len(roots)} messages from {SOURCE_CHANNEL}.")
+    print("Type 'yes' to confirm:")
+    confirm = input().strip()
+    if confirm != "yes":
+        sys.exit("Aborted.")
+
+    delete_from_source(user, manifest)
+    print(f"Delete phase complete.")
 
 
 def main() -> None:
