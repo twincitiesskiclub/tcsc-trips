@@ -116,6 +116,7 @@ class SlackUser(db.Model):
     phone = db.Column(db.String(50))
     status = db.Column(db.Text)
     timezone = db.Column(db.String(100))
+    last_slack_activity = db.Column(db.DateTime, nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
