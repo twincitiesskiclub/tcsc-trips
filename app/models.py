@@ -233,7 +233,8 @@ class User(db.Model):
         Standard rules:
         - ACTIVE status -> full_member
         - ALUMNI with seasons_since_active == 1 -> multi_channel_guest
-        - ALUMNI with seasons_since_active >= 2 -> single_channel_guest
+        - ALUMNI with seasons_since_active >= 2 + active in last 90 days -> multi_channel_guest
+        - ALUMNI with seasons_since_active >= 2 + inactive 90+ days -> single_channel_guest
         - PENDING or DROPPED -> None (no Slack automation)
         """
         # Check for full_member override tags (coaches always get full access)
@@ -247,7 +248,11 @@ class User(db.Model):
         elif self.status == UserStatus.ALUMNI:
             if self.seasons_since_active == 1:
                 return 'multi_channel_guest'
-            else:  # 2+ seasons
+            else:
+                if (self.slack_user
+                        and self.slack_user.last_slack_activity
+                        and (datetime.utcnow() - self.slack_user.last_slack_activity).days < 90):
+                    return 'multi_channel_guest'
                 return 'single_channel_guest'
         # PENDING and DROPPED = no Slack automation
         return None
