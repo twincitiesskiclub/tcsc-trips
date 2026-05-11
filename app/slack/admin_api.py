@@ -371,10 +371,13 @@ def fetch_user_activity() -> dict[str, datetime]:
     activity_map: dict[str, datetime] = {}
 
     try:
+        creds = get_admin_credentials()
+        token = creds['token']
+
         range_response = make_admin_request(
             api_method='admin.analytics.getAvailableDateRange',
             data={
-                'token': get_admin_credentials()['token'],
+                'token': token,
                 'type': 'member',
                 '_x_reason': 'fetchMembersDataAvailableDateRange',
                 '_x_mode': 'online',
@@ -389,9 +392,10 @@ def fetch_user_activity() -> dict[str, datetime]:
 
         cursor = ''
         total_expected = None
+        rows_seen = 0
         while True:
             data = {
-                'token': get_admin_credentials()['token'],
+                'token': token,
                 'start_date': start_date,
                 'end_date': end_date,
                 'count': '500',
@@ -412,7 +416,10 @@ def fetch_user_activity() -> dict[str, datetime]:
                 email='(bulk activity fetch)',
             )
 
-            for member in response.get('member_activity', []):
+            member_activity = response.get('member_activity', [])
+            rows_seen += len(member_activity)
+
+            for member in member_activity:
                 user_id = member.get('user_id')
                 ts = member.get('date_last_active') or 0
                 if user_id and ts > 0:
@@ -424,7 +431,7 @@ def fetch_user_activity() -> dict[str, datetime]:
             next_cursor = response.get('next_cursor_mark', '')
             if not next_cursor or next_cursor == cursor:
                 break
-            if total_expected and len(activity_map) >= total_expected:
+            if total_expected and rows_seen >= total_expected:
                 break
             cursor = next_cursor
 
