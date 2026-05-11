@@ -677,8 +677,9 @@ known_private_channels:
 # Tags that mark users as exceptions (skipped by automation)
 # These users retain their current Slack status regardless of DB status
 # Note: HEAD_COACH and ASSISTANT_COACH are NOT exceptions - they get full_member tier override
+# Note: BOARD_MEMBER is intentionally NOT in this list — board members should be
+#       subject to normal tier logic so their channel memberships stay accurate.
 exception_tags:
-  - "BOARD_MEMBER"
   - "ADMIN"
   - "EXEMPT"
 
@@ -1558,7 +1559,7 @@ Run the sync again with `dry_run=True`. Now the trace output reflects the new po
 - MCG announcement channel is `announcements-alumni` (NOT `announcements-general`)
 - SCG channel is `tcsc-reactivate-me`
 - `announcements-adventures` does not appear anywhere
-- Exception-tagged users (`BOARD_MEMBER`, `ADMIN`, `EXEMPT`) skipped entirely
+- Exception-tagged users (`ADMIN`, `EXEMPT`) skipped entirely
 
 - [ ] **Step 5: Human review gate**
 

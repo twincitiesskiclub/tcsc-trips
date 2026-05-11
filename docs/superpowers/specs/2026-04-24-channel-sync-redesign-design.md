@@ -70,7 +70,7 @@ ALUMNI + seasons_since_active >= 2 + last_slack_activity older than 90 days → 
 PENDING / DROPPED → None (no Slack automation)
 ```
 
-**Exception tags** (`BOARD_MEMBER`, `ADMIN`, `EXEMPT`, from `exception_tags` in `slack_channels.yaml`): users with any of these tags are skipped entirely by the sync — they keep whatever Slack status they currently have regardless of DB state. Unchanged from existing behavior.
+**Exception tags** (`ADMIN`, `EXEMPT`, from `exception_tags` in `slack_channels.yaml`): users with any of these tags are skipped entirely by the sync — they keep whatever Slack status they currently have regardless of DB state. `BOARD_MEMBER` was previously in this list but was removed so board members are subject to normal tier logic and their channel memberships stay accurate.
 
 **PENDING during lottery window:** A new member who registers but has not yet been admitted to ACTIVE has `User.status == PENDING`. `get_slack_tier()` returns `None`, so the sync ignores them. They get no Slack access during the lottery window. Unchanged from existing behavior.
 
@@ -283,5 +283,5 @@ known_private_channels:
 - **Multiple seasons skipped at once:** `seasons_since_active` jumps from 0 to 2+ on season activation. Activity check applies immediately.
 - **Coach tag override:** Coaches always get full_member regardless of registration status or activity. Unchanged.
 - **SCG tries to reactivate but isn't 2+ season alumni:** Handler validates status and rejects with a message. Guards against misuse if a non-SCG user somehow accesses the workflow.
-- **Exception-tagged users (BOARD_MEMBER/ADMIN/EXEMPT):** Skipped entirely. They retain current Slack status across season activations and tier evaluations. Documented to prevent surprise.
+- **Exception-tagged users (ADMIN/EXEMPT):** Skipped entirely. They retain current Slack status across season activations and tier evaluations. Documented to prevent surprise.
 - **Activity probe fails on production but worked in spike:** Sync logs warning, uses stale `last_slack_activity` values. If stale values exist, no mass demotions. If first ever run (no stale values), 2+ alumni would route to SCG — which is why sequence step 3 verifies activity populated before step 7 flips to live.
