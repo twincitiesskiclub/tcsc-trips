@@ -17,22 +17,24 @@ The current Slack channel sync system uses a simple time-based tier model: ACTIV
 
 ### Channel Structure
 
-`announcements-adventures` is archived (handled out-of-band). `announcements-tcsc` is renamed to `announcements-general`. Announcement channels by audience:
+Out-of-band changes already made: `announcements-adventures` archived; `announcements-tcsc` renamed to `announcements-general`; new `announcements-alumni` channel created (`C0B2ZQ4KM0E`) for alumni-tier announcements. Announcement channels by audience:
 
 | Channel | Audience | Content | Posting permissions |
 |---|---|---|---|
-| `announcements-general` | full_member + MCG | Trips, adventures, apparel, seasonal info, club news | Board members only |
+| `announcements-general` | full_member only | Members-only announcements: trips, adventures, apparel, seasonal info, club news | Board members only |
 | `announcements-practices` | full_member only | Practice schedules, workouts, RSVPs | Board/coaches |
+| `announcements-alumni` (C0B2ZQ4KM0E) | MCG only | Alumni-facing announcements (re-engagement, alumni events, club news appropriate for non-members) | Rob, president, and vice president only |
 | `tcsc-reactivate-me` (C0AUQCG7UB1) | SCG only + Rob + president | Reactivation workflow | Board only (SCGs interact via workflow) |
 
-Community channels (chat, gear-recs-swap, extra-training-fun, races-information, meme, photos-videos, race-waxing, fresh-tracks, volunteer-and-job-opportunities) remain unchanged — available to full_member and MCG tiers.
+Community channels (chat, gear-recs-swap, extra-training-fun, races-information, meme, photos-videos, race-waxing, fresh-tracks, volunteer-and-job-opportunities) remain shared between full_member and MCG tiers.
 
 **Full channel-to-tier mapping:**
 
 | Channel | full_member | MCG | SCG |
 |---|---|---|---|
-| `announcements-general` | yes | yes | no |
+| `announcements-general` | yes | no | no |
 | `announcements-practices` | yes | no | no |
+| `announcements-alumni` | no | yes | no |
 | `chat` | yes | yes | no |
 | `fresh-tracks` | yes | yes | no |
 | `gear-recs-swap` | yes | yes | no |
@@ -143,17 +145,20 @@ When transitioning MCG → SCG, no preservation — they lose all channels and g
 
 Two notification modes, controlled by config:
 
-**1. End-of-sync summary (default, always on):** At the end of `run_channel_sync()`, post a single webhook message summarizing the run. Built from the in-memory `ChannelSyncResult` (already accumulating counts and traces during the run). Example:
+**1. End-of-sync summary (always on for live runs, gated off for dry-runs):** At the end of `run_channel_sync()`, post a single webhook message summarizing the run. Built from the in-memory `ChannelSyncResult` (already accumulating counts and traces during the run). Example:
 
-> Channel sync complete (live mode):
-> • Promoted to full_member: 12
-> • Demoted to MCG: 47
-> • Demoted to SCG: 8
-> • Reactivations: 3
+> Channel sync complete (live):
+> • Role changes: 67
+> • Channel additions: 12
+> • Channel removals: 8
+> • Invites: 3
 > • Errors: 0
-> Run ID: 2026-05-12T03:00:14Z
+
+Note: As initially built, `ChannelSyncResult.role_changes` is a single counter across all directions (full_member promotions, MCG demotions, SCG demotions). Splitting that into per-tier counters (`promoted_full_member`, `demoted_mcg`, `demoted_scg`, `reactivated_mcg`) would produce a more actionable summary but requires structural changes to `ChannelSyncResult` and every role-change site. **Follow-up:** add per-tier counters when there's appetite.
 
 Reactivations triggered by the Workflow Builder custom step also post a separate immediate notification (they're user-initiated, infrequent, and operationally interesting).
+
+Dry-runs do NOT post a summary — the 3am scheduled job runs in dry-run mode during the validation window before going live, and we don't want a daily ops-channel ping for no-op runs.
 
 **2. Per-transition notifications (off by default):** Controlled by `notify_per_transition: false` in `slack_channels.yaml`. When enabled, fires one webhook per transition with name/email/from→to/reason. Useful for debugging or low-volume periods, not for the first run.
 
@@ -181,7 +186,7 @@ channels:
     - "race-waxing"
 
   multi_channel_guest:
-    - "announcements-general"
+    - "announcements-alumni"
     - "chat"
     - "fresh-tracks"
     - "gear-recs-swap"
@@ -228,7 +233,8 @@ known_private_channels:
    - `tcsc-reactivate-me` channel exists (done — C0AUQCG7UB1)
    - `announcements-adventures` archived (done out-of-band)
    - `announcements-tcsc` renamed to `announcements-general` (done out-of-band)
-   - `announcements-general` posting permissions board-only
+   - `announcements-alumni` created (done — C0B2ZQ4KM0E); Rob, president, and VP added as posters; posting permissions limited to those three (alumni are added by the sync as channel members)
+   - `announcements-general` posting permissions board-only; existing alumni members will be removed from this channel by the first live sync
    - Bot added to private community channels (best-effort; channels without bot lose alumni)
    - Slack app manifest updated (`function_executed` event, `reactivate_membership` function)
    - Workflow Builder workflow configured with the custom step
