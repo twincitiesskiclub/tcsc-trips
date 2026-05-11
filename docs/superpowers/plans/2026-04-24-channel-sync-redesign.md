@@ -628,7 +628,7 @@ channels:
 
   # ALUMNI (seasons_since_active = 1, or 2+ with recent activity/reactivated)
   multi_channel_guest:
-    - "announcements-general"
+    - "announcements-alumni"
     - "chat"
     - "fresh-tracks"
     - "gear-recs-swap"
@@ -646,6 +646,7 @@ channels:
 # Channels exclusive to full members (full_member - multi_channel_guest)
 exclusive_channels:
   - "announcements-practices"
+  - "announcements-general"
 
 # Activity-based tier check for 2+ season alumni
 # Alumni inactive longer than this threshold are demoted to SCG
@@ -695,8 +696,10 @@ expertvoice:
 Key changes from old config:
 - Renamed `announcements-tcsc` → `announcements-general` everywhere
 - Removed `announcements-adventures` from `full_member` list
-- `single_channel_guest` changed from `announcements-tcsc` to `tcsc-reactivate-me`
-- `exclusive_channels` updated: removed `announcements-adventures`, only `announcements-practices` remains
+- `announcements-general` is now full_member-only (members-only announcements)
+- MCG announcement channel is the new `announcements-alumni` (C0B2ZQ4KM0E)
+- `single_channel_guest` channel is `tcsc-reactivate-me`
+- `exclusive_channels` is the set of channels only full_members get: `announcements-practices` and `announcements-general`
 - Added `activity_threshold_days: 90`
 - Added `reactivation_channel` and `reactivation_channel_id`
 - Added `notify_per_transition: false` (default off)
@@ -1483,9 +1486,21 @@ In Slack, open the existing workflow in `#tcsc-reactivate-me`:
 
 Already done out-of-band — verify:
 - `#announcements-adventures` is archived
-- `#announcements-tcsc` has been renamed to `#announcements-general`
-- `#announcements-general` posting permissions are board-only
-- `#tcsc-reactivate-me` exists (channel ID C0AUQCG7UB1)
+- Old public `announcements-tcsc`/`announcements-general` channel renamed to **`#welcome-to-tcsc`** (public, workspace-default, contains everyone — NOT managed by the sync)
+- **New private `#announcements-general` exists**; existing messages migrated from the old public channel; posting permissions board-only; **bot added** so sync can manage membership
+- `#announcements-alumni` exists (channel ID C0B2ZQ4KM0E); Rob, president, and VP added as posters; posting permissions limited to those three; **bot added**
+- `#tcsc-reactivate-me` exists (channel ID C0AUQCG7UB1); **bot added**
+
+Quick verification command (from `flask shell`):
+
+```python
+from app.slack.client import get_channel_maps
+name_to_id, _ = get_channel_maps()
+for name in ['announcements-general', 'announcements-alumni', 'announcements-practices', 'tcsc-reactivate-me']:
+    print(f"{name}: {name_to_id.get(name) or 'NOT FOUND — bot not in channel?'}")
+```
+
+All four channels must resolve to a non-None ID. If any are `NOT FOUND`, add the bot to that channel before proceeding.
 
 - [ ] **Step 4: Add the bot to community private channels**
 
@@ -1537,7 +1552,8 @@ Run the sync again with `dry_run=True`. Now the trace output reflects the new po
 - 2+ season alumni with recent activity → MCG (not SCG)
 - 2+ season alumni without recent activity → SCG
 - 1-season alumni → MCG with private channels preserved (`PRESERVE_PRIVATE` trace lines)
-- SCG channel is `tcsc-reactivate-me`, not `announcements-general`
+- MCG announcement channel is `announcements-alumni` (NOT `announcements-general`)
+- SCG channel is `tcsc-reactivate-me`
 - `announcements-adventures` does not appear anywhere
 - Exception-tagged users (`BOARD_MEMBER`, `ADMIN`, `EXEMPT`) skipped entirely
 
@@ -1569,7 +1585,7 @@ git commit -m "chore: switch channel sync to live mode after dry-run validation"
 Trigger sync via admin UI or `flask shell`. End-of-sync summary will post to the webhook channel.
 
 Spot-check 5–10 users in the Slack admin UI to confirm their roles match expected tiers. Specifically verify:
-- A 1-season alumni you know is now MCG with their private channels intact
+- A 1-season alumni you know is now MCG, in `announcements-alumni` (not `announcements-general`), with private channels intact
 - A 2+ season alumni with recent activity is MCG (not SCG)
 - A 2+ season alumni without recent activity is SCG, with access to `tcsc-reactivate-me`
-- A current ACTIVE member is full_member
+- A current ACTIVE member is full_member, in `announcements-general` and `announcements-practices`
