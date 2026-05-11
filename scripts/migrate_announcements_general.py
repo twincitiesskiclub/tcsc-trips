@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import os
+import requests
 import sys
 import time
 from datetime import datetime, timezone
@@ -377,6 +378,57 @@ def fetch_replies(bot: WebClient, channel: str, thread_ts: str) -> list[dict]:
     return replies
 
 
+def download_file(file_meta: dict) -> Path | None:
+    """Download a Slack file to FILES_DIR. Returns the local path, or None on failure."""
+    file_id = file_meta["id"]
+    name = file_meta.get("name", file_id)
+    url = file_meta.get("url_private_download") or file_meta.get("url_private")
+    if not url:
+        print(f"    [warn] file {file_id} ({name}): no download URL")
+        return None
+    # Preserve extension when possible
+    suffix = Path(name).suffix or ""
+    local_path = FILES_DIR / f"{file_id}{suffix}"
+    if local_path.exists():
+        return local_path  # already downloaded — restart-safe
+    headers = {"Authorization": f"Bearer {os.environ['SLACK_BOT_TOKEN']}"}
+    try:
+        r = requests.get(url, headers=headers, timeout=60)
+    except requests.RequestException as e:
+        print(f"    [warn] file {file_id} ({name}): download failed ({e})")
+        return None
+    if r.status_code != 200:
+        print(f"    [warn] file {file_id} ({name}): HTTP {r.status_code}")
+        return None
+    local_path.write_bytes(r.content)
+    return local_path
+
+
+def upload_files_to_thread(
+    bot: WebClient,
+    channel: str,
+    thread_ts: str,
+    file_paths: list[Path],
+) -> list[str]:
+    """Upload local files as a threaded reply under thread_ts. Returns new Slack file IDs."""
+    if not file_paths:
+        return []
+    file_uploads = [{"file": str(p), "filename": p.name} for p in file_paths]
+    try:
+        resp = bot.files_upload_v2(
+            channel=channel,
+            thread_ts=thread_ts,
+            initial_comment="",
+            file_uploads=file_uploads,
+        )
+    except SlackApiError as e:
+        print(f"    [warn] file upload failed: {e.response['error']}")
+        return []
+    # files_upload_v2 returns either 'file' (single) or 'files' (multi)
+    files = resp.get("files") or ([resp["file"]] if resp.get("file") else [])
+    return [f["id"] for f in files]
+
+
 def copy_thread_replies(
     bot: WebClient,
     user_cache: dict[str, dict],
@@ -447,7 +499,25 @@ def copy_root_messages(
         # Eligible human message — count it toward the limit before copying
         eligible += 1
         author = resolve_author(msg, user_cache)
+        files = msg.get("files", []) or []
+        downloaded: list[Path] = []
+        file_notes: list[str] = []
+        for f in files:
+            if f.get("mode") == "tombstone":
+                file_notes.append(f"[file deleted: {f.get('name', f['id'])}]")
+                continue
+            local = download_file(f)
+            if local is None:
+                file_notes.append(f"[file no longer available: {f.get('name', f['id'])}]")
+            else:
+                downloaded.append(local)
+
         text = build_post_text(msg, include_reactions=True)
+        if downloaded and not msg.get("text"):
+            text = build_post_text({**msg, "text": "_(attachment below)_"}, include_reactions=True)
+        if file_notes:
+            text = text + "\n\n" + "\n".join(file_notes)
+
         try:
             new_ts = post_impersonated(bot, DEST_CHANNEL, text, author)
         except SlackApiError as e:
@@ -458,11 +528,13 @@ def copy_root_messages(
                 sys.exit("ERROR: DEST has posting permissions that exclude the bot. Adjust and re-run.")
             raise
 
+        new_file_ids = upload_files_to_thread(bot, DEST_CHANNEL, new_ts, downloaded)
+
         manifest["messages"][source_ts] = {
             "author_slack_id": msg.get("user", ""),
             "author_display": author["display_name"],
             "new_ts": new_ts,
-            "files": [],
+            "files": new_file_ids,
             "deleted": False,
             "replies": {},
         }
