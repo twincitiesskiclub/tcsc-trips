@@ -643,7 +643,26 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
         # Get channel maps
         channel_name_to_id, channel_id_to_properties = get_channel_maps()
 
-        # Build tier map from database
+        # Compute all managed channel IDs (for private channel preservation)
+        managed_channel_ids = get_managed_channel_ids(config, channel_name_to_id)
+
+        # Activity backfill BEFORE tier evaluation — last_slack_activity values
+        # must be written before get_db_email_to_tier() materializes the tier map,
+        # because that map is a plain dict[str, str] snapshot from the ORM. Updates
+        # after that call don't retroactively affect tier decisions in this sync run.
+        activity_map = fetch_user_activity()
+        if activity_map:
+            for slack_user_record in SlackUser.query.all():
+                if slack_user_record.slack_uid in activity_map:
+                    slack_user_record.last_slack_activity = activity_map[slack_user_record.slack_uid]
+            db.session.commit()
+            current_app.logger.info(f"Updated last_slack_activity for {len(activity_map)} users")
+        else:
+            current_app.logger.warning(
+                "Activity fetch returned no data — using stale last_slack_activity values"
+            )
+
+        # Build tier map from database (reads last_slack_activity — must be after backfill)
         db_email_to_tier = get_db_email_to_tier()
 
         # Get exception emails
@@ -662,23 +681,6 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
             tier: get_target_channel_ids(tier, config, channel_name_to_id)
             for tier in ['full_member', 'multi_channel_guest', 'single_channel_guest']
         }
-
-        # Compute all managed channel IDs (for private channel preservation)
-        managed_channel_ids = get_managed_channel_ids(config, channel_name_to_id)
-
-        # Activity backfill is NOT gated by dry_run — writing to our own DB
-        # is always safe and is required for tier decisions to be correct.
-        activity_map = fetch_user_activity()
-        if activity_map:
-            for slack_user_record in SlackUser.query.all():
-                if slack_user_record.slack_uid in activity_map:
-                    slack_user_record.last_slack_activity = activity_map[slack_user_record.slack_uid]
-            db.session.commit()
-            current_app.logger.info(f"Updated last_slack_activity for {len(activity_map)} users")
-        else:
-            current_app.logger.warning(
-                "Activity fetch returned no data — using stale last_slack_activity values"
-            )
 
         # Per-transition pings off by default; controlled by config flag
         notify_per_transition = config.get('notify_per_transition', False)
@@ -762,7 +764,9 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
         f"errors={len(result.errors)}"
     )
 
-    # End-of-sync summary notification (always on)
-    send_sync_summary_notification(result, dry_run=dry_run)
+    # End-of-sync summary notification — skip during dry runs so the default
+    # 3am scheduled job (dry_run=True) doesn't post a daily no-op summary.
+    if not dry_run:
+        send_sync_summary_notification(result, dry_run=dry_run)
 
     return result
