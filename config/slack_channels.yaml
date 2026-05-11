@@ -14,9 +14,8 @@ slack:
 channels:
   # ACTIVE users (seasons_since_active = 0) - full workspace access
   full_member:
-    - "announcements-adventures"
     - "announcements-practices"
-    - "announcements-tcsc"
+    - "announcements-general"
     - "chat"
     - "fresh-tracks"
     - "gear-recs-swap"
@@ -27,10 +26,9 @@ channels:
     - "photos-videos"
     - "race-waxing"
 
-  # ALUMNI (seasons_since_active = 1) - multi-channel guest
-  # Same as full_member minus exclusive announcement channels
+  # ALUMNI (seasons_since_active = 1, or 2+ with recent activity/reactivated)
   multi_channel_guest:
-    - "announcements-tcsc"
+    - "announcements-alumni"
     - "chat"
     - "fresh-tracks"
     - "gear-recs-swap"
@@ -41,15 +39,37 @@ channels:
     - "photos-videos"
     - "race-waxing"
 
-  # ALUMNI (seasons_since_active >= 2) - single-channel guest
+  # ALUMNI (seasons_since_active >= 2, inactive 90+ days) - single-channel guest
   single_channel_guest:
-    - "announcements-tcsc"
+    - "tcsc-reactivate-me"
 
-# Channels exclusive to full members (auto-calculated: full_member - multi_channel_guest)
-# Used for removal logic when downgrading from full_member
+# Channels exclusive to full members (full_member - multi_channel_guest)
 exclusive_channels:
-  - "announcements-adventures"
   - "announcements-practices"
+  - "announcements-general"
+
+# Activity-based tier check for 2+ season alumni
+# Alumni inactive longer than this threshold are demoted to SCG
+activity_threshold_days: 90
+
+# Channel for SCG reactivation workflow
+reactivation_channel: "tcsc-reactivate-me"
+reactivation_channel_id: "C0AUQCG7UB1"
+
+# Notifications: end-of-sync summary always posts. Per-transition pings are
+# off by default to avoid flooding the channel and tripping webhook rate
+# limits on large runs (e.g. the first run after season activation).
+notify_per_transition: false
+
+# Private community channels where the bot has been added. Listed for
+# record-keeping only; the sync auto-detects any private channel the bot
+# is in via get_user_channels(). Channels without the bot will lose alumni
+# members on the full_member → MCG transition.
+known_private_channels:
+  # Fill in actual list — examples:
+  # - "book-club"
+  # - "soccer"
+  # - "lake-placid"
 
 # Tags that mark users as exceptions (skipped by automation)
 # These users retain their current Slack status regardless of DB status
