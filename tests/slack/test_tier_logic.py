@@ -4,6 +4,7 @@ from datetime import datetime, timedelta
 from unittest.mock import patch, MagicMock, PropertyMock
 
 import pytest
+import uuid
 
 
 class FakeTag:
@@ -106,3 +107,131 @@ class TestTierLogicActivity:
         slack_user = FakeSlackUser(last_slack_activity=None)
         user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
         assert get_slack_tier_under_test(user) == 'single_channel_guest'
+
+
+class TestUserGetSlackTierIntegration:
+    """Integration tests against the real User model.
+
+    These exercise the production User.get_slack_tier() method (not the
+    replica) so they catch drift between unit-test logic and production code.
+    """
+
+    @pytest.fixture
+    def app(self):
+        from app import create_app
+        app = create_app()
+        app.config['TESTING'] = True
+        app.config['SQLALCHEMY_DATABASE_URI'] = (
+            'postgresql://tcsc:tcsc@localhost:5432/tcsc_trips'
+        )
+        return app
+
+    @pytest.fixture
+    def db_session(self, app):
+        from app.models import db
+        with app.app_context():
+            db.create_all()
+            yield db.session
+
+    def _unique_email(self, prefix='test'):
+        return f'{prefix}-{uuid.uuid4().hex[:8]}@example.com'
+
+    def test_real_active_user_is_full_member(self, db_session, app):
+        """ACTIVE user with seasons_since_active=0 -> full_member."""
+        from app.models import User
+        from app.constants import UserStatus
+
+        user = User(
+            email=self._unique_email('active'),
+            first_name='Active',
+            last_name='Test',
+            status=UserStatus.ACTIVE,
+            seasons_since_active=0,
+        )
+        db_session.add(user)
+        db_session.commit()
+        try:
+            assert user.get_slack_tier() == 'full_member'
+        finally:
+            db_session.delete(user)
+            db_session.commit()
+
+    def test_real_alumni_one_season_is_mcg(self, db_session, app):
+        """ALUMNI with seasons_since_active=1 -> multi_channel_guest."""
+        from app.models import User
+        from app.constants import UserStatus
+
+        user = User(
+            email=self._unique_email('alumni1'),
+            first_name='Alumni',
+            last_name='One',
+            status=UserStatus.ALUMNI,
+            seasons_since_active=1,
+        )
+        db_session.add(user)
+        db_session.commit()
+        try:
+            assert user.get_slack_tier() == 'multi_channel_guest'
+        finally:
+            db_session.delete(user)
+            db_session.commit()
+
+    def test_real_alumni_two_seasons_recent_activity_is_mcg(self, db_session, app):
+        """ALUMNI 2+ seasons with Slack activity 30 days ago -> multi_channel_guest."""
+        from app.models import User, SlackUser
+        from app.constants import UserStatus
+
+        slack_user = SlackUser(
+            slack_uid=f'U{uuid.uuid4().hex[:8].upper()}',
+            last_slack_activity=datetime.utcnow() - timedelta(days=30),
+        )
+        db_session.add(slack_user)
+        db_session.flush()  # get slack_user.id before commit
+
+        user = User(
+            email=self._unique_email('alumni2-recent'),
+            first_name='Alumni',
+            last_name='TwoRecent',
+            status=UserStatus.ALUMNI,
+            seasons_since_active=2,
+            slack_user_id=slack_user.id,
+        )
+        db_session.add(user)
+        db_session.commit()
+        try:
+            assert user.get_slack_tier() == 'multi_channel_guest'
+        finally:
+            db_session.delete(user)
+            db_session.flush()
+            db_session.delete(slack_user)
+            db_session.commit()
+
+    def test_real_alumni_two_seasons_stale_activity_is_scg(self, db_session, app):
+        """ALUMNI 2+ seasons with Slack activity 120 days ago -> single_channel_guest."""
+        from app.models import User, SlackUser
+        from app.constants import UserStatus
+
+        slack_user = SlackUser(
+            slack_uid=f'U{uuid.uuid4().hex[:8].upper()}',
+            last_slack_activity=datetime.utcnow() - timedelta(days=120),
+        )
+        db_session.add(slack_user)
+        db_session.flush()
+
+        user = User(
+            email=self._unique_email('alumni2-stale'),
+            first_name='Alumni',
+            last_name='TwoStale',
+            status=UserStatus.ALUMNI,
+            seasons_since_active=2,
+            slack_user_id=slack_user.id,
+        )
+        db_session.add(user)
+        db_session.commit()
+        try:
+            assert user.get_slack_tier() == 'single_channel_guest'
+        finally:
+            db_session.delete(user)
+            db_session.flush()
+            db_session.delete(slack_user)
+            db_session.commit()

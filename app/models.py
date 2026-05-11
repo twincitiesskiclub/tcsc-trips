@@ -248,7 +248,7 @@ class User(db.Model):
         elif self.status == UserStatus.ALUMNI:
             if self.seasons_since_active == 1:
                 return 'multi_channel_guest'
-            else:
+            else:  # 2+ seasons alumni — check activity
                 if (self.slack_user
                         and self.slack_user.last_slack_activity
                         and (datetime.utcnow() - self.slack_user.last_slack_activity).days < 90):
