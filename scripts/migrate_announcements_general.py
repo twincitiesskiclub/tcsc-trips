@@ -232,9 +232,7 @@ def build_user_cache(bot: WebClient) -> dict[str, dict]:
             params["cursor"] = cursor
         resp = bot.users_list(**params)
         for user in resp["members"]:
-            if user.get("deleted"):
-                # Still cache deactivated users — their messages will reference them
-                pass
+            # Deactivated users still get cached — their messages reference them.
             profile = user.get("profile", {})
             cache[user["id"]] = {
                 "display_name": profile.get("display_name") or profile.get("real_name") or user["id"],
@@ -664,6 +662,15 @@ def build_delete_list(manifest: dict) -> tuple[list[tuple[str, str]], list[str]]
     return reply_pairs, roots
 
 
+# Auth-class errors mean the user token is bad/expired. Continuing would just
+# log N failures and waste the operator's time — hard-abort so they can refresh
+# the cookie and resume from the manifest.
+FATAL_DELETE_ERRORS = {
+    "not_authed", "invalid_auth", "account_inactive",
+    "token_revoked", "token_expired", "no_permission",
+}
+
+
 def delete_from_source(user: WebClient, manifest: dict) -> None:
     reply_pairs, roots = build_delete_list(manifest)
     print(f"Deleting {len(reply_pairs)} replies, then {len(roots)} roots from {SOURCE_CHANNEL}...")
@@ -683,6 +690,8 @@ def delete_from_source(user: WebClient, manifest: dict) -> None:
                 manifest["messages"][root_ts]["replies"][reply_ts]["deleted"] = True
                 save_manifest(manifest)
                 deleted += 1
+            elif err in FATAL_DELETE_ERRORS:
+                sys.exit(f"ERROR: user token failed with {err!r} (auth/permission). Refresh and re-run; manifest will resume.")
             else:
                 print(f"  [warn] reply {reply_ts} failed: {err}")
                 failed += 1
@@ -700,6 +709,8 @@ def delete_from_source(user: WebClient, manifest: dict) -> None:
                 manifest["messages"][root_ts]["deleted"] = True
                 save_manifest(manifest)
                 deleted += 1
+            elif err in FATAL_DELETE_ERRORS:
+                sys.exit(f"ERROR: user token failed with {err!r} (auth/permission). Refresh and re-run; manifest will resume.")
             else:
                 print(f"  [warn] root {root_ts} failed: {err}")
                 failed += 1
