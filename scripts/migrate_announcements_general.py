@@ -39,6 +39,71 @@ TRANSCRIPT_PATH = OUTPUT_DIR / "announcements_general_transcript.txt"
 
 POST_DELAY_SECONDS = 0.3  # explicit pacing between chat.postMessage calls
 
+# Minimal Slack shortcode → Unicode emoji table. Unknown shortcodes (including
+# custom workspace emoji) stay as :shortcode: text in the reaction footer.
+EMOJI_SHORTCODES: dict[str, str] = {
+    "thumbsup": "👍", "+1": "👍", "thumbsdown": "👎", "-1": "👎",
+    "heart": "❤️", "fire": "🔥", "tada": "🎉", "rocket": "🚀",
+    "white_check_mark": "✅", "x": "❌", "warning": "⚠️", "eyes": "👀",
+    "raised_hands": "🙌", "clap": "👏", "100": "💯", "muscle": "💪",
+    "skier": "⛷️", "snowboarder": "🏂", "snowflake": "❄️", "snowman": "⛄",
+    "joy": "😂", "rofl": "🤣", "smile": "😄", "sob": "😭",
+    "thinking_face": "🤔", "pray": "🙏", "wave": "👋", "ok_hand": "👌",
+    "point_up": "☝️", "point_right": "👉", "point_left": "👈",
+    "heart_eyes": "😍", "cry": "😢", "cold_face": "🥶", "hot_face": "🥵",
+    "sunny": "☀️", "cloud": "☁️", "umbrella": "☔", "zap": "⚡",
+    "trophy": "🏆", "medal": "🏅", "first_place_medal": "🥇",
+    "second_place_medal": "🥈", "third_place_medal": "🥉",
+    "beer": "🍺", "wine_glass": "🍷", "coffee": "☕", "pizza": "🍕",
+    "question": "❓", "exclamation": "❗", "heavy_check_mark": "✔️",
+}
+
+
+def render_emoji(shortcode: str) -> str:
+    """Return Unicode for a known shortcode, or the original :shortcode: text."""
+    # Strip skin tone modifiers like ::skin-tone-2
+    base = shortcode.split("::")[0]
+    return EMOJI_SHORTCODES.get(base, f":{base}:")
+
+
+def format_timestamp_central(ts: str) -> str:
+    """Convert Slack ts to 'MMM D, YYYY h:MM AM/PM' string in US Central.
+
+    Uses zoneinfo for tz handling.
+    """
+    from zoneinfo import ZoneInfo
+    dt = datetime.fromtimestamp(float(ts), tz=timezone.utc).astimezone(ZoneInfo("America/Chicago"))
+    # %-I/%-d for non-zero-padded hours/days (Linux/macOS)
+    return dt.strftime("%b %-d, %Y %-I:%M %p")
+
+
+def build_reaction_footer(reactions: list[dict]) -> str:
+    """Return '👍 2 · 😂 1' or '' if no reactions."""
+    if not reactions:
+        return ""
+    parts = []
+    for r in reactions:
+        emoji = render_emoji(r.get("name", ""))
+        count = r.get("count", 0)
+        parts.append(f"{emoji} {count}")
+    return " · ".join(parts)
+
+
+def build_post_text(msg: dict, include_reactions: bool) -> str:
+    """Build the impersonated post body: italic timestamp, original text, optional footer.
+
+    include_reactions is True for root messages, False for thread replies.
+    """
+    ts_line = f"*{format_timestamp_central(msg['ts'])}*"
+    body = msg.get("text", "") or "_(no text)_"
+    parts = [ts_line, body]
+    if include_reactions:
+        footer = build_reaction_footer(msg.get("reactions", []))
+        if footer:
+            parts.append("")  # blank line before footer
+            parts.append(footer)
+    return "\n".join(parts)
+
 
 def get_bot_client() -> WebClient:
     token = os.environ.get("SLACK_BOT_TOKEN")
