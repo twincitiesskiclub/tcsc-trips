@@ -484,7 +484,7 @@ if _bot_token:
                         client.chat_postEphemeral(
                             channel=channel_id,
                             user=user_id,
-                            text=":white_check_mark: Newsletter published to #announcements-tcsc!"
+                            text=":white_check_mark: Newsletter published to #announcements-general!"
                         )
                     logger.info(f"Newsletter {newsletter_id} published by {user_id}")
                 else:
@@ -1331,6 +1331,85 @@ if _bot_token:
 
         with get_app_context():
             _process_reaction_rsvp(channel, message_ts, status, user_id)
+
+    # =========================================================================
+    # Custom Functions (Workflow Builder Custom Steps)
+    # =========================================================================
+
+    @bolt_app.function("reactivate_membership")
+    def handle_reactivate_membership(inputs, complete, fail, logger):
+        """Handle reactivation workflow custom step.
+
+        Triggered by Workflow Builder when an SCG user clicks the
+        reactivation workflow in #tcsc-reactivate-me.
+        """
+        user_id = inputs.get("user_id")
+        if not user_id:
+            fail("No user_id provided")
+            return
+
+        logger.info(f"Reactivation request from {user_id}")
+
+        with get_app_context():
+            from datetime import datetime
+            from app.models import User, SlackUser, db
+            from app.slack.channel_sync import load_channel_config
+            from app.slack.client import get_team_id, get_channel_maps
+            from app.slack.admin_api import change_user_role, ROLE_MCG
+            from app.notifications.slack import send_tier_transition_notification
+
+            slack_user = SlackUser.query.filter_by(slack_uid=user_id).first()
+            if not slack_user or not slack_user.user:
+                fail("No linked TCSC account found for your Slack user. Please contact an admin.")
+                return
+
+            user = slack_user.user
+
+            if user.status != 'ALUMNI' or user.seasons_since_active < 2:
+                fail("Your account is not eligible for reactivation. You may already have full access.")
+                return
+
+            try:
+                config = load_channel_config()
+                channel_name_to_id, _ = get_channel_maps()
+                team_id = get_team_id()
+
+                mcg_channel_names = config.get('channels', {}).get('multi_channel_guest', [])
+                mcg_channel_ids = []
+                for name in mcg_channel_names:
+                    cid = channel_name_to_id.get(name)
+                    if cid:
+                        mcg_channel_ids.append(cid)
+
+                change_user_role(
+                    user_id=user_id,
+                    email=user.email,
+                    target_role=ROLE_MCG,
+                    team_id=team_id,
+                    dry_run=False,
+                    channel_ids=mcg_channel_ids,
+                )
+
+                # Grace period: stamp last_slack_activity so the next sync doesn't
+                # immediately re-demote them. The user clicked the reactivation
+                # workflow, which is its own implicit "I'm active" signal.
+                slack_user.last_slack_activity = datetime.utcnow()
+                db.session.commit()
+
+                send_tier_transition_notification(
+                    name=user.full_name,
+                    email=user.email,
+                    from_tier='single_channel_guest',
+                    to_tier='multi_channel_guest',
+                    reason='self-service reactivation',
+                )
+
+                logger.info(f"Reactivated {user.email} from SCG to MCG")
+                complete(outputs={})
+
+            except Exception as e:
+                logger.error(f"Reactivation failed for {user.email}: {e}")
+                fail(f"Reactivation failed. Please try again or contact an admin.")
 
     @bolt_app.event("message")
     def handle_message_events(body, logger):
