@@ -17,16 +17,26 @@ The current Slack channel sync system uses a simple time-based tier model: ACTIV
 
 ### Channel Structure
 
-Out-of-band changes already made: `announcements-adventures` archived; `announcements-tcsc` renamed to `announcements-general`; new `announcements-alumni` channel created (`C0B2ZQ4KM0E`) for alumni-tier announcements. Announcement channels by audience:
+Out-of-band changes already made:
+- `announcements-adventures` archived.
+- The original `announcements-tcsc` was renamed to `announcements-general`, then re-purposed: that channel was renamed again to **`welcome-to-tcsc`** (public, workspace-default, contains everyone) and a **new** `announcements-general` was created as a **private** channel for the full_member tier. Existing messages from the old channel were migrated to the new private one.
+- New `announcements-alumni` channel created (`C0B2ZQ4KM0E`) for alumni-tier announcements.
+
+Announcement channels by audience:
 
 | Channel | Audience | Content | Posting permissions |
 |---|---|---|---|
-| `announcements-general` | full_member only | Members-only announcements: trips, adventures, apparel, seasonal info, club news | Board members only |
+| `welcome-to-tcsc` (public) | Everyone in the workspace (workspace-default) | Public landing/orientation channel. NOT managed by the sync. | Board only |
+| `announcements-general` (private) | full_member only | Members-only announcements: trips, adventures, apparel, seasonal info, club news | Board members only |
 | `announcements-practices` | full_member only | Practice schedules, workouts, RSVPs | Board/coaches |
 | `announcements-alumni` (C0B2ZQ4KM0E) | MCG only | Alumni-facing announcements (re-engagement, alumni events, club news appropriate for non-members) | Rob, president, and vice president only |
 | `tcsc-reactivate-me` (C0AUQCG7UB1) | SCG only + Rob + president | Reactivation workflow | Board only (SCGs interact via workflow) |
 
+**Why `announcements-general` was made private:** the old public channel forced every workspace member to be in it, defeating tier separation. A private channel lets the sync manage membership precisely — only full_members are added.
+
 Community channels (chat, gear-recs-swap, extra-training-fun, races-information, meme, photos-videos, race-waxing, fresh-tracks, volunteer-and-job-opportunities) remain shared between full_member and MCG tiers.
+
+**Prerequisite:** the TCSC bot must be added to the private `announcements-general` before the sync runs. Otherwise the channel-name→ID lookup fails silently and full_members will not be added to the channel. Same applies to `announcements-alumni` and `tcsc-reactivate-me`.
 
 **Full channel-to-tier mapping:**
 
@@ -232,10 +242,10 @@ known_private_channels:
 1. **Manual admin prep:**
    - `tcsc-reactivate-me` channel exists (done — C0AUQCG7UB1)
    - `announcements-adventures` archived (done out-of-band)
-   - `announcements-tcsc` renamed to `announcements-general` (done out-of-band)
-   - `announcements-alumni` created (done — C0B2ZQ4KM0E); Rob, president, and VP added as posters; posting permissions limited to those three (alumni are added by the sync as channel members)
-   - `announcements-general` posting permissions board-only; existing alumni members will be removed from this channel by the first live sync
-   - Bot added to private community channels (best-effort; channels without bot lose alumni)
+   - Old public `announcements-tcsc`/`announcements-general` channel renamed to `welcome-to-tcsc` (public, contains all workspace members; NOT managed by the sync — leave alone)
+   - **New private `announcements-general` created**; existing messages migrated from the old public channel; posting permissions board-only; **bot added** so the sync can manage membership
+   - `announcements-alumni` created (done — C0B2ZQ4KM0E); Rob, president, and VP added as posters; posting permissions limited to those three; **bot added** (alumni added as channel members by the sync)
+   - Bot added to private community channels (best-effort; channels without bot lose alumni members on transition)
    - Slack app manifest updated (`function_executed` event, `reactivate_membership` function)
    - Workflow Builder workflow configured with the custom step
 2. **Code deployment with `dry_run: true`:**
