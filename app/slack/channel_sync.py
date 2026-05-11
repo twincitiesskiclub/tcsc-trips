@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 from typing import Optional
 from flask import current_app
 
-from app.models import User, Tag, Season, UserSeason, db
+from app.models import User, Tag, Season, UserSeason, SlackUser, db
 from app.constants import UserStatus
 from app.slack.client import (
     get_team_id,
@@ -38,8 +38,13 @@ from app.slack.admin_api import (
     change_user_role,
     invite_user_by_email,
     validate_admin_credentials,
+    fetch_user_activity,
     CookieExpiredError,
     AdminAPIError,
+)
+from app.notifications.slack import (
+    send_tier_transition_notification,
+    send_sync_summary_notification,
 )
 
 # Pattern for deactivated Slack user placeholder emails
@@ -230,6 +235,24 @@ def get_target_channel_ids(
     return channel_ids
 
 
+def get_managed_channel_ids(
+    config: dict,
+    channel_name_to_id: dict[str, str]
+) -> set[str]:
+    """Get all channel IDs managed by the sync across all tiers.
+
+    Used to distinguish managed channels from private/community channels
+    that users joined manually (and should be preserved during transitions).
+    """
+    all_managed = set()
+    for tier in ['full_member', 'multi_channel_guest', 'single_channel_guest']:
+        for name in config.get('channels', {}).get(tier, []):
+            channel_id = channel_name_to_id.get(name)
+            if channel_id:
+                all_managed.add(channel_id)
+    return all_managed
+
+
 def get_role_for_tier(tier: str) -> str:
     """Map tier to Slack role constant.
 
@@ -293,10 +316,12 @@ def sync_single_user(
     target_tier: str,
     target_channel_ids: set[str],
     full_member_channel_ids: set[str],
+    managed_channel_ids: set[str],
     channel_id_to_properties: dict[str, dict],
     team_id: str,
     dry_run: bool,
-    result: ChannelSyncResult
+    result: ChannelSyncResult,
+    notify_per_transition: bool = False,
 ) -> None:
     """Sync a single user's role and channel memberships.
 
@@ -305,16 +330,20 @@ def sync_single_user(
     - Role changes (Full Member, MCG, SCG)
     - Channel additions and removals
     - Full member public channel preservation
+    - Private channel preservation on MCG transitions
 
     Args:
         slack_user: Raw Slack user dict
         target_tier: Target tier string
         target_channel_ids: Set of target channel IDs for this tier
         full_member_channel_ids: Set of all managed channel IDs (full_member tier)
+        managed_channel_ids: Set of all channel IDs managed by the sync (union of tiers).
+            Channels NOT in this set are preserved during MCG transitions.
         channel_id_to_properties: Map of channel ID -> properties
         team_id: Slack team ID
         dry_run: If True, only log what would be done
         result: ChannelSyncResult to update
+        notify_per_transition: If True, send a Slack notification on each role change.
     """
     user_id = slack_user['id']
     email = slack_user.get('profile', {}).get('email', '')
@@ -381,8 +410,35 @@ def sync_single_user(
             )
             current_app.logger.info(f"Changing {user_str} to {target_tier}")
 
-            # For MCG/SCG, role change also sets channels
-            if target_tier in ('multi_channel_guest', 'single_channel_guest'):
+            # MCG: preserve any unmanaged private channels the user is already in
+            if target_tier == 'multi_channel_guest':
+                channels_for_role = set(target_channel_ids)
+                private_preserved = current_channels - managed_channel_ids
+                if private_preserved:
+                    channels_for_role |= private_preserved
+                    preserve_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in private_preserved]
+                    result.traces.append(f"PRESERVE_PRIVATE: {email} | keeping {preserve_names}")
+                change_user_role(
+                    user_id=user_id,
+                    email=email,
+                    target_role=target_role,
+                    team_id=team_id,
+                    dry_run=dry_run,
+                    channel_ids=list(channels_for_role)
+                )
+                result.role_changes += 1
+                if notify_per_transition:
+                    send_tier_transition_notification(
+                        name=db_user.full_name if db_user else email,
+                        email=email,
+                        from_tier=current_role,
+                        to_tier='multi_channel_guest',
+                        reason='activity-based or 1-season alumni',
+                    )
+                return  # MCG role change handles channels
+
+            # SCG: no private-channel preservation (lose all access except reactivate-me)
+            if target_tier == 'single_channel_guest':
                 change_user_role(
                     user_id=user_id,
                     email=email,
@@ -392,7 +448,15 @@ def sync_single_user(
                     channel_ids=list(target_channel_ids)
                 )
                 result.role_changes += 1
-                return  # MCG/SCG role change handles channels
+                if notify_per_transition:
+                    send_tier_transition_notification(
+                        name=db_user.full_name if db_user else email,
+                        email=email,
+                        from_tier=current_role,
+                        to_tier='single_channel_guest',
+                        reason='inactive 90+ days',
+                    )
+                return  # SCG role change handles channels
 
             else:
                 # Full member - just set role, then sync channels separately
@@ -404,6 +468,14 @@ def sync_single_user(
                     dry_run=dry_run
                 )
                 result.role_changes += 1
+                if notify_per_transition:
+                    send_tier_transition_notification(
+                        name=db_user.full_name if db_user else email,
+                        email=email,
+                        from_tier=current_role,
+                        to_tier='full_member',
+                        reason='active member or re-registration',
+                    )
 
         # Sync channels for full members (or when role didn't change)
         # For MCG/SCG, the role change API handles channels
@@ -591,6 +663,26 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
             for tier in ['full_member', 'multi_channel_guest', 'single_channel_guest']
         }
 
+        # Compute all managed channel IDs (for private channel preservation)
+        managed_channel_ids = get_managed_channel_ids(config, channel_name_to_id)
+
+        # Activity backfill is NOT gated by dry_run — writing to our own DB
+        # is always safe and is required for tier decisions to be correct.
+        activity_map = fetch_user_activity()
+        if activity_map:
+            for slack_user_record in SlackUser.query.all():
+                if slack_user_record.slack_uid in activity_map:
+                    slack_user_record.last_slack_activity = activity_map[slack_user_record.slack_uid]
+            db.session.commit()
+            current_app.logger.info(f"Updated last_slack_activity for {len(activity_map)} users")
+        else:
+            current_app.logger.warning(
+                "Activity fetch returned no data — using stale last_slack_activity values"
+            )
+
+        # Per-transition pings off by default; controlled by config flag
+        notify_per_transition = config.get('notify_per_transition', False)
+
         # Process each Slack user
         for slack_user in slack_users:
             email = slack_user.get('profile', {}).get('email', '').lower()
@@ -626,10 +718,12 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
                 target_tier=target_tier,
                 target_channel_ids=target_channel_ids,
                 full_member_channel_ids=tier_channel_ids['full_member'],
+                managed_channel_ids=managed_channel_ids,
                 channel_id_to_properties=channel_id_to_properties,
                 team_id=team_id,
                 dry_run=dry_run,
-                result=result
+                result=result,
+                notify_per_transition=notify_per_transition,
             )
 
         # Invite new members
@@ -667,5 +761,8 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
         f"skipped={result.users_skipped}, "
         f"errors={len(result.errors)}"
     )
+
+    # End-of-sync summary notification (always on)
+    send_sync_summary_notification(result, dry_run=dry_run)
 
     return result
