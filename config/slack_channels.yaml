@@ -81,8 +81,9 @@ known_private_channels:
 # Tags that mark users as exceptions (skipped by automation)
 # These users retain their current Slack status regardless of DB status
 # Note: HEAD_COACH and ASSISTANT_COACH are NOT exceptions - they get full_member tier override
+# Note: BOARD_MEMBER is intentionally NOT in this list — board members should be
+#       subject to normal tier logic so their channel memberships stay accurate.
 exception_tags:
-  - "BOARD_MEMBER"
   - "ADMIN"
   - "EXEMPT"
 
