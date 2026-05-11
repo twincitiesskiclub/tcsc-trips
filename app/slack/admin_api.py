@@ -423,7 +423,7 @@ def fetch_user_activity() -> dict[str, datetime]:
                 user_id = member.get('user_id')
                 ts = member.get('date_last_active') or 0
                 if user_id and ts > 0:
-                    activity_map[user_id] = datetime.fromtimestamp(ts, tz=timezone.utc)
+                    activity_map[user_id] = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
 
             if total_expected is None:
                 total_expected = response.get('num_found', 0)
