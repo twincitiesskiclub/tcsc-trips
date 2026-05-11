@@ -94,7 +94,7 @@ def get_publish_channel() -> Optional[str]:
     try:
         config = _load_config()
         channel_name = config.get('newsletter', {}).get('channels', {}).get(
-            'publish_channel', 'announcements-tcsc'
+            'publish_channel', 'announcements-general'
         )
         # Remove # prefix if present
         channel_name = channel_name.lstrip('#')
