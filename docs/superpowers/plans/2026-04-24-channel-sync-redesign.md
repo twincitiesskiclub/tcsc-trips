@@ -12,6 +12,48 @@
 
 ---
 
+### Task 0: Activity API Endpoint Spike — COMPLETE (2026-05-11)
+
+**Outcome:** ✓ Verified. Endpoint is `admin.analytics.getMemberAnalytics`, paired with `admin.analytics.getAvailableDateRange`. See the "Activity Detection" section of the spec for the full contract. Probe script at `scripts/probe_slack_activity.py`. Distribution snapshot at time of probe (223 total members):
+
+| Days since last active | Members |
+|---|---|
+| 0–30 | 121 |
+| 30–90 | 15 |
+| 90–180 | 8 |
+| 180–365 | 15 |
+| Over 365 | 29 |
+| Never | 35 |
+
+Under the 90-day MCG rule, 136 members are activity-eligible and 87 would be flagged inactive (of which only the 2+ season alumni become SCG candidates).
+
+**Files:**
+- Created: `scripts/probe_slack_activity.py`
+
+- [x] **Step 1: Write the probe script**
+
+Probe lives at `scripts/probe_slack_activity.py`. It exercises `admin.analytics.getAvailableDateRange` and `admin.analytics.getMemberAnalytics` via the cookie-based auth in `app.slack.admin_api`, prints the response shapes, and summarizes the workspace's activity distribution. See the script for current behavior.
+
+- [x] **Step 2: Run the probe**
+
+```bash
+source env/bin/activate
+python scripts/probe_slack_activity.py
+```
+
+Verified output: 223 members fetched, `date_last_active` present, distribution buckets printed. Endpoint contract recorded in the spec under "Activity Detection." Used by Task 2 to implement `fetch_user_activity()`.
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add scripts/probe_slack_activity.py
+git commit -m "feat: add probe script to verify Slack admin activity API endpoint"
+```
+
+(Commit will be made along with Task 0's spec updates.)
+
+---
+
 ### Task 1: Database Migration — Add `last_slack_activity` to SlackUser
 
 **Files:**
@@ -87,15 +129,30 @@ git commit -m "feat: add last_slack_activity column to SlackUser model"
 
 - [ ] **Step 1: Write the test file**
 
-Create `tests/slack/test_admin_api.py`:
+Create `tests/slack/test_admin_api.py`. Tests mock `make_admin_request` to return the verified response shapes from Task 0:
 
 ```python
-"""Tests for admin API activity fetch."""
+"""Tests for admin API activity fetch.
 
-from datetime import datetime, timedelta
-from unittest.mock import patch, MagicMock
+The implementation makes two calls:
+  1. admin.analytics.getAvailableDateRange — returns {start_date, end_date}
+  2. admin.analytics.getMemberAnalytics — returns {member_activity: [...], num_found, next_cursor_mark}
+Tests mock both via side_effect on make_admin_request.
+"""
+
+from datetime import datetime
+from unittest.mock import patch
 
 import pytest
+
+
+RANGE_OK = {
+    'ok': True,
+    'start_date': '2025-04-10',
+    'end_date': '2026-05-10',
+    'date_last_updated': 1778502662,
+    'date_last_indexed': 1778502662,
+}
 
 
 class TestFetchUserActivity:
@@ -105,20 +162,18 @@ class TestFetchUserActivity:
     def test_returns_user_id_to_timestamp_map(self, mock_request):
         from app.slack.admin_api import fetch_user_activity
 
-        mock_request.return_value = {
-            'ok': True,
-            'members': [
-                {
-                    'id': 'U123',
-                    'date_last_active': 1714000000,
-                },
-                {
-                    'id': 'U456',
-                    'date_last_active': 1713000000,
-                },
-            ],
-            'response_metadata': {'next_cursor': ''},
-        }
+        mock_request.side_effect = [
+            RANGE_OK,
+            {
+                'ok': True,
+                'num_found': 2,
+                'next_cursor_mark': '',
+                'member_activity': [
+                    {'user_id': 'U123', 'date_last_active': 1714000000},
+                    {'user_id': 'U456', 'date_last_active': 1713000000},
+                ],
+            },
+        ]
 
         result = fetch_user_activity()
 
@@ -128,43 +183,47 @@ class TestFetchUserActivity:
         assert isinstance(result['U456'], datetime)
 
     @patch('app.slack.admin_api.make_admin_request')
-    def test_skips_members_without_activity(self, mock_request):
+    def test_skips_members_with_zero_or_missing_activity(self, mock_request):
+        """Bots, never-onboarded users have date_last_active = 0 or missing."""
         from app.slack.admin_api import fetch_user_activity
 
-        mock_request.return_value = {
-            'ok': True,
-            'members': [
-                {
-                    'id': 'U123',
-                    'date_last_active': 1714000000,
-                },
-                {
-                    'id': 'U789',
-                    # no date_last_active
-                },
-            ],
-            'response_metadata': {'next_cursor': ''},
-        }
+        mock_request.side_effect = [
+            RANGE_OK,
+            {
+                'ok': True,
+                'num_found': 3,
+                'next_cursor_mark': '',
+                'member_activity': [
+                    {'user_id': 'U123', 'date_last_active': 1714000000},
+                    {'user_id': 'U789', 'date_last_active': 0},
+                    {'user_id': 'U000'},  # field missing entirely
+                ],
+            },
+        ]
 
         result = fetch_user_activity()
 
         assert 'U123' in result
         assert 'U789' not in result
+        assert 'U000' not in result
 
     @patch('app.slack.admin_api.make_admin_request')
     def test_handles_pagination(self, mock_request):
         from app.slack.admin_api import fetch_user_activity
 
         mock_request.side_effect = [
+            RANGE_OK,
             {
                 'ok': True,
-                'members': [{'id': 'U1', 'date_last_active': 1714000000}],
-                'response_metadata': {'next_cursor': 'page2'},
+                'num_found': 2,
+                'next_cursor_mark': 'cursor-page-2',
+                'member_activity': [{'user_id': 'U1', 'date_last_active': 1714000000}],
             },
             {
                 'ok': True,
-                'members': [{'id': 'U2', 'date_last_active': 1714000000}],
-                'response_metadata': {'next_cursor': ''},
+                'num_found': 2,
+                'next_cursor_mark': '',
+                'member_activity': [{'user_id': 'U2', 'date_last_active': 1714000000}],
             },
         ]
 
@@ -173,13 +232,24 @@ class TestFetchUserActivity:
         assert len(result) == 2
         assert 'U1' in result
         assert 'U2' in result
-        assert mock_request.call_count == 2
+        # 1 range call + 2 analytics calls
+        assert mock_request.call_count == 3
 
     @patch('app.slack.admin_api.make_admin_request')
-    def test_returns_empty_dict_on_api_error(self, mock_request):
+    def test_returns_empty_dict_on_range_failure(self, mock_request):
         from app.slack.admin_api import fetch_user_activity
 
         mock_request.side_effect = Exception("API error")
+
+        result = fetch_user_activity()
+
+        assert result == {}
+
+    @patch('app.slack.admin_api.make_admin_request')
+    def test_returns_empty_dict_on_analytics_failure(self, mock_request):
+        from app.slack.admin_api import fetch_user_activity
+
+        mock_request.side_effect = [RANGE_OK, Exception("analytics failed")]
 
         result = fetch_user_activity()
 
@@ -197,63 +267,98 @@ Expected: FAIL — `fetch_user_activity` does not exist yet.
 
 - [ ] **Step 3: Implement `fetch_user_activity()`**
 
-Add to `app/slack/admin_api.py` after the `invite_user_by_email` function (after line 354):
+Add to `app/slack/admin_api.py` after the `invite_user_by_email` function.
+
+The function makes two calls in sequence: first to `getAvailableDateRange` to learn the valid window (Slack's analytics index lags today by ~1 day), then to `getMemberAnalytics` with that window. Both endpoints require `_x_app_name=manage` — different from the workspace UI calls used elsewhere in `admin_api.py`.
 
 ```python
 def fetch_user_activity() -> dict[str, datetime]:
     """Fetch last-active timestamps for all workspace members.
 
-    Uses the Slack admin API (same cookie-based auth as role changes)
-    to retrieve the "Last active" data visible on the admin stats page.
+    Uses Slack's admin analytics API (admin.analytics.getMemberAnalytics).
+    Two-call sequence:
+      1. getAvailableDateRange to determine the valid window
+      2. getMemberAnalytics to retrieve per-member date_last_active
 
     Returns:
-        Dict mapping Slack user ID -> last active datetime.
+        Dict mapping Slack user ID -> last active datetime (UTC).
+        Members with date_last_active <= 0 (bots, never-onboarded) are omitted.
         Returns empty dict on failure (caller uses stale data).
     """
-    from datetime import datetime
-
-    activity_map = {}
-    cursor = ''
+    activity_map: dict[str, datetime] = {}
 
     try:
-        creds = get_admin_credentials()
+        # Step 1: get the valid window
+        range_response = make_admin_request(
+            api_method='admin.analytics.getAvailableDateRange',
+            data={
+                'token': get_admin_credentials()['token'],
+                'type': 'member',
+                '_x_reason': 'fetchMembersDataAvailableDateRange',
+                '_x_mode': 'online',
+                '_x_app_name': 'manage',
+            },
+            action_description='Fetch analytics date range',
+            email='(bulk activity fetch)',
+        )
 
+        start_date = range_response['start_date']
+        end_date = range_response['end_date']
+
+        # Step 2: paginate through member_activity rows
+        cursor = ''
+        total_expected = None
         while True:
             data = {
-                'token': creds['token'],
-                'count': '200',
-                'include_deactivated_user_workspaces': 'false',
+                'token': get_admin_credentials()['token'],
+                'start_date': start_date,
+                'end_date': end_date,
+                'count': '500',
+                'sort_column': 'date_last_active',
+                'sort_direction': 'desc',
+                'query': '',
+                '_x_reason': 'loadMembersDataForTimeRange',
+                '_x_mode': 'online',
+                '_x_app_name': 'manage',
             }
             if cursor:
-                data['cursor'] = cursor
+                data['cursor_mark'] = cursor
 
             response = make_admin_request(
-                api_method='users.admin.list',
+                api_method='admin.analytics.getMemberAnalytics',
                 data=data,
-                action_description='Fetch user activity',
+                action_description='Fetch member analytics',
                 email='(bulk activity fetch)',
             )
 
-            for member in response.get('members', []):
-                user_id = member.get('id')
-                last_active_ts = member.get('date_last_active')
-                if user_id and last_active_ts:
-                    activity_map[user_id] = datetime.utcfromtimestamp(last_active_ts)
+            for member in response.get('member_activity', []):
+                user_id = member.get('user_id')
+                ts = member.get('date_last_active') or 0
+                if user_id and ts > 0:
+                    activity_map[user_id] = datetime.utcfromtimestamp(ts)
 
-            next_cursor = response.get('response_metadata', {}).get('next_cursor', '')
-            if not next_cursor:
+            if total_expected is None:
+                total_expected = response.get('num_found', 0)
+
+            next_cursor = response.get('next_cursor_mark', '')
+            if not next_cursor or next_cursor == cursor:
+                break
+            if total_expected and len(activity_map) >= total_expected:
                 break
             cursor = next_cursor
 
-        current_app.logger.info(f"Fetched activity for {len(activity_map)} Slack users")
+        current_app.logger.info(
+            f"Fetched activity for {len(activity_map)} of {total_expected or '?'} Slack users"
+        )
 
     except Exception as e:
         current_app.logger.error(f"Failed to fetch user activity: {e}")
+        return {}
 
     return activity_map
 ```
 
-Also add the `datetime` import at the top of `admin_api.py` if not already present. Check line 1 — it currently imports `os`, `time`, `functools`, `requests`. Add `from datetime import datetime` after the existing imports:
+Add `from datetime import datetime` to the imports at the top of `admin_api.py`:
 
 ```python
 import os
@@ -264,6 +369,8 @@ from datetime import datetime
 from typing import Optional
 from flask import current_app
 ```
+
+**Note on `make_admin_request`:** it currently injects auth params from `get_admin_credentials()` but does NOT auto-add `_x_app_name=manage` (the workspace UI endpoints use the default UI app name). Including `_x_app_name=manage` in the `data` dict per-call works because it's passed through as multipart form data. If this becomes painful for multiple analytics endpoints later, consider a `make_admin_request(..., app_name='manage')` keyword.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -508,7 +615,7 @@ channels:
   # ACTIVE users (seasons_since_active = 0) - full workspace access
   full_member:
     - "announcements-practices"
-    - "announcements-tcsc"
+    - "announcements-general"
     - "chat"
     - "fresh-tracks"
     - "gear-recs-swap"
@@ -521,7 +628,7 @@ channels:
 
   # ALUMNI (seasons_since_active = 1, or 2+ with recent activity/reactivated)
   multi_channel_guest:
-    - "announcements-tcsc"
+    - "announcements-general"
     - "chat"
     - "fresh-tracks"
     - "gear-recs-swap"
@@ -548,6 +655,21 @@ activity_threshold_days: 90
 reactivation_channel: "tcsc-reactivate-me"
 reactivation_channel_id: "C0AUQCG7UB1"
 
+# Notifications: end-of-sync summary always posts. Per-transition pings are
+# off by default to avoid flooding the channel and tripping webhook rate
+# limits on large runs (e.g. the first run after season activation).
+notify_per_transition: false
+
+# Private community channels where the bot has been added. Listed for
+# record-keeping only; the sync auto-detects any private channel the bot
+# is in via get_user_channels(). Channels without the bot will lose alumni
+# members on the full_member → MCG transition.
+known_private_channels:
+  # Fill in actual list — examples:
+  # - "book-club"
+  # - "soccer"
+  # - "lake-placid"
+
 # Tags that mark users as exceptions (skipped by automation)
 # These users retain their current Slack status regardless of DB status
 # Note: HEAD_COACH and ASSISTANT_COACH are NOT exceptions - they get full_member tier override
@@ -571,11 +693,14 @@ expertvoice:
 ```
 
 Key changes from old config:
+- Renamed `announcements-tcsc` → `announcements-general` everywhere
 - Removed `announcements-adventures` from `full_member` list
 - `single_channel_guest` changed from `announcements-tcsc` to `tcsc-reactivate-me`
 - `exclusive_channels` updated: removed `announcements-adventures`, only `announcements-practices` remains
 - Added `activity_threshold_days: 90`
 - Added `reactivation_channel` and `reactivation_channel_id`
+- Added `notify_per_transition: false` (default off)
+- Added `known_private_channels` documentation block
 
 - [ ] **Step 2: Commit**
 
@@ -591,6 +716,8 @@ git commit -m "feat: update channel config for sync redesign
 ---
 
 ### Task 5: Tier Transition Notifications
+
+**Approach:** End-of-sync summary is the default notification. Per-transition pings are optional and off by default (controlled by `notify_per_transition` in `slack_channels.yaml`). The summary is built from `ChannelSyncResult` counters that already exist; this task adds the webhook function and the per-transition variant.
 
 **Files:**
 - Modify: `app/notifications/slack.py` (add new notification functions)
@@ -680,7 +807,7 @@ pytest tests/slack/test_notifications.py -v
 
 Expected: FAIL — `send_tier_transition_notification` does not exist yet.
 
-- [ ] **Step 3: Implement `send_tier_transition_notification()`**
+- [ ] **Step 3: Implement notification functions**
 
 Add to `app/notifications/slack.py` after the existing `send_payment_notification` function:
 
@@ -693,7 +820,11 @@ TIER_DISPLAY = {
 
 
 def send_tier_transition_notification(name, email, from_tier, to_tier, reason):
-    """Send Slack webhook notification for a tier transition."""
+    """Per-transition notification. Gated by notify_per_transition config flag.
+
+    The caller is responsible for honoring the flag; this function always sends
+    when called. Use send_sync_summary_notification for default per-run output.
+    """
     slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
 
     if not slack_webhook_url:
@@ -718,7 +849,43 @@ def send_tier_transition_notification(name, email, from_tier, to_tier, reason):
     except Exception as e:
         current_app.logger.error(f"Failed to send tier transition notification: {e}")
         return False
+
+
+def send_sync_summary_notification(result, dry_run=False):
+    """End-of-sync summary. Always sent.
+
+    Args:
+        result: ChannelSyncResult with populated counters
+        dry_run: whether this sync was a dry-run
+    """
+    slack_webhook_url = os.environ.get('SLACK_WEBHOOK_URL')
+
+    if not slack_webhook_url:
+        current_app.logger.warning("SLACK_WEBHOOK_URL not configured, skipping sync summary")
+        return False
+
+    mode = "DRY RUN" if dry_run else "live"
+    lines = [
+        f"Channel sync complete ({mode}):",
+        f"• Role changes: {result.role_changes}",
+        f"• Channel additions: {result.channels_added}",
+        f"• Channel removals: {result.channels_removed}",
+        f"• Invites: {result.invites_sent}",
+        f"• Errors: {len(result.errors)}",
+    ]
+
+    message = {"text": "\n".join(lines)}
+
+    try:
+        response = requests.post(slack_webhook_url, json=message, timeout=5)
+        response.raise_for_status()
+        return True
+    except Exception as e:
+        current_app.logger.error(f"Failed to send sync summary notification: {e}")
+        return False
 ```
+
+Add a test for `send_sync_summary_notification` to `tests/slack/test_notifications.py` covering: (a) summary text includes counts, (b) dry_run vs live labeling, (c) returns False when webhook unset.
 
 - [ ] **Step 4: Run tests to verify they pass**
 
@@ -940,7 +1107,7 @@ def sync_single_user(
 
 - [ ] **Step 7: Update `run_channel_sync()` to compute and pass managed IDs, and integrate activity fetch**
 
-In `app/slack/channel_sync.py`, add the import at the top:
+In `app/slack/channel_sync.py`, add to the existing module-level imports (do not import inside the function):
 
 ```python
 from app.slack.admin_api import (
@@ -954,6 +1121,11 @@ from app.slack.admin_api import (
     AdminAPIError,
     fetch_user_activity,
 )
+from app.models import SlackUser  # already used elsewhere — promote to module-level
+from app.notifications.slack import (
+    send_tier_transition_notification,
+    send_sync_summary_notification,
+)
 ```
 
 Then in `run_channel_sync()`, after the `tier_channel_ids` computation (after line 592), add:
@@ -962,8 +1134,8 @@ Then in `run_channel_sync()`, after the `tier_channel_ids` computation (after li
         # Compute all managed channel IDs (for private channel preservation)
         managed_channel_ids = get_managed_channel_ids(config, channel_name_to_id)
 
-        # Fetch activity data and update SlackUser records
-        from app.models import SlackUser
+        # Activity backfill is NOT gated by dry_run — writing to our own DB
+        # is always safe and is required for tier decisions to be correct.
         activity_map = fetch_user_activity()
         if activity_map:
             for slack_user_record in SlackUser.query.all():
@@ -973,6 +1145,13 @@ Then in `run_channel_sync()`, after the `tier_channel_ids` computation (after li
             current_app.logger.info(f"Updated last_slack_activity for {len(activity_map)} users")
         else:
             current_app.logger.warning("Activity fetch returned no data — using stale last_slack_activity values")
+```
+
+At the end of `run_channel_sync()`, just before returning `result`, add:
+
+```python
+        # End-of-sync summary notification (always on)
+        send_sync_summary_notification(result, dry_run=dry_run)
 ```
 
 And update the `sync_single_user` call (around line 624) to pass `managed_channel_ids`:
@@ -991,49 +1170,56 @@ And update the `sync_single_user` call (around line 624) to pass `managed_channe
             )
 ```
 
-- [ ] **Step 8: Add tier transition notification calls to sync_single_user**
+- [ ] **Step 8: Add gated per-transition notification calls to sync_single_user**
 
-In `sync_single_user()`, add import and notification calls. At the top of `channel_sync.py`, add:
-
-```python
-from app.notifications.slack import send_tier_transition_notification
-```
-
-Then inside `sync_single_user()`, after each role change trace/log block, add notification calls. After the `result.role_changes += 1` for the MCG block (the one you just wrote):
+`send_tier_transition_notification` is already imported at the module level (Step 7). Per-transition pings are gated by the `notify_per_transition` config flag — read it once at the top of `sync_single_user()` (it's already loaded into `config` upstream and can be passed in or read from a module-level cache):
 
 ```python
-                send_tier_transition_notification(
-                    name=db_user.full_name if db_user else email,
-                    email=email,
-                    from_tier=current_role,
-                    to_tier='multi_channel_guest',
-                    reason='activity-based or 1-season alumni',
-                )
+notify_per_transition = config.get('notify_per_transition', False)
 ```
 
-After the `result.role_changes += 1` for the SCG block:
+(Pass `config` through `sync_single_user()`'s signature, or capture `notify_per_transition` as an additional parameter when called from `run_channel_sync()`. Prefer the parameter approach to keep the function pure.)
+
+Then inside `sync_single_user()`, wrap each per-transition notification call in the flag check. After the `result.role_changes += 1` for the MCG block:
 
 ```python
-                send_tier_transition_notification(
-                    name=db_user.full_name if db_user else email,
-                    email=email,
-                    from_tier=current_role,
-                    to_tier='single_channel_guest',
-                    reason='inactive 90+ days',
-                )
+                if notify_per_transition:
+                    send_tier_transition_notification(
+                        name=db_user.full_name if db_user else email,
+                        email=email,
+                        from_tier=current_role,
+                        to_tier='multi_channel_guest',
+                        reason='activity-based or 1-season alumni',
+                    )
 ```
 
-After the full_member role change `result.role_changes += 1` (the existing one for full_member promotion):
+After the SCG block:
 
 ```python
-                send_tier_transition_notification(
-                    name=db_user.full_name if db_user else email,
-                    email=email,
-                    from_tier=current_role,
-                    to_tier='full_member',
-                    reason='active member or re-registration',
-                )
+                if notify_per_transition:
+                    send_tier_transition_notification(
+                        name=db_user.full_name if db_user else email,
+                        email=email,
+                        from_tier=current_role,
+                        to_tier='single_channel_guest',
+                        reason='inactive 90+ days',
+                    )
 ```
+
+After the full_member role change (existing block):
+
+```python
+                if notify_per_transition:
+                    send_tier_transition_notification(
+                        name=db_user.full_name if db_user else email,
+                        email=email,
+                        from_tier=current_role,
+                        to_tier='full_member',
+                        reason='active member or re-registration',
+                    )
+```
+
+The end-of-sync summary (added in Step 7) provides the default per-run visibility. Per-transition notifications are for debugging or low-volume periods.
 
 - [ ] **Step 9: Run all tests**
 
@@ -1293,23 +1479,29 @@ In Slack, open the existing workflow in `#tcsc-reactivate-me`:
 2. Map the "Person who used this workflow" variable to the `user_id` input
 3. Save and publish the workflow
 
-- [ ] **Step 3: Archive `announcements-adventures`**
+- [ ] **Step 3: Confirm channel admin prep is complete**
 
-In Slack, go to `#announcements-adventures` → Channel settings → Archive this channel.
+Already done out-of-band — verify:
+- `#announcements-adventures` is archived
+- `#announcements-tcsc` has been renamed to `#announcements-general`
+- `#announcements-general` posting permissions are board-only
+- `#tcsc-reactivate-me` exists (channel ID C0AUQCG7UB1)
 
 - [ ] **Step 4: Add the bot to community private channels**
 
-Notify channel owners of private community channels (book club, soccer, etc.) to add the TCSC bot so that MCG transitions preserve membership.
+Notify channel owners of private community channels (book club, soccer, Lake Placid, etc.) to add the TCSC bot so that MCG transitions preserve membership. Channels without the bot will lose alumni members. Update `known_private_channels` in `slack_channels.yaml` with the confirmed list for record-keeping.
 
 ---
 
-### Task 9: Dry-Run Validation
+### Task 9: Validation Sequence & Go-Live
 
-**Files:** None (operational validation)
+**Files:** None (operational sequence). Each step is a hard gate — do not advance until the prior step is confirmed.
 
-- [ ] **Step 1: Run sync in dry-run mode**
+The order matters: season activation changes DB statuses, which in turn change the tiers the sync will apply. Backfilling activity data BEFORE season activation ensures 2+ alumni with recent activity are correctly classified as MCG instead of falling through to SCG.
 
-Ensure `dry_run: true` is set in `config/slack_channels.yaml` (it is by default). Then trigger a manual sync from the admin UI at `/admin/channel-sync` or via the Flask shell:
+- [ ] **Step 1: First dry-run — activity backfill**
+
+Confirm `dry_run: true` in `config/slack_channels.yaml`. Trigger a manual sync from `/admin/channel-sync` or via the Flask shell:
 
 ```bash
 flask shell
@@ -1318,32 +1510,50 @@ flask shell
 >>> print(result.to_dict())
 ```
 
-- [ ] **Step 2: Review dry-run traces**
+Activity backfill runs regardless of `dry_run`. Proposed tier changes are logged but not applied.
 
-Check the `result.traces` list for expected behavior:
-- 2+ season alumni with recent activity should show as MCG (not SCG)
-- 2+ season alumni without recent activity should show as SCG
-- Private channel preservation traces (`PRESERVE_PRIVATE`) should appear for MCG transitions
-- The SCG channel should be `tcsc-reactivate-me`, not `announcements-tcsc`
-- `announcements-adventures` should not appear in any channel operations
-
-- [ ] **Step 3: Validate activity data was fetched**
-
-Check `SlackUser.last_slack_activity` values:
+- [ ] **Step 2: Verify activity data populated**
 
 ```bash
 flask shell
 >>> from app.models import SlackUser
->>> users_with_activity = SlackUser.query.filter(SlackUser.last_slack_activity.isnot(None)).count()
->>> print(f"Users with activity data: {users_with_activity}")
->>> # Spot-check a few
+>>> total = SlackUser.query.count()
+>>> with_activity = SlackUser.query.filter(SlackUser.last_slack_activity.isnot(None)).count()
+>>> print(f"{with_activity} / {total} users have activity data")
 >>> for su in SlackUser.query.filter(SlackUser.last_slack_activity.isnot(None)).limit(5):
 ...     print(f"{su.email}: {su.last_slack_activity}")
 ```
 
-- [ ] **Step 4: Switch to live mode when validated**
+Expected: a meaningful proportion of users have populated `last_slack_activity` (most active users should). If most are NULL, investigate the activity fetch before proceeding — do not activate the season.
 
-After reviewing dry-run results, update `config/slack_channels.yaml`:
+- [ ] **Step 3: Activate the new season**
+
+Via `/admin/seasons/<id>/activate`. This updates `User.status` and `seasons_since_active` for all users but does NOT touch Slack (sync is still `dry_run=true`).
+
+- [ ] **Step 4: Second dry-run — review proposed tier changes**
+
+Run the sync again with `dry_run=True`. Now the trace output reflects the new post-activation state. Inspect `result.traces`:
+
+- 2+ season alumni with recent activity → MCG (not SCG)
+- 2+ season alumni without recent activity → SCG
+- 1-season alumni → MCG with private channels preserved (`PRESERVE_PRIVATE` trace lines)
+- SCG channel is `tcsc-reactivate-me`, not `announcements-general`
+- `announcements-adventures` does not appear anywhere
+- Exception-tagged users (`BOARD_MEMBER`, `ADMIN`, `EXEMPT`) skipped entirely
+
+- [ ] **Step 5: Human review gate**
+
+Before flipping to live, manually review:
+- Count of transitions by type — does the volume look reasonable?
+- Spot-check 5 specific named users you know personally — are their proposed tiers correct?
+- Look for any board members or coaches accidentally being demoted (would indicate exception tag or coach override misconfiguration)
+- Verify no `announcements-tcsc` references remain in the trace (would indicate a stale config)
+
+**Do not proceed until this review is complete.**
+
+- [ ] **Step 6: Switch to live mode**
+
+Update `config/slack_channels.yaml`:
 ```yaml
 dry_run: false
 ```
@@ -1353,3 +1563,13 @@ Commit and deploy:
 git add config/slack_channels.yaml
 git commit -m "chore: switch channel sync to live mode after dry-run validation"
 ```
+
+- [ ] **Step 7: Run live sync and verify**
+
+Trigger sync via admin UI or `flask shell`. End-of-sync summary will post to the webhook channel.
+
+Spot-check 5–10 users in the Slack admin UI to confirm their roles match expected tiers. Specifically verify:
+- A 1-season alumni you know is now MCG with their private channels intact
+- A 2+ season alumni with recent activity is MCG (not SCG)
+- A 2+ season alumni without recent activity is SCG, with access to `tcsc-reactivate-me`
+- A current ACTIVE member is full_member
