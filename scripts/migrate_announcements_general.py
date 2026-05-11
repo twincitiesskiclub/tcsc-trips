@@ -54,12 +54,80 @@ def get_user_client() -> WebClient:
     return WebClient(token=token, retry_handlers=[RateLimitErrorRetryHandler(max_retry_count=5)])
 
 
+def verify_channel_access(bot: WebClient, channel_id: str, label: str) -> None:
+    try:
+        info = bot.conversations_info(channel=channel_id)
+    except SlackApiError as e:
+        sys.exit(f"ERROR: cannot read {label} channel {channel_id}: {e.response['error']}")
+    if not info["channel"].get("is_member"):
+        sys.exit(f"ERROR: bot is not a member of {label} channel {channel_id} (#{info['channel']['name']}). Invite the bot and re-run.")
+    print(f"  bot is in {label}={channel_id} (#{info['channel']['name']})")
+
+
+def probe_copy_scopes(bot: WebClient) -> None:
+    """Verify chat:write, chat:write.customize, and bot membership in DEST.
+
+    Posts an impersonated probe message in DEST and deletes it. Aborts on any failure.
+    """
+    print("Probing copy scopes (impersonate + delete in DEST)...")
+    try:
+        resp = bot.chat_postMessage(
+            channel=DEST_CHANNEL,
+            text="[probe] migration scope check — will be deleted",
+            username="Migration Probe",
+            icon_emoji=":construction:",
+        )
+    except SlackApiError as e:
+        err = e.response["error"]
+        needed = e.response.get("needed", "?")
+        sys.exit(f"ERROR: copy-phase probe post failed ({err}, needed scope: {needed})")
+    try:
+        bot.chat_delete(channel=DEST_CHANNEL, ts=resp["ts"])
+    except SlackApiError as e:
+        sys.exit(f"ERROR: copy-phase probe delete failed: {e.response['error']}")
+    print("  OK")
+
+
+def probe_delete_scopes(bot: WebClient, user: WebClient) -> None:
+    """Verify admin chat:write on user token via post-then-delete in SOURCE.
+
+    Posts a bot message in SOURCE then deletes it via user token.
+    """
+    print("Probing delete scopes (admin chat:write in SOURCE via user token)...")
+    try:
+        resp = bot.chat_postMessage(channel=SOURCE_CHANNEL, text="[probe] migration delete scope check — will be deleted")
+    except SlackApiError as e:
+        sys.exit(f"ERROR: delete-phase probe post failed: {e.response['error']}")
+    try:
+        user.chat_delete(channel=SOURCE_CHANNEL, ts=resp["ts"])
+    except SlackApiError as e:
+        err = e.response["error"]
+        needed = e.response.get("needed", "?")
+        # Best-effort cleanup before aborting
+        try:
+            bot.chat_delete(channel=SOURCE_CHANNEL, ts=resp["ts"])
+        except SlackApiError:
+            pass
+        sys.exit(f"ERROR: user-token delete failed ({err}, needed scope: {needed})")
+    print("  OK")
+
+
 def cmd_copy(args: argparse.Namespace) -> None:
-    print("copy phase: not yet implemented")
+    bot = get_bot_client()
+    print(f"Verifying channel access...")
+    verify_channel_access(bot, SOURCE_CHANNEL, "SOURCE")
+    verify_channel_access(bot, DEST_CHANNEL, "DEST")
+    probe_copy_scopes(bot)
+    print("Scopes OK. Copy implementation pending.")
 
 
 def cmd_delete(args: argparse.Namespace) -> None:
-    print("delete phase: not yet implemented")
+    bot = get_bot_client()
+    user = get_user_client()
+    print(f"Verifying channel access...")
+    verify_channel_access(bot, SOURCE_CHANNEL, "SOURCE")
+    probe_delete_scopes(bot, user)
+    print(f"Scopes OK. Delete implementation pending. (dry_run={not args.no_dry_run})")
 
 
 def main() -> None:
