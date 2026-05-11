@@ -356,6 +356,56 @@ def parse_since(since: str | None) -> str | None:
     return str(dt.timestamp())
 
 
+def fetch_replies(bot: WebClient, channel: str, thread_ts: str) -> list[dict]:
+    """Fetch all replies in a thread (excluding the root). Oldest-first."""
+    replies: list[dict] = []
+    cursor = None
+    while True:
+        params = {"channel": channel, "ts": thread_ts, "limit": 200}
+        if cursor:
+            params["cursor"] = cursor
+        resp = bot.conversations_replies(**params)
+        for r in resp.get("messages", []):
+            if r.get("ts") == thread_ts:
+                continue  # skip the duplicated root
+            replies.append(r)
+        cursor = resp.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+    # API already returns oldest-first for replies, but be explicit
+    replies.sort(key=lambda r: float(r["ts"]))
+    return replies
+
+
+def copy_thread_replies(
+    bot: WebClient,
+    user_cache: dict[str, dict],
+    manifest: dict,
+    source_root_ts: str,
+    new_root_ts: str,
+) -> int:
+    """Copy all replies of source_root_ts under new_root_ts. Returns count copied."""
+    replies = fetch_replies(bot, SOURCE_CHANNEL, source_root_ts)
+    copied = 0
+    for reply in replies:
+        source_reply_ts = reply["ts"]
+        entry = manifest["messages"][source_root_ts]
+        if source_reply_ts in entry["replies"]:
+            continue  # already done
+        reason = should_skip(reply)
+        if reason:
+            manifest["skipped"][source_reply_ts] = reason
+            save_manifest(manifest)
+            continue
+        author = resolve_author(reply, user_cache)
+        text = build_post_text(reply, include_reactions=False)
+        new_reply_ts = post_impersonated(bot, DEST_CHANNEL, text, author, thread_ts=new_root_ts)
+        entry["replies"][source_reply_ts] = {"new_ts": new_reply_ts, "deleted": False}
+        save_manifest(manifest)
+        copied += 1
+    return copied
+
+
 def copy_root_messages(
     bot: WebClient,
     user_cache: dict[str, dict],
@@ -418,6 +468,11 @@ def copy_root_messages(
         }
         save_manifest(manifest)
         copied += 1
+
+        if msg.get("reply_count", 0) > 0:
+            reply_count = copy_thread_replies(bot, user_cache, manifest, source_ts, new_ts)
+            if reply_count:
+                print(f"  copied {reply_count} replies under {source_ts}")
 
         if limit is not None and eligible >= limit:
             print(f"  --limit {limit} reached; stopping")
