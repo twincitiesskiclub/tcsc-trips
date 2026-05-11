@@ -478,7 +478,9 @@ def sync_single_user(
                     )
 
         # Sync channels for full members (or when role didn't change)
-        # For MCG/SCG, the role change API handles channels
+        # For MCG/SCG role *changes*, the role change API handles channels (see
+        # the early returns above). This block only runs when no role change
+        # happened, so we only need additive repair for all tiers.
 
         if target_tier == 'full_member':
             # Add user to target channels they're not in
@@ -513,6 +515,30 @@ def sync_single_user(
 
                 if remove_user_from_channel(user_id, channel_id, email, dry_run):
                     result.channel_removals += 1
+
+        elif target_tier == 'multi_channel_guest':
+            # MCG no-role-change channel sync: add any missing managed MCG channels.
+            # Don't remove anything — private channels are preserved by design, and
+            # full_member-exclusive channels are protected by the MCG Slack role itself.
+            channels_to_add = target_channel_ids - current_channels
+            if channels_to_add:
+                add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
+                result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
+            for channel_id in channels_to_add:
+                if add_user_to_channel(user_id, channel_id, email, dry_run):
+                    result.channel_adds += 1
+
+        elif target_tier == 'single_channel_guest':
+            # SCG no-role-change channel sync: add any missing target channels
+            # (typically just tcsc-reactivate-me). Don't remove anything — the SCG
+            # role restricts what they can do; welcome-to-tcsc is a workspace default.
+            channels_to_add = target_channel_ids - current_channels
+            if channels_to_add:
+                add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
+                result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
+            for channel_id in channels_to_add:
+                if add_user_to_channel(user_id, channel_id, email, dry_run):
+                    result.channel_adds += 1
 
     except CookieExpiredError as e:
         current_app.logger.error(f"Cookie expired during sync for {user_str}: {e}")
