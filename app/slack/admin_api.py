@@ -15,6 +15,7 @@ import os
 import time
 import functools
 import requests
+from datetime import datetime, timezone
 from typing import Optional
 from flask import current_app
 
@@ -352,3 +353,87 @@ def invite_user_by_email(
         action_description += f" with {len(channel_ids)} initial channels"
 
     make_admin_request('users.admin.inviteBulk', data, action_description, email, dry_run=dry_run)
+
+
+def fetch_user_activity() -> dict[str, datetime]:
+    """Fetch last-active timestamps for all workspace members.
+
+    Uses Slack's admin analytics API (admin.analytics.getMemberAnalytics).
+    Two-call sequence:
+      1. getAvailableDateRange to determine the valid window
+      2. getMemberAnalytics to retrieve per-member date_last_active
+
+    Returns:
+        Dict mapping Slack user ID -> last active datetime (UTC).
+        Members with date_last_active <= 0 (bots, never-onboarded) are omitted.
+        Returns empty dict on failure (caller uses stale data).
+    """
+    activity_map: dict[str, datetime] = {}
+
+    try:
+        range_response = make_admin_request(
+            api_method='admin.analytics.getAvailableDateRange',
+            data={
+                'token': get_admin_credentials()['token'],
+                'type': 'member',
+                '_x_reason': 'fetchMembersDataAvailableDateRange',
+                '_x_mode': 'online',
+                '_x_app_name': 'manage',
+            },
+            action_description='Fetch analytics date range',
+            email='(bulk activity fetch)',
+        )
+
+        start_date = range_response['start_date']
+        end_date = range_response['end_date']
+
+        cursor = ''
+        total_expected = None
+        while True:
+            data = {
+                'token': get_admin_credentials()['token'],
+                'start_date': start_date,
+                'end_date': end_date,
+                'count': '500',
+                'sort_column': 'date_last_active',
+                'sort_direction': 'desc',
+                'query': '',
+                '_x_reason': 'loadMembersDataForTimeRange',
+                '_x_mode': 'online',
+                '_x_app_name': 'manage',
+            }
+            if cursor:
+                data['cursor_mark'] = cursor
+
+            response = make_admin_request(
+                api_method='admin.analytics.getMemberAnalytics',
+                data=data,
+                action_description='Fetch member analytics',
+                email='(bulk activity fetch)',
+            )
+
+            for member in response.get('member_activity', []):
+                user_id = member.get('user_id')
+                ts = member.get('date_last_active') or 0
+                if user_id and ts > 0:
+                    activity_map[user_id] = datetime.fromtimestamp(ts, tz=timezone.utc)
+
+            if total_expected is None:
+                total_expected = response.get('num_found', 0)
+
+            next_cursor = response.get('next_cursor_mark', '')
+            if not next_cursor or next_cursor == cursor:
+                break
+            if total_expected and len(activity_map) >= total_expected:
+                break
+            cursor = next_cursor
+
+        current_app.logger.info(
+            f"Fetched activity for {len(activity_map)} of {total_expected or '?'} Slack users"
+        )
+
+    except Exception as e:
+        current_app.logger.error(f"Failed to fetch user activity: {e}")
+        return {}
+
+    return activity_map
