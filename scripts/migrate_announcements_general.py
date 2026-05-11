@@ -91,19 +91,20 @@ def build_reaction_footer(reactions: list[dict]) -> str:
 
 
 def build_post_text(msg: dict, include_reactions: bool) -> str:
-    """Build the impersonated post body: italic timestamp, original text, optional footer.
+    """Build the impersonated post body: original text, then italic timestamp footer.
 
-    include_reactions is True for root messages, False for thread replies.
+    For root messages (include_reactions=True), reactions are joined onto the
+    same footer line as the timestamp, separated by ' · '. For thread replies,
+    the footer is just the italic timestamp.
     """
-    ts_line = f"*{format_timestamp_central(msg['ts'])}*"
     body = msg.get("text", "") or "_(no text)_"
-    parts = [ts_line, body]
+    ts = f"*{format_timestamp_central(msg['ts'])}*"
     if include_reactions:
-        footer = build_reaction_footer(msg.get("reactions", []))
-        if footer:
-            parts.append("")  # blank line before footer
-            parts.append(footer)
-    return "\n".join(parts)
+        reactions = build_reaction_footer(msg.get("reactions", []))
+        footer = f"{ts} · {reactions}" if reactions else ts
+    else:
+        footer = ts
+    return f"{body}\n\n{footer}"
 
 
 MANIFEST_SCHEMA_VERSION = 1
