@@ -8,6 +8,7 @@ from app.slack.channel_sync import (
     ChannelSyncResult,
     get_managed_channel_ids,
 )
+from app.slack.admin_api import ROLE_MCG, ROLE_SCG
 
 
 @pytest.fixture
@@ -219,9 +220,9 @@ C_BOOKCLUB = 'C_BOOKCLUB'
 
 
 class TestSyncSingleUserStableTierChannelRepair:
-    """SCG/MCG users whose role doesn't change still get missing channels added."""
+    """SCG/MCG users whose role doesn't change still get missing channels added via admin API."""
 
-    @patch('app.slack.channel_sync.add_user_to_channel', return_value=True)
+    @patch('app.slack.channel_sync.add_user_to_channel')
     @patch('app.slack.channel_sync.change_user_role')
     @patch('app.slack.channel_sync.get_user_channels')
     @patch('app.slack.channel_sync.needs_role_change', return_value=False)
@@ -231,7 +232,7 @@ class TestSyncSingleUserStableTierChannelRepair:
         self, mock_season, mock_user, mock_needs, mock_get_chans,
         mock_change_role, mock_add_channel, app
     ):
-        """SCG user in welcome-only should be added to tcsc-reactivate-me."""
+        """SCG user in welcome-only should be added to tcsc-reactivate-me via admin API."""
         from app.slack.channel_sync import sync_single_user, ChannelSyncResult
 
         # User is currently only in the workspace default channel
@@ -261,15 +262,18 @@ class TestSyncSingleUserStableTierChannelRepair:
             notify_per_transition=False,
         )
 
-        # Should add tcsc-reactivate-me
-        mock_add_channel.assert_called_once_with('U_SCG', C_REACTIVATE, 'claire@example.com', True)
-        # Role change must NOT be called
-        mock_change_role.assert_not_called()
+        # change_user_role (admin API) must be called with SCG role and target channel
+        mock_change_role.assert_called_once()
+        call_kwargs = mock_change_role.call_args.kwargs
+        assert call_kwargs['target_role'] == ROLE_SCG
+        assert C_REACTIVATE in call_kwargs['channel_ids']
+        # conversations.invite must NOT be called (it silently no-ops for SCG)
+        mock_add_channel.assert_not_called()
         assert result.channel_adds == 1
-        # No PRESERVE_PRIVATE trace (that's an MCG role-change concept)
+        # No PRESERVE_PRIVATE trace (that's an MCG concept)
         assert not any('PRESERVE_PRIVATE' in t for t in result.traces)
 
-    @patch('app.slack.channel_sync.add_user_to_channel', return_value=True)
+    @patch('app.slack.channel_sync.add_user_to_channel')
     @patch('app.slack.channel_sync.change_user_role')
     @patch('app.slack.channel_sync.get_user_channels')
     @patch('app.slack.channel_sync.needs_role_change', return_value=False)
@@ -279,7 +283,7 @@ class TestSyncSingleUserStableTierChannelRepair:
         self, mock_season, mock_user, mock_needs, mock_get_chans,
         mock_change_role, mock_add_channel, app
     ):
-        """MCG user missing one managed channel gets it added; private channel untouched."""
+        """MCG user missing one managed channel gets it added via admin API; private channel preserved."""
         from app.slack.channel_sync import sync_single_user, ChannelSyncResult
 
         # User is in two managed MCG channels + one private channel they joined manually
@@ -313,13 +317,21 @@ class TestSyncSingleUserStableTierChannelRepair:
             notify_per_transition=False,
         )
 
-        # Only C_ALUMNI should be added (the missing managed MCG channel)
-        mock_add_channel.assert_called_once_with('U_MCG', C_ALUMNI, 'mcg@example.com', True)
-        # Role change must NOT be called
-        mock_change_role.assert_not_called()
+        # change_user_role (admin API) called with MCG role
+        mock_change_role.assert_called_once()
+        call_kwargs = mock_change_role.call_args.kwargs
+        assert call_kwargs['target_role'] == ROLE_MCG
+        # channel_ids must include all target managed channels PLUS the private channel
+        passed_channels = set(call_kwargs['channel_ids'])
+        assert passed_channels == {C_WELCOME, C_CHAT, C_ALUMNI, C_BOOKCLUB}
+        # conversations.invite must NOT be called
+        mock_add_channel.assert_not_called()
         assert result.channel_adds == 1
+        # Private channel preservation trace and channel-add trace both present
+        assert any('PRESERVE_PRIVATE' in t for t in result.traces)
+        assert any('CHANNEL_ADD' in t for t in result.traces)
 
-    @patch('app.slack.channel_sync.add_user_to_channel', return_value=True)
+    @patch('app.slack.channel_sync.add_user_to_channel')
     @patch('app.slack.channel_sync.change_user_role')
     @patch('app.slack.channel_sync.get_user_channels')
     @patch('app.slack.channel_sync.needs_role_change', return_value=False)
@@ -329,7 +341,7 @@ class TestSyncSingleUserStableTierChannelRepair:
         self, mock_season, mock_user, mock_needs, mock_get_chans,
         mock_change_role, mock_add_channel, app
     ):
-        """SCG user already in the correct channels — no adds, no role change."""
+        """SCG user already in the correct channels — no adds, no role change, no API calls."""
         from app.slack.channel_sync import sync_single_user, ChannelSyncResult
 
         # User already has both expected channels
@@ -362,3 +374,4 @@ class TestSyncSingleUserStableTierChannelRepair:
         mock_add_channel.assert_not_called()
         mock_change_role.assert_not_called()
         assert result.channel_adds == 0
+        assert not any('PRESERVE_PRIVATE' in t for t in result.traces)

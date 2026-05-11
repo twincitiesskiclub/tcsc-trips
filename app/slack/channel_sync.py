@@ -517,28 +517,48 @@ def sync_single_user(
                     result.channel_removals += 1
 
         elif target_tier == 'multi_channel_guest':
-            # MCG no-role-change channel sync: add any missing managed MCG channels.
-            # Don't remove anything — private channels are preserved by design, and
-            # full_member-exclusive channels are protected by the MCG Slack role itself.
+            # MCG no-role-change channel repair: if any managed target channels are
+            # missing, re-apply via change_user_role (admin API). conversations.invite
+            # silently no-ops on restricted users — only the admin API actually moves
+            # them. Preserve private channels via the same merge as the role-change branch.
             channels_to_add = target_channel_ids - current_channels
             if channels_to_add:
                 add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
+                channels_for_role = set(target_channel_ids)
+                private_preserved = current_channels - managed_channel_ids
+                if private_preserved:
+                    channels_for_role |= private_preserved
+                    preserve_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in private_preserved]
+                    result.traces.append(f"PRESERVE_PRIVATE: {email} | keeping {preserve_names}")
                 result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
-            for channel_id in channels_to_add:
-                if add_user_to_channel(user_id, channel_id, email, dry_run):
-                    result.channel_adds += 1
+                change_user_role(
+                    user_id=user_id,
+                    email=email,
+                    target_role=ROLE_MCG,
+                    team_id=team_id,
+                    dry_run=dry_run,
+                    channel_ids=list(channels_for_role)
+                )
+                result.channel_adds += len(channels_to_add)
 
         elif target_tier == 'single_channel_guest':
-            # SCG no-role-change channel sync: add any missing target channels
-            # (typically just tcsc-reactivate-me). Don't remove anything — the SCG
-            # role restricts what they can do; welcome-to-tcsc is a workspace default.
+            # SCG no-role-change channel repair: if the user is not in the target
+            # channel (typically tcsc-reactivate-me), re-apply via change_user_role
+            # (admin API). conversations.invite silently no-ops on ultra_restricted
+            # users — only the admin API actually moves them.
             channels_to_add = target_channel_ids - current_channels
             if channels_to_add:
                 add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
                 result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
-            for channel_id in channels_to_add:
-                if add_user_to_channel(user_id, channel_id, email, dry_run):
-                    result.channel_adds += 1
+                change_user_role(
+                    user_id=user_id,
+                    email=email,
+                    target_role=ROLE_SCG,
+                    team_id=team_id,
+                    dry_run=dry_run,
+                    channel_ids=list(target_channel_ids)
+                )
+                result.channel_adds += len(channels_to_add)
 
     except CookieExpiredError as e:
         current_app.logger.error(f"Cookie expired during sync for {user_str}: {e}")
