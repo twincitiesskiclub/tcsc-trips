@@ -105,6 +105,48 @@ def build_post_text(msg: dict, include_reactions: bool) -> str:
     return "\n".join(parts)
 
 
+MANIFEST_SCHEMA_VERSION = 1
+
+
+def load_or_init_manifest() -> dict:
+    """Load manifest from disk, or initialize a new one. Validates schema version."""
+    if MANIFEST_PATH.exists():
+        try:
+            with open(MANIFEST_PATH) as f:
+                m = json.load(f)
+        except json.JSONDecodeError as e:
+            sys.exit(
+                f"ERROR: manifest at {MANIFEST_PATH} is corrupted ({e}). "
+                f"Rename it (e.g. mv {MANIFEST_PATH} {MANIFEST_PATH}.bad) and re-run."
+            )
+        if m.get("schema_version") != MANIFEST_SCHEMA_VERSION:
+            sys.exit(f"ERROR: manifest schema version mismatch (expected {MANIFEST_SCHEMA_VERSION}, got {m.get('schema_version')})")
+        if m.get("channel_from") != SOURCE_CHANNEL or m.get("channel_to") != DEST_CHANNEL:
+            sys.exit(
+                f"ERROR: manifest channels ({m.get('channel_from')} → {m.get('channel_to')}) "
+                f"do not match configured channels ({SOURCE_CHANNEL} → {DEST_CHANNEL})"
+            )
+        return m
+    return {
+        "schema_version": MANIFEST_SCHEMA_VERSION,
+        "channel_from": SOURCE_CHANNEL,
+        "channel_to": DEST_CHANNEL,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "copy_completed_at": None,
+        "messages": {},
+        "pinned_source_ts": [],
+        "skipped": {},
+    }
+
+
+def save_manifest(manifest: dict) -> None:
+    """Atomically write manifest to disk."""
+    tmp = MANIFEST_PATH.with_suffix(".json.tmp")
+    with open(tmp, "w") as f:
+        json.dump(manifest, f, indent=2, sort_keys=True)
+    tmp.replace(MANIFEST_PATH)
+
+
 def get_bot_client() -> WebClient:
     token = os.environ.get("SLACK_BOT_TOKEN")
     if not token:
@@ -235,7 +277,9 @@ def cmd_copy(args: argparse.Namespace) -> None:
     verify_channel_access(bot, DEST_CHANNEL, "DEST")
     probe_copy_scopes(bot)
     user_cache = build_user_cache(bot)
-    print(f"Scopes OK, user cache loaded ({len(user_cache)} users). Copy implementation pending.")
+    manifest = load_or_init_manifest()
+    save_manifest(manifest)
+    print(f"Manifest loaded: {len(manifest['messages'])} messages already copied.")
 
 
 def cmd_delete(args: argparse.Namespace) -> None:
