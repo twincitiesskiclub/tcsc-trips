@@ -112,13 +112,65 @@ def probe_delete_scopes(bot: WebClient, user: WebClient) -> None:
     print("  OK")
 
 
+def build_user_cache(bot: WebClient) -> dict[str, dict]:
+    """Return {slack_uid: {display_name, real_name, image_72}} for all workspace users."""
+    print("Fetching workspace users...")
+    cache: dict[str, dict] = {}
+    cursor = None
+    while True:
+        params = {"limit": 200}
+        if cursor:
+            params["cursor"] = cursor
+        resp = bot.users_list(**params)
+        for user in resp["members"]:
+            if user.get("deleted"):
+                # Still cache deactivated users — their messages will reference them
+                pass
+            profile = user.get("profile", {})
+            cache[user["id"]] = {
+                "display_name": profile.get("display_name") or profile.get("real_name") or user["id"],
+                "real_name": profile.get("real_name", ""),
+                "image_72": profile.get("image_72", ""),
+            }
+        cursor = resp.get("response_metadata", {}).get("next_cursor")
+        if not cursor:
+            break
+    print(f"  cached {len(cache)} users")
+    return cache
+
+
+def resolve_author(msg: dict, user_cache: dict[str, dict]) -> dict:
+    """Return {display_name, icon_url, icon_emoji} for the author of msg.
+
+    Precedence: user_cache → msg.user_profile → 'Former member' fallback.
+    """
+    user_id = msg.get("user", "")
+    if user_id in user_cache:
+        cached = user_cache[user_id]
+        return {
+            "display_name": cached["display_name"],
+            "icon_url": cached["image_72"] or None,
+            "icon_emoji": None if cached["image_72"] else ":bust_in_silhouette:",
+        }
+    # Slack embeds user_profile on messages for users who left
+    profile = msg.get("user_profile")
+    if profile:
+        return {
+            "display_name": profile.get("display_name") or profile.get("real_name") or "Former member",
+            "icon_url": profile.get("image_72") or None,
+            "icon_emoji": None if profile.get("image_72") else ":bust_in_silhouette:",
+        }
+    return {"display_name": "Former member", "icon_url": None, "icon_emoji": ":ghost:"}
+
+
 def cmd_copy(args: argparse.Namespace) -> None:
     bot = get_bot_client()
     print(f"Verifying channel access...")
     verify_channel_access(bot, SOURCE_CHANNEL, "SOURCE")
     verify_channel_access(bot, DEST_CHANNEL, "DEST")
     probe_copy_scopes(bot)
-    print("Scopes OK. Copy implementation pending.")
+    user_cache = build_user_cache(bot)
+    print(f"Scopes OK, user cache loaded ({len(user_cache)} users). Copy implementation pending.")
 
 
 def cmd_delete(args: argparse.Namespace) -> None:
