@@ -614,6 +614,7 @@ slack:
 channels:
   # ACTIVE users (seasons_since_active = 0) - full workspace access
   full_member:
+    - "welcome-to-tcsc"
     - "announcements-practices"
     - "announcements-general"
     - "chat"
@@ -628,6 +629,7 @@ channels:
 
   # ALUMNI (seasons_since_active = 1, or 2+ with recent activity/reactivated)
   multi_channel_guest:
+    - "welcome-to-tcsc"
     - "announcements-alumni"
     - "chat"
     - "fresh-tracks"
@@ -640,6 +642,7 @@ channels:
     - "race-waxing"
 
   # ALUMNI (seasons_since_active >= 2, inactive 90+ days) - single-channel guest
+  # SCG is the demoted tier — only gets the reactivation channel. Not welcome-to-tcsc.
   single_channel_guest:
     - "tcsc-reactivate-me"
 
