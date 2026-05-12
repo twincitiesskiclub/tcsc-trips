@@ -560,10 +560,16 @@ def sync_single_user(
             # SCG stable-tier diff-then-act repair. Same idempotency rationale as
             # MCG above. SCG has no private-channel preservation — ultra_restricted
             # users are confined to the managed set by Slack itself.
+            #
+            # Compare only the managed portion of the user's current channels.
+            # Slack may place SCG users in unmanaged public channels (e.g. the
+            # workspace default #welcome-to-tcsc), but those are not ours to
+            # remove, so they must not trigger a spurious repair.
             final_target = set(target_channel_ids)
-            if current_channels != final_target:
-                channels_to_add = final_target - current_channels
-                channels_to_remove = current_channels - final_target
+            current_managed = current_channels & managed_channel_ids
+            if current_managed != final_target:
+                channels_to_add = final_target - current_managed
+                channels_to_remove = current_managed - final_target
                 if channels_to_add:
                     add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
                     result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
