@@ -36,7 +36,6 @@ channels:
     - "welcome-to-tcsc"
     - "announcements-alumni"
     - "chat"
-    - "fresh-tracks"
     - "gear-recs-swap"
     - "races-information"
     - "volunteer-and-job-opportunities"
@@ -54,6 +53,7 @@ channels:
 exclusive_channels:
   - "announcements-practices"
   - "announcements-general"
+  - "fresh-tracks"
 
 # Activity-based tier check for 2+ season alumni
 # Alumni inactive longer than this threshold are demoted to SCG
