@@ -35,7 +35,7 @@ class TestFetchUserActivity:
     """Test fetch_user_activity admin API function."""
 
     @patch('app.slack.admin_api.make_admin_request')
-    def test_returns_user_id_to_timestamp_map(self, mock_request, app):
+    def test_returns_user_id_to_activity_dict(self, mock_request, app):
         from app.slack.admin_api import fetch_user_activity
 
         mock_request.side_effect = [
@@ -45,8 +45,18 @@ class TestFetchUserActivity:
                 'num_found': 2,
                 'next_cursor_mark': '',
                 'member_activity': [
-                    {'user_id': 'U123', 'date_last_active': 1714000000},
-                    {'user_id': 'U456', 'date_last_active': 1713000000},
+                    {
+                        'user_id': 'U123',
+                        'date_last_active': 1714000000,
+                        'days_active': 5,
+                        'messages_posted': 3,
+                    },
+                    {
+                        'user_id': 'U456',
+                        'date_last_active': 1713000000,
+                        'days_active': 0,
+                        'messages_posted': 0,
+                    },
                 ],
             },
         ]
@@ -56,8 +66,12 @@ class TestFetchUserActivity:
 
         assert 'U123' in result
         assert 'U456' in result
-        assert isinstance(result['U123'], datetime)
-        assert isinstance(result['U456'], datetime)
+        assert isinstance(result['U123']['last_active'], datetime)
+        assert result['U123']['days_active'] == 5
+        assert result['U123']['messages_posted'] == 3
+        assert isinstance(result['U456']['last_active'], datetime)
+        assert result['U456']['days_active'] == 0
+        assert result['U456']['messages_posted'] == 0
 
     @patch('app.slack.admin_api.make_admin_request')
     def test_skips_members_with_zero_or_missing_activity(self, mock_request, app):

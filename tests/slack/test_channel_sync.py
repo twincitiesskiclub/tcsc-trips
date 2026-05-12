@@ -375,3 +375,173 @@ class TestSyncSingleUserStableTierChannelRepair:
         mock_change_role.assert_not_called()
         assert result.channel_adds == 0
         assert not any('PRESERVE_PRIVATE' in t for t in result.traces)
+
+    @patch('app.slack.channel_sync.add_user_to_channel')
+    @patch('app.slack.channel_sync.change_user_role')
+    @patch('app.slack.channel_sync.get_user_channels')
+    @patch('app.slack.channel_sync.needs_role_change', return_value=False)
+    @patch('app.slack.channel_sync.User.get_by_email', return_value=None)
+    @patch('app.slack.channel_sync.Season.get_current', return_value=None)
+    def test_mcg_no_op_when_channels_already_correct(
+        self, mock_season, mock_user, mock_needs, mock_get_chans,
+        mock_change_role, mock_add_channel, app
+    ):
+        """MCG user with channels matching target ∪ privates — no role change, no API call.
+
+        This is the critical regression guard. Without the diff-then-act check,
+        every sync would call change_user_role and bump date_last_active.
+        """
+        from app.slack.channel_sync import sync_single_user, ChannelSyncResult
+
+        # User has all managed MCG channels + one private channel
+        mock_get_chans.return_value = {C_WELCOME, C_CHAT, C_ALUMNI, C_BOOKCLUB}
+
+        slack_user = {
+            'id': 'U_MCG_NOOP',
+            'profile': {'email': 'mcg-noop@example.com'},
+            'is_restricted': True,
+            'is_ultra_restricted': False,
+        }
+        managed = {C_WELCOME, C_CHAT, C_ALUMNI}
+        target_mcg = {C_WELCOME, C_CHAT, C_ALUMNI}
+        result = ChannelSyncResult()
+
+        sync_single_user(
+            slack_user=slack_user,
+            target_tier='multi_channel_guest',
+            target_channel_ids=target_mcg,
+            full_member_channel_ids=set(),
+            managed_channel_ids=managed,
+            channel_id_to_properties={
+                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_CHAT: {'name': 'general-chat', 'is_public': False},
+                C_ALUMNI: {'name': 'alumni-corner', 'is_public': False},
+                C_BOOKCLUB: {'name': 'book-club', 'is_public': False},
+            },
+            team_id='T_TEST',
+            dry_run=True,
+            result=result,
+            notify_per_transition=False,
+        )
+
+        mock_change_role.assert_not_called()
+        mock_add_channel.assert_not_called()
+        assert result.channel_adds == 0
+        assert result.channel_removals == 0
+
+    @patch('app.slack.channel_sync.add_user_to_channel')
+    @patch('app.slack.channel_sync.change_user_role')
+    @patch('app.slack.channel_sync.get_user_channels')
+    @patch('app.slack.channel_sync.needs_role_change', return_value=False)
+    @patch('app.slack.channel_sync.User.get_by_email', return_value=None)
+    @patch('app.slack.channel_sync.Season.get_current', return_value=None)
+    def test_mcg_extra_managed_channel_gets_removed(
+        self, mock_season, mock_user, mock_needs, mock_get_chans,
+        mock_change_role, mock_add_channel, app
+    ):
+        """MCG user has a channel that is managed but no longer in the MCG target list.
+
+        Models the fresh-tracks removal: a channel was removed from the MCG tier
+        list in config; this user is still in it and should be removed.
+        Private channels must still be preserved.
+        """
+        from app.slack.channel_sync import sync_single_user, ChannelSyncResult
+
+        C_FRESHTRACKS = 'C_FRESHTRACKS'  # managed (full_member tier) but no longer in MCG target
+        # User has the managed MCG channels + the now-removed fresh-tracks + a private channel
+        mock_get_chans.return_value = {C_WELCOME, C_CHAT, C_ALUMNI, C_FRESHTRACKS, C_BOOKCLUB}
+
+        slack_user = {
+            'id': 'U_MCG_EXTRA',
+            'profile': {'email': 'mcg-extra@example.com'},
+            'is_restricted': True,
+            'is_ultra_restricted': False,
+        }
+        # managed = union of all tier lists (incl. full_member where fresh-tracks lives)
+        managed = {C_WELCOME, C_CHAT, C_ALUMNI, C_FRESHTRACKS}
+        target_mcg = {C_WELCOME, C_CHAT, C_ALUMNI}  # fresh-tracks no longer here
+        result = ChannelSyncResult()
+
+        sync_single_user(
+            slack_user=slack_user,
+            target_tier='multi_channel_guest',
+            target_channel_ids=target_mcg,
+            full_member_channel_ids=set(),
+            managed_channel_ids=managed,
+            channel_id_to_properties={
+                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_CHAT: {'name': 'general-chat', 'is_public': False},
+                C_ALUMNI: {'name': 'alumni-corner', 'is_public': False},
+                C_FRESHTRACKS: {'name': 'fresh-tracks', 'is_public': False},
+                C_BOOKCLUB: {'name': 'book-club', 'is_public': False},
+            },
+            team_id='T_TEST',
+            dry_run=True,
+            result=result,
+            notify_per_transition=False,
+        )
+
+        mock_change_role.assert_called_once()
+        call_kwargs = mock_change_role.call_args.kwargs
+        assert call_kwargs['target_role'] == ROLE_MCG
+        passed_channels = set(call_kwargs['channel_ids'])
+        # Must NOT contain fresh-tracks; must contain target + preserved private
+        assert C_FRESHTRACKS not in passed_channels
+        assert passed_channels == {C_WELCOME, C_CHAT, C_ALUMNI, C_BOOKCLUB}
+        # conversations.invite NOT called
+        mock_add_channel.assert_not_called()
+        # Counters reflect a real removal
+        assert result.channel_removals == 1
+        assert result.channel_adds == 0
+        # Trace strings present
+        assert any('CHANNEL_REMOVE' in t and 'fresh-tracks' in t for t in result.traces)
+        assert any('PRESERVE_PRIVATE' in t for t in result.traces)
+
+    @patch('app.slack.channel_sync.add_user_to_channel')
+    @patch('app.slack.channel_sync.change_user_role')
+    @patch('app.slack.channel_sync.get_user_channels')
+    @patch('app.slack.channel_sync.needs_role_change', return_value=False)
+    @patch('app.slack.channel_sync.User.get_by_email', return_value=None)
+    @patch('app.slack.channel_sync.Season.get_current', return_value=None)
+    def test_scg_extra_channel_gets_removed(
+        self, mock_season, mock_user, mock_needs, mock_get_chans,
+        mock_change_role, mock_add_channel, app
+    ):
+        """SCG user has an extra managed channel that should be removed."""
+        from app.slack.channel_sync import sync_single_user, ChannelSyncResult
+
+        # User is in reactivate channel + an extra managed channel they shouldn't have
+        mock_get_chans.return_value = {C_REACTIVATE, C_CHAT}
+
+        slack_user = {
+            'id': 'U_SCG_EXTRA',
+            'profile': {'email': 'scg-extra@example.com'},
+            'is_restricted': False,
+            'is_ultra_restricted': True,
+        }
+        result = ChannelSyncResult()
+
+        sync_single_user(
+            slack_user=slack_user,
+            target_tier='single_channel_guest',
+            target_channel_ids={C_REACTIVATE},
+            full_member_channel_ids=set(),
+            managed_channel_ids={C_REACTIVATE, C_CHAT},
+            channel_id_to_properties={
+                C_REACTIVATE: {'name': 'tcsc-reactivate-me', 'is_public': False},
+                C_CHAT: {'name': 'general-chat', 'is_public': False},
+            },
+            team_id='T_TEST',
+            dry_run=True,
+            result=result,
+            notify_per_transition=False,
+        )
+
+        mock_change_role.assert_called_once()
+        call_kwargs = mock_change_role.call_args.kwargs
+        assert call_kwargs['target_role'] == ROLE_SCG
+        passed_channels = set(call_kwargs['channel_ids'])
+        assert passed_channels == {C_REACTIVATE}
+        mock_add_channel.assert_not_called()
+        assert result.channel_removals == 1
+        assert result.channel_adds == 0
