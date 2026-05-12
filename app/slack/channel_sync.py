@@ -557,23 +557,29 @@ def sync_single_user(
                 result.channel_removals += len(channels_to_remove)
 
         elif target_tier == 'single_channel_guest':
-            # SCG no-role-change channel repair: if the user is not in the target
-            # channel (typically tcsc-reactivate-me), re-apply via change_user_role
-            # (admin API). conversations.invite silently no-ops on ultra_restricted
-            # users — only the admin API actually moves them.
-            channels_to_add = target_channel_ids - current_channels
-            if channels_to_add:
-                add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
-                result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
+            # SCG stable-tier diff-then-act repair. Same idempotency rationale as
+            # MCG above. SCG has no private-channel preservation — ultra_restricted
+            # users are confined to the managed set by Slack itself.
+            final_target = set(target_channel_ids)
+            if current_channels != final_target:
+                channels_to_add = final_target - current_channels
+                channels_to_remove = current_channels - final_target
+                if channels_to_add:
+                    add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
+                    result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
+                if channels_to_remove:
+                    remove_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_remove]
+                    result.traces.append(f"CHANNEL_REMOVE: {email} | -{remove_names} | {db_info}")
                 change_user_role(
                     user_id=user_id,
                     email=email,
                     target_role=ROLE_SCG,
                     team_id=team_id,
                     dry_run=dry_run,
-                    channel_ids=list(target_channel_ids)
+                    channel_ids=list(final_target)
                 )
                 result.channel_adds += len(channels_to_add)
+                result.channel_removals += len(channels_to_remove)
 
     except CookieExpiredError as e:
         current_app.logger.error(f"Cookie expired during sync for {user_str}: {e}")
