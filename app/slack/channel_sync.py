@@ -517,29 +517,44 @@ def sync_single_user(
                     result.channel_removals += 1
 
         elif target_tier == 'multi_channel_guest':
-            # MCG no-role-change channel repair: if any managed target channels are
-            # missing, re-apply via change_user_role (admin API). conversations.invite
-            # silently no-ops on restricted users — only the admin API actually moves
-            # them. Preserve private channels via the same merge as the role-change branch.
-            channels_to_add = target_channel_ids - current_channels
-            if channels_to_add:
-                add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
-                channels_for_role = set(target_channel_ids)
-                private_preserved = current_channels - managed_channel_ids
+            # MCG stable-tier diff-then-act repair.
+            #
+            # We must avoid calling change_user_role when channels already match
+            # the target. Each admin role-change bumps Slack analytics'
+            # date_last_active for the target user, which the tier criterion
+            # treats as activity — so a no-op repair would create a churn loop
+            # that re-promotes dormant SCGs.
+            #
+            # When a real diff exists (add OR remove), apply it via a single
+            # change_user_role call with target ∪ preserved_private. Slack's
+            # admin API replaces the user's managed channel set, so this both
+            # adds missing channels and removes extras inside the managed set.
+            # Private (unmanaged) channels are preserved by including them in
+            # the call.
+            private_preserved = current_channels - managed_channel_ids
+            final_target = set(target_channel_ids) | private_preserved
+            if current_channels != final_target:
+                channels_to_add = final_target - current_channels
+                channels_to_remove = current_channels - final_target
                 if private_preserved:
-                    channels_for_role |= private_preserved
                     preserve_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in private_preserved]
                     result.traces.append(f"PRESERVE_PRIVATE: {email} | keeping {preserve_names}")
-                result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
+                if channels_to_add:
+                    add_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_add]
+                    result.traces.append(f"CHANNEL_ADD: {email} | +{add_names} | {db_info}")
+                if channels_to_remove:
+                    remove_names = [channel_id_to_properties.get(cid, {}).get('name', cid) for cid in channels_to_remove]
+                    result.traces.append(f"CHANNEL_REMOVE: {email} | -{remove_names} | {db_info}")
                 change_user_role(
                     user_id=user_id,
                     email=email,
                     target_role=ROLE_MCG,
                     team_id=team_id,
                     dry_run=dry_run,
-                    channel_ids=list(channels_for_role)
+                    channel_ids=list(final_target)
                 )
                 result.channel_adds += len(channels_to_add)
+                result.channel_removals += len(channels_to_remove)
 
         elif target_tier == 'single_channel_guest':
             # SCG no-role-change channel repair: if the user is not in the target
