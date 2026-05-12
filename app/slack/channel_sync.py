@@ -692,20 +692,23 @@ def run_channel_sync(dry_run: Optional[bool] = None) -> ChannelSyncResult:
         # Compute all managed channel IDs (for private channel preservation)
         managed_channel_ids = get_managed_channel_ids(config, channel_name_to_id)
 
-        # Activity backfill BEFORE tier evaluation — last_slack_activity values
-        # must be written before get_db_email_to_tier() materializes the tier map,
-        # because that map is a plain dict[str, str] snapshot from the ORM. Updates
-        # after that call don't retroactively affect tier decisions in this sync run.
+        # Activity backfill BEFORE tier evaluation — last_slack_activity, days_active,
+        # and messages_posted must be written before get_db_email_to_tier() materializes
+        # the tier map, because that map is a plain dict[str, str] snapshot from the ORM.
+        # Updates after that call don't retroactively affect tier decisions in this sync run.
         activity_map = fetch_user_activity()
         if activity_map:
             for slack_user_record in SlackUser.query.all():
                 if slack_user_record.slack_uid in activity_map:
-                    slack_user_record.last_slack_activity = activity_map[slack_user_record.slack_uid]
+                    a = activity_map[slack_user_record.slack_uid]
+                    slack_user_record.last_slack_activity = a['last_active']
+                    slack_user_record.slack_days_active = a['days_active']
+                    slack_user_record.slack_messages_posted = a['messages_posted']
             db.session.commit()
-            current_app.logger.info(f"Updated last_slack_activity for {len(activity_map)} users")
+            current_app.logger.info(f"Updated activity metrics for {len(activity_map)} users")
         else:
             current_app.logger.warning(
-                "Activity fetch returned no data — using stale last_slack_activity values"
+                "Activity fetch returned no data — using stale activity metrics"
             )
 
         # Build tier map from database (reads last_slack_activity — must be after backfill)
