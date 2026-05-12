@@ -13,8 +13,10 @@ class FakeTag:
 
 
 class FakeSlackUser:
-    def __init__(self, last_slack_activity=None):
+    def __init__(self, last_slack_activity=None, slack_days_active=None, slack_messages_posted=None):
         self.last_slack_activity = last_slack_activity
+        self.slack_days_active = slack_days_active
+        self.slack_messages_posted = slack_messages_posted
 
 
 class FakeUser:
@@ -38,10 +40,13 @@ def get_slack_tier_under_test(user, threshold_days=90):
         if user.seasons_since_active == 1:
             return 'multi_channel_guest'
         else:
-            if (user.slack_user
-                    and user.slack_user.last_slack_activity
-                    and (datetime.utcnow() - user.slack_user.last_slack_activity).days < threshold_days):
-                return 'multi_channel_guest'
+            su = user.slack_user
+            if (su and su.last_slack_activity
+                    and (datetime.utcnow() - su.last_slack_activity).days < threshold_days):
+                messages = su.slack_messages_posted or 0
+                days_active = su.slack_days_active or 0
+                if messages >= 1 or days_active >= 3:
+                    return 'multi_channel_guest'
             return 'single_channel_guest'
     return None
 
@@ -61,8 +66,12 @@ class TestTierLogicActivity:
         user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=None)
         assert get_slack_tier_under_test(user) == 'single_channel_guest'
 
-    def test_two_season_alumni_recent_activity_is_mcg(self):
-        slack_user = FakeSlackUser(last_slack_activity=datetime.utcnow() - timedelta(days=30))
+    def test_two_season_alumni_recent_activity_with_messages_is_mcg(self):
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=30),
+            slack_messages_posted=1,
+            slack_days_active=1,
+        )
         user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
         assert get_slack_tier_under_test(user) == 'multi_channel_guest'
 
@@ -76,13 +85,21 @@ class TestTierLogicActivity:
         user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
         assert get_slack_tier_under_test(user) == 'single_channel_guest'
 
-    def test_two_season_alumni_activity_just_under_threshold_is_mcg(self):
-        slack_user = FakeSlackUser(last_slack_activity=datetime.utcnow() - timedelta(days=89))
+    def test_two_season_alumni_activity_just_under_threshold_with_engagement_is_mcg(self):
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=89),
+            slack_messages_posted=1,
+            slack_days_active=1,
+        )
         user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
         assert get_slack_tier_under_test(user) == 'multi_channel_guest'
 
-    def test_three_season_alumni_recent_activity_is_mcg(self):
-        slack_user = FakeSlackUser(last_slack_activity=datetime.utcnow() - timedelta(days=10))
+    def test_three_season_alumni_recent_activity_with_engagement_is_mcg(self):
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=10),
+            slack_messages_posted=1,
+            slack_days_active=1,
+        )
         user = FakeUser(status='ALUMNI', seasons_since_active=3, slack_user=slack_user)
         assert get_slack_tier_under_test(user) == 'multi_channel_guest'
 
@@ -105,6 +122,53 @@ class TestTierLogicActivity:
 
     def test_slack_user_with_null_activity_is_scg(self):
         slack_user = FakeSlackUser(last_slack_activity=None)
+        user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
+        assert get_slack_tier_under_test(user) == 'single_channel_guest'
+
+    def test_two_season_alumni_recent_no_engagement_is_scg(self):
+        """The bug case: date_last_active bumped by admin call, but no real activity."""
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=1),
+            slack_messages_posted=0,
+            slack_days_active=1,
+        )
+        user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
+        assert get_slack_tier_under_test(user) == 'single_channel_guest'
+
+    def test_two_season_alumni_with_one_message_is_mcg(self):
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=10),
+            slack_messages_posted=1,
+            slack_days_active=1,
+        )
+        user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
+        assert get_slack_tier_under_test(user) == 'multi_channel_guest'
+
+    def test_two_season_alumni_with_three_days_active_is_mcg(self):
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=10),
+            slack_messages_posted=0,
+            slack_days_active=3,
+        )
+        user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
+        assert get_slack_tier_under_test(user) == 'multi_channel_guest'
+
+    def test_two_season_alumni_with_two_days_active_no_messages_is_scg(self):
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=10),
+            slack_messages_posted=0,
+            slack_days_active=2,
+        )
+        user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
+        assert get_slack_tier_under_test(user) == 'single_channel_guest'
+
+    def test_two_season_alumni_old_activity_with_many_messages_is_scg(self):
+        """90-day window is required even with real engagement signals."""
+        slack_user = FakeSlackUser(
+            last_slack_activity=datetime.utcnow() - timedelta(days=120),
+            slack_messages_posted=10,
+            slack_days_active=20,
+        )
         user = FakeUser(status='ALUMNI', seasons_since_active=2, slack_user=slack_user)
         assert get_slack_tier_under_test(user) == 'single_channel_guest'
 
@@ -184,6 +248,8 @@ class TestUserGetSlackTierIntegration:
         slack_user = SlackUser(
             slack_uid=f'U{uuid.uuid4().hex[:8].upper()}',
             last_slack_activity=datetime.utcnow() - timedelta(days=30),
+            slack_messages_posted=1,
+            slack_days_active=1,
         )
         db_session.add(slack_user)
         db_session.flush()  # get slack_user.id before commit
