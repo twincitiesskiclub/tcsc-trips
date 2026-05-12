@@ -355,20 +355,24 @@ def invite_user_by_email(
     make_admin_request('users.admin.inviteBulk', data, action_description, email, dry_run=dry_run)
 
 
-def fetch_user_activity() -> dict[str, datetime]:
-    """Fetch last-active timestamps for all workspace members.
+def fetch_user_activity() -> dict[str, dict]:
+    """Fetch activity metrics for all workspace members.
 
     Uses Slack's admin analytics API (admin.analytics.getMemberAnalytics).
     Two-call sequence:
       1. getAvailableDateRange to determine the valid window
-      2. getMemberAnalytics to retrieve per-member date_last_active
+      2. getMemberAnalytics to retrieve per-member metrics
 
     Returns:
-        Dict mapping Slack user ID -> last active datetime (UTC).
+        Dict mapping Slack user ID -> {
+            'last_active': datetime (UTC),
+            'days_active': int,
+            'messages_posted': int,
+        }
         Members with date_last_active <= 0 (bots, never-onboarded) are omitted.
         Returns empty dict on failure (caller uses stale data).
     """
-    activity_map: dict[str, datetime] = {}
+    activity_map: dict[str, dict] = {}
 
     try:
         creds = get_admin_credentials()
@@ -423,7 +427,11 @@ def fetch_user_activity() -> dict[str, datetime]:
                 user_id = member.get('user_id')
                 ts = member.get('date_last_active') or 0
                 if user_id and ts > 0:
-                    activity_map[user_id] = datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None)
+                    activity_map[user_id] = {
+                        'last_active': datetime.fromtimestamp(ts, tz=timezone.utc).replace(tzinfo=None),
+                        'days_active': int(member.get('days_active') or 0),
+                        'messages_posted': int(member.get('messages_posted') or 0),
+                    }
 
             if total_expected is None:
                 total_expected = response.get('num_found', 0)
