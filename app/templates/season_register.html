@@ -58,7 +58,11 @@
 
             <div class="form-field">
               <label class="form-field__label" for="email">Email Address</label>
-              <input class="form-input" type="email" id="email" name="email" placeholder="Email Address" autocomplete="email" required>
+              {% if invite_email %}
+                <input class="form-input" type="email" id="email" name="email" value="{{ invite_email }}" readonly autocomplete="email" required>
+              {% else %}
+                <input class="form-input" type="email" id="email" name="email" placeholder="Email Address" autocomplete="email" required>
+              {% endif %}
             </div>
 
             <div class="form-field">

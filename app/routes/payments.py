@@ -9,6 +9,7 @@ from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, P
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
 from ..notifications.slack import send_payment_notification
+from .. import late_link
 
 payments = Blueprint('payments', __name__)
 
@@ -469,6 +470,7 @@ def create_season_payment_intent():
         season_id = data.get('season_id')
         email = normalize_email(data.get('email', ''))
         name = data.get('name', '')
+        invite_token = data.get('invite')
         if not all([season_id, email, name]):
             return json_error('Missing required fields')
         season = Season.query.get(season_id)
@@ -477,10 +479,17 @@ def create_season_payment_intent():
         # Derive member_type on the backend
         user = User.get_by_email(email)
         member_type = MemberType.RETURNING.value if user and user.is_returning else MemberType.NEW.value
+        # A valid invite token for this (season, email) bypasses the window gate.
+        invite_payload = late_link.verify(invite_token) if invite_token else None
+        invite_valid_for_email = (
+            invite_payload is not None
+            and invite_payload.get('season_id') == int(season_id)
+            and invite_payload.get('email') == email
+        )
         # Reject if the registration window for this member_type is closed.
         # Prevents stub User rows from being created via the webhook when the
         # form POST would have rejected the registration anyway.
-        if not season.is_open_for(member_type.lower(), datetime.utcnow()):
+        if not invite_valid_for_email and not season.is_open_for(member_type.lower(), datetime.utcnow()):
             return json_error(
                 f"Registration for {member_type.lower()} members is not currently open."
             )

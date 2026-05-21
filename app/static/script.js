@@ -418,6 +418,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function createPaymentIntent(name, email) {
       idempotencyKey = generateIdempotencyKey();
+      const invite = new URLSearchParams(window.location.search).get('invite');
       const response = await fetch('/create-season-payment-intent', {
         method: 'POST',
         headers: {
@@ -427,7 +428,8 @@ document.addEventListener('DOMContentLoaded', () => {
         body: JSON.stringify({
           season_id: registrationForm.dataset.seasonId,
           email,
-          name
+          name,
+          invite
         })
       });
 

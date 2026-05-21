@@ -4,6 +4,7 @@ from ..constants import DATE_FORMAT, UserStatus, UserSeasonStatus
 from datetime import datetime
 from ..errors import flash_error, flash_info
 from ..utils import get_current_times, normalize_email, format_datetime_central, today_central, validate_registration_form
+from .. import late_link
 
 registration = Blueprint('registration', __name__)
 
@@ -56,11 +57,24 @@ def season_register(season_id):
     current_time = times['central']  # Use localized time for potential display
     now_utc = times['utc']  # Use UTC for comparisons
 
+    invite_token = request.args.get('invite')
+    invite_payload = late_link.verify(invite_token) if invite_token else None
+    invite_season_match = (
+        invite_payload is not None
+        and invite_payload.get('season_id') == season_id
+    )
+
     if request.method == 'POST':
         try:
             form = request.form
             email = normalize_email(form['email'])
             user = User.get_by_email(email)
+
+            if invite_token and user is not None:
+                existing_us = UserSeason.get_for_user_season(user.id, season.id)
+                if existing_us and existing_us.status in (UserSeasonStatus.ACTIVE, UserSeasonStatus.PENDING_LOTTERY):
+                    flash_error("This link has already been used — you're already registered for this season.")
+                    return redirect(url_for('registration.season_register', season_id=season_id))
 
             # Get payment_intent_id for coordination with webhook
             payment_intent_id = form.get('payment_intent_id')
@@ -75,7 +89,20 @@ def season_register(season_id):
 
             # Check if registration window is open for this user type
             member_type_str = 'returning' if is_returning else 'new'
-            if not season.is_open_for(member_type_str, now_utc):
+            invite_valid_for_email = (
+                invite_season_match
+                and invite_payload.get('email') == email
+            )
+            if invite_token and not invite_valid_for_email:
+                # Token present but signature/expiry/email mismatch — explain why.
+                if invite_payload is None:
+                    flash_error('This link is invalid or has expired. Please ask an admin for a new one.')
+                elif not invite_season_match:
+                    flash_error('This link is for a different season.')
+                else:
+                    flash_error('This link was issued for a different email.')
+                return redirect(url_for('registration.season_register', season_id=season_id, invite=invite_token))
+            if not invite_valid_for_email and not season.is_open_for(member_type_str, now_utc):
                 status_msg = "returning members" if is_returning else "new members"
                 flash_error(f'Sorry, the registration window for {status_msg} is currently closed.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
@@ -168,7 +195,7 @@ def season_register(season_id):
             return redirect(url_for('registration.season_register', season_id=season_id))
 
     # --- GET Request Handling ---
-    if not season.is_any_registration_open(now_utc):
+    if not season.is_any_registration_open(now_utc) and not invite_season_match:
         # Determine the appropriate message based on timing
         message = "Registration is currently closed for this season."
         # Check timezone handling for accurate display
@@ -182,8 +209,13 @@ def season_register(season_id):
         flash_info(message)
         return redirect(url_for('main.get_home_page')) # Redirect to home page which shows status
 
-    # If GET request and registration is open, render the form
-    return render_template('season_register.html', season=season)
+    # If GET request and registration is open (or valid invite), render the form
+    return render_template(
+        'season_register.html',
+        season=season,
+        invite_token=invite_token if invite_season_match else None,
+        invite_email=invite_payload.get('email') if invite_season_match else None,
+    )
 
 @registration.route('/seasons/<int:season_id>')
 def season_detail(season_id):

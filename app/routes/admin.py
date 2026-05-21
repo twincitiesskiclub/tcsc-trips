@@ -10,7 +10,8 @@ from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
-from ..utils import CENTRAL_TZ, format_datetime_central
+from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email
+from .. import late_link
 from datetime import datetime, timedelta
 import pytz
 import csv
@@ -375,6 +376,19 @@ def edit_season(season_id):
 @admin_required
 def delete_season(season_id):
     return delete_entity(Season, season_id, 'Season', 'admin.get_admin_seasons')
+
+
+@admin.route('/admin/seasons/<int:season_id>/late-link', methods=['POST'])
+@admin_required
+def generate_late_link(season_id):
+    season = Season.query.get_or_404(season_id)
+    email_raw = (request.json or {}).get('email') if request.is_json else request.form.get('email')
+    if not email_raw or '@' not in email_raw:
+        return jsonify({'success': False, 'error': 'A valid email is required.'}), 400
+    email = normalize_email(email_raw)
+    token = late_link.generate(season.id, email)
+    url = url_for('registration.season_register', season_id=season.id, invite=token, _external=True)
+    return jsonify({'success': True, 'url': url, 'email': email})
 
 
 @admin.route('/admin/seasons/data')

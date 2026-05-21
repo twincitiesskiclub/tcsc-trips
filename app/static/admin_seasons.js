@@ -78,7 +78,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     const data = cell.getRow().getData();
                     let html = `<div class="admin-actions">
                         <a href="/admin/seasons/${data.id}/edit" class="admin-btn admin-btn-sm admin-btn-primary">Edit</a>
-                        <a href="/admin/seasons/${data.id}/export" class="admin-btn admin-btn-sm admin-btn-secondary">Export</a>`;
+                        <a href="/admin/seasons/${data.id}/export" class="admin-btn admin-btn-sm admin-btn-secondary">Export</a>
+                        <button class="admin-btn admin-btn-sm admin-btn-secondary" onclick="generateLateLink(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Late Link</button>`;
 
                     if (!data.is_current) {
                         html += `<button class="admin-btn admin-btn-sm admin-btn-success" onclick="activateSeason(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Activate</button>`;
@@ -135,6 +136,31 @@ function confirmDeleteSeason(id, name) {
         } else {
             showToast(data.error || 'Failed to delete season', 'error');
         }
+    })
+    .catch(err => {
+        showToast('Error: ' + err.message, 'error');
+    });
+}
+
+function generateLateLink(seasonId, seasonName) {
+    const email = window.prompt(`Generate late-registration link for "${seasonName}"\n\nEnter the recipient's email:`);
+    if (!email) return;
+
+    fetch(`/admin/seasons/${seasonId}/late-link`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: email.trim() })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (!data.success) {
+            showToast(data.error || 'Failed to generate link', 'error');
+            return;
+        }
+        // Show the URL in a way the admin can copy from. window.prompt's text
+        // field is selected by default in most browsers, which is the easiest
+        // copy UX without building a dedicated modal.
+        window.prompt(`Late-registration link for ${data.email} (7-day expiry). Copy and send via Slack/email:`, data.url);
     })
     .catch(err => {
         showToast('Error: ' + err.message, 'error');
