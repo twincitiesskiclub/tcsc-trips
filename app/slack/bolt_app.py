@@ -1310,6 +1310,7 @@ if _bot_token:
 
         reaction_map = {
             "white_check_mark": "going",
+            "ballot_box_with_check": "going",
             "+1": "going",
             "thumbsup": "going",
             "heavy_check_mark": "going",
@@ -1317,6 +1318,10 @@ if _bot_token:
             "muscle": "going",
             "ski": "going",
             "skier": "going",
+            # Hour-based RSVP emojis for combined-lift posts (e.g. :six: + :seven:)
+            "one": "going", "two": "going", "three": "going", "four": "going",
+            "five": "going", "six": "going", "seven": "going", "eight": "going",
+            "nine": "going", "keycap_ten": "going",
             "question": "maybe",
             "thinking_face": "maybe",
             "shrug": "maybe",
@@ -1330,7 +1335,7 @@ if _bot_token:
             return
 
         with get_app_context():
-            _process_reaction_rsvp(channel, message_ts, status, user_id)
+            _process_reaction_rsvp(channel, message_ts, status, user_id, reaction=reaction)
 
     # =========================================================================
     # Custom Functions (Workflow Builder Custom Steps)
@@ -1676,19 +1681,44 @@ def _process_lead_confirmation(practice_id: int, confirmed: bool, slack_user_id:
         return result
 
 
-def _process_reaction_rsvp(channel: str, message_ts: str, status: str, user_id: str):
-    """Process emoji reaction as RSVP."""
+def _process_reaction_rsvp(channel: str, message_ts: str, status: str, user_id: str, reaction: str = None):
+    """Process emoji reaction as RSVP.
+
+    For combined-lift posts (multiple practices sharing the same
+    slack_message_ts), `reaction` is used to route the RSVP to the
+    correct sibling via its hour-based / position-based emoji.
+    """
     from app.models import db, User
     from app.practices.models import Practice, PracticeRSVP
+    from app.slack.client import get_combined_practice_emojis
     from app.slack.practices import update_practice_rsvp_counts
 
-    practice = Practice.query.filter_by(
+    siblings = Practice.query.filter_by(
         slack_message_ts=message_ts,
         slack_channel_id=channel
-    ).first()
+    ).order_by(Practice.date).all()
 
-    if not practice:
+    if not siblings:
         return
+
+    if len(siblings) == 1:
+        practice = siblings[0]
+    else:
+        # Combined post — pick the sibling whose slot emoji matches the reaction.
+        practice = None
+        if reaction:
+            slot_emojis = get_combined_practice_emojis(siblings)
+            for sib, slot_emoji in zip(siblings, slot_emojis):
+                if slot_emoji == reaction:
+                    practice = sib
+                    break
+        if practice is None:
+            # Reaction doesn't match any slot — ignore rather than misattribute.
+            logger.debug(
+                f"Combined-post reaction :{reaction}: from {user_id} didn't "
+                f"match any slot emoji on ts={message_ts}; ignoring."
+            )
+            return
 
     user = User.query.join(User.slack_user).filter_by(slack_uid=user_id).first()
 

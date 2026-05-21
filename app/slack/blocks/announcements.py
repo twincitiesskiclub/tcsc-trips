@@ -295,12 +295,20 @@ def build_combined_lift_blocks(
     location_spot = location.spot if location and location.spot else None
     full_location = f"{location_name} - {location_spot}" if location_spot else location_name
 
-    # Build day list for header
-    days = [p.date.strftime('%a') for p in sorted_practices]
-    days_str = " + ".join(days)
+    # Header day label: dedupe so two same-day practices render as "Thu"
+    # rather than "Thu + Thu".
+    seen_days = []
+    for p in sorted_practices:
+        d = p.date.strftime('%a')
+        if d not in seen_days:
+            seen_days.append(d)
+    days_str = " + ".join(seen_days)
 
-    # RSVP emoji mapping (supports up to 3 lift days)
-    rsvp_emojis = [":white_check_mark:", ":ballot_box_with_check:", ":heavy_check_mark:"]
+    # Per-practice RSVP emojis. Hour-based when unique (e.g. :six: for 6:10 PM,
+    # :seven: for 7:20 PM); falls back to checkmark variants if hours collide.
+    from app.slack.client import get_combined_practice_emojis
+    rsvp_emoji_names = get_combined_practice_emojis(sorted_practices)
+    rsvp_emojis = [f":{name}:" for name in rsvp_emoji_names]
 
     # ==========================================================================
     # HEADER: :weight_lifter: _TCSC Lift_ - Wed & Fri
@@ -407,13 +415,18 @@ def build_combined_lift_blocks(
             "fields": location_fields
         })
 
+    # When all sessions are same-day, the header already names the day,
+    # so per-slot labels switch to the time to avoid "Thu | Thu" repetition.
+    all_same_day = len(seen_days) == 1
+
     # ==========================================================================
     # COACH / LEADS (per day if different)
     # ==========================================================================
     coach_lead_parts = []
     for i, practice in enumerate(sorted_practices):
         emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else ":white_check_mark:"
-        day_short = practice.date.strftime('%a')
+        time_str = practice.date.strftime('%I:%M %p').lstrip('0')
+        slot_label = time_str if all_same_day else practice.date.strftime('%a')
 
         coaches = []
         leads = []
@@ -429,7 +442,7 @@ def build_combined_lift_blocks(
                     leads.append(mention)
 
         if coaches or leads:
-            day_coaches = f"{day_short}: "
+            day_coaches = f"{emoji} {slot_label}: "
             parts = []
             if coaches:
                 parts.append(f":male-teacher: {', '.join(coaches)}")
@@ -448,20 +461,21 @@ def build_combined_lift_blocks(
         })
 
     # ==========================================================================
-    # RSVP CTA
+    # RSVP CTA — matches the standalone announcement's "Bop ..." tone.
+    # The schedule line above already shows which slot each emoji represents.
     # ==========================================================================
-    rsvp_instructions = []
-    for i, practice in enumerate(sorted_practices):
-        emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else ":white_check_mark:"
-        day_short = practice.date.strftime('%a')
-        time_str = practice.date.strftime('%I:%M %p').lstrip('0')
-        rsvp_instructions.append(f"{emoji} {day_short} ({time_str})")
+    if len(rsvp_emojis) == 1:
+        emoji_list = rsvp_emojis[0]
+    elif len(rsvp_emojis) == 2:
+        emoji_list = f"{rsvp_emojis[0]} or {rsvp_emojis[1]}"
+    else:
+        emoji_list = ", ".join(rsvp_emojis[:-1]) + f", or {rsvp_emojis[-1]}"
 
     blocks.append({
         "type": "context",
         "elements": [{
             "type": "mrkdwn",
-            "text": f"RSVP: {' | '.join(rsvp_instructions)} — so we know you'll be there! <!channel>"
+            "text": f"Bop {emoji_list} so we'll know you'll be there. Running late? Drop a comment in the thread. <!channel>"
         }]
     })
 

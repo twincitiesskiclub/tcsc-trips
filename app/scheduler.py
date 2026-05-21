@@ -382,10 +382,14 @@ def run_expire_proposals_job(app: Flask):
 
 
 def _is_strength_practice(practice) -> bool:
-    """Check if a practice has the 'Strength' practice type."""
-    return any(
-        pt.name.lower() == 'strength'
-        for pt in practice.practice_types
+    """Check if a practice is a lift session.
+
+    Matches a 'Strength' practice_type OR a 'Strength' activity — TCSC tags
+    lifts inconsistently across the two, so we accept either.
+    """
+    return (
+        any(pt.name.lower() == 'strength' for pt in practice.practice_types)
+        or any(a.name.lower() == 'strength' for a in practice.activities)
     )
 
 

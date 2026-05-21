@@ -422,52 +422,67 @@ def has_user_reacted_with_emoji(
     }
 
 
-# Combined practice emoji mapping (day index -> emoji name)
-COMBINED_PRACTICE_EMOJIS = {
-    0: 'white_check_mark',      # Day 1 (e.g., Wednesday)
-    1: 'ballot_box_with_check',  # Day 2 (e.g., Friday)
-    2: 'heavy_check_mark',       # Day 3 (if applicable)
+# Position-based fallback when hour-based emojis collide or aren't available.
+COMBINED_PRACTICE_FALLBACK_EMOJIS = ['white_check_mark', 'ballot_box_with_check', 'heavy_check_mark']
+
+_HOUR_EMOJI = {
+    1: 'one', 2: 'two', 3: 'three', 4: 'four', 5: 'five',
+    6: 'six', 7: 'seven', 8: 'eight', 9: 'nine', 10: 'keycap_ten',
 }
 
 
-def get_lead_confirmation_emoji_for_practice(practice) -> list[str]:
-    """
-    Get the emoji name(s) that a lead should use to confirm for a practice.
+def _hour_emoji_for(dt) -> str | None:
+    """Return Slack emoji name for the 12-hour clock value of dt's hour, or None."""
+    h = dt.hour % 12
+    if h == 0:
+        h = 12
+    return _HOUR_EMOJI.get(h)
 
-    For standalone practices: returns ['white_check_mark']
-    For combined practices: returns the emoji for that practice's day in the combined post
 
-    Combined lift practices share the same slack_message_ts. The emoji order is:
-    - Day 1: white_check_mark
-    - Day 2: ballot_box_with_check
-    - Day 3: heavy_check_mark
+def get_combined_practice_emojis(practices) -> list[str]:
+    """Pick the per-practice RSVP emoji list for a combined post.
+
+    Strategy: hour-based number emojis (e.g. 6:10 PM → :six:, 7:20 PM → :seven:)
+    when every practice's hour resolves to a unique digit. If hours collide or
+    any hour falls outside 1-10 (12-hour clock), fall back to the position-based
+    checkmark sequence so the post is internally consistent.
 
     Args:
-        practice: Practice model instance
+        practices: list of Practice models, in display order (usually by date).
 
     Returns:
-        List of emoji names that would count as confirmation
+        List of emoji names, parallel to practices.
     """
-    # Check if this is a combined lift practice by seeing if other practices
-    # share the same slack_message_ts
+    if not practices:
+        return []
+    hour_emojis = [_hour_emoji_for(p.date) for p in practices]
+    if all(hour_emojis) and len(set(hour_emojis)) == len(hour_emojis):
+        return hour_emojis
+    return list(COMBINED_PRACTICE_FALLBACK_EMOJIS[:len(practices)])
+
+
+def get_lead_confirmation_emoji_for_practice(practice) -> list[str]:
+    """Get the emoji name(s) that count as a lead confirmation for a practice.
+
+    Standalone practice → ['white_check_mark'].
+    Combined practice → the single emoji for this practice's slot in the
+    combined post (hour-based when possible, position-based otherwise).
+    """
     if practice.slack_message_ts:
         from app.practices.models import Practice as PracticeModel
 
-        # Find all practices sharing this message timestamp
         sibling_practices = PracticeModel.query.filter(
             PracticeModel.slack_message_ts == practice.slack_message_ts
         ).order_by(PracticeModel.date).all()
 
         if len(sibling_practices) > 1:
-            # This is a combined practice - find this practice's position
+            emojis = get_combined_practice_emojis(sibling_practices)
             try:
-                day_index = sibling_practices.index(practice)
-                emoji_name = COMBINED_PRACTICE_EMOJIS.get(day_index, 'white_check_mark')
-                return [emoji_name]
-            except ValueError:
+                idx = sibling_practices.index(practice)
+                return [emojis[idx]]
+            except (ValueError, IndexError):
                 pass
 
-    # Default: standard white check mark
     return ['white_check_mark']
 
 

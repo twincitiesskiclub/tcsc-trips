@@ -178,8 +178,11 @@ def post_combined_lift_announcement(
             practice.slack_channel_id = channel_id
         db.session.commit()
 
-        # Add RSVP emojis for each day (different emoji per day)
-        rsvp_emojis = ["white_check_mark", "ballot_box_with_check", "heavy_check_mark"]
+        # Add RSVP emojis for each session — hour-based when possible
+        # (e.g. :six: for 6:10 PM, :seven: for 7:20 PM), matching the
+        # block builder's per-slot emoji.
+        from app.slack.client import get_combined_practice_emojis
+        rsvp_emojis = get_combined_practice_emojis(sorted_practices)
         for i, practice in enumerate(sorted_practices):
             emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else "white_check_mark"
             try:
