@@ -109,3 +109,45 @@ class TestErrorIsolation:
             result = _refresh_collab(practice, 'edit')
         assert result['success'] is False
         assert 'boom' in result['error']
+
+
+class TestSurfaceRegistry:
+    """Test the declarative PracticeSurface registry."""
+
+    def test_registry_covers_known_surfaces(self):
+        from app.slack.practices.refresh import PRACTICE_SURFACES
+        names = {s.name for s in PRACTICE_SURFACES}
+        assert names == {
+            "announcement", "collab", "coach_summary", "weekly_summary"
+        }
+
+    def test_surface_skips_when_ts_absent(self):
+        from app.slack.practices.refresh import PracticeSurface
+        calls = []
+        s = PracticeSurface(
+            "x", "slack_message_ts", ["edit"],
+            lambda p, c: calls.append(c) or {"success": True},
+        )
+        practice = FakePractice()  # no slack_message_ts
+        assert s.refresh(practice, "edit") == {"skipped": True}
+        assert calls == []
+
+    def test_surface_skips_when_change_type_not_applicable(self):
+        from app.slack.practices.refresh import PracticeSurface
+        calls = []
+        s = PracticeSurface(
+            "x", "slack_message_ts", ["edit"],
+            lambda p, c: calls.append(c) or {"success": True},
+        )
+        practice = FakePractice(slack_message_ts="1")
+        assert s.refresh(practice, "rsvp") == {"skipped": True}
+        assert calls == []
+
+    def test_surface_runs_when_applicable_and_present(self):
+        from app.slack.practices.refresh import PracticeSurface
+        s = PracticeSurface(
+            "x", "slack_message_ts", ["edit"],
+            lambda p, c: {"success": True, "ct": c},
+        )
+        practice = FakePractice(slack_message_ts="1")
+        assert s.refresh(practice, "edit") == {"success": True, "ct": "edit"}
