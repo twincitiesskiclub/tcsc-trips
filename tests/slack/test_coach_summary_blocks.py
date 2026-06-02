@@ -418,3 +418,52 @@ class TestBuildCoachWeeklySummaryBlocks:
         # Practices should have Edit buttons in actions blocks
         actions_blocks = [b for b in blocks if b.get('type') == 'actions']
         assert len(actions_blocks) == 3, f"Expected 3 actions blocks (one per practice), got {len(actions_blocks)}"
+
+    def test_all_assigned_coaches_render_including_degraded(self):
+        """Regression for the reported bug: a practice with 3 assigned coaches
+        must show all 3 in the weekly summary, even when one coach has no Slack
+        link (a degraded PracticeLeadInfo). Previously the unlinked coach was
+        silently dropped, producing '3 selected, 2 shown'."""
+        from app.slack.blocks import build_coach_weekly_summary_blocks
+
+        week_start = datetime(2026, 1, 19)  # Monday
+        expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
+
+        practice = PracticeInfo(
+            id=1,
+            date=datetime(2026, 1, 20, 18, 0),  # Tuesday
+            day_of_week="tuesday",
+            status=PracticeStatus.SCHEDULED,
+            workout_description="4x3min",
+            leads=[
+                PracticeLeadInfo(id=1, practice_id=1, user_id=1,
+                                 display_name="Alice Coach", slack_user_id="U1",
+                                 role=LeadRole.COACH),
+                PracticeLeadInfo(id=2, practice_id=1, user_id=2,
+                                 display_name="Bob Coach", slack_user_id="U2",
+                                 role=LeadRole.COACH),
+                # Degraded entry: no Slack link, falls back to display_name.
+                PracticeLeadInfo(id=3, practice_id=1, user_id=3,
+                                 display_name="Carol Coach", slack_user_id=None,
+                                 role=LeadRole.COACH),
+                PracticeLeadInfo(id=4, practice_id=1, user_id=4,
+                                 display_name="Dan Lead", slack_user_id="U4",
+                                 role=LeadRole.LEAD),
+            ],
+        )
+
+        blocks = build_coach_weekly_summary_blocks([practice], expected_days, week_start)
+
+        # Find the context line that lists coaches (":male-teacher:").
+        coach_context = None
+        for b in blocks:
+            if b.get("type") == "context":
+                text = " ".join(e.get("text", "") for e in b.get("elements", []))
+                if ":male-teacher:" in text:
+                    coach_context = text
+                    break
+
+        assert coach_context is not None, "Expected a coach context line"
+        assert "<@U1>" in coach_context
+        assert "<@U2>" in coach_context
+        assert "Carol Coach" in coach_context, "degraded 3rd coach must still render"
