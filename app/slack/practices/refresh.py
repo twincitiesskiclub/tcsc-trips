@@ -14,6 +14,42 @@ from app.practices.models import Practice
 
 logger = logging.getLogger(__name__)
 
+# Change types that any surface may react to.
+ALL_CHANGE_TYPES = ("edit", "cancel", "delete", "rsvp", "workout", "create")
+
+
+class PracticeSurface:
+    """A Slack surface that displays practice info and can be refreshed.
+
+    Adding a new surface (e.g. a future lead-scheduling DM) is one registry
+    entry — no changes to refresh_practice_posts() or any call site.
+    """
+
+    def __init__(self, name, ts_field, applies_to, refresh_fn):
+        self.name = name
+        self.ts_field = ts_field
+        self.applies_to = set(applies_to)
+        self._refresh_fn = refresh_fn
+
+    def is_present(self, practice):
+        return bool(getattr(practice, self.ts_field, None))
+
+    def refresh(self, practice, change_type):
+        if not self.is_present(practice):
+            return {"skipped": True}
+        if change_type not in self.applies_to:
+            return {"skipped": True}
+        return self._refresh_fn(practice, change_type)
+
+
+def _week_bounds(practice_date):
+    """Return (week_start, week_end) Monday-anchored bounds for a practice date."""
+    days_since_monday = practice_date.weekday()
+    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    return week_start, week_start + timedelta(days=7)
+
 
 def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, notify=True):
     """Update all Slack posts for a practice after DB changes.
@@ -35,19 +71,10 @@ def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, no
     """
     results = {}
 
-    # 1. Announcement post
-    results['announcement'] = _refresh_announcement(practice, change_type)
+    for surface in PRACTICE_SURFACES:
+        results[surface.name] = surface.refresh(practice, change_type)
 
-    # 2. Collab review post
-    results['collab'] = _refresh_collab(practice, change_type)
-
-    # 3. Coach weekly summary
-    results['coach_summary'] = _refresh_coach_summary(practice, change_type)
-
-    # 4. Weekly summary (#announcements-practices)
-    results['weekly_summary'] = _refresh_weekly_summary(practice, change_type)
-
-    # 5. Edit logging (thread replies)
+    # Edit logging (thread replies) remains a post-pass keyed on notify + type
     if notify and actor_slack_id and change_type in ('edit', 'workout'):
         results['edit_logs'] = _post_edit_logs(practice, actor_slack_id)
 
@@ -108,16 +135,13 @@ def _refresh_coach_summary(practice, change_type):
         from app.models import AppConfig, db
         from app.practices.service import convert_practice_to_info
         from app.slack.blocks import build_coach_weekly_summary_blocks
-        from app.slack.practices._config import COLLAB_CHANNEL_ID
+        from app.slack.practices._config import (
+            COLLAB_CHANNEL_ID,
+            COACH_SUMMARY_FALLBACK_CHANNEL_ID,
+        )
         from app.slack.client import get_slack_client
 
-        # Calculate week boundaries from the practice date
-        practice_date = practice.date
-        days_since_monday = practice_date.weekday()
-        week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        week_end = week_start + timedelta(days=7)
+        week_start, week_end = _week_bounds(practice.date)
 
         # Get all practices for the week
         practices_for_week = Practice.query.filter(
@@ -138,7 +162,7 @@ def _refresh_coach_summary(practice, change_type):
 
         # Try to update — try collab channel first, then fallback
         client = get_slack_client()
-        channels_to_try = [COLLAB_CHANNEL_ID, 'C053T1AR48Y']
+        channels_to_try = [COLLAB_CHANNEL_ID, COACH_SUMMARY_FALLBACK_CHANNEL_ID]
         for channel in channels_to_try:
             try:
                 client.chat_update(
@@ -170,13 +194,7 @@ def _refresh_weekly_summary(practice, change_type):
         from app.slack.client import get_slack_client
         from app.integrations.weather import get_weather_for_location
 
-        # Calculate week boundaries from the practice date
-        practice_date = practice.date
-        days_since_monday = practice_date.weekday()
-        week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
-        week_end = week_start + timedelta(days=7)
+        week_start, week_end = _week_bounds(practice.date)
 
         # Get all scheduled/confirmed practices for the week
         practices_for_week = Practice.query.filter(
@@ -231,6 +249,14 @@ def _refresh_weekly_summary(practice, change_type):
     except Exception as e:
         logger.warning(f"Failed to refresh weekly summary for practice #{practice.id}: {e}")
         return {'success': False, 'error': str(e)}
+
+
+PRACTICE_SURFACES = [
+    PracticeSurface("announcement", "slack_message_ts", ALL_CHANGE_TYPES, _refresh_announcement),
+    PracticeSurface("collab", "slack_collab_message_ts", ALL_CHANGE_TYPES, _refresh_collab),
+    PracticeSurface("coach_summary", "slack_coach_summary_ts", ALL_CHANGE_TYPES, _refresh_coach_summary),
+    PracticeSurface("weekly_summary", "slack_weekly_summary_ts", ALL_CHANGE_TYPES, _refresh_weekly_summary),
+]
 
 
 def _post_edit_logs(practice, actor_slack_id):
