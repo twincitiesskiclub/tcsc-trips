@@ -62,6 +62,9 @@ LOGGING_CHANNEL_ID = "C0A5VEV86Q6"  # #tcsc-logging
 PRACTICES_CORE_CHANNEL_ID = "C0535SLU7TR"  # #practices-core (daily recaps + proposals)
 COORD_CHANNEL_ID = "C02J4DGCFL2"  # #coord-practices-leads-assists (24h lead reminders)
 COLLAB_CHANNEL_ID = "C04AUHEDBSR"  # #collab-coaches-practices
+# Legacy fallback channel for the coach weekly summary, used when an update to
+# COLLAB_CHANNEL_ID fails (older summaries were posted here).
+COACH_SUMMARY_FALLBACK_CHANNEL_ID = "C053T1AR48Y"
 
 # KJ's Slack ID for 48h check tagging
 KJ_SLACK_ID = "U02K45N1JEV"
