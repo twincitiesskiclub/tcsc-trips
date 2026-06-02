@@ -975,6 +975,20 @@ def toggle_lead_confirmation(practice_id, lead_id):
         lead.confirmed_at = datetime.utcnow() if lead.confirmed else None
         db.session.commit()
 
+        # Keep Slack surfaces (announcement / collab / coach summary) in sync.
+        # Local import matches the existing edit/cancel/delete routes in this file.
+        from app.slack.practices import refresh_practice_posts
+        from flask import current_app
+        practice = Practice.query.get(practice_id)
+        if practice:
+            try:
+                refresh_practice_posts(practice, change_type='edit')
+            except Exception as refresh_err:
+                current_app.logger.warning(
+                    f"Lead toggle saved but Slack refresh failed for practice "
+                    f"#{practice_id}: {refresh_err}"
+                )
+
         return jsonify({
             'success': True,
             'confirmed': lead.confirmed,
