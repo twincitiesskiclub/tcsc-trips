@@ -83,8 +83,12 @@ def convert_type_to_info(practice_type: PracticeType) -> PracticeTypeInfo:
 
 
 def convert_lead_to_info(lead: Optional[PracticeLead]) -> Optional[PracticeLeadInfo]:
-    """Convert PracticeLead model to PracticeLeadInfo dataclass."""
-    if not lead or not lead.user:
+    """Convert PracticeLead model to PracticeLeadInfo dataclass.
+
+    If the linked user is unresolved, return a visible degraded entry rather
+    than dropping the assignment silently (which previously hid coaches/leads).
+    """
+    if not lead:
         return None
 
     # Safe enum conversion with fallback
@@ -94,6 +98,23 @@ def convert_lead_to_info(lead: Optional[PracticeLead]) -> Optional[PracticeLeadI
         role = LeadRole.LEAD
 
     user = lead.user
+    if user is None:
+        logger.warning(
+            f"PracticeLead id={lead.id} for practice id={lead.practice_id} "
+            f"has unresolved user (user_id={lead.user_id}); rendering degraded entry"
+        )
+        return PracticeLeadInfo(
+            id=lead.id,
+            practice_id=lead.practice_id,
+            user_id=lead.user_id,
+            display_name=f"Unknown (uid {lead.user_id})",
+            slack_user_id=None,
+            email=None,
+            role=role,
+            confirmed=lead.confirmed,
+            confirmed_at=lead.confirmed_at,
+        )
+
     slack_uid = user.slack_user.slack_uid if user.slack_user else None
 
     return PracticeLeadInfo(
@@ -105,7 +126,7 @@ def convert_lead_to_info(lead: Optional[PracticeLead]) -> Optional[PracticeLeadI
         email=user.email,
         role=role,
         confirmed=lead.confirmed,
-        confirmed_at=lead.confirmed_at
+        confirmed_at=lead.confirmed_at,
     )
 
 
