@@ -79,11 +79,26 @@ def _build_person_multi_select(
         for uid, name, _ in eligible_users
     ]
 
+    # Always include currently-assigned users, even if they are no longer in
+    # the eligible list (e.g. missing a coach tag or Slack link). Otherwise the
+    # modal cannot pre-select them and a re-save silently drops the assignment.
+    eligible_ids = {str(uid) for uid, _, _ in eligible_users}
+    for assignment in current_assignments:
+        aid = str(assignment.user_id)
+        if aid not in eligible_ids:
+            label = (getattr(assignment, "display_name", None)
+                     or f"Unknown (uid {assignment.user_id})")[:75]
+            options.append({
+                "text": {"type": "plain_text", "text": label},
+                "value": aid,
+            })
+            eligible_ids.add(aid)
+
     element = {
         "type": "multi_static_select",
         "action_id": action_id,
         "placeholder": {"type": "plain_text", "text": placeholder},
-        "options": options
+        "options": options,
     }
 
     # Set initial selections from current assignments
