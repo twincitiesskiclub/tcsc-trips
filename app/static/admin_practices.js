@@ -215,6 +215,8 @@ function openDrawer(id, triggerEl) {
   scrim.classList.remove('hidden');
   drawer.classList.remove('hidden');
   drawer.removeAttribute('hidden');
+  ['.pl-head', '.pl-toolbar'].forEach(s => { const el = document.querySelector(s); if (el) el.inert = true; });
+  document.getElementById('pl-list').inert = true;
   document.getElementById('pl-close').focus();
 
   loadDrawerRSVPs(id);
@@ -226,6 +228,8 @@ function closeDrawer() {
   drawer.classList.add('hidden');
   drawer.setAttribute('hidden', '');
   document.querySelectorAll('.pl-row.is-active').forEach(r => r.classList.remove('is-active'));
+  ['.pl-head', '.pl-toolbar'].forEach(s => { const el = document.querySelector(s); if (el) el.inert = false; });
+  const plList = document.getElementById('pl-list'); if (plList) plList.inert = false;
   if (lastFocusedEl && document.contains(lastFocusedEl)) lastFocusedEl.focus();
   currentDrawerId = null;
 }
@@ -239,7 +243,7 @@ function populateDrawer(p) {
   const st = p.status || 'scheduled';
   let badges = `<span class="pl-status is-${esc(st)}">${esc(STATUS_LABEL[st] || st)}</span>`;
   if (p.is_dark_practice) badges += '<span class="pl-pill"><span aria-hidden="true">🔦</span>&nbsp;Dark</span>';
-  badges += '<span id="pl-skipper-slot"></span>';
+  badges += '<span id="pl-skipper-slot" aria-live="polite"></span>';
   document.getElementById('pl-badges').innerHTML = badges;
 
   document.getElementById('pl-dwbody').innerHTML = drawerBody(p);
@@ -252,7 +256,7 @@ function populateDrawer(p) {
   const isSoon = ymd(p.date) === today || ymd(p.date) === addDaysYMD(today, 1);
   const slot = document.getElementById('pl-skipper-slot');
   if (isSoon) {
-    slot.innerHTML = `<button type="button" class="pl-skipper-btn" id="pl-skipper-btn">Load Skipper check</button>`;
+    slot.innerHTML = `<button type="button" class="pl-skipper-btn" id="pl-skipper-btn">Load Skipper evaluation</button>`;
     document.getElementById('pl-skipper-btn').addEventListener('click', () => loadDrawerEvaluation(p.id));
   } else {
     slot.innerHTML = '';
