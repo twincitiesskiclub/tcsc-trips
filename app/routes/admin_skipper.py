@@ -46,6 +46,7 @@ def proposals_data():
             'decided_by': proposal.decided_by_user.full_name if proposal.decided_by_user else None,
             'decision_notes': proposal.decision_notes or '',
             'expires_at': proposal.expires_at.isoformat() if proposal.expires_at else None,
+            'evaluation_data': proposal.evaluation_data,
         })
 
     return jsonify({'proposals': proposals_data})
