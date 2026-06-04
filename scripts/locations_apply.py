@@ -100,17 +100,23 @@ def main() -> None:
     conn = psycopg2.connect(PROD_DB_URL)
     cur = conn.cursor()
     log = []
-    for row in rows:
-        op = (row.get("op") or "update").strip()
-        handler = HANDLERS.get(op)
-        if handler is None:
-            log.append(f"[{op} {row['id']}] SKIP — unknown op")
-            continue
-        handler(cur, row, commit, log)
-
-    if commit:
-        conn.commit()
-    conn.close()
+    try:
+        for row in rows:
+            op = (row.get("op") or "update").strip()
+            handler = HANDLERS.get(op)
+            if handler is None:
+                log.append(f"[{op} {row['id']}] SKIP — unknown op")
+                continue
+            handler(cur, row, commit, log)
+        if commit:
+            conn.commit()
+    except Exception as exc:
+        conn.rollback()
+        print("\n".join(log))
+        print(f"\nABORTED — no changes written ({exc})")
+        sys.exit(1)
+    finally:
+        conn.close()
 
     print("\n".join(log))
     print(f"\n{'COMMITTED' if commit else 'DRY RUN (no changes)'} — {len(rows)} rows processed")
