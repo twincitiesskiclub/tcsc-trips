@@ -378,9 +378,6 @@
     var existing = listEl.querySelector('[data-user-id="' + user.id + '"]');
     if (!existing) return;
     var newRow = mr_buildRow(user);
-    if (mr_selectMode) {
-      var listNode = newRow.parentNode || listEl;
-    }
     existing.replaceWith(newRow);
   }
 
@@ -541,7 +538,7 @@
       el('button', {
         type: 'button',
         class: 'mr-act-primary',
-        onclick: function () { mr_openEditModal(user.id, null); }
+        onclick: function () { if (mr_drawerApi) mr_drawerApi.close(); mr_openEditModal(user.id, null); }
       }, ['Edit']),
       el('a', {
         href: '/admin/users/' + user.id,
@@ -553,10 +550,12 @@
 
     var api = AdminUI.drawer({ title: user.full_name, content: content });
 
-    // Wrap close to restore focus
-    var origClose = api.close;
-    api.close = function () {
-      origClose();
+    // Run cleanup on every close path (X, scrim, Esc, or programmatic api.close).
+    // The foundation removes the panel from document.body on close; observe that removal.
+    var drawerPanel = api.body && api.body.closest('.admin-ui-drawer');
+    var drawerObserver = null;
+    function mr_drawerCleanup() {
+      if (drawerObserver) { drawerObserver.disconnect(); drawerObserver = null; }
       document.querySelectorAll('#member-roster-list .mr-row.is-active').forEach(function (r) {
         r.classList.remove('is-active');
       });
@@ -564,7 +563,23 @@
       mr_drawerApi = null;
       if (mr_drawerReturnFocus && typeof mr_drawerReturnFocus.focus === 'function') {
         mr_drawerReturnFocus.focus();
+        mr_drawerReturnFocus = null;
       }
+    }
+    if (drawerPanel) {
+      drawerObserver = new MutationObserver(function () {
+        if (!document.body.contains(drawerPanel)) {
+          mr_drawerCleanup();
+        }
+      });
+      drawerObserver.observe(document.body, { childList: true });
+    }
+
+    // Also wrap api.close so programmatic callers trigger cleanup synchronously
+    var origClose = api.close;
+    api.close = function () {
+      origClose();
+      mr_drawerCleanup();
     };
 
     mr_drawerApi = api;
