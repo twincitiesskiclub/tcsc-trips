@@ -121,9 +121,8 @@ def practices_data():
             'coaches': coaches,
             'assists': assists,
             'cancellation_reason': practice.cancellation_reason or '',
-            'warmup_description': practice.warmup_description or '',
             'workout_description': practice.workout_description or '',
-            'cooldown_description': practice.cooldown_description or '',
+            'logistics_notes': practice.logistics_notes or '',
         })
 
     return jsonify({'practices': practices_data})
@@ -175,9 +174,8 @@ def create_practice():
             location_id=data['location_id'],
             social_location_id=data.get('social_location_id'),
             status=PracticeStatus.SCHEDULED.value,
-            warmup_description=data.get('warmup_description'),
             workout_description=data.get('workout_description'),
-            cooldown_description=data.get('cooldown_description'),
+            logistics_notes=data.get('logistics_notes') or None,
             is_dark_practice=data.get('is_dark_practice', False),
         )
         db.session.add(practice)
@@ -266,14 +264,11 @@ def edit_practice(practice_id):
         if 'location_id' in data:
             practice.location_id = data['location_id']
 
-        if 'warmup_description' in data:
-            practice.warmup_description = data['warmup_description']
-
         if 'workout_description' in data:
             practice.workout_description = data['workout_description']
 
-        if 'cooldown_description' in data:
-            practice.cooldown_description = data['cooldown_description']
+        if 'logistics_notes' in data:
+            practice.logistics_notes = data['logistics_notes'] or None
 
         if 'social_location_id' in data:
             practice.social_location_id = data['social_location_id']
