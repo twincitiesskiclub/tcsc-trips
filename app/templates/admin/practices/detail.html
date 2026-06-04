@@ -141,6 +141,50 @@
   #workout-editor .sticky-bar{flex-direction:row;margin-left:-24px;margin-right:-24px}
   #workout-editor .rail-col{position:static}
 }
+
+/* ── rail: Skipper evaluation ── */
+#workout-editor .rail-go-row{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+#workout-editor .rail-go{display:inline-block;font-size:11px;font-weight:700;letter-spacing:.06em;padding:3px 8px;border-radius:6px}
+#workout-editor .rail-go.go{background:#acf3c4;color:#166534}
+#workout-editor .rail-go.nogo{background:#fde8e8;color:#c53030}
+#workout-editor .rail-muted{font-size:12px;color:#64748b}
+#workout-editor .rail-chips{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}
+#workout-editor .rail-chip{font-size:11px;background:#f1f5f9;color:#475569;border-radius:4px;padding:2px 6px;white-space:nowrap}
+#workout-editor .rail-violation{font-size:12px;border-radius:6px;padding:5px 8px;margin-bottom:4px;line-height:1.4}
+#workout-editor .rail-violation.critical{background:#fde8e8;color:#c53030}
+#workout-editor .rail-violation.warning{background:#fefce8;color:#854d0e}
+#workout-editor .rail-ok{font-size:12px;color:#166534}
+#workout-editor .rail-error{font-size:12px;color:#c53030;font-style:italic}
+
+/* ── rail: RSVP strip ── */
+#workout-editor .rsvp-strip{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin-bottom:10px}
+#workout-editor .rsvp-cell{display:flex;flex-direction:column;align-items:center;padding:8px 4px;background:#f8fafb}
+#workout-editor .rsvp-cell+.rsvp-cell{border-left:1px solid #e5e7eb}
+#workout-editor .rsvp-cell .n{font-size:18px;font-weight:700;color:#1c2c44;line-height:1.1}
+#workout-editor .rsvp-cell .lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:#64748b;margin-top:2px}
+
+/* ── rail: RSVP list ── */
+#workout-editor .rsvp-row{display:flex;align-items:center;gap:6px;padding:4px 0;font-size:13px}
+#workout-editor .dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+#workout-editor .dot.going{background:#166534}
+#workout-editor .dot.maybe{background:#854d0e}
+#workout-editor .dot.not_going{background:#c53030}
+#workout-editor .rsvp-name{flex:1;color:#1c2c44;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#workout-editor .rsvp-tag{font-size:11px;color:#64748b;white-space:nowrap;text-transform:capitalize}
+
+/* ── rail: Lead confirmations ── */
+#workout-editor .conf-row{display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f1f5f9}
+#workout-editor .conf-row:last-child{border-bottom:none}
+#workout-editor .conf-name{flex:1;font-size:13px;color:#1c2c44;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#workout-editor .conf-role{font-size:11px;color:#64748b;font-weight:400}
+#workout-editor .conf-state{font-size:11px;color:#94a3b8;white-space:nowrap}
+#workout-editor .conf-state.on{color:#166534}
+
+/* ── toggle mini (lead confirmation toggle) ── */
+#workout-editor .toggle-row.mini{min-height:0;padding:0;border:none;border-radius:0;flex-shrink:0;width:auto;gap:0;cursor:pointer}
+#workout-editor .toggle-row.mini .toggle-track{width:32px;height:18px;border-radius:9px}
+#workout-editor .toggle-row.mini .toggle-track::after{width:12px;height:12px;top:3px;left:3px}
+#workout-editor .toggle-row.mini input[type="checkbox"]:checked~.toggle-track::after{left:17px}
 </style>
 {% endblock %}
 
