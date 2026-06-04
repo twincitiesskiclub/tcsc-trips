@@ -4,7 +4,7 @@ Verifies that _upsert_details_reply (and the three functions that call it)
 correctly post a new threaded reply when slack_details_ts is absent, and
 update an existing one when it is present.
 
-Uses unittest.mock throughout — no live Slack calls.
+Uses unittest.mock throughout - no live Slack calls.
 """
 
 from types import SimpleNamespace
