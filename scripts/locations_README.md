@@ -49,6 +49,15 @@ The `review` column tells you what to check:
 | `verify_backfill`| row had no coords; coords backfilled from a **street-level** geocode (approximate) | glance at the pin; nudge to the real lot/trailhead if off |
 | `needs_pin`      | input was vague/malformed, or the geocode disagreed with existing coords by >150 m | **drop a real pin** (see below) |
 | `delete`         | row slated for deletion (id 30 "Unknown") | resolve its referencing practice first (see below) |
+| `missing_coords` | row has no coords and the geocode returned nothing | add coords by hand, same as `needs_pin` |
+
+(`missing_coords` doesn't occur in the current dataset — every row either geocodes or
+is handled by `needs_pin`/`delete` — but the script can emit it if the export changes.)
+
+> **Heads up on id collisions:** the practice ids referenced below (practice **47**,
+> practice **38**) are *practice* ids, not the *location* ids in this CSV. Location
+> rows 47 (Minnehaha/Pavillion 1) and 38 (Balance Fitness Studio) are unrelated real
+> venues — don't confuse them with the practices that reference location 30.
 
 The script prints a summary of every non-`ok` row, e.g.:
 
@@ -77,12 +86,13 @@ Open `scripts/output/locations_proposed.csv` and resolve the flagged rows:
   `new_lat`/`new_lon` and the URL the same way as `needs_pin`.
 
 - **`delete` — id 30 "Unknown":** this location has no real data and is slated for
-  deletion, but a **future scheduled** practice still references it: **#47
-  (2026-03-10, "Lakes Run")**. The apply step will REFUSE to delete a location with a
-  non-cancelled reference. Before deleting, reassign #47 to a real location in the
-  admin UI (`/admin/practices`), changing its location to the correct venue. The
-  cancelled practice (#38) is auto-nulled by the script. Once #47 is moved, the delete
-  will go through on the next apply run.
+  deletion, but a **future scheduled** practice still references it: **practice id 47**
+  (2026-03-10, "Lakes Run") — a practice, not location row 47. The apply step will
+  REFUSE to delete a location with a non-cancelled reference. Before deleting, reassign
+  that practice to a real location in the admin UI (`/admin/practices`), changing its
+  location to the correct venue. The other referencing practice — **practice id 38**,
+  which is cancelled — is auto-nulled by the script. Once practice 47 is moved, the
+  delete will go through on the next apply run.
 
 - **Possible duplicates** (e.g. ids 35 Hyland/Visitor Center and 37 Hyland/Stadium
   Area share an address + coords but are genuinely ~1 km apart): decide per pair.
@@ -107,7 +117,7 @@ python scripts/locations_apply.py            # dry run — prints a before/after
 Review the diff carefully. Every row will show a change on the first run (the
 geocoder appends ", USA" to addresses and fills in the previously-empty
 `google_maps_url`). The `[delete 30]` line stays `REFUSED` until you've reassigned
-practice #47.
+practice id 47 (the dry-run prints the blocking practice id as `[47]`).
 
 When the diff looks right:
 
@@ -126,8 +136,8 @@ python scripts/locations_apply.py            # re-run dry-run
 
 All `update` rows should now report `no change` (their proposed values already match
 prod) — that's the idempotency check. Note the `delete` row is the exception: once id
-30 is gone it no longer prints "no change", and if #47 was never reassigned it will
-still show `REFUSED` — handle that row on its own.
+30 is gone it no longer prints "no change", and if practice 47 was never reassigned it
+will still show `REFUSED` — handle that row on its own.
 
 Finally, confirm the live result: re-post a test practice announcement to the test
 channel `C07G9RTMRT3` and check that the address renders as a tappable link opening a
