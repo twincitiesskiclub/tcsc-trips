@@ -138,6 +138,18 @@ def practice_detail(practice_id):
     return render_template('admin/practices/detail.html', practice=practice, social_locations=social_locations)
 
 
+@admin_practices_bp.route('/new')
+@admin_required
+def practice_new():
+    """Render the editor in create mode (no practice)."""
+    social_locations = SocialLocation.query.order_by(SocialLocation.name).all()
+    return render_template(
+        'admin/practices/detail.html',
+        practice=None,
+        social_locations=social_locations,
+    )
+
+
 @admin_practices_bp.route('/create', methods=['POST'])
 @admin_required
 def create_practice():

@@ -1,0 +1,440 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Unified Workout Editor — merged-v2</title>
+<style>
+/* ── top version bar ── */
+#version-bar{background:#1c2c44;color:#fff;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;font-weight:500;padding:8px 24px;letter-spacing:.01em}
+
+/* ── scoped design tokens & base ── */
+#dir-final *{box-sizing:border-box;margin:0;padding:0}
+#dir-final{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafb;color:#1c2c44;font-size:15px;line-height:1.5}
+#dir-final .wrap{max-width:1140px;margin:0 auto;padding:32px 24px 120px}
+
+/* ── page header ── */
+#dir-final .phead{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid #e5e7eb}
+#dir-final .phead h1{font-size:20px;font-weight:700;letter-spacing:-0.01em}
+#dir-final .phead .meta{font-size:14px;color:#475569}
+#dir-final .badge{display:inline-flex;align-items:center;font-size:12px;font-weight:600;border-radius:12px;padding:4px 10px;background:#dbeafe;color:#1e40af}
+
+/* ── two-column grid ── */
+#dir-final .cols{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
+
+/* ── cards ── */
+#dir-final .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px}
+#dir-final .eyebrow{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:16px}
+
+/* ── form layout ── */
+#dir-final .frow{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+#dir-final .frow.single{grid-template-columns:1fr}
+#dir-final .field{display:flex;flex-direction:column;gap:6px}
+#dir-final .field>label{font-size:12px;font-weight:600;color:#1c2c44}
+#dir-final .help{font-size:12px;color:#475569;line-height:1.4;margin-top:2px}
+
+/* ── inputs ── */
+#dir-final input,#dir-final select,#dir-final textarea{border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s}
+#dir-final input:focus,#dir-final select:focus,#dir-final textarea:focus,
+#dir-final .pill:focus-visible,
+#dir-final .switch:focus-visible,
+#dir-final .chip-x:focus-visible,
+#dir-final .assist-btn:focus-visible,
+#dir-final .btn-primary:focus-visible,
+#dir-final .btn-ghost:focus-visible{border-color:#1c2c44;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+#dir-final textarea{resize:vertical;line-height:1.7;min-height:72px}
+#dir-final .wk textarea{min-height:80px}
+#dir-final .wk .main-wk{min-height:104px}
+#dir-final .wk textarea:focus{box-shadow:inset 3px 0 0 #1c2c44,0 0 0 2px #fff,0 0 0 4px #1c2c44}
+
+/* ── dark-practice toggle ── */
+#dir-final .switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;min-height:44px}
+#dir-final .switch-row .lbl{font-size:14px}
+#dir-final .switch-side{display:flex;align-items:center;gap:10px}
+#dir-final .warn-badge{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em;background:#fefce8;border:1px solid #fde68a;color:#854d0e;border-radius:8px;padding:2px 8px}
+#dir-final .switch{width:44px;height:26px;border-radius:13px;border:none;background:#1c2c44;position:relative;cursor:pointer;flex-shrink:0;padding:0;transition:background .15s}
+#dir-final .switch[aria-checked="false"]{background:#cbd5e1}
+#dir-final .switch .thumb{position:absolute;top:3px;left:21px;width:20px;height:20px;border-radius:50%;background:#acf3c4;transition:left .15s}
+#dir-final .switch[aria-checked="false"] .thumb{left:3px;background:#fff}
+
+/* ── CHANGE 1: compact choice pills ──
+   Before: min-height:44px; padding:0 16px; font-size:13px
+   After:  min-height:28px; padding:4px 10px; font-size:12.5px
+   Touch target is still adequate for a multi-select chip group.
+   Border-radius kept at 20px; selected state uses 2px navy border + #f0f4ff tint.
+*/
+#dir-final .pgroup{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+#dir-final .pill{
+  min-height:28px;
+  display:inline-flex;
+  align-items:center;
+  border-radius:20px;
+  padding:4px 10px;
+  font-size:12.5px;
+  font-weight:500;
+  cursor:pointer;
+  border:1.5px solid #e5e7eb;
+  color:#475569;
+  background:#fff;
+  font-family:inherit;
+  transition:background .12s,color .12s,border-color .12s;
+  line-height:1.2;
+}
+#dir-final .pill:hover{border-color:#1c2c44;color:#1c2c44}
+#dir-final .pill[aria-checked="true"]{
+  background:#eef2f9;
+  color:#1c2c44;
+  border:2px solid #1c2c44;
+  font-weight:600;
+}
+
+/* ── people chips (coaches/leads) — unchanged ── */
+#dir-final .chips{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 12px}
+#dir-final .chip{display:inline-flex;align-items:center;gap:4px;min-height:44px;background:#1c2c44;color:#fff;border-radius:20px;padding:0 6px 0 14px;font-size:13px;font-weight:500}
+#dir-final .chip-x{width:32px;height:32px;border-radius:50%;border:none;background:rgba(255,255,255,.16);color:#fff;font-size:15px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit}
+#dir-final .chip-x:hover{background:rgba(255,255,255,.3)}
+#dir-final .search{width:100%}
+#dir-final .divider{height:1px;background:#f1f5f9;margin:16px 0}
+#dir-final .assist-btn{display:inline-flex;align-items:center;gap:8px;min-height:44px;background:none;border:none;cursor:pointer;font-family:inherit;font-size:13px;font-weight:600;color:#1c2c44;padding:0}
+#dir-final .assist-btn .chev{display:inline-block;transition:transform .15s}
+
+/* ── CHANGE 2: restrained Grid-Lock sidebar ──
+   Structure borrows from Grid-Lock's rail-card / rail-head / rail-body pattern,
+   translated to the merged version's token set:
+     – card border: 1px solid #e5e7eb (matches .card)
+     – rail-head border-bottom: #f1f5f9 (matches .divider)
+     – section title: 10px / 700 / uppercase / #64748b (restrained, denser than 11px)
+     – GO badge: #dcfce7 bg / #166534 text (a11y success green, not color-alone)
+     – status labels always include text, never color alone
+     – focus rings: 2px solid #1c2c44 (navy), not Grid-Lock's faint mint ring
+     – weather pills: small inline chips from Grid-Lock, styled with merged tokens
+     – rsvp-strip: 3-col grid of compact cells (from Grid-Lock), not the tall bordered segment
+     – lead rows: Grid-Lock's compact row with role sub-label + dot + text label
+*/
+#dir-final .right{position:sticky;top:16px}
+
+#dir-final .rail-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:12px;overflow:hidden}
+#dir-final .rail-head{padding:8px 14px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between}
+#dir-final .rail-head-title{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b}
+
+#dir-final .go-badge{display:inline-flex;align-items:center;gap:5px;background:#dcfce7;color:#166534;border-radius:12px;padding:3px 10px;font-size:12px;font-weight:700;letter-spacing:.04em}
+#dir-final .go-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:#166534;flex-shrink:0}
+
+#dir-final .rail-body{padding:10px 14px}
+
+/* skipper confidence + date row */
+#dir-final .skipper-row{display:flex;align-items:center;justify-content:space-between;margin-top:6px}
+#dir-final .skipper-conf{font-size:12px;color:#475569}
+#dir-final .skipper-conf strong{color:#1c2c44;font-weight:700}
+#dir-final .skipper-date{font-size:11px;color:#94a3b8}
+
+/* weather pills (Grid-Lock style, merged tokens) */
+#dir-final .weather-pills{display:flex;flex-wrap:wrap;gap:4px;margin-top:8px}
+#dir-final .w-pill{font-size:11px;background:#f1f5f9;border-radius:8px;padding:2px 7px;color:#475569;display:inline-flex;align-items:center;gap:3px}
+
+/* rsvp strip: 3-col compact grid */
+#dir-final .rsvp-strip{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;margin-bottom:10px}
+#dir-final .rsvp-cell{display:flex;flex-direction:column;align-items:center;background:#f8fafb;border-radius:8px;padding:6px 4px}
+#dir-final .rsvp-num{font-size:18px;font-weight:800;color:#1c2c44;line-height:1}
+#dir-final .rsvp-lbl{font-size:10px;color:#64748b;margin-top:3px;font-weight:500;text-transform:uppercase;letter-spacing:.03em}
+#dir-final .rsvp-names{font-size:11px;color:#475569;line-height:1.7}
+#dir-final .rsvp-total{font-size:10px;color:#94a3b8}
+
+/* lead confirmation rows */
+#dir-final .lead-row{display:flex;align-items:center;justify-content:space-between;padding:6px 0}
+#dir-final .lead-row+.lead-row{border-top:1px solid #f8fafb}
+#dir-final .lead-name{font-size:12px;font-weight:500;color:#1c2c44}
+#dir-final .lead-role{font-size:10px;color:#94a3b8;margin-top:1px}
+#dir-final .conf-right{display:flex;align-items:center;gap:4px}
+#dir-final .conf-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+#dir-final .conf-dot.ok{background:#22c55e}
+#dir-final .conf-dot.pend{background:#f59e0b}
+/* a11y: text label alongside the dot — never color alone */
+#dir-final .conf-text{font-size:11px;font-weight:600}
+#dir-final .conf-text.ok{color:#166534}
+#dir-final .conf-text.pend{color:#92400e}
+
+/* ── sticky save bar ── */
+#dir-final .stick{position:sticky;bottom:0;background:#fff;border-top:1px solid #e5e7eb;padding:16px 24px;display:flex;gap:12px;justify-content:flex-end;margin:24px -24px -120px;border-radius:0}
+#dir-final .btn-primary{background:#1c2c44;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s}
+#dir-final .btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+#dir-final .btn-ghost{background:#fff;color:#475569;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit}
+#dir-final .btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+
+/* ── mobile demo ── */
+#dir-final .mdemo{margin-top:40px;padding-top:32px;border-top:1px solid #e5e7eb}
+#dir-final .mdemo .lbl{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:16px}
+#dir-final .mframe{width:360px;border:2px solid #e5e7eb;border-radius:18px;overflow:hidden;background:#f8fafb}
+#dir-final .mframe .mh{background:#1c2c44;color:#fff;padding:14px 16px;font-size:15px;font-weight:700}
+#dir-final .mframe .mh span{display:block;font-size:12px;color:#acf3c4;font-weight:500;margin-top:2px}
+#dir-final .mframe .mb{padding:16px}
+#dir-final .mframe .mcard{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px}
+#dir-final .mframe .mf{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+#dir-final .mframe .mf:last-child{margin-bottom:0}
+#dir-final .mframe .mf label{font-size:12px;font-weight:600;color:#1c2c44}
+#dir-final .mframe textarea{width:100%;resize:none}
+#dir-final .mframe .focused{box-shadow:inset 3px 0 0 #1c2c44;border-color:#1c2c44}
+#dir-final .mstick{background:#fff;border-top:1px solid #e5e7eb;padding:12px 16px;display:flex;gap:10px}
+#dir-final .mstick .btn-primary{flex:1;text-align:center}
+
+/* ── responsive ── */
+@media(max-width:880px){
+  #dir-final .cols{grid-template-columns:1fr}
+  #dir-final .frow{grid-template-columns:1fr}
+  #dir-final .stick{flex-direction:row}
+  #dir-final .right{position:static}
+}
+</style>
+</head>
+<body style="margin:0;padding:0;background:#f8fafb">
+
+<div id="version-bar">Unified Workout Editor — revised: smaller pills + restrained sidebar</div>
+
+<div id="dir-final">
+  <div class="wrap">
+
+    <div class="phead">
+      <h1>Edit Practice</h1>
+      <span class="meta">Monday, December 9 · 6:00 PM</span>
+      <span class="badge">Scheduled</span>
+    </div>
+
+    <div class="cols">
+
+      <!-- LEFT: FORM -->
+      <div class="left">
+
+        <!-- 1. When & Where -->
+        <div class="card">
+          <div class="eyebrow">When &amp; Where</div>
+          <div class="frow">
+            <div class="field">
+              <label for="f-date">Date</label>
+              <input id="f-date" type="text" value="Monday, December 9, 2024" readonly>
+            </div>
+            <div class="field">
+              <label for="f-time">Start time</label>
+              <input id="f-time" type="text" value="6:00 PM">
+            </div>
+          </div>
+          <div class="frow single">
+            <div class="field">
+              <label for="f-loc">Location</label>
+              <select id="f-loc">
+                <option selected>Theodore Wirth — Trailhead</option>
+                <option>Hyland Lake Park Reserve</option>
+              </select>
+              <p class="help">Sets the weather-check location for Skipper's GO/NO-GO evaluation.</p>
+            </div>
+          </div>
+          <div class="frow single">
+            <div class="field">
+              <label for="f-social">Post-practice social</label>
+              <select id="f-social">
+                <option selected value="">None scheduled</option>
+                <option>Wirth Brewing</option>
+              </select>
+            </div>
+          </div>
+          <div class="field" style="margin-top:4px">
+            <label id="dark-lbl">Dark practice</label>
+            <div class="switch-row">
+              <span class="lbl">Lights needed — dark practice</span>
+              <div class="switch-side">
+                <span class="warn-badge">On</span>
+                <button class="switch" role="switch" aria-checked="true" aria-labelledby="dark-lbl"><span class="thumb"></span></button>
+              </div>
+            </div>
+            <p class="help">Turn on when practice starts or ends after sunset. Members see a headlamp notice.</p>
+          </div>
+        </div>
+
+        <!-- 2. Activity & Type -->
+        <div class="card">
+          <div class="eyebrow">Activity &amp; Type</div>
+          <div class="field" style="margin-bottom:16px">
+            <span id="act-lbl" style="font-size:12px;font-weight:600">Activities</span>
+            <div class="pgroup" role="group" aria-labelledby="act-lbl">
+              <button class="pill" role="checkbox" aria-checked="true">Classic</button>
+              <button class="pill" role="checkbox" aria-checked="false">Skate</button>
+              <button class="pill" role="checkbox" aria-checked="false">Strength</button>
+              <button class="pill" role="checkbox" aria-checked="false">Technique</button>
+            </div>
+          </div>
+          <div class="field">
+            <span id="typ-lbl" style="font-size:12px;font-weight:600">Practice types</span>
+            <div class="pgroup" role="group" aria-labelledby="typ-lbl">
+              <button class="pill" role="checkbox" aria-checked="false">Intervals</button>
+              <button class="pill" role="checkbox" aria-checked="true">Distance</button>
+              <button class="pill" role="checkbox" aria-checked="false">Recovery</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 3. Coaches · Leads · Assists -->
+        <div class="card">
+          <div class="eyebrow">Coaches · Leads · Assists</div>
+          <div class="field" style="margin-bottom:16px">
+            <label for="s-coach">Coaches</label>
+            <div class="chips">
+              <span class="chip">Anna Lindqvist <button class="chip-x" aria-label="Remove Anna Lindqvist">×</button></span>
+            </div>
+            <input id="s-coach" class="search" type="text" placeholder="Search coaches by name…" aria-label="Search coaches by name">
+          </div>
+          <div class="divider"></div>
+          <div class="field">
+            <label for="s-lead">Leads</label>
+            <div class="chips">
+              <span class="chip">Dana Olsson <button class="chip-x" aria-label="Remove Dana Olsson">×</button></span>
+            </div>
+            <input id="s-lead" class="search" type="text" placeholder="Search leads by name…" aria-label="Search leads by name">
+          </div>
+          <div class="divider"></div>
+          <button class="assist-btn" aria-expanded="false"><span class="chev">›</span> Show assists (0)</button>
+          <p class="help" style="margin-top:6px">Assists support leads but don't receive confirmation DMs.</p>
+        </div>
+
+        <!-- 4. Workout Plan -->
+        <div class="card wk">
+          <div class="eyebrow">Workout Plan</div>
+          <div class="field">
+            <label for="w-warm">Warmup</label>
+            <textarea id="w-warm" rows="2">15 min easy classic, dynamic mobility, 4× 20s pickups</textarea>
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label for="w-main">Main workout</label>
+            <textarea id="w-main" class="main-wk" rows="3">4 × 6 min @ threshold (classic), 3 min easy between. Cue: relaxed tempo, strong kick, quiet upper body.</textarea>
+            <p class="help">Include effort, intervals or distance, and one cue so leads can deliver it confidently.</p>
+          </div>
+          <div class="field" style="margin-top:16px">
+            <label for="w-cool">Cooldown</label>
+            <textarea id="w-cool" rows="2">10 min easy ski, light stretching</textarea>
+          </div>
+        </div>
+      </div><!-- /left -->
+
+      <!-- RIGHT: CONTEXT (Grid-Lock restrained sidebar, merged tokens + a11y) -->
+      <div class="right">
+
+        <!-- Skipper Evaluation -->
+        <div class="rail-card">
+          <div class="rail-head">
+            <span class="rail-head-title">Skipper Evaluation</span>
+            <!-- GO badge: #dcfce7/#166534 — accessible color + text label, not color alone -->
+            <div class="go-badge">GO</div>
+          </div>
+          <div class="rail-body">
+            <div class="skipper-row">
+              <span class="skipper-conf">Confidence <strong>92%</strong> · Scheduled</span>
+              <span class="skipper-date">Dec 9 · 6 pm</span>
+            </div>
+            <div class="weather-pills">
+              <div class="w-pill">🌡 24°F (feels 16°F)</div>
+              <div class="w-pill">💨 8 mph</div>
+              <div class="w-pill">🎿 Good · groomed</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- RSVPs -->
+        <div class="rail-card">
+          <div class="rail-head">
+            <span class="rail-head-title">RSVPs</span>
+            <span class="rsvp-total">19 total</span>
+          </div>
+          <div class="rail-body">
+            <!-- segmented strip from Grid-Lock; labels satisfy color-alone rule -->
+            <div class="rsvp-strip">
+              <div class="rsvp-cell">
+                <div class="rsvp-num">14</div>
+                <div class="rsvp-lbl">Going</div>
+              </div>
+              <div class="rsvp-cell">
+                <div class="rsvp-num">3</div>
+                <div class="rsvp-lbl">Maybe</div>
+              </div>
+              <div class="rsvp-cell">
+                <div class="rsvp-num">2</div>
+                <div class="rsvp-lbl">Not going</div>
+              </div>
+            </div>
+            <div class="rsvp-names">Sarah K., Marcus T., Priya N., Dana O., Erik M. <span style="color:#94a3b8">+9 more going</span></div>
+          </div>
+        </div>
+
+        <!-- Lead Confirmations -->
+        <div class="rail-card">
+          <div class="rail-head">
+            <span class="rail-head-title">Lead Confirmations</span>
+          </div>
+          <div class="rail-body" style="padding-top:6px;padding-bottom:6px">
+            <!-- Anna — coach -->
+            <div class="lead-row">
+              <div>
+                <div class="lead-name">Anna Lindqvist</div>
+                <div class="lead-role">Coach</div>
+              </div>
+              <!-- a11y: dot + text label; focus ring navy per tokens -->
+              <div class="conf-right">
+                <div class="conf-dot ok" aria-hidden="true"></div>
+                <span class="conf-text ok">Confirmed</span>
+              </div>
+            </div>
+            <!-- Dana — lead confirmed -->
+            <div class="lead-row">
+              <div>
+                <div class="lead-name">Dana Olsson</div>
+                <div class="lead-role">Lead</div>
+              </div>
+              <div class="conf-right">
+                <div class="conf-dot ok" aria-hidden="true"></div>
+                <span class="conf-text ok">Confirmed</span>
+              </div>
+            </div>
+            <!-- Erik — lead pending -->
+            <div class="lead-row">
+              <div>
+                <div class="lead-name">Erik Mattson</div>
+                <div class="lead-role">Lead</div>
+              </div>
+              <div class="conf-right">
+                <div class="conf-dot pend" aria-hidden="true"></div>
+                <span class="conf-text pend">Pending</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div><!-- /right -->
+    </div><!-- /cols -->
+
+    <div class="stick">
+      <button class="btn-ghost">Cancel</button>
+      <button class="btn-primary">Save Changes</button>
+    </div>
+
+    <!-- Mobile reflow demo -->
+    <div class="mdemo">
+      <div class="lbl">Mobile reflow · 360px — Workout section stacks, sticky Save/Cancel pinned at bottom</div>
+      <div class="mframe">
+        <div class="mh">Edit Practice<span>Monday, December 9 · 6:00 PM</span></div>
+        <div class="mb">
+          <div class="mcard wk">
+            <div class="eyebrow" style="margin-bottom:12px">Workout Plan</div>
+            <div class="mf"><label for="m-warm">Warmup</label><textarea id="m-warm" rows="2">15 min easy classic, dynamic mobility, 4× 20s pickups</textarea></div>
+            <div class="mf"><label for="m-main">Main workout</label><textarea id="m-main" class="focused main-wk" rows="3">4 × 6 min @ threshold (classic), 3 min easy between. Cue: relaxed tempo, strong kick, quiet upper body.</textarea></div>
+            <div class="mf"><label for="m-cool">Cooldown</label><textarea id="m-cool" rows="2">10 min easy ski, light stretching</textarea></div>
+          </div>
+        </div>
+        <div class="mstick">
+          <button class="btn-ghost">Cancel</button>
+          <button class="btn-primary">Save Changes</button>
+        </div>
+      </div>
+    </div>
+
+  </div><!-- /wrap -->
+</div><!-- /#dir-final -->
+
+</body>
+</html>
