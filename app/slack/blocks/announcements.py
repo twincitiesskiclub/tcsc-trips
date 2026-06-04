@@ -8,6 +8,7 @@ from app.practices.interfaces import (
     TrailCondition,
     LeadRole,
 )
+from app.utils import utc_naive_to_central_naive
 
 
 def _activity_label(activities) -> str:
@@ -154,8 +155,11 @@ def build_practice_details_blocks(
             direction = getattr(weather, "wind_direction", None)
             cond.append(f"💨 Wind {direction + ' ' if direction else ''}{weather.wind_speed_mph:.0f} mph")
     if daylight and getattr(daylight, "sunset", None):
-        sunset_str = daylight.sunset.strftime('%I:%M %p').lstrip('0')
-        if practice.date >= daylight.sunset:
+        # sunset is stored as naive UTC; practice.date is naive Central. Convert
+        # once so both the comparison and the displayed time are Central.
+        sunset_central = utc_naive_to_central_naive(daylight.sunset)
+        sunset_str = sunset_central.strftime('%I:%M %p').lstrip('0')
+        if practice.date >= sunset_central:
             cond.append(f"🔦 Sunset {sunset_str}, bring a headlamp")
         else:
             cond.append(f"☀️ Sunset {sunset_str}")

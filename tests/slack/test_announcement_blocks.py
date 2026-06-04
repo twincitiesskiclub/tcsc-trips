@@ -1,5 +1,5 @@
 from types import SimpleNamespace
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from app.slack.blocks.announcements import (
     _activity_label,
@@ -102,8 +102,17 @@ def _weather(temp=25, feels=18, summary="cloudy, light snow", wind_speed=12, win
     )
 
 
-def _daylight(hour=16, minute=38):
-    return SimpleNamespace(sunset=datetime(2026, 12, 29, hour, minute), civil_twilight_end=datetime(2026, 12, 29, hour + 1, minute))
+def _daylight(central_hour=16, central_minute=38):
+    """Build a DaylightInfo-like stub whose sunset is stored as naive UTC,
+    matching production (app/integrations/daylight.py stores naive UTC).
+
+    `central_hour`/`central_minute` is the sunset in Central wall-clock time;
+    in winter (CST, UTC-6) that means UTC = Central + 6h. A naive-UTC fixture
+    is what catches a tz regression: if the builder forgets to convert, it
+    would render/compare the UTC value and the assertions below would fail.
+    """
+    sunset_utc = datetime(2026, 12, 29, central_hour, central_minute) + timedelta(hours=6)
+    return SimpleNamespace(sunset=sunset_utc, civil_twilight_end=sunset_utc + timedelta(hours=1))
 
 
 def test_details_has_parking_gear_and_conditions():
@@ -115,12 +124,14 @@ def test_details_has_parking_gear_and_conditions():
     assert "*Gear*" in text and "Classic skis" in text
     assert "*Conditions*" in text
     assert "💨 Wind NW 12 mph" in text
+    # Sunset 4:38 PM Central (stored as 22:38 UTC) must display in Central.
     assert "☀️ Sunset 4:38 PM" in text
 
 
 def test_details_headlamp_when_practice_after_sunset():
-    p = _practice(date=datetime(2026, 12, 29, 16, 0))  # 4pm start, sunset 3:38pm
-    text = _all_text(build_practice_details_blocks(p, weather=_weather(), daylight=_daylight(hour=15, minute=38)))
+    # 4pm Central start, sunset 3:38pm Central (stored as 21:38 UTC).
+    p = _practice(date=datetime(2026, 12, 29, 16, 0))
+    text = _all_text(build_practice_details_blocks(p, weather=_weather(), daylight=_daylight(central_hour=15, central_minute=38)))
     assert "🔦 Sunset 3:38 PM, bring a headlamp" in text
     assert "—" not in text
 
@@ -138,8 +149,23 @@ def test_details_aqi_hidden_at_or_below_49():
 
 def test_details_no_emdash():
     import json
-    blob = json.dumps(build_practice_details_blocks(_practice(), weather=_weather(), daylight=_daylight(hour=12, minute=10), air_quality=80))
+    blob = json.dumps(build_practice_details_blocks(_practice(), weather=_weather(), daylight=_daylight(central_hour=12, central_minute=10), air_quality=80))
     assert "—" not in blob and "–" not in blob
+
+
+def test_details_weather_alert_renders_headline():
+    alert = SimpleNamespace(headline="Winter Storm Warning")
+    text = _all_text(build_practice_details_blocks(_practice(), weather=_weather(alerts=[alert])))
+    assert "⚠️ Winter Storm Warning" in text
+    assert "No alerts." not in text
+
+
+def test_details_trail_conditions_render_in_conditions():
+    trail = SimpleNamespace(ski_quality="good", groomed=True, report_url="https://trails.example/report")
+    text = _all_text(build_practice_details_blocks(_practice(), weather=_weather(), trail_conditions=trail))
+    assert "🎿 Trails: Good" in text
+    assert "Groomed" in text
+    assert "<https://trails.example/report|Trail report>" in text
 
 
 from app.slack.blocks.announcements import build_combined_lift_blocks
