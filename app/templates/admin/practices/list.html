@@ -1,37 +1,191 @@
 {% extends 'admin/admin_base.html' %}
 
+{% block title %}Practice Management{% endblock %}
+
+{% block extra_css %}
+<style>
+/* ===== Practice list — scoped "Quiet Precision" styles (source of truth) ===== */
+#practice-list, #practice-list *{box-sizing:border-box;margin:0;padding:0}
+#practice-list{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* header + toolbar */
+#practice-list .pl-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+#practice-list .pl-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+#practice-list .pl-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:18px}
+#practice-list .pl-search{flex:1;min-width:180px;height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
+#practice-list .pl-select{height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 10px;font-size:14px;color:#475569;background:#fff;font-family:inherit}
+#practice-list .pl-search:focus,#practice-list .pl-select:focus{outline:none;border-color:#1c2c44}
+#practice-list .pl-btn{height:38px;display:inline-flex;align-items:center;border-radius:10px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;border:1.5px solid transparent}
+#practice-list .pl-btn-primary{background:#1c2c44;color:#fff}
+#practice-list .pl-btn-ghost{background:#fff;color:#475569;border-color:#e5e7eb}
+#practice-list .pl-btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+
+/* section heading */
+#practice-list .pl-sec{display:flex;align-items:center;gap:10px;margin:22px 2px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b}
+#practice-list .pl-sec:first-of-type{margin-top:2px}
+#practice-list .pl-sec.today{color:#1e40af}
+#practice-list .pl-sec .ln{flex:1;height:1px;background:#eceff3}
+#practice-list .pl-sec.today .ln{background:#dbeafe}
+#practice-list .pl-sec .ct{color:#94a3b8;font-weight:700}
+
+/* day group: date block once per day, rows stacked right */
+#practice-list .pl-day{display:flex;align-items:stretch;gap:14px;margin-bottom:8px}
+#practice-list .pl-db{display:flex;flex-direction:column;align-items:center;width:50px;flex-shrink:0;padding-top:12px}
+#practice-list .pl-db .dow{font-size:10.5px;font-weight:700;text-transform:uppercase;color:#64748b}
+#practice-list .pl-db .dn{font-size:23px;font-weight:700;line-height:1;color:#1c2c44}
+#practice-list .pl-db .mo{font-size:10px;color:#64748b;text-transform:uppercase}
+#practice-list .pl-db.is-today .dn{color:#1e40af}
+#practice-list .pl-rows{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px}
+
+/* row (a button) */
+#practice-list .pl-row{width:100%;text-align:left;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:11px 15px;display:flex;align-items:center;gap:12px;cursor:pointer;font-family:inherit;color:inherit;transition:border-color .12s,box-shadow .12s}
+#practice-list .pl-row:hover{border-color:#cdd5e0}
+#practice-list .pl-row.today{border-color:#bfdbfe;background:#f6faff}
+#practice-list .pl-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#practice-list .pl-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+#practice-list .pl-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
+#practice-list .pl-row-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+#practice-list .pl-loc{font-size:15px;font-weight:600}
+#practice-list .pl-time{font-size:12.5px;color:#64748b}
+#practice-list .pl-today-flag{font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#1e40af;background:#dbeafe;border-radius:5px;padding:1px 6px;text-transform:uppercase}
+#practice-list .pl-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#practice-list .pl-pill{display:inline-flex;align-items:center;border:1.5px solid #e5e7eb;border-radius:20px;padding:1px 9px;font-size:11.5px;font-weight:500;color:#475569}
+#practice-list .pl-ind{font-size:11.5px;color:#475569;display:inline-flex;align-items:center;gap:3px}
+#practice-list .pl-row-aside{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex-shrink:0}
+
+/* staffing chip */
+#practice-list .pl-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:7px;background:#f1f5f9;color:#475569;white-space:nowrap}
+#practice-list .pl-chip.warn{background:#fefce8;color:#854d0e}
+
+/* status badge — all five states (color + text; never color alone) */
+#practice-list .pl-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;white-space:nowrap}
+#practice-list .pl-status::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+#practice-list .pl-status.is-scheduled{background:#dbeafe;color:#1e40af}
+#practice-list .pl-status.is-confirmed{background:#dcfce7;color:#166534}
+#practice-list .pl-status.is-in_progress{background:#fefce8;color:#854d0e}
+#practice-list .pl-status.is-completed{background:#f1f5f9;color:#64748b}
+#practice-list .pl-status.is-cancelled{background:#fde8e8;color:#c53030}
+
+/* past section */
+#practice-list .pl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#fff;border:1px dashed #d6dbe3;border-radius:11px;padding:12px 15px;color:#475569;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
+#practice-list .pl-past-toggle .chev{transition:transform .15s;color:#94a3b8}
+#practice-list .pl-past-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+#practice-list .pl-past-toggle .dim{color:#94a3b8;font-weight:500}
+#practice-list .pl-loadmore{display:block;margin:8px auto 0;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;font-family:inherit}
+#practice-list .pl-empty{padding:28px 8px;text-align:center;color:#94a3b8;font-size:14px}
+
+/* ===== preview drawer (dialog) ===== */
+#practice-list .pl-scrim{position:fixed;inset:0;background:rgba(20,30,50,.18);z-index:1000}
+#practice-list .pl-drawer{position:fixed;top:0;right:0;bottom:0;width:400px;max-width:100%;background:#fff;border-left:1px solid #e5e7eb;box-shadow:-14px 0 40px rgba(20,30,50,.16);z-index:1001;display:flex;flex-direction:column;transform:translateX(0);transition:transform .2s ease}
+#practice-list .pl-drawer.hidden,#practice-list .pl-scrim.hidden{display:none}
+#practice-list .pl-dwh{padding:16px 18px 14px;border-bottom:1px solid #eef1f5}
+#practice-list .pl-dwh-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+#practice-list .pl-dw-title{font-size:18px;font-weight:700;letter-spacing:-.01em}
+#practice-list .pl-dw-sub{font-size:13px;color:#475569;margin-top:3px}
+#practice-list .pl-x{width:44px;height:44px;margin:-8px -8px 0 0;border-radius:8px;border:none;background:transparent;color:#64748b;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
+#practice-list .pl-x:hover{background:#f1f5f9}
+#practice-list .pl-x:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#practice-list .pl-badges{display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap}
+#practice-list .pl-go{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:6px;background:#acf3c4;color:#166534}
+#practice-list .pl-go.nogo{background:#fde8e8;color:#c53030}
+#practice-list .pl-dwbody{flex:1;overflow-y:auto;padding:6px 18px 16px}
+#practice-list .pl-blk{padding:15px 0;border-bottom:1px solid #f1f5f9}
+#practice-list .pl-blk:last-child{border-bottom:none}
+#practice-list .pl-blk-h{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px}
+#practice-list .pl-kv{display:flex;gap:10px;margin-bottom:8px;font-size:13.5px}
+#practice-list .pl-kv:last-child{margin-bottom:0}
+#practice-list .pl-kv .k{color:#64748b;width:74px;flex-shrink:0}
+#practice-list .pl-kv .v{color:#1c2c44;font-weight:500}
+#practice-list .pl-pills{display:flex;gap:6px;flex-wrap:wrap}
+#practice-list .pl-wblk{margin-bottom:12px}
+#practice-list .pl-wblk:last-child{margin-bottom:0}
+#practice-list .pl-wblk .wl{font-size:11.5px;font-weight:700;color:#1c2c44;margin-bottom:3px}
+#practice-list .pl-wblk .wt{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:9px 11px}
+#practice-list .pl-wblk.main .wt{border-left-color:#1c2c44}
+#practice-list .pl-person{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f6f8fa}
+#practice-list .pl-person:last-child{border-bottom:none}
+#practice-list .pl-person .role{font-size:10.5px;font-weight:700;text-transform:uppercase;color:#64748b;width:54px;flex-shrink:0}
+#practice-list .pl-person .pn{flex:1;color:#1c2c44}
+#practice-list .pl-conf{font-size:11px;font-weight:600;padding:2px 7px;border-radius:5px}
+#practice-list .pl-conf.yes{background:#dcfce7;color:#166534}
+#practice-list .pl-conf.no{background:#fef3c7;color:#92660b}
+#practice-list .pl-rsvp{display:grid;grid-template-columns:1fr 1fr 1fr;border:1px solid #e5e7eb;border-radius:9px;overflow:hidden}
+#practice-list .pl-rcell{display:flex;flex-direction:column;align-items:center;padding:9px 4px;background:#f8fafb}
+#practice-list .pl-rcell+.pl-rcell{border-left:1px solid #e5e7eb}
+#practice-list .pl-rcell .n{font-size:19px;font-weight:700;color:#1c2c44;line-height:1}
+#practice-list .pl-rcell .l{font-size:9.5px;font-weight:700;text-transform:uppercase;color:#64748b;margin-top:3px}
+#practice-list .pl-skipper-btn{background:#fff;color:#475569;border:1.5px solid #e5e7eb;border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+#practice-list .pl-muted{font-size:12.5px;color:#64748b}
+#practice-list .pl-dwacts{padding:13px 18px;border-top:1px solid #eef1f5;display:flex;gap:9px}
+#practice-list .pl-act{height:40px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid transparent;font-family:inherit;text-decoration:none}
+#practice-list .pl-act-pri{flex:1;background:#1c2c44;color:#fff}
+#practice-list .pl-act-ghost{background:#fff;color:#475569;border-color:#e5e7eb;padding:0 14px}
+#practice-list .pl-act-danger{background:#fff;color:#c53030;border-color:#f3c9c9;padding:0 14px}
+#practice-list .pl-act:focus-visible,#practice-list .pl-skipper-btn:focus-visible,#practice-list .pl-past-toggle:focus-visible,#practice-list .pl-loadmore:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* ===== mobile: full-height sheet + row reflow (the 375px gate) ===== */
+@media (max-width:767px){
+  #practice-list .pl-drawer{width:100%;border-left:none}
+  #practice-list .pl-row-aside{flex-direction:row;align-self:flex-start}
+  #practice-list .pl-db{width:42px}
+}
+@media (prefers-reduced-motion:reduce){
+  #practice-list .pl-drawer{transition:none}
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold text-tcsc-navy">Practice Management</h1>
-    <div class="flex gap-2">
-        <a href="{{ url_for('admin_practices.practices_calendar') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Calendar View</a>
-        <a href="{{ url_for('admin.get_admin_page') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Dashboard</a>
+<div id="practice-list">
+  <div class="pl-head">
+    <h1>Practice Management</h1>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <a href="{{ url_for('admin_practices.practices_calendar') }}" class="pl-btn pl-btn-ghost">Calendar View</a>
+      <a href="{{ url_for('admin.get_admin_page') }}" class="pl-btn pl-btn-ghost">Back to Dashboard</a>
+      <a href="{{ url_for('admin_practices.practice_new') }}" class="pl-btn pl-btn-primary">+ New Practice</a>
     </div>
+  </div>
+
+  <div class="pl-toolbar">
+    <input type="text" id="pl-search" class="pl-search" placeholder="Search location, activity, type, person…" aria-label="Search practices">
+    <select id="pl-status-filter" class="pl-select" aria-label="Filter by status">
+      <option value="">All Status</option>
+      <option value="scheduled">Scheduled</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="in_progress">In Progress</option>
+      <option value="cancelled">Cancelled</option>
+      <option value="completed">Completed</option>
+    </select>
+    <select id="pl-location-filter" class="pl-select" aria-label="Filter by location">
+      <option value="">All Locations</option>
+    </select>
+  </div>
+
+  <div id="pl-list" aria-live="off"><p class="pl-empty">Loading practices…</p></div>
 </div>
 
-<div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
-    <!-- Toolbar -->
-    <div class="toolbar">
-        <input type="text" id="practices-search" class="tbl-search" placeholder="Search...">
-        <select id="status-filter" class="tbl-select">
-            <option value="">All Status</option>
-            <option value="scheduled">Scheduled</option>
-            <option value="confirmed">Confirmed</option>
-            <option value="in_progress">In Progress</option>
-            <option value="cancelled">Cancelled</option>
-            <option value="completed">Completed</option>
-        </select>
-        <select id="location-filter" class="tbl-select">
-            <option value="">All Locations</option>
-        </select>
-        <div class="toolbar-spacer"></div>
-        <button id="create-practice-btn" class="toolbar-btn toolbar-btn-primary">Create New Practice</button>
+<!-- Preview drawer (dialog) -->
+<div id="pl-scrim" class="pl-scrim hidden"></div>
+<aside id="pl-drawer" class="pl-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="pl-dw-title" hidden>
+  <div class="pl-dwh">
+    <div class="pl-dwh-top">
+      <div>
+        <div class="pl-dw-title" id="pl-dw-title"></div>
+        <div class="pl-dw-sub" id="pl-dw-sub"></div>
+      </div>
+      <button type="button" class="pl-x" id="pl-close" aria-label="Close preview">&times;</button>
     </div>
+    <div class="pl-badges" id="pl-badges"></div>
+  </div>
+  <div class="pl-dwbody" id="pl-dwbody"></div>
+  <div class="pl-dwacts">
+    <a href="#" class="pl-act pl-act-pri" id="pl-edit">Edit in full editor</a>
+    <button type="button" class="pl-act pl-act-ghost" id="pl-cancel-btn">Cancel</button>
+    <button type="button" class="pl-act pl-act-danger" id="pl-delete-btn">Delete</button>
+  </div>
+</aside>
 
-    <div id="practices-table" class="tabulator-data"></div>
-</div>
-
-<!-- Cancel Modal -->
+<!-- Cancel Modal (unchanged) -->
 <div id="cancel-modal" class="hidden fixed inset-0 bg-black/50 z-[1000] items-center justify-center">
     <div class="absolute inset-0" onclick="closeCancelModal()"></div>
     <div class="relative bg-white rounded-lg p-6 w-[90%] max-w-md max-h-[90vh] overflow-y-auto z-[1001]">
@@ -51,7 +205,6 @@
         </div>
     </div>
 </div>
-
 {% endblock %}
 
 {% block extra_js %}
