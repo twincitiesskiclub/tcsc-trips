@@ -15,6 +15,7 @@
 
 /* ── two-column grid ── */
 #workout-editor .cols{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
+#workout-editor .cols-single{grid-template-columns:1fr}
 
 /* ── cards ── */
 #workout-editor .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px}
@@ -153,9 +154,9 @@
     <a href="{{ url_for('admin_practices.practices_list') }}" class="btn-ghost">Back to Practices</a>
   </div>
 
-  <form id="practice-form"
+  <form id="practice-form" method="POST"
         action="{{ url_for('admin_practices.edit_practice', practice_id=practice.id) if practice else url_for('admin_practices.create_practice') }}"
-        class="cols">
+        class="cols{% if not practice %} cols-single{% endif %}">
 
     <div class="form-col">
 
