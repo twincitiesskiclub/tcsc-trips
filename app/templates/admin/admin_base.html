@@ -8,6 +8,8 @@
     <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
     <!-- Pure Tailwind CSS (no legacy CSS) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
+    <!-- AdminUI foundation styles -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/admin_ui.css') }}">
     <!-- Alpine.js for mobile menu -->
     <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
     {% block extra_css %}{% endblock %}
@@ -95,6 +97,14 @@
     <script src="{{ url_for('static', filename='admin.js') }}" defer></script>
     <!-- Shared toast notifications -->
     <script src="{{ url_for('static', filename='js/toast.js') }}"></script>
+    <!-- AdminUI foundation (load _core first) -->
+    <script src="{{ url_for('static', filename='js/admin/_core.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/status_badge.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/drawer.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/filter_bar.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/pills.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/admin/data.js') }}"></script>
     <!-- Tabulator JS -->
     <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
     {% block extra_js %}{% endblock %}
