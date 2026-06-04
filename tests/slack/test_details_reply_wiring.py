@@ -364,6 +364,201 @@ class TestUpdatePracticePostWiring:
 
 
 # ---------------------------------------------------------------------------
+# Combined-lift details reply tests
+# ---------------------------------------------------------------------------
+
+def _make_group_practices(n=2, existing_details_ts=None):
+    """Return n fake Practice instances that share a common slack_message_ts."""
+    shared_ts = "COMBINED.1234"
+    channel_id = "CCOMBINED"
+    practices = []
+    for i in range(n):
+        p = MagicMock()
+        p.id = 100 + i
+        p.slack_message_ts = shared_ts
+        p.slack_channel_id = channel_id
+        p.slack_details_ts = existing_details_ts
+        loc = MagicMock()
+        loc.latitude = 44.99
+        loc.longitude = -93.32
+        p.location = loc
+        practices.append(p)
+    return practices
+
+
+class TestUpsertCombinedDetailsReply:
+    """Tests for _upsert_combined_details_reply."""
+
+    def _blocks(self):
+        return [{"type": "header", "text": {"type": "plain_text", "text": "Practice Details"}}]
+
+    def test_new_post_calls_chat_postMessage_with_thread_ts_and_no_broadcast(self, app_context):
+        """When no practice has slack_details_ts set, a new thread reply is posted."""
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "REPLY.TS"}
+        practices = _make_group_practices(2)
+
+        with patch("app.practices.service.convert_practice_to_info",
+                   return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks",
+                   return_value=self._blocks()), \
+             patch("app.slack.practices.announcements.db") as mock_db:
+            _upsert_combined_details_reply(client, practices)
+
+        client.chat_postMessage.assert_called_once()
+        kw = client.chat_postMessage.call_args[1]
+        assert kw["thread_ts"] == "COMBINED.1234"
+        assert kw["reply_broadcast"] is False
+        assert kw["unfurl_links"] is False
+        assert kw["unfurl_media"] is False
+        mock_db.session.commit.assert_called_once()
+
+    def test_new_post_saves_details_ts_to_all_practices(self, app_context):
+        """After a new reply, slack_details_ts is saved to every practice in the group."""
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "REPLY.TS"}
+        practices = _make_group_practices(3)
+
+        with patch("app.practices.service.convert_practice_to_info",
+                   return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks",
+                   return_value=self._blocks()), \
+             patch("app.slack.practices.announcements.db"):
+            _upsert_combined_details_reply(client, practices)
+
+        for p in practices:
+            assert p.slack_details_ts == "REPLY.TS", \
+                f"Practice #{p.id} should have slack_details_ts='REPLY.TS'"
+
+    def test_existing_ts_calls_chat_update(self, app_context):
+        """When any practice in the group has slack_details_ts, chat_update is used."""
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        practices = _make_group_practices(2, existing_details_ts="OLD.TS")
+
+        with patch("app.practices.service.convert_practice_to_info",
+                   return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks",
+                   return_value=self._blocks()), \
+             patch("app.slack.practices.announcements.db") as mock_db:
+            _upsert_combined_details_reply(client, practices)
+
+        client.chat_update.assert_called_once()
+        kw = client.chat_update.call_args[1]
+        assert kw["ts"] == "OLD.TS"
+        client.chat_postMessage.assert_not_called()
+        mock_db.session.commit.assert_not_called()
+
+    def test_empty_blocks_skips_slack_call(self, app_context):
+        """When build_practice_details_blocks returns empty, no Slack call is made."""
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        practices = _make_group_practices(2)
+
+        with patch("app.practices.service.convert_practice_to_info",
+                   return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks",
+                   return_value=[]), \
+             patch("app.slack.practices.announcements.db"):
+            _upsert_combined_details_reply(client, practices)
+
+        client.chat_postMessage.assert_not_called()
+        client.chat_update.assert_not_called()
+
+    def test_exception_is_swallowed(self, app_context):
+        """Errors in _upsert_combined_details_reply must not propagate."""
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        client.chat_postMessage.side_effect = Exception("slack boom")
+        practices = _make_group_practices(2)
+
+        with patch("app.practices.service.convert_practice_to_info",
+                   return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks",
+                   return_value=self._blocks()), \
+             patch("app.slack.practices.announcements.db"):
+            # Must not raise
+            _upsert_combined_details_reply(client, practices)
+
+
+class TestPostCombinedLiftAnnouncementWiring:
+    """post_combined_lift_announcement calls _upsert_combined_details_reply."""
+
+    def test_combined_details_reply_called_after_post(self, app_context):
+        """On initial combined-lift post, _upsert_combined_details_reply is invoked."""
+        from datetime import datetime
+        from app.slack.practices.announcements import post_combined_lift_announcement
+
+        # Use real datetime objects so sorted() and strftime() work without stubs
+        practices = _make_group_practices(2)
+        practices[0].date = datetime(2026, 1, 21, 18, 0)  # Wednesday
+        practices[1].date = datetime(2026, 1, 23, 18, 0)  # Friday
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CCOMBINED"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_combined_lift_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements._upsert_combined_details_reply") as mock_upsert, \
+             patch("app.slack.practices.announcements.db"), \
+             patch("app.slack.client.get_combined_practice_emojis",
+                   return_value=["white_check_mark", "ballot_box_with_check"]):
+
+            mock_client = MagicMock()
+            mock_client.chat_postMessage.return_value = {"ts": "COMBINED.1234"}
+            mock_get_client.return_value = mock_client
+
+            result = post_combined_lift_announcement(practices)
+
+        assert result.get("success") is True
+        mock_upsert.assert_called_once()
+        # The list passed should contain the sorted practices
+        call_practices = mock_upsert.call_args[0][1]
+        assert len(call_practices) == 2
+
+
+class TestUpdateCombinedLiftPostWiring:
+    """update_combined_lift_post calls _upsert_combined_details_reply."""
+
+    def test_combined_details_reply_called_on_update(self, app_context):
+        """When update_combined_lift_post runs, _upsert_combined_details_reply is called."""
+        from datetime import datetime
+        from app.slack.practices.announcements import update_combined_lift_post
+
+        practice = _make_group_practices(1)[0]
+        practice.date = datetime(2026, 1, 21, 18, 0)
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.practices.models.Practice.query") as mock_query, \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_combined_lift_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements._upsert_combined_details_reply") as mock_upsert, \
+             patch("app.slack.practices.announcements.db"):
+
+            mock_client = MagicMock()
+            mock_get_client.return_value = mock_client
+
+            # Mock the DB query to return two practices sharing the ts
+            sibling = _make_group_practices(1)[0]
+            sibling.id = 101
+            sibling.date = datetime(2026, 1, 23, 18, 0)
+            all_practices = [practice, sibling]
+            mock_query.filter.return_value.order_by.return_value.all.return_value = all_practices
+
+            update_combined_lift_post(practice)
+
+        mock_upsert.assert_called_once()
+        call_practices = mock_upsert.call_args[0][1]
+        assert len(call_practices) == 2
+
+
+# ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
