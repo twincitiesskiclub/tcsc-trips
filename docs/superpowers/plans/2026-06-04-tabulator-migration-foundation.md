@@ -788,7 +788,7 @@ read-only and `admin_base.html` which is reserved for WF-9):
 | WF-7 Slack Sync | `app/templates/admin/slack_sync.html`, `app/static/admin_slack.js` |
 | WF-8 Skipper | `app/templates/admin/skipper.html` |
 
-- [ ] **Step 3: Seed each workflow with its charter**
+- [ ] **Step 3: Seed each workflow with its charter, then start all 8 at once**
 
 For each surface, fill the charter template from the design doc
 (`docs/superpowers/specs/2026-06-04-tabulator-migration-design.md`, Section 8) with that surface's
@@ -797,6 +797,13 @@ the workflow. The charter instructs the workflow to honor the migration canon (S
 frozen foundation without modifying it, report foundation gaps back instead of patching, and treat
 the surface as done only when parity is verified, lightweight feature seeds have landed, and mobile
 is checked at 767px.
+
+**Autonomous operation (required):** the charter template's AUTONOMY block makes every workflow
+non-interactive from the moment it starts. Each `/brainstorming` cycle self-answers its clarifying
+questions from the practices reference + its charter + existing codebase conventions, records any
+residual assumption under an "Assumptions" heading in its own spec, and proceeds without prompting
+the user. The only sanctioned stop is a hard technical blocker, which halts that one surface only.
+This means all 8 can be launched together and run to completion unattended.
 
 - [ ] **Step 4: Track completion**
 

@@ -262,7 +262,11 @@ Each charter is the seed for that surface's isolated `/brainstorming` cycle. For
 
 ## 8. Dynamic Workflow Launch — Charter Template
 
-Each surface launches in its own isolated session/worktree, seeded with this template:
+Each surface launches in its own isolated session/worktree, seeded with this template. **The
+workflows run fully autonomously**: from the moment they start, no user interaction is required.
+Each workflow's `/brainstorming` cycle must self-answer its clarifying questions from the material
+already in the repo — the practices reference implementation, this design doc + the surface charter,
+and existing codebase conventions — rather than prompting the user.
 
 ```
 You are migrating the <SURFACE> admin surface off Tabulator in the tcsc-trips Flask app,
@@ -283,8 +287,18 @@ Your charter (from Section 6 of the design doc):
 
 Run your own full cycle: /brainstorming -> spec -> /writing-plans -> implement -> verify.
 
+AUTONOMY (no user interaction from the moment you start):
+- Do NOT ask the user any questions. Run /brainstorming in self-answering mode: resolve every
+  clarifying question yourself from the practices reference, this charter, and existing codebase
+  conventions.
+- When a genuine ambiguity remains, choose the option most consistent with the practices reference
+  implementation, record it under an "Assumptions" heading in your spec, and proceed.
+- The ONLY acceptable stop is a hard technical blocker (e.g. a required endpoint genuinely does not
+  exist and cannot be inferred). Document the blocker and halt that one surface only; do not block
+  the others.
+
 Rules:
-- Honor the migration canon (Section 3). Reuse the shared foundation; do NOT modify it — if you
+- Honor the migration canon (Section 3). Reuse the shared foundation; do NOT modify it. If you
   find a gap, report it back rather than patching shared code.
 - Do NOT touch any other surface's files or admin_base.html.
 - Not done until: parity verified against the checklist, lightweight feature seeds landed
