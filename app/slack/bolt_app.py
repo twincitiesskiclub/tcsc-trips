@@ -60,6 +60,36 @@ if _bot_token:
         logger.info("Socket Mode handler ready (will start when start_socket_mode() is called)")
 
     # =========================================================================
+    # Global error handler — surfaces unhandled listener exceptions in the logs.
+    #
+    # With process_before_response=True, any exception raised AFTER ack() (DB
+    # writes, refresh_practice_posts, Slack/weather API calls) is swallowed by
+    # Bolt and shows the user "there was an error connecting" with no detail.
+    # This logs the full traceback plus enough payload context to identify the
+    # interaction (callback_id / action_id / user) that failed.
+    # =========================================================================
+    @bolt_app.error
+    def handle_global_error(error, body, logger):
+        try:
+            payload = body if isinstance(body, dict) else {}
+            interaction_type = payload.get("type")
+            view = payload.get("view") or {}
+            callback_id = view.get("callback_id")
+            actions = payload.get("actions") or []
+            action_ids = [a.get("action_id") for a in actions if isinstance(a, dict)]
+            user = (payload.get("user") or {}).get("id")
+            private_metadata = view.get("private_metadata")
+        except Exception:
+            interaction_type = callback_id = user = private_metadata = None
+            action_ids = []
+
+        logger.exception(
+            "Unhandled Slack listener error: %s | type=%s callback_id=%s "
+            "action_ids=%s user=%s private_metadata=%s",
+            error, interaction_type, callback_id, action_ids, user, private_metadata,
+        )
+
+    # =========================================================================
     # Slash Commands
     # =========================================================================
 
