@@ -44,8 +44,8 @@
 #practice-list .pl-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #practice-list .pl-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
 #practice-list .pl-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}
-#practice-list .pl-row-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-#practice-list .pl-loc{font-size:15px;font-weight:600}
+#practice-list .pl-row-top{display:flex;align-items:center;gap:9px;flex-wrap:wrap;min-width:0}
+#practice-list .pl-loc{font-size:15px;font-weight:600;min-width:0;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #practice-list .pl-time{font-size:12.5px;color:#64748b}
 #practice-list .pl-today-flag{font-size:9.5px;font-weight:800;letter-spacing:.05em;color:#1e40af;background:#dbeafe;border-radius:5px;padding:1px 6px;text-transform:uppercase}
 #practice-list .pl-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -53,9 +53,13 @@
 #practice-list .pl-ind{font-size:11.5px;color:#475569;display:inline-flex;align-items:center;gap:3px}
 #practice-list .pl-row-aside{display:flex;flex-direction:column;align-items:flex-end;gap:7px;flex-shrink:0}
 
-/* staffing chip */
-#practice-list .pl-chip{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:600;padding:2px 8px;border-radius:7px;background:#f1f5f9;color:#475569;white-space:nowrap}
-#practice-list .pl-chip.warn{background:#fefce8;color:#854d0e}
+/* people line (coach + leads names) */
+#practice-list .pl-people{display:flex;align-items:center;gap:5px;flex-wrap:wrap;font-size:12px;color:#475569;line-height:1.3}
+#practice-list .pl-people-grp{display:inline-flex;align-items:center;gap:4px}
+#practice-list .pl-people-lbl{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.03em;color:#64748b}
+#practice-list .pl-people-nm{color:#1c2c44;font-weight:500}
+#practice-list .pl-people-sep{color:#cbd5e1}
+#practice-list .pl-people.warn{color:#854d0e;font-weight:600}
 
 /* status badge — all five states (color + text; never color alone) */
 #practice-list .pl-status{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px;white-space:nowrap}
@@ -67,11 +71,20 @@
 #practice-list .pl-status.is-cancelled{background:#fde8e8;color:#c53030}
 
 /* past section */
-#practice-list .pl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#fff;border:1px dashed #d6dbe3;border-radius:11px;padding:12px 15px;color:#475569;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:8px}
+#practice-list .pl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#f1f4f8;border:1px solid #e1e6ee;border-radius:11px;padding:13px 15px;color:#475569;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;font-family:inherit;margin-top:28px}
 #practice-list .pl-past-toggle .chev{transition:transform .15s;color:#94a3b8}
 #practice-list .pl-past-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
-#practice-list .pl-past-toggle .dim{color:#94a3b8;font-weight:500}
+#practice-list .pl-past-toggle .dim{color:#94a3b8;font-weight:600;letter-spacing:0}
 #practice-list .pl-loadmore{display:block;margin:8px auto 0;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px;padding:8px 16px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;font-family:inherit}
+/* past list reads as secondary: dimmed, recessed */
+#practice-list .pl-past-list{margin-top:10px;padding:4px 0 0 6px;border-left:2px solid #eef1f5}
+#practice-list .pl-past-list .pl-row{background:#fbfcfd;border-color:#eef1f5}
+#practice-list .pl-past-list .pl-row:hover{border-color:#dce2ea}
+#practice-list .pl-past-list .pl-loc{color:#64748b}
+#practice-list .pl-past-list .pl-db .dn{color:#94a3b8}
+#practice-list .pl-past-list .pl-db .dow,#practice-list .pl-past-list .pl-db .mo{color:#cbd5e1}
+#practice-list .pl-past-list .pl-people-nm{color:#64748b;font-weight:400}
+#practice-list .pl-past-list .pl-pill{opacity:.8}
 #practice-list .pl-empty{padding:28px 8px;text-align:center;color:#94a3b8;font-size:14px}
 
 /* ===== preview drawer (dialog) ===== */
@@ -80,7 +93,7 @@
 #practice-list .pl-drawer.hidden,#practice-list .pl-scrim.hidden{display:none}
 #practice-list .pl-dwh{padding:16px 18px 14px;border-bottom:1px solid #eef1f5}
 #practice-list .pl-dwh-top{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
-#practice-list .pl-dw-title{font-size:18px;font-weight:700;letter-spacing:-.01em}
+#practice-list .pl-dw-title{font-size:18px;font-weight:700;letter-spacing:-.01em;overflow-wrap:anywhere}
 #practice-list .pl-dw-sub{font-size:13px;color:#475569;margin-top:3px}
 #practice-list .pl-x{width:44px;height:44px;margin:-8px -8px 0 0;border-radius:8px;border:none;background:transparent;color:#64748b;font-size:18px;cursor:pointer;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 #practice-list .pl-x:hover{background:#f1f5f9}
@@ -88,7 +101,7 @@
 #practice-list .pl-badges{display:flex;align-items:center;gap:7px;margin-top:11px;flex-wrap:wrap}
 #practice-list .pl-go{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;letter-spacing:.04em;padding:3px 9px;border-radius:6px;background:#acf3c4;color:#166534}
 #practice-list .pl-go.nogo{background:#fde8e8;color:#c53030}
-#practice-list .pl-dwbody{flex:1;overflow-y:auto;padding:6px 18px 16px}
+#practice-list .pl-dwbody{flex:1;overflow-y:auto;overflow-x:hidden;padding:6px 18px 16px}
 #practice-list .pl-blk{padding:15px 0;border-bottom:1px solid #f1f5f9}
 #practice-list .pl-blk:last-child{border-bottom:none}
 #practice-list .pl-blk-h{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px}
@@ -100,7 +113,7 @@
 #practice-list .pl-wblk{margin-bottom:12px}
 #practice-list .pl-wblk:last-child{margin-bottom:0}
 #practice-list .pl-wblk .wl{font-size:11.5px;font-weight:700;color:#1c2c44;margin-bottom:3px}
-#practice-list .pl-wblk .wt{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:9px 11px}
+#practice-list .pl-wblk .wt{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:9px 11px}
 #practice-list .pl-wblk.main .wt{border-left-color:#1c2c44}
 #practice-list .pl-person{display:flex;align-items:center;gap:8px;padding:6px 0;font-size:13.5px;border-bottom:1px solid #f6f8fa}
 #practice-list .pl-person:last-child{border-bottom:none}
@@ -117,7 +130,7 @@
 #practice-list .pl-skipper-btn{background:#fff;color:#475569;border:1.5px solid #e5e7eb;border-radius:9px;padding:7px 12px;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
 #practice-list .pl-muted{font-size:12.5px;color:#64748b}
 #practice-list .pl-dwacts{padding:13px 18px;border-top:1px solid #eef1f5;display:flex;gap:9px}
-#practice-list .pl-act{height:40px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid transparent;font-family:inherit;text-decoration:none}
+#practice-list .pl-act{height:40px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid transparent;font-family:inherit;text-decoration:none;white-space:nowrap}
 #practice-list .pl-act-pri{flex:1;background:#1c2c44;color:#fff}
 #practice-list .pl-act-ghost{background:#fff;color:#475569;border-color:#e5e7eb;padding:0 14px}
 #practice-list .pl-act-danger{background:#fff;color:#c53030;border-color:#f3c9c9;padding:0 14px}
@@ -128,6 +141,7 @@
   #practice-list .pl-drawer{width:100%;border-left:none}
   #practice-list .pl-row-aside{flex-direction:row;align-self:flex-start}
   #practice-list .pl-db{width:42px}
+  #practice-list .pl-dwacts{padding-bottom:calc(13px + env(safe-area-inset-bottom))}
 }
 @media (prefers-reduced-motion:reduce){
   #practice-list .pl-drawer{transition:none}
@@ -178,7 +192,7 @@
     </div>
     <div class="pl-dwbody" id="pl-dwbody"></div>
     <div class="pl-dwacts">
-      <a href="#" class="pl-act pl-act-pri" id="pl-edit">Edit in full editor</a>
+      <a href="#" class="pl-act pl-act-pri" id="pl-edit">Edit practice</a>
       <button type="button" class="pl-act pl-act-ghost" id="pl-cancel-btn">Cancel</button>
       <button type="button" class="pl-act pl-act-danger" id="pl-delete-btn">Delete</button>
     </div>

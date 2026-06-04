@@ -110,8 +110,9 @@ function render() {
       + `<span class="chev" aria-hidden="true">▸</span> Past practices <span class="dim">— ${pastL.length}</span></button>`;
     if (pastExpanded) {
       const shown = pastL.slice(0, pastLimit);
-      html += dayGroups(shown, false);
-      if (pastL.length > pastLimit) html += `<button type="button" class="pl-loadmore" id="pl-loadmore">Load more</button>`;
+      let pastHtml = dayGroups(shown, false);
+      if (pastL.length > pastLimit) pastHtml += `<button type="button" class="pl-loadmore" id="pl-loadmore">Load more</button>`;
+      html += `<div class="pl-past-list">${pastHtml}</div>`;
     }
   }
 
@@ -144,12 +145,16 @@ function dayGroups(list, isToday) {
   }).join('');
 }
 
-function staffingChip(p) {
-  const leads = p.leads || [], coaches = p.coaches || [];
-  if (leads.length === 0) return '<span class="pl-chip warn">needs leads</span>';
-  const total = leads.length + coaches.length;
-  const confirmed = leads.filter(x => x.confirmed).length + coaches.filter(x => x.confirmed).length;
-  return `<span class="pl-chip">✓ ${confirmed}/${total}</span>`;
+function peopleLine(p) {
+  const names = arr => (arr || [])
+    .map(x => `<span class="pl-people-nm">${esc(x.name || 'Unknown')}${x.confirmed ? ' ✓' : ''}</span>`)
+    .join(', ');
+  const coaches = p.coaches || [], leads = p.leads || [];
+  if (!coaches.length && !leads.length) return '<div class="pl-people warn">Needs leads</div>';
+  const parts = [];
+  if (coaches.length) parts.push(`<span class="pl-people-grp"><span class="pl-people-lbl">${coaches.length > 1 ? 'Coaches' : 'Coach'}</span> ${names(coaches)}</span>`);
+  if (leads.length) parts.push(`<span class="pl-people-grp"><span class="pl-people-lbl">${leads.length > 1 ? 'Leads' : 'Lead'}</span> ${names(leads)}</span>`);
+  return `<div class="pl-people">${parts.join('<span class="pl-people-sep" aria-hidden="true">·</span>')}</div>`;
 }
 
 function rowHtml(p, isToday) {
@@ -166,8 +171,10 @@ function rowHtml(p, isToday) {
     + `aria-label="${esc(p.location_name || 'Practice')} ${esc(time)}, ${esc(STATUS_LABEL[st] || st)}">`
     + `<div class="pl-row-main"><div class="pl-row-top"><span class="pl-loc">${esc(p.location_name || 'No Location')}</span>`
     + `<span class="pl-time">${esc(time)}</span>${flag}</div>`
-    + `<div class="pl-meta">${pills}${inds}</div></div>`
-    + `<div class="pl-row-aside">${status}${staffingChip(p)}</div></button>`;
+    + `<div class="pl-meta">${pills}${inds}</div>`
+    + peopleLine(p)
+    + `</div>`
+    + `<div class="pl-row-aside">${status}</div></button>`;
 }
 
 /* ---------- events ---------- */
