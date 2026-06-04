@@ -638,10 +638,7 @@
     var panel = drawer.body.parentElement;
     if (panel) panel.appendChild(footer);
 
-    // Listen for drawer close to clean up active card
-    // We do this via the panel's removal - poll isn't ideal; instead
-    // we rely on the fact that AdminUI.drawer's close() is called on Esc/scrim.
-    // We override the close reference to also clear active card.
+    // Programmatic close override: for stlActivate / stlDelete paths.
     var origClose = drawer.close;
     drawer.close = function () {
       origClose();
@@ -649,6 +646,28 @@
       _activeDrawer = null;
     };
     _activeDrawer = drawer;
+
+    // The frozen drawer wires its x-button, Esc, and scrim directly to its
+    // internal close function (not drawer.close), so the override above does
+    // not fire on user-initiated close. Use a MutationObserver on document.body
+    // to detect panel removal and clean up the active-card highlight on ALL
+    // close paths without touching any frozen foundation file.
+    if (panel && typeof MutationObserver !== 'undefined') {
+      var _panelObserver = new MutationObserver(function (mutations) {
+        for (var i = 0; i < mutations.length; i++) {
+          var removed = mutations[i].removedNodes;
+          for (var j = 0; j < removed.length; j++) {
+            if (removed[j] === panel) {
+              _panelObserver.disconnect();
+              stlRemoveActiveCard();
+              _activeDrawer = null;
+              return;
+            }
+          }
+        }
+      });
+      _panelObserver.observe(document.body, { childList: true });
+    }
   }
 
   // -----------------------------------------------------------------------
