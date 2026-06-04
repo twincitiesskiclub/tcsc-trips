@@ -202,3 +202,49 @@ The thread reply is new behavior (the announcement is currently a single message
 - `has_intervals` and `_is_strength_practice` still behave after normalization (regression tests around renamed names).
 - Refresh dispatcher test: editing a practice updates both hero and thread reply; missing `slack_details_ts` triggers a reply post.
 - Follow existing block-builder test patterns in `tests/slack/`.
+
+## 13. Live Testing & Validation Plan (gate before go-live)
+
+Unit tests verify block structure but cannot catch how Block Kit actually renders on real Slack clients (header wrapping, emoji glyphs, field stacking, link tap targets, reaction pills, thread threading). Because the redesign changes the member-facing experience, it MUST be validated end-to-end by posting to a **dedicated unused test channel** and reviewing on **real mobile and desktop Slack** before a single message goes to the real `#announcements-practices`. This is a hard go-live gate.
+
+### 13.1 Guardrails (non-negotiable)
+- **Post only to the test channel `C07G9RTMRT3`** during all validation. Never to `#announcements-practices` until sign-off. Local dev and these scripts hit the **real Slack workspace**, so an un-overridden channel is a live-fire accident.
+- Use the **test user `U07P38VQJP5`** for any user-specific paths (mentions, App Home, RSVP-by-reaction). Do not mention or DM real members during validation.
+- Drive every post through the existing `channel_override` parameter (`post_practice_announcement(..., channel_override="C07G9RTMRT3")`, same for `post_combined_lift_announcement`, `update_practice_announcement`, and the new thread-reply path).
+- Tag and delete test messages after each run so the channel does not accumulate noise (track posted `ts` values; delete via the bot token).
+
+### 13.2 Validation harness
+- Extend the existing manual harness `test_practice_post.py` (root, already used for manual announcement testing, not pytest) into a scenario runner that posts each case below to `C07G9RTMRT3` using synthetic `PracticeInfo` / fixture practices, with all the new optional data (daylight, AQI, wind) injected so conditional paths can be exercised without waiting for real weather.
+- Each scenario prints the posted message permalink so it can be opened on a phone.
+- Provide a teardown command that deletes all messages the run posted.
+
+### 13.3 Scenario matrix (each rendered to the test channel, reviewed on mobile + desktop)
+1. **Baseline** single practice: Classic, Intervals, with Notes, with Social, normal weather, clean air, daytime.
+2. **Minimal** practice: no Notes, no Social, no leads, no trail data (every optional block omitted cleanly, no empty/dangling dividers).
+3. **Multi-activity** (Classic + Skate): header joins as `Classic Ski + Skate Ski`.
+4. **No activity set**: header falls back to `Practice`.
+5. **Strength**: combined lift announcement renders consistently (header `... · Strength`, no warmup/cooldown, thread reply present).
+6. **After-dark** practice: Conditions shows the `🔦 Sunset h:mm PM, bring a headlamp` line (comma, no em dash).
+7. **Elevated AQI** (value > 49): `🌫️ AQI {n}` line appears, value only, no advisory.
+8. **Clean air** (AQI <= 49): no AQI line at all.
+9. **Weather alert active**: alert surfaces without breaking layout.
+10. **Fetch failures**: weather and/or daylight and/or AQI fetch throws, so those lines are silently omitted and the post still succeeds (best-effort behavior).
+11. **Long content**: very long workout description + long Notes; hero still does not trigger "View full message" collapse. If it would, confirm the collapse boundary and the trim strategy.
+12. **Normalized names**: confirm every normalized activity/type renders correctly in the header and the `Workout · {type}` label.
+13. **Thread reply**: the "Practice Details" reply posts in-thread (not broadcast), with correct Parking/Gear/Conditions.
+14. **Edit / refresh**: edit a test practice and confirm `refresh_practice_posts` updates BOTH the hero and the thread reply; then edit a practice that has no `slack_details_ts` and confirm the reply is created (backfill path).
+15. **RSVP**: react with ✅ / 🌲 / 🤔 as the test user; confirm counts/pills behave and existing reaction handlers still fire.
+
+### 13.4 Cross-client UI checklist (per scenario, on a real phone and desktop)
+- Header is the visually dominant element and fits one line on common iPhone widths (2-line wrap acceptable, never truncated mid-word).
+- **No pipe-soup, no em dashes** anywhere (assert programmatically in unit tests AND eyeball on device).
+- Address/map link is tappable and opens the correct location; trail report link works.
+- Dividers create three distinct hero zones; spacing reads as breathing room, not cramped.
+- Emoji all render as glyphs (no `:shortcode:` text, no tofu boxes) on iOS and Android.
+- Reaction pills appear and are tappable; the 🌲 endurance option is present only for interval practices.
+- Thread reply is collapsed under the parent with the correct "1 reply" affordance and does not double-notify the channel.
+
+### 13.5 Sign-off
+- The user reviews the full scenario matrix in `C07G9RTMRT3` on both mobile and desktop and explicitly approves.
+- Only then is the real channel re-enabled (remove `channel_override` / restore the production channel from config).
+- Keep the validation harness in the repo (under `scripts/` or root) so the same matrix can be re-run after future changes.
