@@ -13,12 +13,14 @@ import csv
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from app import create_app
 from app.models import db
 from app.practices.models import PracticeActivity, PracticeType
 
 
-def _apply(model, path, commit):
+def _apply(model, path):
     changed = 0
     with open(path, newline="") as f:
         for row in csv.DictReader(f):
@@ -35,14 +37,18 @@ def _apply(model, path, commit):
 
 
 def main():
+    load_dotenv()
     use_prod = "--prod" in sys.argv
     commit = "--commit" in sys.argv
     if use_prod:
-        os.environ["DATABASE_URL"] = os.environ["PROD_DATABASE_URL"]
+        prod_url = os.environ.get("PROD_DATABASE_URL")
+        if not prod_url:
+            raise SystemExit("PROD_DATABASE_URL not set - add it to .env")
+        os.environ["DATABASE_URL"] = prod_url
     app = create_app()
     with app.app_context():
-        total = _apply(PracticeActivity, "export_activities.csv", commit)
-        total += _apply(PracticeType, "export_types.csv", commit)
+        total = _apply(PracticeActivity, "export_activities.csv")
+        total += _apply(PracticeType, "export_types.csv")
         if commit:
             db.session.commit()
             print(f"Committed {total} name change(s).")

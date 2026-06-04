@@ -11,15 +11,21 @@ import csv
 import os
 import sys
 
+from dotenv import load_dotenv
+
 from app import create_app
 from app.models import db
 from app.practices.models import PracticeActivity, PracticeType
 
 
 def main():
+    load_dotenv()
     use_prod = "--prod" in sys.argv
     if use_prod:
-        os.environ["DATABASE_URL"] = os.environ["PROD_DATABASE_URL"]
+        prod_url = os.environ.get("PROD_DATABASE_URL")
+        if not prod_url:
+            raise SystemExit("PROD_DATABASE_URL not set - add it to .env")
+        os.environ["DATABASE_URL"] = prod_url
     app = create_app()
     with app.app_context():
         with open("export_activities.csv", "w", newline="") as f:
