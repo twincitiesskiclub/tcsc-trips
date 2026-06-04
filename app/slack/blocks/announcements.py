@@ -318,27 +318,6 @@ def build_combined_lift_blocks(
         })
 
     # ==========================================================================
-    # WARMUP / COOLDOWN (two columns, shared)
-    # ==========================================================================
-    warmup_cooldown_fields = []
-    if first_practice.warmup_description:
-        warmup_cooldown_fields.append({
-            "type": "mrkdwn",
-            "text": f"*:fire: Warmup*\n{first_practice.warmup_description}"
-        })
-    if first_practice.cooldown_description:
-        warmup_cooldown_fields.append({
-            "type": "mrkdwn",
-            "text": f"*:ice_cube: Cooldown*\n{first_practice.cooldown_description}"
-        })
-
-    if warmup_cooldown_fields:
-        blocks.append({
-            "type": "section",
-            "fields": warmup_cooldown_fields
-        })
-
-    # ==========================================================================
     # LOCATION DETAILS: Address, Parking (shared)
     # ==========================================================================
     location_fields = []

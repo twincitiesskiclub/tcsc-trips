@@ -140,3 +140,16 @@ def test_details_no_emdash():
     import json
     blob = json.dumps(build_practice_details_blocks(_practice(), weather=_weather(), daylight=_daylight(hour=12, minute=10), air_quality=80))
     assert "—" not in blob and "–" not in blob
+
+
+from app.slack.blocks.announcements import build_combined_lift_blocks
+
+
+def test_combined_lift_header_uses_strength_and_no_warmup():
+    p1 = _practice(date=datetime(2026, 12, 30, 18, 0), activities=[_act("Strength")], practice_types=[], has_social=False, logistics_notes=None)
+    p2 = _practice(date=datetime(2027, 1, 1, 18, 0), activities=[_act("Strength")], practice_types=[], has_social=False, logistics_notes=None)
+    blocks = build_combined_lift_blocks([p1, p2])
+    import json
+    blob = json.dumps(blocks)
+    assert "Warmup" not in blob and "Cooldown" not in blob
+    assert "—" not in blob
