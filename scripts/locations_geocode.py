@@ -118,6 +118,10 @@ def main() -> None:
             op, review = "update", "missing_coords"
         elif delta != "" and delta > KEEP_RADIUS_M:
             op, review = "update", "needs_pin"
+        elif cur_lat is None:
+            # Coords were backfilled from a street-level geocode — plausible but
+            # unverified; surface for a human glance rather than silently "ok".
+            op, review = "update", "verify_backfill"
         else:
             op, review = "update", "ok"
 
