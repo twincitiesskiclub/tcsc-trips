@@ -1,5 +1,7 @@
 // app/static/js/admin/drawer.js
-// drawer({ title, content }) -> { close, body }. Singleton: opening closes any open drawer.
+// drawer({ title, content, contentHTML }) -> { close, body }. Singleton: opening closes any open drawer.
+// content: a DOM node, or a plain string (rendered as safe text).
+// contentHTML: raw HTML string (opt-in, trusted markup only).
 // Right-side panel with inert scrim, focus-trap, Esc + scrim-click to close.
 (function () {
   const AdminUI = window.AdminUI = window.AdminUI || {};
@@ -16,7 +18,10 @@
     }, []);
 
     const body = AdminUI.el('div', { class: 'admin-ui-drawer__body' }, []);
-    if (typeof opts.content === 'string') body.innerHTML = opts.content;
+    // content: a DOM node, or a plain string (rendered as safe text).
+    // contentHTML: raw HTML string (opt-in, trusted markup only).
+    if (opts.contentHTML != null) body.innerHTML = opts.contentHTML;
+    else if (typeof opts.content === 'string') body.appendChild(document.createTextNode(opts.content));
     else if (opts.content) body.appendChild(opts.content);
 
     const header = AdminUI.el('div', { class: 'admin-ui-drawer__header' }, [

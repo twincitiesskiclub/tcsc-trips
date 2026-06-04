@@ -10,7 +10,8 @@
 
     function focusables() {
       return Array.prototype.slice.call(container.querySelectorAll(FOCUSABLE))
-        .filter(function (el) { return el.offsetParent !== null; });
+        // getClientRects() is robust to position:fixed focusables (offsetParent is null for those).
+        .filter(function (el) { return el.getClientRects().length > 0; });
     }
 
     function onKeydown(e) {

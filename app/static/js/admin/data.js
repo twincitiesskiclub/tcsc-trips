@@ -19,6 +19,9 @@
       body: JSON.stringify(body || {})
     }).then(function (res) {
       return res.json().catch(function () { return {}; }).then(function (data) {
+        // Convention: server returns { success, message, error }. A truthy `message`
+        // drives the success toast; absence of `message` shows none. Only success===false
+        // (or non-2xx) is treated as failure - a 2xx with no `success` field is success.
         if (!res.ok || data.success === false) {
           const msg = (data && (data.error || data.message)) ||
             ('Request failed (' + res.status + ')');
