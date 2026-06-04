@@ -143,6 +143,8 @@ class PracticeInfo:
     warmup_description: Optional[str] = None
     workout_description: Optional[str] = None
     cooldown_description: Optional[str] = None
+    logistics_notes: Optional[str] = None
+    slack_details_ts: Optional[str] = None
 
     # Flags
     has_social: bool = False
