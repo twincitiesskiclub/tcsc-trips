@@ -32,10 +32,10 @@ class TestRefreshDispatch:
     def test_skips_all_when_no_slack_fields(self):
         practice = FakePractice()
         results = refresh_practice_posts(practice)
-        assert results['announcement']['skipped'] is True
-        assert results['collab']['skipped'] is True
-        assert results['coach_summary']['skipped'] is True
-        assert results['weekly_summary']['skipped'] is True
+        assert results['announcement']['skipped'] == 'absent'
+        assert results['collab']['skipped'] == 'absent'
+        assert results['coach_summary']['skipped'] == 'absent'
+        assert results['weekly_summary']['skipped'] == 'absent'
 
     def test_edit_logs_skipped_when_no_actor(self):
         practice = FakePractice()
@@ -129,7 +129,7 @@ class TestSurfaceRegistry:
             lambda p, c: calls.append(c) or {"success": True},
         )
         practice = FakePractice()  # no slack_message_ts
-        assert s.refresh(practice, "edit") == {"skipped": True}
+        assert s.refresh(practice, "edit") == {"skipped": "absent"}
         assert calls == []
 
     def test_surface_skips_when_change_type_not_applicable(self):
@@ -140,7 +140,7 @@ class TestSurfaceRegistry:
             lambda p, c: calls.append(c) or {"success": True},
         )
         practice = FakePractice(slack_message_ts="1")
-        assert s.refresh(practice, "rsvp") == {"skipped": True}
+        assert s.refresh(practice, "rsvp") == {"skipped": "not_applicable"}
         assert calls == []
 
     def test_surface_runs_when_applicable_and_present(self):

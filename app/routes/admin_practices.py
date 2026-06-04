@@ -1,7 +1,7 @@
 """Admin routes for Practice Management CRUD."""
 
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..auth import admin_required
 from ..models import db, User, Tag, AppConfig
 from ..practices.models import (
@@ -13,6 +13,33 @@ from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, Cancell
 from sqlalchemy.orm import joinedload
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
+
+
+def _week_coach_summary_ts(practice_date, exclude_id=None):
+    """Return the Coach Review post ts already linked to this practice's week.
+
+    The weekly Coach Review summary is one Slack post per week, and the
+    refresh dispatcher updates it via each practice's slack_coach_summary_ts.
+    A practice created out-of-band (admin UI) after the summary was posted has
+    no ts of its own, so editing it silently skips the refresh. Copying a
+    sibling's ts at create time keeps the whole week linked to the same post.
+    """
+    days_since_monday = practice_date.weekday()
+    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
+        hour=0, minute=0, second=0, microsecond=0
+    )
+    week_end = week_start + timedelta(days=7)
+
+    query = Practice.query.filter(
+        Practice.date >= week_start,
+        Practice.date < week_end,
+        Practice.slack_coach_summary_ts.isnot(None),
+    )
+    if exclude_id is not None:
+        query = query.filter(Practice.id != exclude_id)
+
+    sibling = query.first()
+    return sibling.slack_coach_summary_ts if sibling else None
 
 
 @admin_practices_bp.route('/')
@@ -143,6 +170,12 @@ def create_practice():
         )
         db.session.add(practice)
         db.session.flush()
+
+        # Link to the week's existing Coach Review post (if one was already
+        # posted) so later edits refresh that post instead of silently skipping.
+        practice.slack_coach_summary_ts = _week_coach_summary_ts(
+            practice.date, exclude_id=practice.id
+        )
 
         # Add activities (many-to-many)
         if data.get('activity_ids'):

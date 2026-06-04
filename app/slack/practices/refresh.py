@@ -36,9 +36,12 @@ class PracticeSurface:
 
     def refresh(self, practice, change_type):
         if not self.is_present(practice):
-            return {"skipped": True}
+            # The post exists in Slack but this practice isn't linked to it
+            # (e.g. created out-of-band after the post). Distinguished from a
+            # not-applicable change type so it can be logged as a real gap.
+            return {"skipped": "absent"}
         if change_type not in self.applies_to:
-            return {"skipped": True}
+            return {"skipped": "not_applicable"}
         return self._refresh_fn(practice, change_type)
 
 
@@ -78,7 +81,48 @@ def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, no
     if notify and actor_slack_id and change_type in ('edit', 'workout'):
         results['edit_logs'] = _post_edit_logs(practice, actor_slack_id)
 
+    _log_refresh_results(practice, change_type, results)
+
     return results
+
+
+def _log_refresh_results(practice, change_type, results):
+    """Surface skipped/failed refreshes instead of letting them pass silently.
+
+    A surface that errors (`success: False`) or is skipped because the
+    practice isn't linked to an existing post (`skipped: "absent"`) means a
+    Slack post that should have updated did not. Those are logged loudly so an
+    out-of-sync post is diagnosable; legitimate skips (no such post, or change
+    type not applicable) stay quiet.
+    """
+    errored = [
+        name for name, r in results.items()
+        if isinstance(r, dict) and r.get('success') is False
+    ]
+    absent = [
+        name for name, r in results.items()
+        if isinstance(r, dict) and r.get('skipped') == 'absent'
+    ]
+
+    if errored:
+        logger.warning(
+            "Practice #%s (%s): refresh FAILED for %s — posts may be stale. Details: %s",
+            practice.id, change_type, ", ".join(errored),
+            {n: results[n] for n in errored},
+        )
+    if absent:
+        logger.warning(
+            "Practice #%s (%s): refresh skipped for %s — practice not linked to "
+            "the post (missing ts); that post was not updated.",
+            practice.id, change_type, ", ".join(absent),
+        )
+    if not errored and not absent:
+        logger.info(
+            "Practice #%s (%s): refresh ok (%s)",
+            practice.id, change_type,
+            {n: (r.get('skipped') or 'updated') if isinstance(r, dict) else r
+             for n, r in results.items()},
+        )
 
 
 def _refresh_announcement(practice, change_type):
