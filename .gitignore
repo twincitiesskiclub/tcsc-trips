@@ -36,3 +36,7 @@ target/
 
 # Git worktrees
 .worktrees/
+
+# Generated data exports (may contain production PII: addresses, coords)
+scripts/output/locations_current.csv
+scripts/output/locations_proposed.csv
