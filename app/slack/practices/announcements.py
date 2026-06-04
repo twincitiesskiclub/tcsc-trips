@@ -76,8 +76,14 @@ def _upsert_details_reply(client, practice, practice_info, weather=None, trail_c
                 unfurl_links=False,
                 unfurl_media=False,
             )
-            practice.slack_details_ts = reply.get('ts')
-            db.session.commit()
+            # Only persist a real ts; saving None would make the next refresh
+            # post a second reply. Known/accepted gap: if the process dies
+            # between this post succeeding and the commit below, no ts is
+            # persisted, so a later refresh will post a duplicate reply.
+            ts = reply.get('ts')
+            if ts:
+                practice.slack_details_ts = ts
+                db.session.commit()
     except Exception as e:
         current_app.logger.warning(
             f"Could not upsert practice details reply for #{practice.id}: {e}"
