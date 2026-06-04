@@ -9,11 +9,79 @@ from app.slack.client import get_slack_client, get_channel_id_by_name
 from app.slack.blocks import (
     build_practice_announcement_blocks,
     build_combined_lift_blocks,
+    build_practice_details_blocks,
 )
 from app.practices.models import Practice
 from app.practices.interfaces import WeatherConditions, TrailCondition
 
 from app.slack.practices._config import _get_announcement_channel
+
+
+def _gather_conditions(practice):
+    """Best-effort fetch of daylight + AQI for a practice location.
+
+    Returns (daylight, aqi) with each None on any failure.
+    Only attempts the fetch when the location has lat/lon coordinates.
+    """
+    daylight, aqi = None, None
+    loc = practice.location
+    if not (loc and loc.latitude and loc.longitude):
+        return daylight, aqi
+    try:
+        from app.integrations.daylight import get_daylight_info
+        daylight = get_daylight_info(loc.latitude, loc.longitude, practice.date)
+    except Exception as e:
+        current_app.logger.warning(f"daylight fetch failed for practice #{practice.id}: {e}")
+    try:
+        from app.integrations.air_quality import get_air_quality
+        info = get_air_quality(loc.latitude, loc.longitude)
+        aqi = info.aqi if info else None
+    except Exception as e:
+        current_app.logger.warning(f"AQI fetch failed for practice #{practice.id}: {e}")
+    return daylight, aqi
+
+
+def _upsert_details_reply(client, practice, practice_info, weather=None, trail_conditions=None):
+    """Post or update the threaded 'Practice Details' reply. Best-effort.
+
+    Creates a new thread reply when slack_details_ts is absent (initial post or
+    backfill after an edit). Updates the existing reply otherwise.
+    Saves slack_details_ts to the practice row on first creation.
+    """
+    try:
+        daylight, aqi = _gather_conditions(practice)
+        blocks = build_practice_details_blocks(
+            practice_info,
+            weather=weather,
+            trail_conditions=trail_conditions,
+            daylight=daylight,
+            air_quality=aqi,
+        )
+        if not blocks:
+            return
+        if practice.slack_details_ts:
+            client.chat_update(
+                channel=practice.slack_channel_id,
+                ts=practice.slack_details_ts,
+                blocks=blocks,
+                text="Practice details",
+            )
+        else:
+            reply = client.chat_postMessage(
+                channel=practice.slack_channel_id,
+                thread_ts=practice.slack_message_ts,
+                blocks=blocks,
+                text="Practice details",
+                reply_broadcast=False,
+                unfurl_links=False,
+                unfurl_media=False,
+            )
+            practice.slack_details_ts = reply.get('ts')
+            db.session.commit()
+    except Exception as e:
+        current_app.logger.warning(
+            f"Could not upsert practice details reply for #{practice.id}: {e}"
+        )
 
 
 def post_practice_announcement(
@@ -73,6 +141,9 @@ def post_practice_announcement(
         practice.slack_message_ts = message_ts
         practice.slack_channel_id = channel_id
         db.session.commit()
+
+        # Post the threaded "Practice Details" reply (sunset/wind/AQI/parking/gear)
+        _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
 
         # Add pre-seeded checkmark emoji for RSVP
         try:
@@ -243,6 +314,9 @@ def update_practice_announcement(
             text=f"Practice on {practice.date.strftime('%A, %B %d')}"
         )
 
+        # Update (or backfill) the threaded "Practice Details" reply
+        _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
+
         current_app.logger.info(f"Updated practice announcement for practice #{practice.id}")
         return {'success': True}
 
@@ -282,6 +356,9 @@ def update_practice_post(practice: Practice) -> dict:
             blocks=blocks,
             text=f"Practice on {practice.date.strftime('%A, %B %d')}"
         )
+
+        # Update (or backfill) the threaded "Practice Details" reply (no weather on edit path)
+        _upsert_details_reply(client, practice, practice_info)
 
         current_app.logger.info(f"Updated practice post for practice #{practice.id}")
         return {'success': True}
