@@ -210,21 +210,6 @@ def build_practice_edit_modal(practice: PracticeInfo) -> dict:
             },
             {
                 "type": "input",
-                "block_id": "warmup_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Warmup Description"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "warmup_description",
-                    "multiline": True,
-                    "initial_value": practice.warmup_description or ""
-                }
-            },
-            {
-                "type": "input",
                 "block_id": "workout_block",
                 "optional": True,
                 "label": {
@@ -236,21 +221,6 @@ def build_practice_edit_modal(practice: PracticeInfo) -> dict:
                     "action_id": "workout_description",
                     "multiline": True,
                     "initial_value": practice.workout_description or ""
-                }
-            },
-            {
-                "type": "input",
-                "block_id": "cooldown_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Cooldown Description"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "cooldown_description",
-                    "multiline": True,
-                    "initial_value": practice.cooldown_description or ""
                 }
             }
         ]
@@ -421,24 +391,6 @@ def build_workout_modal(practice: PracticeInfo) -> dict:
             },
             {
                 "type": "input",
-                "block_id": "warmup_block",
-                "label": {
-                    "type": "plain_text",
-                    "text": "Warmup"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "warmup_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 15 min easy ski, focus on balance"
-                    },
-                    "initial_value": practice.warmup_description or ""
-                }
-            },
-            {
-                "type": "input",
                 "block_id": "workout_block",
                 "label": {
                     "type": "plain_text",
@@ -457,39 +409,21 @@ def build_workout_modal(practice: PracticeInfo) -> dict:
             },
             {
                 "type": "input",
-                "block_id": "cooldown_block",
-                "optional": True,
-                "label": {
-                    "type": "plain_text",
-                    "text": "Cooldown"
-                },
-                "element": {
-                    "type": "plain_text_input",
-                    "action_id": "cooldown_description",
-                    "multiline": True,
-                    "placeholder": {
-                        "type": "plain_text",
-                        "text": "e.g., 10 min easy, stretching"
-                    },
-                    "initial_value": practice.cooldown_description or ""
-                }
-            },
-            {
-                "type": "input",
                 "block_id": "notes_block",
                 "optional": True,
                 "label": {
                     "type": "plain_text",
-                    "text": "Additional Notes"
+                    "text": "Notes / Logistics"
                 },
                 "element": {
                     "type": "plain_text_input",
-                    "action_id": "workout_notes",
+                    "action_id": "logistics_notes",
                     "multiline": True,
                     "placeholder": {
                         "type": "plain_text",
-                        "text": "Weather, trail conditions, adjustments, etc."
-                    }
+                        "text": "Weather, trail conditions, meeting spot, adjustments, etc."
+                    },
+                    "initial_value": practice.logistics_notes or ""
                 }
             }
         ]
@@ -629,19 +563,6 @@ def build_practice_edit_full_modal(
         },
         {
             "type": "input",
-            "block_id": "warmup_block",
-            "optional": True,
-            "label": {"type": "plain_text", "text": "Warmup"},
-            "element": {
-                "type": "plain_text_input",
-                "action_id": "warmup_description",
-                "multiline": True,
-                "placeholder": {"type": "plain_text", "text": "e.g., 15 min easy ski, focus on balance"},
-                "initial_value": practice.warmup_description or ""
-            }
-        },
-        {
-            "type": "input",
             "block_id": "workout_block",
             "optional": True,
             "label": {"type": "plain_text", "text": "Main Workout"},
@@ -651,19 +572,6 @@ def build_practice_edit_full_modal(
                 "multiline": True,
                 "placeholder": {"type": "plain_text", "text": "e.g., 5 x 4min @ threshold (2min rest)"},
                 "initial_value": practice.workout_description or ""
-            }
-        },
-        {
-            "type": "input",
-            "block_id": "cooldown_block",
-            "optional": True,
-            "label": {"type": "plain_text", "text": "Cooldown"},
-            "element": {
-                "type": "plain_text_input",
-                "action_id": "cooldown_description",
-                "multiline": True,
-                "placeholder": {"type": "plain_text", "text": "e.g., 10 min easy, stretching"},
-                "initial_value": practice.cooldown_description or ""
             }
         }
     ])
@@ -812,24 +720,6 @@ def build_practice_create_modal(
         }
     ]
 
-    # Warmup (with optional default)
-    warmup_default = defaults.get('warmup', '')
-    warmup_element = {
-        "type": "plain_text_input",
-        "action_id": "warmup_description",
-        "multiline": True,
-        "placeholder": {"type": "plain_text", "text": "e.g., 15 min easy ski, focus on balance"}
-    }
-    if warmup_default:
-        warmup_element["initial_value"] = warmup_default
-    blocks.append({
-        "type": "input",
-        "block_id": "warmup_block",
-        "optional": True,
-        "label": {"type": "plain_text", "text": "Warmup"},
-        "element": warmup_element
-    })
-
     # Workout (with optional default)
     workout_default = defaults.get('workout', '')
     workout_element = {
@@ -846,24 +736,6 @@ def build_practice_create_modal(
         "optional": True,
         "label": {"type": "plain_text", "text": "Main Workout"},
         "element": workout_element
-    })
-
-    # Cooldown (with optional default)
-    cooldown_default = defaults.get('cooldown', '')
-    cooldown_element = {
-        "type": "plain_text_input",
-        "action_id": "cooldown_description",
-        "multiline": True,
-        "placeholder": {"type": "plain_text", "text": "e.g., 10 min easy, stretching"}
-    }
-    if cooldown_default:
-        cooldown_element["initial_value"] = cooldown_default
-    blocks.append({
-        "type": "input",
-        "block_id": "cooldown_block",
-        "optional": True,
-        "label": {"type": "plain_text", "text": "Cooldown"},
-        "element": cooldown_element
     })
 
     # Activities multi-select (with optional defaults)
