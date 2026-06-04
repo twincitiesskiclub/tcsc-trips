@@ -752,9 +752,7 @@ if _bot_token:
             # Extract form values
             location_id = _safe_get(values, "location_block", "location_id", "selected_option", "value")
             time_str = _safe_get(values, "time_block", "practice_time", "selected_time", default="18:00")
-            warmup = _safe_get(values, "warmup_block", "warmup_description", "value", default="")
             workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
-            cooldown = _safe_get(values, "cooldown_block", "cooldown_description", "value", default="")
 
             # Extract checkbox flags
             selected_flags = _safe_get(values, "flags_block", "practice_flags", "selected_options", default=[])
@@ -791,9 +789,7 @@ if _bot_token:
                 status='scheduled',
                 location_id=int(location_id) if location_id else None,
                 social_location_id=effective_social_location_id,
-                warmup_description=warmup,
                 workout_description=workout,
-                cooldown_description=cooldown,
                 is_dark_practice=is_dark_practice,
                 slack_coach_summary_ts=message_ts  # Link to summary for edit threading
             )
@@ -896,17 +892,13 @@ if _bot_token:
                 return
 
             date_value = _safe_get(values, "date_block", "practice_date", "selected_date_time")
-            warmup = _safe_get(values, "warmup_block", "warmup_description", "value", default="")
             workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
-            cooldown = _safe_get(values, "cooldown_block", "cooldown_description", "value", default="")
 
             if date_value:
                 practice.date = datetime.fromtimestamp(date_value)
                 practice.day_of_week = practice.date.strftime("%A")
 
-            practice.warmup_description = warmup
             practice.workout_description = workout
-            practice.cooldown_description = cooldown
 
             db.session.commit()
             logger.info(f"Practice {practice_id} updated by {user_id}")
@@ -940,9 +932,7 @@ if _bot_token:
             # Extract form values
             # Location is a dropdown (static_select)
             location_id = _safe_get(values, "location_block", "location_id", "selected_option", "value")
-            warmup = _safe_get(values, "warmup_block", "warmup_description", "value", default="")
             workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
-            cooldown = _safe_get(values, "cooldown_block", "cooldown_description", "value", default="")
 
             # Extract checkbox flags
             selected_flags = _safe_get(values, "flags_block", "practice_flags", "selected_options", default=[])
@@ -971,9 +961,7 @@ if _bot_token:
             # Update database
             if location_id:
                 practice.location_id = int(location_id)
-            practice.warmup_description = warmup
             practice.workout_description = workout
-            practice.cooldown_description = cooldown
             practice.is_dark_practice = is_dark_practice
             # has_social is a computed property - clear social_location_id if unchecked
             if not has_social:
@@ -1053,20 +1041,11 @@ if _bot_token:
                 logger.error(f"Practice {practice_id} not found")
                 return
 
-            warmup = _safe_get(values, "warmup_block", "warmup_description", "value", default="")
             workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
-            cooldown = _safe_get(values, "cooldown_block", "cooldown_description", "value", default="")
-            notes = _safe_get(values, "notes_block", "workout_notes", "value", default="")
+            notes = _safe_get(values, "notes_block", "logistics_notes", "value", default="")
 
-            practice.warmup_description = warmup
             practice.workout_description = workout
-            practice.cooldown_description = cooldown
-
-            if notes:
-                if practice.workout_description:
-                    practice.workout_description += f"\n\n**Notes:** {notes}"
-                else:
-                    practice.workout_description = f"**Notes:** {notes}"
+            practice.logistics_notes = notes or None
 
             practice.status = PracticeStatus.CONFIRMED.value
 

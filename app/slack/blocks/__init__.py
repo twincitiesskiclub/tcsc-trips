@@ -8,6 +8,7 @@ continue to work without change.
 from app.slack.blocks.announcements import (
     build_practice_announcement_blocks,
     build_combined_lift_blocks,
+    build_practice_details_blocks,
     _get_day_suffix,
 )
 from app.slack.blocks.cancellations import (
@@ -46,6 +47,7 @@ __all__ = [
     # announcements
     "build_practice_announcement_blocks",
     "build_combined_lift_blocks",
+    "build_practice_details_blocks",
     "_get_day_suffix",
     # cancellations
     "build_cancellation_proposal_blocks",

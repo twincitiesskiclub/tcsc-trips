@@ -295,9 +295,8 @@ function drawerBody(p) {
     </div>
     <div class="pl-blk"><div class="pl-blk-h">Activity &amp; Type</div><div class="pl-pills">${pills}</div></div>
     <div class="pl-blk"><div class="pl-blk-h">Workout Plan</div>
-      ${wo('Warmup', p.warmup_description, false)}
-      ${wo('Main', p.workout_description, true)}
-      ${wo('Cooldown', p.cooldown_description, false)}
+      ${wo('Workout', p.workout_description, true)}
+      ${wo('Notes / Logistics', p.logistics_notes, false)}
     </div>
     <div class="pl-blk"><div class="pl-blk-h">Coaches · Leads · Assists</div>${peopleHtml}</div>
     <div class="pl-blk"><div class="pl-blk-h">RSVPs</div>

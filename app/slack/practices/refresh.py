@@ -148,7 +148,10 @@ def _refresh_announcement(practice, change_type):
             from app.slack.practices.rsvp import update_practice_rsvp_counts
             return update_practice_rsvp_counts(practice)
 
-        # For edit, workout, create — rebuild the full announcement
+        # For edit, workout, create — rebuild the full announcement.
+        # update_practice_slack_post -> update_practice_post also upserts the
+        # threaded "Practice Details" reply transitively, so no separate
+        # surface registration is needed for the details thread.
         from app.slack.practices.announcements import update_practice_slack_post
         return update_practice_slack_post(practice)
 

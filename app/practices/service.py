@@ -185,6 +185,8 @@ def convert_practice_to_info(practice: Practice) -> PracticeInfo:
         warmup_description=practice.warmup_description,
         workout_description=practice.workout_description,
         cooldown_description=practice.cooldown_description,
+        logistics_notes=practice.logistics_notes,
+        slack_details_ts=practice.slack_details_ts,
         has_social=practice.has_social,
         is_dark_practice=practice.is_dark_practice,
         leads=converted_leads,

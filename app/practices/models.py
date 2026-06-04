@@ -131,11 +131,15 @@ class Practice(db.Model):
     workout_description = db.Column(db.Text)
     cooldown_description = db.Column(db.Text)
 
+    # Freeform logistics/commentary shown in the announcement (separate from workout)
+    logistics_notes = db.Column(db.Text)
+
     # Flags
     is_dark_practice = db.Column(db.Boolean, default=False, nullable=False)
 
     # Slack integration
     slack_message_ts = db.Column(db.String(50))  # Message timestamp for updates
+    slack_details_ts = db.Column(db.String(50))  # Threaded "Practice Details" reply ts
     slack_channel_id = db.Column(db.String(50))
     slack_log_message_ts = db.Column(db.String(50))  # Logging thread in #tcsc-logging
     slack_collab_message_ts = db.Column(db.String(50))  # Collab review post in #collab-coaches-practices

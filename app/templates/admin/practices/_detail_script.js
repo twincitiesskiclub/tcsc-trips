@@ -83,9 +83,8 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         coach_ids: peCollectIds('coaches-pills'),
         lead_ids: peCollectIds('leads-pills'),
         assist_ids: peCollectIds('assists-pills'),
-        warmup_description: fd.get('warmup_description') || null,
         workout_description: fd.get('workout_description') || null,
-        cooldown_description: fd.get('cooldown_description') || null,
+        logistics_notes: fd.get('logistics_notes') || null,
         is_dark_practice: fd.get('is_dark_practice') === 'on',
     };
     if (practiceId) payload.status = fd.get('status');

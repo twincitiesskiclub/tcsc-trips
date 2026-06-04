@@ -287,16 +287,12 @@
       <section class="card workout-anchor">
         <h2 class="section-label">Workout Plan</h2>
         <div class="field">
-          <label for="warmup_description">Warmup</label>
-          <textarea id="warmup_description" name="warmup_description" placeholder="e.g., 15 min easy classic, dynamic mobility, 4× pickups">{{ practice.warmup_description if practice else '' }}</textarea>
-        </div>
-        <div class="field">
-          <label for="workout_description">Main Workout</label>
+          <label for="workout_description">Workout</label>
           <textarea id="workout_description" name="workout_description" class="workout-main" placeholder="e.g., 4 × 6 min @ threshold, 3 min easy between. Cue: relaxed tempo, strong kick.">{{ practice.workout_description if practice else '' }}</textarea>
         </div>
         <div class="field">
-          <label for="cooldown_description">Cooldown</label>
-          <textarea id="cooldown_description" name="cooldown_description" placeholder="e.g., 10 min easy ski, light stretching">{{ practice.cooldown_description if practice else '' }}</textarea>
+          <label for="logistics_notes">Notes / Logistics</label>
+          <textarea id="logistics_notes" name="logistics_notes" placeholder="e.g., Meet at the flagpole. Cold out, warm up extra. Newer skiers grab a lead for waxing.">{{ practice.logistics_notes if practice else '' }}</textarea>
         </div>
       </section>
     </div>

@@ -40,3 +40,9 @@ target/
 # Generated data exports (may contain production PII: addresses, coords)
 scripts/output/locations_current.csv
 scripts/output/locations_proposed.csv
+.superpowers/
+
+# Practice announcement redesign — generated data artifacts (never commit)
+export_activities.csv
+export_types.csv
+validate_posted_ts.json

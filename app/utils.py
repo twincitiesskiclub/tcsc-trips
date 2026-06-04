@@ -51,6 +51,18 @@ def now_central_naive() -> datetime:
     return datetime.now(CENTRAL_TZ).replace(tzinfo=None)
 
 
+def utc_naive_to_central_naive(dt: datetime) -> datetime:
+    """Convert a naive UTC datetime to a naive Central datetime.
+
+    Use this when comparing or displaying values stored as naive UTC
+    (e.g. DaylightInfo.sunset) alongside fields stored as naive Central
+    (e.g. Practice.date).
+    """
+    if dt is None:
+        return None
+    return pytz.utc.localize(dt).astimezone(CENTRAL_TZ).replace(tzinfo=None)
+
+
 def format_datetime_central(dt: datetime, fmt: str = '%b %d, %Y %I:%M %p %Z') -> str:
     """Format a datetime in Central timezone.
 

@@ -888,7 +888,7 @@ function renderDefaultsSummary(defaults) {
     if (typeNames.length) parts.push(typeNames.join(', '));
     if (defaults.coach_ids?.length) parts.push(`${defaults.coach_ids.length} coach${defaults.coach_ids.length > 1 ? 'es' : ''}`);
     if (defaults.is_dark_practice) parts.push('Dark');
-    if (defaults.warmup || defaults.workout || defaults.cooldown) parts.push('Workout template');
+    if (defaults.workout) parts.push('Workout template');
     return parts.length ? '— ' + parts.join(' · ') : '— not configured';
 }
 
@@ -928,24 +928,12 @@ function renderDefaultsEditor(index, defaults) {
         <!-- Section: Workout Template -->
         <div class="mb-5 pb-5 border-b border-tcsc-gray-100">
             <h4 class="text-xs font-semibold text-tcsc-navy uppercase tracking-wide mb-3">Workout Template</h4>
-            <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Warmup</label>
-                    <textarea onchange="updateDefault(${index}, 'warmup', this.value || null)"
-                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10"
-                        placeholder="e.g., 15 min easy ski, focus on balance">${(d.warmup || '').replace(/</g, '&lt;')}</textarea>
-                </div>
+            <div class="grid grid-cols-1 gap-4">
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Workout</label>
                     <textarea onchange="updateDefault(${index}, 'workout', this.value || null)"
                         class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10"
                         placeholder="e.g., 5 stations, 6 exercises per station, 2 sets">${(d.workout || '').replace(/</g, '&lt;')}</textarea>
-                </div>
-                <div>
-                    <label class="block mb-1.5 font-medium text-sm text-gray-700">Cooldown</label>
-                    <textarea onchange="updateDefault(${index}, 'cooldown', this.value || null)"
-                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10"
-                        placeholder="e.g., 10 min easy, stretching">${(d.cooldown || '').replace(/</g, '&lt;')}</textarea>
                 </div>
             </div>
         </div>

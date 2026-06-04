@@ -9,11 +9,151 @@ from app.slack.client import get_slack_client, get_channel_id_by_name
 from app.slack.blocks import (
     build_practice_announcement_blocks,
     build_combined_lift_blocks,
+    build_practice_details_blocks,
 )
 from app.practices.models import Practice
 from app.practices.interfaces import WeatherConditions, TrailCondition
 
 from app.slack.practices._config import _get_announcement_channel
+
+
+def _gather_conditions(practice):
+    """Best-effort fetch of weather, daylight, and AQI for a practice location.
+
+    Returns (weather, daylight, aqi) with each None on any failure.
+    Only attempts the fetch when the location has lat/lon coordinates.
+    """
+    weather, daylight, aqi = None, None, None
+    loc = practice.location
+    if not (loc and loc.latitude and loc.longitude):
+        return weather, daylight, aqi
+    try:
+        from app.integrations.weather import get_weather_for_location
+        weather = get_weather_for_location(loc.latitude, loc.longitude, practice.date)
+    except Exception as e:
+        current_app.logger.warning(f"weather fetch failed for practice #{practice.id}: {e}")
+    try:
+        from app.integrations.daylight import get_daylight_info
+        daylight = get_daylight_info(loc.latitude, loc.longitude, practice.date)
+    except Exception as e:
+        current_app.logger.warning(f"daylight fetch failed for practice #{practice.id}: {e}")
+    try:
+        from app.integrations.air_quality import get_air_quality
+        info = get_air_quality(loc.latitude, loc.longitude)
+        aqi = info.aqi if info else None
+    except Exception as e:
+        current_app.logger.warning(f"AQI fetch failed for practice #{practice.id}: {e}")
+    return weather, daylight, aqi
+
+
+def _upsert_combined_details_reply(client, practices: list) -> None:
+    """Post or update the threaded 'Practice Details' reply for a combined-lift post.
+
+    Combined-lift posts are indoor strength sessions (no weather/daylight/AQI).
+    The reply contains only the header + Parking/Gear sections from the first
+    (location-bearing) practice in the group.
+
+    Saves/updates slack_details_ts on ALL practices in the group so the ts stays
+    consistent regardless of which practice triggers the refresh.
+
+    Best-effort: any exception is caught and logged.
+    """
+    if not practices:
+        return
+    try:
+        from app.practices.service import convert_practice_to_info
+        # Use first practice as the representative (has location/gear data)
+        rep = practices[0]
+        practice_info = convert_practice_to_info(rep)
+        # No weather/daylight/AQI for indoor strength sessions
+        blocks = build_practice_details_blocks(practice_info)
+        if not blocks:
+            return
+
+        # All practices in the group share the same slack_message_ts / channel_id
+        channel_id = rep.slack_channel_id
+        thread_ts = rep.slack_message_ts
+
+        # Determine existing details_ts (any non-None value across the group is canonical)
+        existing_ts = next((p.slack_details_ts for p in practices if p.slack_details_ts), None)
+
+        if existing_ts:
+            client.chat_update(
+                channel=channel_id,
+                ts=existing_ts,
+                blocks=blocks,
+                text="Practice details",
+            )
+        else:
+            reply = client.chat_postMessage(
+                channel=channel_id,
+                thread_ts=thread_ts,
+                blocks=blocks,
+                text="Practice details",
+                reply_broadcast=False,
+                unfurl_links=False,
+                unfurl_media=False,
+            )
+            ts = reply.get("ts")
+            if ts:
+                for p in practices:
+                    p.slack_details_ts = ts
+                db.session.commit()
+    except Exception as e:
+        current_app.logger.warning(
+            f"Could not upsert combined details reply for practices "
+            f"{[p.id for p in practices]}: {e}"
+        )
+
+
+def _upsert_details_reply(client, practice, practice_info, weather=None, trail_conditions=None):
+    """Post or update the threaded 'Practice Details' reply. Best-effort.
+
+    Creates a new thread reply when slack_details_ts is absent (initial post or
+    backfill after an edit). Updates the existing reply otherwise.
+    Saves slack_details_ts to the practice row on first creation.
+    """
+    try:
+        fetched_weather, daylight, aqi = _gather_conditions(practice)
+        weather = weather or fetched_weather
+        blocks = build_practice_details_blocks(
+            practice_info,
+            weather=weather,
+            trail_conditions=trail_conditions,
+            daylight=daylight,
+            air_quality=aqi,
+        )
+        if not blocks:
+            return
+        if practice.slack_details_ts:
+            client.chat_update(
+                channel=practice.slack_channel_id,
+                ts=practice.slack_details_ts,
+                blocks=blocks,
+                text="Practice details",
+            )
+        else:
+            reply = client.chat_postMessage(
+                channel=practice.slack_channel_id,
+                thread_ts=practice.slack_message_ts,
+                blocks=blocks,
+                text="Practice details",
+                reply_broadcast=False,
+                unfurl_links=False,
+                unfurl_media=False,
+            )
+            # Only persist a real ts; saving None would make the next refresh
+            # post a second reply. Known/accepted gap: if the process dies
+            # between this post succeeding and the commit below, no ts is
+            # persisted, so a later refresh will post a duplicate reply.
+            ts = reply.get('ts')
+            if ts:
+                practice.slack_details_ts = ts
+                db.session.commit()
+    except Exception as e:
+        current_app.logger.warning(
+            f"Could not upsert practice details reply for #{practice.id}: {e}"
+        )
 
 
 def post_practice_announcement(
@@ -74,6 +214,9 @@ def post_practice_announcement(
         practice.slack_channel_id = channel_id
         db.session.commit()
 
+        # Post the threaded "Practice Details" reply (sunset/wind/AQI/parking/gear)
+        _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
+
         # Add pre-seeded checkmark emoji for RSVP
         try:
             client.reactions_add(
@@ -82,7 +225,7 @@ def post_practice_announcement(
                 name="white_check_mark"
             )
             # Add evergreen tree for interval practices (endurance option)
-            has_intervals = any('intervals' in t.name.lower() for t in practice.practice_types) if practice.practice_types else False
+            has_intervals = any(getattr(t, 'has_intervals', False) for t in practice.practice_types) if practice.practice_types else False
             if has_intervals:
                 client.reactions_add(
                     channel=channel_id,
@@ -194,6 +337,9 @@ def post_combined_lift_announcement(
             except Exception as e:
                 current_app.logger.warning(f"Could not add {emoji} reaction: {e}")
 
+        # Post threaded "Practice Details" reply (parking + gear; no weather for indoor)
+        _upsert_combined_details_reply(client, sorted_practices)
+
         return {
             'success': True,
             'message_ts': message_ts,
@@ -243,6 +389,9 @@ def update_practice_announcement(
             text=f"Practice on {practice.date.strftime('%A, %B %d')}"
         )
 
+        # Update (or backfill) the threaded "Practice Details" reply
+        _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
+
         current_app.logger.info(f"Updated practice announcement for practice #{practice.id}")
         return {'success': True}
 
@@ -282,6 +431,9 @@ def update_practice_post(practice: Practice) -> dict:
             blocks=blocks,
             text=f"Practice on {practice.date.strftime('%A, %B %d')}"
         )
+
+        # Update (or backfill) the threaded "Practice Details" reply (no weather on edit path)
+        _upsert_details_reply(client, practice, practice_info)
 
         current_app.logger.info(f"Updated practice post for practice #{practice.id}")
         return {'success': True}
@@ -361,6 +513,9 @@ def update_combined_lift_post(practice: Practice) -> dict:
             blocks=blocks,
             text=f"TCSC Lift - {days_str}"
         )
+
+        # Update (or backfill) the threaded "Practice Details" reply
+        _upsert_combined_details_reply(client, practices)
 
         practice_ids = [p.id for p in practices]
         current_app.logger.info(f"Updated combined lift post for practices {practice_ids}")
