@@ -52,3 +52,13 @@ def test_new_practice_route_requires_auth(client, db_session):
     # Unauthenticated users are redirected to login.
     assert resp.status_code == 302
     assert '/login' in resp.headers.get('Location', '')
+
+
+def test_practices_list_renders_new_shell(admin_client, db_session):
+    resp = admin_client.get('/admin/practices', follow_redirects=True)
+    assert resp.status_code == 200
+    body = resp.get_data(as_text=True)
+    # New shell present; old Tabulator grid container gone.
+    assert 'id="practice-list"' in body
+    assert 'id="pl-drawer"' in body
+    assert 'practices-table' not in body

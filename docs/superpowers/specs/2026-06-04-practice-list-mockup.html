@@ -1,8 +1,6 @@
-{% extends 'admin/admin_base.html' %}
-
-{% block title %}Practice Management{% endblock %}
-
-{% block extra_css %}
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Practice list — visual source</title>
 <style>
 /* ===== Practice list — scoped "Quiet Precision" styles (source of truth) ===== */
 #practice-list, #practice-list *{box-sizing:border-box;margin:0;padding:0}
@@ -132,81 +130,41 @@
 @media (prefers-reduced-motion:reduce){
   #practice-list .pl-drawer{transition:none}
 }
-</style>
-{% endblock %}
+</style></head>
+<body style="background:#f8fafb;padding:24px">
+<div id="practice-list" style="max-width:780px;margin:0 auto">
+  <div class="pl-head"><h1>Practice Management</h1>
+    <div style="display:flex;gap:8px"><a class="pl-btn pl-btn-ghost" href="#">Calendar View</a><a class="pl-btn pl-btn-primary" href="#">+ New Practice</a></div></div>
+  <div class="pl-toolbar"><input class="pl-search" placeholder="Search location, activity, type, person…"><select class="pl-select"><option>All Status</option></select><select class="pl-select"><option>All Locations</option></select></div>
 
-{% block content %}
-<div id="practice-list">
-  <div class="pl-head">
-    <h1>Practice Management</h1>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <a href="{{ url_for('admin_practices.practices_calendar') }}" class="pl-btn pl-btn-ghost">Calendar View</a>
-      <a href="{{ url_for('admin.get_admin_page') }}" class="pl-btn pl-btn-ghost">Back to Dashboard</a>
-      <a href="{{ url_for('admin_practices.practice_new') }}" class="pl-btn pl-btn-primary">+ New Practice</a>
+  <div class="pl-sec today">Today<span class="ln"></span><span class="ct">1</span></div>
+  <div class="pl-day">
+    <div class="pl-db is-today"><span class="dow">Tue</span><span class="dn">9</span><span class="mo">Jun</span></div>
+    <div class="pl-rows">
+      <button class="pl-row today is-active">
+        <div class="pl-row-main">
+          <div class="pl-row-top"><span class="pl-loc">Theodore Wirth</span><span class="pl-time">6:00 PM</span><span class="pl-today-flag">Today</span></div>
+          <div class="pl-meta"><span class="pl-pill">Skate</span><span class="pl-pill">Intervals</span><span class="pl-ind"><span aria-hidden="true">🔦</span> Dark</span></div>
+        </div>
+        <div class="pl-row-aside"><span class="pl-status is-confirmed">Confirmed</span><span class="pl-chip">✓ 2/3</span></div>
+      </button>
     </div>
   </div>
 
-  <div class="pl-toolbar">
-    <input type="text" id="pl-search" class="pl-search" placeholder="Search location, activity, type, person…" aria-label="Search practices">
-    <select id="pl-status-filter" class="pl-select" aria-label="Filter by status">
-      <option value="">All Status</option>
-      <option value="scheduled">Scheduled</option>
-      <option value="confirmed">Confirmed</option>
-      <option value="in_progress">In Progress</option>
-      <option value="cancelled">Cancelled</option>
-      <option value="completed">Completed</option>
-    </select>
-    <select id="pl-location-filter" class="pl-select" aria-label="Filter by location">
-      <option value="">All Locations</option>
-    </select>
+  <div class="pl-sec">This week<span class="ln"></span><span class="ct">1</span></div>
+  <div class="pl-day">
+    <div class="pl-db"><span class="dow">Thu</span><span class="dn">11</span><span class="mo">Jun</span></div>
+    <div class="pl-rows">
+      <button class="pl-row">
+        <div class="pl-row-main">
+          <div class="pl-row-top"><span class="pl-loc">Hyland Park</span><span class="pl-time">6:00 PM</span></div>
+          <div class="pl-meta"><span class="pl-pill">Classic</span><span class="pl-pill">Distance</span><span class="pl-ind"><span aria-hidden="true">🍺</span> Social</span></div>
+        </div>
+        <div class="pl-row-aside"><span class="pl-status is-scheduled">Scheduled</span><span class="pl-chip warn">needs leads</span></div>
+      </button>
+    </div>
   </div>
 
-  <div id="pl-list" aria-live="off"><p class="pl-empty">Loading practices…</p></div>
-
-  <!-- Preview drawer (dialog) -->
-  <div id="pl-scrim" class="pl-scrim hidden"></div>
-  <aside id="pl-drawer" class="pl-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="pl-dw-title" hidden>
-    <div class="pl-dwh">
-      <div class="pl-dwh-top">
-        <div>
-          <div class="pl-dw-title" id="pl-dw-title"></div>
-          <div class="pl-dw-sub" id="pl-dw-sub"></div>
-        </div>
-        <button type="button" class="pl-x" id="pl-close" aria-label="Close preview">&times;</button>
-      </div>
-      <div class="pl-badges" id="pl-badges"></div>
-    </div>
-    <div class="pl-dwbody" id="pl-dwbody"></div>
-    <div class="pl-dwacts">
-      <a href="#" class="pl-act pl-act-pri" id="pl-edit">Edit in full editor</a>
-      <button type="button" class="pl-act pl-act-ghost" id="pl-cancel-btn">Cancel</button>
-      <button type="button" class="pl-act pl-act-danger" id="pl-delete-btn">Delete</button>
-    </div>
-  </aside>
+  <button class="pl-past-toggle" aria-expanded="false"><span class="chev">▸</span> Past practices <span class="dim">— 142</span></button>
 </div>
-
-<!-- Cancel Modal (unchanged) -->
-<div id="cancel-modal" class="hidden fixed inset-0 bg-black/50 z-[1000] items-center justify-center">
-    <div class="absolute inset-0" onclick="closeCancelModal()"></div>
-    <div class="relative bg-white rounded-lg p-6 w-[90%] max-w-md max-h-[90vh] overflow-y-auto z-[1001]">
-        <div class="flex justify-between items-center mb-5">
-            <h2 class="m-0 text-lg font-semibold text-tcsc-navy">Cancel Practice</h2>
-            <button class="bg-transparent border-none text-2xl text-gray-500 cursor-pointer p-0 w-8 h-8" onclick="closeCancelModal()">&times;</button>
-        </div>
-        <div class="mb-5">
-            <div class="mb-4">
-                <label class="block mb-1.5 font-medium text-sm text-tcsc-navy">Cancellation Reason</label>
-                <textarea id="cancel-reason" placeholder="Why is this practice being cancelled?" required class="w-full py-2 px-3 border border-gray-300 rounded-md text-sm min-h-[80px] resize-y focus:outline-none focus:border-tcsc-navy"></textarea>
-            </div>
-        </div>
-        <div class="flex justify-end gap-2">
-            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="closeCancelModal()">Nevermind</button>
-            <button type="button" class="bg-red-500 text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-red-600 transition-all" onclick="confirmCancel()">Cancel Practice</button>
-        </div>
-    </div>
-</div>
-{% endblock %}
-
-{% block extra_js %}
-<script src="{{ url_for('static', filename='admin_practices.js') }}"></script>
-{% endblock %}
+</body></html>
