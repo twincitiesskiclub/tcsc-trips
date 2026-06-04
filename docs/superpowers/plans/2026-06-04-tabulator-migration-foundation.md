@@ -36,6 +36,13 @@ Each primitive lives in its own focused file so a surface workflow can read exac
 
 ## WF-0 — Shared Foundation
 
+> **Build note (frozen 2026-06-04):** the code blocks below are the as-authored starting point.
+> The frozen foundation files incorporate code-review refinements applied during the build (commit
+> `86e9dfe`): the `el()` raw-HTML prop is named `unsafeHTML` (not `html`), `el()` warns-and-skips
+> non-function `on*` props, the drawer exposes `content` (DOM node or safe text) vs `contentHTML`
+> (opt-in raw HTML), and `focus_trap` uses `getClientRects().length`. **The committed files under
+> `app/static/js/admin/` are the authoritative contract for surface workflows, not these blocks.**
+
 ### Task 1: Core namespace + DOM helpers
 
 **Files:**
