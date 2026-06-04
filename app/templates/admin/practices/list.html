@@ -162,28 +162,28 @@
   </div>
 
   <div id="pl-list" aria-live="off"><p class="pl-empty">Loading practices…</p></div>
-</div>
 
-<!-- Preview drawer (dialog) -->
-<div id="pl-scrim" class="pl-scrim hidden"></div>
-<aside id="pl-drawer" class="pl-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="pl-dw-title" hidden>
-  <div class="pl-dwh">
-    <div class="pl-dwh-top">
-      <div>
-        <div class="pl-dw-title" id="pl-dw-title"></div>
-        <div class="pl-dw-sub" id="pl-dw-sub"></div>
+  <!-- Preview drawer (dialog) -->
+  <div id="pl-scrim" class="pl-scrim hidden"></div>
+  <aside id="pl-drawer" class="pl-drawer hidden" role="dialog" aria-modal="true" aria-labelledby="pl-dw-title" hidden>
+    <div class="pl-dwh">
+      <div class="pl-dwh-top">
+        <div>
+          <div class="pl-dw-title" id="pl-dw-title"></div>
+          <div class="pl-dw-sub" id="pl-dw-sub"></div>
+        </div>
+        <button type="button" class="pl-x" id="pl-close" aria-label="Close preview">&times;</button>
       </div>
-      <button type="button" class="pl-x" id="pl-close" aria-label="Close preview">&times;</button>
+      <div class="pl-badges" id="pl-badges"></div>
     </div>
-    <div class="pl-badges" id="pl-badges"></div>
-  </div>
-  <div class="pl-dwbody" id="pl-dwbody"></div>
-  <div class="pl-dwacts">
-    <a href="#" class="pl-act pl-act-pri" id="pl-edit">Edit in full editor</a>
-    <button type="button" class="pl-act pl-act-ghost" id="pl-cancel-btn">Cancel</button>
-    <button type="button" class="pl-act pl-act-danger" id="pl-delete-btn">Delete</button>
-  </div>
-</aside>
+    <div class="pl-dwbody" id="pl-dwbody"></div>
+    <div class="pl-dwacts">
+      <a href="#" class="pl-act pl-act-pri" id="pl-edit">Edit in full editor</a>
+      <button type="button" class="pl-act pl-act-ghost" id="pl-cancel-btn">Cancel</button>
+      <button type="button" class="pl-act pl-act-danger" id="pl-delete-btn">Delete</button>
+    </div>
+  </aside>
+</div>
 
 <!-- Cancel Modal (unchanged) -->
 <div id="cancel-modal" class="hidden fixed inset-0 bg-black/50 z-[1000] items-center justify-center">
