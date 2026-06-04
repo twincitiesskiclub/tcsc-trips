@@ -10,6 +10,15 @@ from app.practices.interfaces import (
 )
 
 
+def _activity_label(activities) -> str:
+    """Header activity label. Names are pre-normalized in the DB, so join them
+    verbatim. Falls back to 'Practice' when no activity is set."""
+    names = [a.name for a in (activities or []) if getattr(a, "name", None)]
+    if not names:
+        return "Practice"
+    return " + ".join(names)
+
+
 def build_practice_announcement_blocks(
     practice: PracticeInfo,
     weather: Optional[WeatherConditions] = None,
@@ -252,6 +261,11 @@ def build_practice_announcement_blocks(
     })
 
     return blocks
+
+
+def build_practice_details_blocks(practice, weather=None, trail_conditions=None, daylight=None, air_quality=None) -> list[dict]:
+    """Stub - to be implemented in Task 3.3."""
+    raise NotImplementedError
 
 
 def _get_day_suffix(day: int) -> str:
