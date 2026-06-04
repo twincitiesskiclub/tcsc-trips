@@ -101,9 +101,78 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
     return blocks
 
 
-def build_practice_details_blocks(practice, weather=None, trail_conditions=None, daylight=None, air_quality=None) -> list[dict]:
-    """Stub - to be implemented in Task 3.3."""
-    raise NotImplementedError
+def _gear_list(practice) -> list[str]:
+    items = []
+    for activity in (practice.activities or []):
+        gear = getattr(activity, "gear_required", None)
+        if not gear:
+            continue
+        items.extend(gear if isinstance(gear, list) else [gear])
+    seen = set()
+    return [g for g in items if not (g in seen or seen.add(g))]
+
+
+def build_practice_details_blocks(
+    practice,
+    weather=None,
+    trail_conditions=None,
+    daylight=None,
+    air_quality=None,
+) -> list[dict]:
+    """Threaded 'Practice Details' reply: parking, gear, conditions.
+
+    air_quality is an int AQI value (or None). Sunset uses comma + 'bring a
+    headlamp' (no em dash) when the practice starts at/after sunset.
+    """
+    blocks = [{"type": "header", "text": {"type": "plain_text", "text": "Practice Details", "emoji": True}}]
+
+    # Parking + Gear (one section, blank-line separated)
+    parts = []
+    parking = practice.location.parking_notes if practice.location else None
+    if parking:
+        parts.append(f"*Parking*\n{parking}")
+    gear = _gear_list(practice)
+    if gear:
+        parts.append(f"*Gear*\n{', '.join(gear)}")
+    if parts:
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n\n".join(parts)}})
+
+    # Conditions
+    cond = []
+    if weather:
+        temp = f"🌡️ {weather.temperature_f:.0f}°F"
+        if weather.feels_like_f is not None and abs(weather.feels_like_f - weather.temperature_f) > 3:
+            temp += f" (feels {weather.feels_like_f:.0f}°)"
+        if getattr(weather, "conditions_summary", None):
+            temp += f", {weather.conditions_summary}"
+        if getattr(weather, "alerts", None):
+            temp += f". ⚠️ {weather.alerts[0].headline}"
+        else:
+            temp += ". No alerts."
+        cond.append(temp)
+        if getattr(weather, "wind_speed_mph", None):
+            direction = getattr(weather, "wind_direction", None)
+            cond.append(f"💨 Wind {direction + ' ' if direction else ''}{weather.wind_speed_mph:.0f} mph")
+    if daylight and getattr(daylight, "sunset", None):
+        sunset_str = daylight.sunset.strftime('%I:%M %p').lstrip('0')
+        if practice.date >= daylight.sunset:
+            cond.append(f"🔦 Sunset {sunset_str}, bring a headlamp")
+        else:
+            cond.append(f"☀️ Sunset {sunset_str}")
+    if air_quality is not None and air_quality > 49:
+        cond.append(f"🌫️ AQI {air_quality}")
+    if trail_conditions:
+        trail = f"🎿 Trails: {trail_conditions.ski_quality.replace('_', ' ').title()}"
+        if trail_conditions.groomed:
+            trail += ", Groomed"
+        if getattr(trail_conditions, "report_url", None):
+            trail += f" · <{trail_conditions.report_url}|Trail report>"
+        cond.append(trail)
+    if cond:
+        blocks.append({"type": "divider"})
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "*Conditions*\n" + "\n".join(cond)}})
+
+    return blocks
 
 
 def _get_day_suffix(day: int) -> str:

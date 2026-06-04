@@ -93,3 +93,50 @@ def test_hero_no_emdash_anywhere():
     import json
     blob = json.dumps(build_practice_announcement_blocks(_practice()))
     assert "—" not in blob and "–" not in blob
+
+
+def _weather(temp=25, feels=18, summary="cloudy, light snow", wind_speed=12, wind_dir="NW", alerts=None):
+    return SimpleNamespace(
+        temperature_f=temp, feels_like_f=feels, conditions_summary=summary,
+        wind_speed_mph=wind_speed, wind_direction=wind_dir, alerts=alerts or [],
+    )
+
+
+def _daylight(hour=16, minute=38):
+    return SimpleNamespace(sunset=datetime(2026, 12, 29, hour, minute), civil_twilight_end=datetime(2026, 12, 29, hour + 1, minute))
+
+
+def test_details_has_parking_gear_and_conditions():
+    p = _practice()
+    p.location.parking_notes = "Chalet lot; arrive early."
+    p.activities = [SimpleNamespace(name="Classic Ski", gear_required=["Classic skis", "kick wax"])]
+    text = _all_text(build_practice_details_blocks(p, weather=_weather(), daylight=_daylight()))
+    assert "*Parking*" in text and "Chalet lot" in text
+    assert "*Gear*" in text and "Classic skis" in text
+    assert "*Conditions*" in text
+    assert "💨 Wind NW 12 mph" in text
+    assert "☀️ Sunset 4:38 PM" in text
+
+
+def test_details_headlamp_when_practice_after_sunset():
+    p = _practice(date=datetime(2026, 12, 29, 16, 0))  # 4pm start, sunset 3:38pm
+    text = _all_text(build_practice_details_blocks(p, weather=_weather(), daylight=_daylight(hour=15, minute=38)))
+    assert "🔦 Sunset 3:38 PM, bring a headlamp" in text
+    assert "—" not in text
+
+
+def test_details_aqi_shown_above_49_value_only():
+    text = _all_text(build_practice_details_blocks(_practice(), weather=_weather(), daylight=_daylight(), air_quality=78))
+    assert "🌫️ AQI 78" in text
+    assert "Sensitive" not in text and "Unhealthy" not in text
+
+
+def test_details_aqi_hidden_at_or_below_49():
+    text = _all_text(build_practice_details_blocks(_practice(), weather=_weather(), daylight=_daylight(), air_quality=42))
+    assert "AQI" not in text
+
+
+def test_details_no_emdash():
+    import json
+    blob = json.dumps(build_practice_details_blocks(_practice(), weather=_weather(), daylight=_daylight(hour=12, minute=10), air_quality=80))
+    assert "—" not in blob and "–" not in blob
