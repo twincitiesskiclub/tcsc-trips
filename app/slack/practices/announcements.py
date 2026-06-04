@@ -18,15 +18,20 @@ from app.slack.practices._config import _get_announcement_channel
 
 
 def _gather_conditions(practice):
-    """Best-effort fetch of daylight + AQI for a practice location.
+    """Best-effort fetch of weather, daylight, and AQI for a practice location.
 
-    Returns (daylight, aqi) with each None on any failure.
+    Returns (weather, daylight, aqi) with each None on any failure.
     Only attempts the fetch when the location has lat/lon coordinates.
     """
-    daylight, aqi = None, None
+    weather, daylight, aqi = None, None, None
     loc = practice.location
     if not (loc and loc.latitude and loc.longitude):
-        return daylight, aqi
+        return weather, daylight, aqi
+    try:
+        from app.integrations.weather import get_weather_for_location
+        weather = get_weather_for_location(loc.latitude, loc.longitude, practice.date)
+    except Exception as e:
+        current_app.logger.warning(f"weather fetch failed for practice #{practice.id}: {e}")
     try:
         from app.integrations.daylight import get_daylight_info
         daylight = get_daylight_info(loc.latitude, loc.longitude, practice.date)
@@ -38,7 +43,7 @@ def _gather_conditions(practice):
         aqi = info.aqi if info else None
     except Exception as e:
         current_app.logger.warning(f"AQI fetch failed for practice #{practice.id}: {e}")
-    return daylight, aqi
+    return weather, daylight, aqi
 
 
 def _upsert_details_reply(client, practice, practice_info, weather=None, trail_conditions=None):
@@ -49,7 +54,8 @@ def _upsert_details_reply(client, practice, practice_info, weather=None, trail_c
     Saves slack_details_ts to the practice row on first creation.
     """
     try:
-        daylight, aqi = _gather_conditions(practice)
+        fetched_weather, daylight, aqi = _gather_conditions(practice)
+        weather = weather or fetched_weather
         blocks = build_practice_details_blocks(
             practice_info,
             weather=weather,
@@ -159,7 +165,7 @@ def post_practice_announcement(
                 name="white_check_mark"
             )
             # Add evergreen tree for interval practices (endurance option)
-            has_intervals = any('intervals' in t.name.lower() for t in practice.practice_types) if practice.practice_types else False
+            has_intervals = any(getattr(t, 'has_intervals', False) for t in practice.practice_types) if practice.practice_types else False
             if has_intervals:
                 client.reactions_add(
                     channel=channel_id,

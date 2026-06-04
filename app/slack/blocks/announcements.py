@@ -63,7 +63,7 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
 
     # SOCIAL
     if practice.has_social:
-        social = getattr(practice, "social_location", None) or (practice.location.social_location if practice.location else None)
+        social = getattr(practice, "social_location", None)
         if social and getattr(social, "name", None):
             blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🍹 *Social after at {social.name}*"}})
         else:
@@ -72,7 +72,7 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
     blocks.append({"type": "divider"})
 
     # RSVP CTA (emoji reactions)
-    has_intervals = any('intervals' in t.name.lower() for t in practice.practice_types) if practice.practice_types else False
+    has_intervals = any(getattr(t, 'has_intervals', False) for t in practice.practice_types) if practice.practice_types else False
     if has_intervals:
         cta_text = ("Bop :white_check_mark: so we'll know you'll be there. "
                     ":evergreen_tree: if you'll be there but doing endurance instead. "

@@ -28,7 +28,7 @@ def _practice(**over):
     base = dict(
         date=datetime(2026, 12, 27, 12, 0),  # Dec 27 2026 is a Sunday
         activities=[_act("Classic Ski")],
-        practice_types=[SimpleNamespace(name="Intervals")],
+        practice_types=[SimpleNamespace(name="Intervals", has_intervals=True)],
         location=SimpleNamespace(
             name="Theodore Wirth", spot="Trailhead",
             address="1301 Theodore Wirth Pkwy", google_maps_url="https://maps.example/wirth",
@@ -77,7 +77,7 @@ def test_hero_intervals_cta_has_evergreen():
 
 
 def test_hero_no_intervals_cta_omits_evergreen():
-    p = _practice(practice_types=[SimpleNamespace(name="Distance")])
+    p = _practice(practice_types=[SimpleNamespace(name="Distance", has_intervals=False)])
     text = _all_text(build_practice_announcement_blocks(p))
     assert ":evergreen_tree:" not in text
 
