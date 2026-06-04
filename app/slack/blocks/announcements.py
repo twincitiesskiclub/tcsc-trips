@@ -1,6 +1,7 @@
 """Block Kit builders for practice announcements."""
 
 from typing import Optional
+from urllib.parse import quote_plus
 from app.practices.interfaces import (
     PracticeInfo,
     WeatherConditions,
@@ -164,10 +165,11 @@ def build_practice_announcement_blocks(
     # ==========================================================================
     location_fields = []
 
-    if practice.location and practice.location.address:
+    address_md = _address_link(practice.location) if practice.location else None
+    if address_md:
         location_fields.append({
             "type": "mrkdwn",
-            "text": f"*:world_map: Address*\n{practice.location.address}"
+            "text": f"*:world_map: Address*\n{address_md}"
         })
 
     if practice.location and practice.location.parking_notes:
@@ -257,6 +259,29 @@ def _get_day_suffix(day: int) -> str:
     if 11 <= day <= 13:
         return 'th'
     return {1: 'st', 2: 'nd', 3: 'rd'}.get(day % 10, 'th')
+
+
+def _address_link(location) -> Optional[str]:
+    """Return mrkdwn for the Address field: the address string as a clickable link.
+
+    Fallback chain so the address is tappable even when google_maps_url is unset.
+    The visible label is always the address text; the URL never expands inline.
+    Returns None when there is no address to show.
+    """
+    address = getattr(location, "address", None)
+    if not address:
+        return None
+
+    url = getattr(location, "google_maps_url", None)
+    if not url:
+        lat = getattr(location, "latitude", None)
+        lon = getattr(location, "longitude", None)
+        if lat is not None and lon is not None:
+            url = f"https://www.google.com/maps/search/?api=1&query={lat},{lon}"
+        else:
+            url = f"https://www.google.com/maps/search/?api=1&query={quote_plus(address)}"
+
+    return f"<{url}|{address}>"
 
 
 def build_combined_lift_blocks(
@@ -397,10 +422,11 @@ def build_combined_lift_blocks(
     # ==========================================================================
     location_fields = []
 
-    if location and location.address:
+    address_md = _address_link(location) if location else None
+    if address_md:
         location_fields.append({
             "type": "mrkdwn",
-            "text": f"*:world_map: Address*\n{location.address}"
+            "text": f"*:world_map: Address*\n{address_md}"
         })
 
     if location and location.parking_notes:
