@@ -29,6 +29,11 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
     """
     blocks = []
 
+    # Trailing blank-line spacer so each section has even breathing room below
+    # its text (Slack trims plain trailing newlines, but keeps a zero-width
+    # space, which renders as an empty line).
+    spacer = "\n​"
+
     day = practice.date.strftime('%A')
     time_str = practice.date.strftime('%I:%M %p').lstrip('0')
     activity = _activity_label(practice.activities)
@@ -47,7 +52,7 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
     addr = _address_link(practice.location) if practice.location else None
     if addr:
         where_text += f"\n📍 {addr}"
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": where_text}})
+    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": where_text + spacer}})
 
     blocks.append({"type": "divider"})
 
@@ -55,19 +60,19 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
     type_names = ", ".join(t.name for t in practice.practice_types) if practice.practice_types else ""
     workout_label = f"*Workout · {type_names}*" if type_names else "*Workout*"
     if practice.workout_description:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"{workout_label}\n{practice.workout_description}"}})
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"{workout_label}\n{practice.workout_description}{spacer}"}})
 
     # NOTES (logistics)
     if getattr(practice, "logistics_notes", None):
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*📌 Notes*\n{practice.logistics_notes}"}})
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*📌 Notes*\n{practice.logistics_notes}{spacer}"}})
 
     # SOCIAL
     if practice.has_social:
         social = getattr(practice, "social_location", None)
         if social and getattr(social, "name", None):
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🍹 *Social after at {social.name}*"}})
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🍹 *Social after at {social.name}*{spacer}"}})
         else:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "🍹 *Social after!*"}})
+            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🍹 *Social after!*{spacer}"}})
 
     blocks.append({"type": "divider"})
 
@@ -80,7 +85,7 @@ def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
     else:
         cta_text = ("Bop :white_check_mark: so we'll know you'll be there. "
                     "Running late? Reply in the thread. <!channel>")
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": cta_text}})
+    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": cta_text}]})
 
     # COACH / LEADS (context)
     coaches, leads = [], []
