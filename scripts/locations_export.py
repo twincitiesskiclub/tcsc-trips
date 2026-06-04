@@ -13,11 +13,14 @@ import csv
 import os
 
 import psycopg2
+from dotenv import load_dotenv
 
-PROD_DB_URL = (
-    "postgresql://heidi:c1y7XzSne5jVDEOVRBy4ODUoHWDJv8jK"
-    "@dpg-d4nrbauuk2gs73frosqg-a.oregon-postgres.render.com/tcsc_trips_db_6k97"
-)
+load_dotenv()
+
+# Read prod DSN from env (PROD_DATABASE_URL in .env) — never hardcode credentials.
+PROD_DB_URL = os.environ.get("PROD_DATABASE_URL")
+if not PROD_DB_URL:
+    raise SystemExit("PROD_DATABASE_URL not set — add it to .env")
 
 OUT_PATH = os.path.join(os.path.dirname(__file__), "output", "locations_current.csv")
 

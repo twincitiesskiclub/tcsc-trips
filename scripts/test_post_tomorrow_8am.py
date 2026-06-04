@@ -14,7 +14,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-PROD_DB_URL = "postgresql://heidi:c1y7XzSne5jVDEOVRBy4ODUoHWDJv8jK@dpg-d4nrbauuk2gs73frosqg-a.oregon-postgres.render.com/tcsc_trips_db_6k97"
+PROD_DB_URL = os.environ.get("PROD_DATABASE_URL")
+if not PROD_DB_URL:
+    raise SystemExit("PROD_DATABASE_URL not set — add it to .env")
 os.environ['DATABASE_URL'] = PROD_DB_URL
 
 if len(sys.argv) < 2:

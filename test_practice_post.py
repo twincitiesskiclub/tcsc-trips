@@ -25,9 +25,11 @@ from dotenv import load_dotenv
 # Load .env first to get SLACK_BOT_TOKEN etc.
 load_dotenv()
 
-# Override DATABASE_URL with production database
-# Note: dpg-d4nrbauuk... (with 'a' not 'o')
-PROD_DB_URL = "postgresql://heidi:c1y7XzSne5jVDEOVRBy4ODUoHWDJv8jK@dpg-d4nrbauuk2gs73frosqg-a.oregon-postgres.render.com/tcsc_trips_db_6k97"
+# Override DATABASE_URL with production database.
+# Read from PROD_DATABASE_URL (in .env) — never hardcode prod credentials.
+PROD_DB_URL = os.environ.get("PROD_DATABASE_URL")
+if not PROD_DB_URL:
+    raise SystemExit("PROD_DATABASE_URL not set — add it to .env")
 os.environ['DATABASE_URL'] = PROD_DB_URL
 
 from app import create_app
