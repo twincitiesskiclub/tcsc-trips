@@ -87,7 +87,7 @@
     <div class="flex flex-col gap-0.5">
       <a href="{{ url_for('admin_practices.practices_list') }}"
          class="flex w-full items-center gap-3 rounded-lg px-2 py-2 text-sm font-medium transition-colors
-                {% if request.endpoint in ['admin_practices.practices_list', 'admin_practices.practice_detail', 'admin_practices.practices_calendar'] %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
+                {% if request.endpoint in ['admin_practices.practices_list', 'admin_practices.practice_detail', 'admin_practices.practice_new', 'admin_practices.practices_calendar'] %}bg-tcsc-navy/5 text-tcsc-navy{% else %}text-zinc-700 hover:bg-zinc-100{% endif %}">
         <svg class="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" d="M3.75 12h16.5m-16.5 3.75h16.5M3.75 19.5h16.5M5.625 4.5h12.75a1.875 1.875 0 0 1 0 3.75H5.625a1.875 1.875 0 0 1 0-3.75Z" />
         </svg>
