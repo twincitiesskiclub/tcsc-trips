@@ -99,8 +99,11 @@ class TestPracticeNeedsAttention:
 class TestBuildCoachWeeklySummaryBlocks:
     """Tests for build_coach_weekly_summary_blocks function."""
 
-    def test_location_and_warmup_in_fields(self):
-        """Location/types and warmup/cooldown should be in 2-column fields."""
+    def test_location_shown_as_section_no_warmup_cooldown(self):
+        """Location/types should appear in a plain section block.
+
+        Warmup and cooldown are no longer rendered; no fields section should exist.
+        """
         from app.slack.blocks import build_coach_weekly_summary_blocks
         from app.practices.interfaces import (
             PracticeLocationInfo,
@@ -112,7 +115,6 @@ class TestBuildCoachWeeklySummaryBlocks:
         week_start = datetime(2026, 1, 19)
         expected_days = [{"day": "tuesday", "time": "18:00", "active": True}]
 
-        # Add location, activities, warmup, cooldown
         practice = PracticeInfo(
             id=1,
             date=datetime(2026, 1, 20, 18, 0),  # Tuesday Jan 20, 2026
@@ -136,22 +138,30 @@ class TestBuildCoachWeeklySummaryBlocks:
 
         blocks = build_coach_weekly_summary_blocks(practices, expected_days, week_start)
 
-        # Find section with fields
+        # No fields section should exist (warmup/cooldown removed)
         fields_section = next(
             (b for b in blocks if b.get('type') == 'section' and b.get('fields')),
             None
         )
+        assert fields_section is None, "Should not have a 2-column fields section (warmup/cooldown removed)"
 
-        assert fields_section is not None, "Should have a section with fields"
-        assert len(fields_section['fields']) == 2, "Should have 2 columns"
+        # Location should appear in a plain section
+        location_section = next(
+            (b for b in blocks
+             if b.get('type') == 'section'
+             and 'Wirth Park' in b.get('text', {}).get('text', '')),
+            None
+        )
+        assert location_section is not None, "Location should appear in a section block"
+        assert 'Location' in location_section['text']['text']
 
-        # Left column should have location info
-        left_col = fields_section['fields'][0]['text']
-        assert 'Location' in left_col or 'Wirth Park' in left_col
-
-        # Right column should have warmup/cooldown
-        right_col = fields_section['fields'][1]['text']
-        assert 'Warmup' in right_col or 'Cooldown' in right_col
+        # Warmup / Cooldown text must not appear anywhere
+        all_text = " ".join(
+            b.get('text', {}).get('text', '')
+            for b in blocks if b.get('type') == 'section'
+        )
+        assert 'Warmup' not in all_text, "Warmup must not be rendered"
+        assert 'Cooldown' not in all_text, "Cooldown must not be rendered"
 
     def test_header_shows_attention_count(self):
         """Header should show count of practices needing attention."""
@@ -467,3 +477,82 @@ class TestBuildCoachWeeklySummaryBlocks:
         assert "<@U1>" in coach_context
         assert "<@U2>" in coach_context
         assert "Carol Coach" in coach_context, "degraded 3rd coach must still render"
+
+
+class TestBuildCollabPracticeBlocks:
+    """Tests for build_collab_practice_blocks: logistics_notes, no warmup/cooldown."""
+
+    def test_logistics_notes_rendered_when_present(self):
+        """logistics_notes should appear as a Notes section in the collab post."""
+        from app.slack.blocks.coach_review import build_collab_practice_blocks
+        from app.practices.interfaces import PracticeStatus
+
+        practice = PracticeInfo(
+            id=1,
+            date=datetime(2026, 1, 20, 18, 0),
+            day_of_week="tuesday",
+            status=PracticeStatus.SCHEDULED,
+            workout_description="4x3min intervals",
+            logistics_notes="Bring your own water; lot fills fast on weekends",
+        )
+
+        blocks = build_collab_practice_blocks(practice, approved=False)
+
+        notes_block = next(
+            (b for b in blocks
+             if b.get("type") == "section"
+             and "Notes" in b.get("text", {}).get("text", "")),
+            None
+        )
+        assert notes_block is not None, "logistics_notes should render as a Notes section"
+        assert "Bring your own water" in notes_block["text"]["text"]
+
+    def test_logistics_notes_absent_when_none(self):
+        """When logistics_notes is None/empty, no Notes section should appear."""
+        from app.slack.blocks.coach_review import build_collab_practice_blocks
+        from app.practices.interfaces import PracticeStatus
+
+        practice = PracticeInfo(
+            id=2,
+            date=datetime(2026, 1, 20, 18, 0),
+            day_of_week="tuesday",
+            status=PracticeStatus.SCHEDULED,
+            workout_description="Easy ski",
+            logistics_notes=None,
+        )
+
+        blocks = build_collab_practice_blocks(practice, approved=False)
+
+        notes_block = next(
+            (b for b in blocks
+             if b.get("type") == "section"
+             and "Notes" in b.get("text", {}).get("text", "")),
+            None
+        )
+        assert notes_block is None, "Notes section must not appear when logistics_notes is None"
+
+    def test_warmup_and_cooldown_not_rendered(self):
+        """warmup_description and cooldown_description must not appear in collab blocks."""
+        from app.slack.blocks.coach_review import build_collab_practice_blocks
+        from app.practices.interfaces import PracticeStatus
+
+        practice = PracticeInfo(
+            id=3,
+            date=datetime(2026, 1, 20, 18, 0),
+            day_of_week="tuesday",
+            status=PracticeStatus.SCHEDULED,
+            workout_description="Threshold sets",
+            warmup_description="Easy 10 min jog",
+            cooldown_description="5 min walk",
+        )
+
+        blocks = build_collab_practice_blocks(practice, approved=False)
+
+        all_text = " ".join(
+            b.get("text", {}).get("text", "")
+            for b in blocks if b.get("type") == "section"
+        )
+        assert "Warmup" not in all_text, "warmup_description must not be rendered"
+        assert "Cooldown" not in all_text, "cooldown_description must not be rendered"
+        assert "Easy 10 min jog" not in all_text
+        assert "5 min walk" not in all_text

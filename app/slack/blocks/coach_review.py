@@ -142,37 +142,18 @@ def build_coach_weekly_summary_blocks(
             })
 
             # ==========================================================
-            # TWO-COLUMN FIELDS: Location/Types + Warmup/Cooldown
+            # LOCATION SECTION: Location + Activities + Types
             # ==========================================================
-            fields = []
-
-            # LEFT COLUMN: Location + Activities + Types
-            location_col = f"*:round_pushpin: Location*\n{full_location}"
+            location_text = f"*:round_pushpin: Location*\n{full_location}"
             if practice.activities:
                 activity_names = ", ".join([a.name for a in practice.activities])
-                location_col += f"\n:skier: {activity_names}"
+                location_text += f"\n:skier: {activity_names}"
             if type_names:
-                location_col += f" | :snowflake: {type_names}"
-            fields.append({"type": "mrkdwn", "text": location_col})
-
-            # RIGHT COLUMN: Warmup + Cooldown (truncated to 40 chars each)
-            warmup_cooldown = "*:fire: Warmup / :ice_cube: Cooldown*\n"
-            if practice.warmup_description:
-                warmup = practice.warmup_description[:40] + "..." if len(practice.warmup_description) > 40 else practice.warmup_description
-                warmup_cooldown += f"{warmup}\n"
-            else:
-                warmup_cooldown += "_No warmup_\n"
-
-            if practice.cooldown_description:
-                cooldown = practice.cooldown_description[:40] + "..." if len(practice.cooldown_description) > 40 else practice.cooldown_description
-                warmup_cooldown += cooldown
-            else:
-                warmup_cooldown += "_No cooldown_"
-            fields.append({"type": "mrkdwn", "text": warmup_cooldown})
+                location_text += f" | :snowflake: {type_names}"
 
             blocks.append({
                 "type": "section",
-                "fields": fields
+                "text": {"type": "mrkdwn", "text": location_text}
             })
 
             # ==========================================================
@@ -357,15 +338,6 @@ def build_collab_practice_blocks(
     # ==========================================================================
     # WORKOUT DETAILS (full text, not truncated)
     # ==========================================================================
-    if practice.warmup_description:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*:fire: Warmup*\n{practice.warmup_description}"
-            }
-        })
-
     if practice.workout_description:
         blocks.append({
             "type": "section",
@@ -374,23 +346,22 @@ def build_collab_practice_blocks(
                 "text": f"*:nerd_face: Workout*\n{practice.workout_description}"
             }
         })
-
-    if practice.cooldown_description:
-        blocks.append({
-            "type": "section",
-            "text": {
-                "type": "mrkdwn",
-                "text": f"*:ice_cube: Cooldown*\n{practice.cooldown_description}"
-            }
-        })
-
-    # If no workout info at all, show placeholder
-    if not any([practice.warmup_description, practice.workout_description, practice.cooldown_description]):
+    else:
         blocks.append({
             "type": "section",
             "text": {
                 "type": "mrkdwn",
                 "text": "_No workout details entered yet. Click Edit to add._"
+            }
+        })
+
+    # Notes (logistics commentary for coaches)
+    if getattr(practice, "logistics_notes", None):
+        blocks.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": f"*📌 Notes*\n{practice.logistics_notes}"
             }
         })
 
