@@ -10,6 +10,7 @@ from app.models import db
 def app():
     app = create_app()
     app.config['TESTING'] = True
+    app.config['SECRET_KEY'] = 'test-secret-key'
     app.config['SQLALCHEMY_DATABASE_URI'] = (
         'postgresql://tcsc:tcsc@localhost:5432/tcsc_trips'
     )

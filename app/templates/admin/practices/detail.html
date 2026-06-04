@@ -4,707 +4,307 @@
 
 {% block extra_css %}
 <style>
-/* Toggle slider needs pseudo-element styling */
-.toggle-slider {
-    position: relative;
-    width: 40px;
-    height: 22px;
-    background: #d1d5db;
-    border-radius: 11px;
-    transition: background 0.2s;
-}
+/* ── scoped design tokens & base ── */
+#workout-editor *{box-sizing:border-box;margin:0;padding:0}
+#workout-editor{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#f8fafb;color:#1c2c44;font-size:15px;line-height:1.5;padding:32px 24px 120px}
 
-.toggle-slider:before {
-    content: '';
-    position: absolute;
-    width: 18px;
-    height: 18px;
-    left: 2px;
-    top: 2px;
-    background: white;
-    border-radius: 50%;
-    transition: transform 0.2s;
-}
+/* ── page header ── */
+#workout-editor .page-header{display:flex;align-items:baseline;gap:16px;flex-wrap:wrap;justify-content:space-between;margin-bottom:32px;padding-bottom:24px;border-bottom:1px solid #e5e7eb}
+#workout-editor .page-header h1{font-size:20px;font-weight:700;letter-spacing:-0.01em}
+#workout-editor .page-header .meta{font-size:14px;color:#475569;margin-top:4px}
 
-.toggle input:checked + .toggle-slider {
-    background: #10b981;
-}
+/* ── two-column grid ── */
+#workout-editor .cols{display:grid;grid-template-columns:1fr 320px;gap:24px;align-items:start}
 
-.toggle input:checked + .toggle-slider:before {
-    transform: translateX(18px);
-}
+/* ── cards ── */
+#workout-editor .card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;margin-bottom:16px}
+#workout-editor .section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.06em;color:#64748b;margin-bottom:16px}
+#workout-editor .section-head{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px;flex-wrap:wrap}
+#workout-editor .section-head .section-label{margin-bottom:0}
 
-/* Toast animation */
-@keyframes slideIn {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
+/* ── form layout ── */
+#workout-editor .field-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+#workout-editor .field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+#workout-editor .field:last-child{margin-bottom:0}
+#workout-editor .field>label,#workout-editor .field>.label-text{font-size:12px;font-weight:600;color:#1c2c44}
+#workout-editor .field-hint{font-size:12px;color:#475569;line-height:1.4;margin-top:2px}
 
-.toast {
-    animation: slideIn 0.3s ease-out;
-}
+/* ── inputs ── */
+#workout-editor input,#workout-editor select,#workout-editor textarea{border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;width:100%}
+#workout-editor input:focus,#workout-editor select:focus,#workout-editor textarea:focus{border-color:#1c2c44;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+#workout-editor textarea{resize:vertical;line-height:1.7;min-height:72px}
+#workout-editor .workout-main{min-height:104px}
+#workout-editor textarea:focus{box-shadow:inset 3px 0 0 #1c2c44,0 0 0 2px #fff,0 0 0 4px #1c2c44}
 
-/* Loading state */
-.form-loading {
-    opacity: 0.6;
-    pointer-events: none;
+/* ── people search ── */
+#workout-editor .people-search{font-size:13px;padding:7px 10px;border-radius:8px;min-width:160px;max-width:220px}
+
+/* ── dark-practice toggle ── */
+#workout-editor .toggle-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:10px;min-height:44px;cursor:pointer}
+#workout-editor .toggle-row span:first-child{font-size:14px;color:#1c2c44}
+/* hide native checkbox, keep accessible */
+#workout-editor .toggle-row input[type="checkbox"]{position:absolute;opacity:0;width:0;height:0;pointer-events:none}
+/* the styled track */
+#workout-editor .toggle-track{width:44px;height:26px;border-radius:13px;background:#cbd5e1;position:relative;flex-shrink:0;transition:background .15s}
+#workout-editor .toggle-track::after{content:'';position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#fff;transition:left .15s,background .15s}
+#workout-editor .toggle-row input[type="checkbox"]:checked~.toggle-track{background:#1c2c44}
+#workout-editor .toggle-row input[type="checkbox"]:checked~.toggle-track::after{left:21px;background:#acf3c4}
+#workout-editor .toggle-row input[type="checkbox"]:focus-visible~.toggle-track{box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+
+/* ── compact choice pills (activities / types) ── */
+#workout-editor .pe-pill-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+#workout-editor .pe-pill{
+  min-height:28px;
+  display:inline-flex;
+  align-items:center;
+  border-radius:20px;
+  padding:4px 10px;
+  font-size:12.5px;
+  font-weight:500;
+  cursor:pointer;
+  border:1.5px solid #e5e7eb;
+  color:#475569;
+  background:#fff;
+  font-family:inherit;
+  transition:background .12s,color .12s,border-color .12s;
+  line-height:1.2;
+  width:auto;
+}
+#workout-editor .pe-pill:hover{border-color:#1c2c44;color:#1c2c44}
+#workout-editor .pe-pill.selected{background:#eef2f9;color:#1c2c44;border:2px solid #1c2c44;font-weight:600}
+#workout-editor .pe-pill:focus-visible{border-color:#1c2c44;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44;outline:none}
+#workout-editor .pe-empty{font-size:13px;color:#94a3b8;font-style:italic}
+
+/* ── person pills (coaches / leads / assists) ── */
+#workout-editor .person-pill-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+#workout-editor .person-pill{
+  display:inline-flex;align-items:center;gap:5px;
+  min-height:32px;padding:4px 10px;border-radius:20px;
+  font-size:13px;font-weight:500;cursor:pointer;
+  border:1.5px solid #e5e7eb;color:#475569;background:#fff;
+  font-family:inherit;transition:background .12s,color .12s,border-color .12s;
+  width:auto;
+}
+#workout-editor .person-pill:hover{border-color:#1c2c44;color:#1c2c44}
+#workout-editor .person-pill.selected{background:#1c2c44;color:#fff;border-color:#1c2c44}
+#workout-editor .person-pill:focus-visible{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+#workout-editor .check-icon{width:14px;height:14px;flex-shrink:0;display:none}
+#workout-editor .check-icon svg{width:14px;height:14px}
+#workout-editor .person-pill.selected .check-icon{display:inline-flex}
+#workout-editor .role-emoji{font-size:12px;line-height:1}
+#workout-editor .hidden{display:none!important}
+
+/* ── selected summary chips ── */
+#workout-editor .selected-summary{display:flex;flex-wrap:wrap;gap:6px;min-height:20px;margin-top:4px;margin-bottom:6px}
+#workout-editor .selected-chip{display:inline-flex;align-items:center;gap:4px;background:#1c2c44;color:#fff;border-radius:20px;padding:3px 8px 3px 12px;font-size:12px;font-weight:500}
+#workout-editor .selected-chip button{width:20px;height:20px;border-radius:50%;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:13px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;padding:0}
+#workout-editor .selected-chip button:hover{background:rgba(255,255,255,.35)}
+#workout-editor .none-text{font-size:12px;color:#94a3b8;font-style:italic}
+
+/* ── assists collapsible ── */
+#workout-editor .assists-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
+#workout-editor .assists-toggle{background:none;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:#475569;display:inline-flex;align-items:center;gap:4px;padding:0;width:auto;min-height:0}
+#workout-editor .assists-toggle:hover{color:#1c2c44}
+#workout-editor .assists-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px;border-radius:4px}
+#workout-editor .chevron{display:inline-block;font-size:10px;transition:transform .15s}
+#workout-editor .chevron.expanded{transform:rotate(90deg)}
+
+/* ── rail (context column) ── */
+#workout-editor .rail-col{position:sticky;top:16px}
+#workout-editor .rail-card{background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:12px;overflow:hidden}
+#workout-editor .rail-head{padding:8px 14px;border-bottom:1px solid #f1f5f9;display:flex;align-items:center;justify-content:space-between}
+#workout-editor .rail-head span{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b}
+#workout-editor .rail-body{padding:10px 14px}
+#workout-editor .rail-body .field{margin-bottom:10px}
+#workout-editor .rail-body .field:last-child{margin-bottom:0}
+
+/* ── sticky save bar (spans full grid width) ── */
+#workout-editor .sticky-bar{position:sticky;bottom:0;background:#fff;border-top:1px solid #e5e7eb;padding:16px 24px;display:flex;gap:12px;justify-content:flex-end;grid-column:1 / -1;margin:8px -24px -120px;border-radius:0}
+
+/* ── buttons ── */
+#workout-editor .btn-primary{background:#1c2c44;color:#fff;border:none;border-radius:10px;padding:12px 24px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;transition:opacity .15s,transform .1s;width:auto}
+#workout-editor .btn-primary:hover{opacity:.9;transform:translateY(-1px)}
+#workout-editor .btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+#workout-editor .btn-ghost{background:#fff;color:#475569;border:1.5px solid #e5e7eb;border-radius:10px;padding:12px 20px;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;width:auto}
+#workout-editor .btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+#workout-editor .btn-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#workout-editor .btn-sm{padding:7px 14px;font-size:13px;min-height:0}
+
+/* ── loading state ── */
+#workout-editor .form-loading{opacity:.6;pointer-events:none}
+
+/* ── responsive: single column under 768px ── */
+@media(max-width:767px){
+  #workout-editor .cols{grid-template-columns:1fr}
+  #workout-editor .field-row{grid-template-columns:1fr}
+  #workout-editor .sticky-bar{flex-direction:row;margin-left:-24px;margin-right:-24px}
+  #workout-editor .rail-col{position:static}
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-6">
-    <h1 class="text-2xl font-semibold text-tcsc-navy">{{ 'Edit Practice' if practice else 'New Practice' }}</h1>
-    <div class="flex gap-2">
-        <a href="{{ url_for('admin_practices.practices_list') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Practices</a>
+<div id="workout-editor">
+  <div class="page-header">
+    <div>
+      <h1>{{ 'Edit Practice' if practice else 'New Practice' }}</h1>
+      {% if practice %}<p class="meta" id="header-meta"></p>{% endif %}
     </div>
-</div>
+    <a href="{{ url_for('admin_practices.practices_list') }}" class="btn-ghost">Back to Practices</a>
+  </div>
 
-<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 max-w-[900px]">
-    <form id="practice-form" method="POST" action="{{ url_for('admin_practices.edit_practice', practice_id=practice.id) if practice else url_for('admin_practices.create_practice') }}">
+  <form id="practice-form"
+        action="{{ url_for('admin_practices.edit_practice', practice_id=practice.id) if practice else url_for('admin_practices.create_practice') }}"
+        class="cols">
 
-        <!-- Basic Information -->
-        <div class="mb-7 pb-7 border-b border-gray-200">
-            <h2 class="font-semibold text-base text-tcsc-navy mb-4">Basic Information</h2>
+    <div class="form-col">
 
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div class="mb-4">
-                    <label for="date" class="block mb-1.5 font-medium text-sm text-gray-700">Date & Time *</label>
-                    <input type="datetime-local" id="date" name="date"
-                           value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}" required
-                           class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
-                </div>
-
-                <div class="mb-4">
-                    <label for="location_id" class="block mb-1.5 font-medium text-sm text-gray-700">Location *</label>
-                    <select id="location_id" name="location_id" required
-                            class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
-                        <option value="">Select a location...</option>
-                    </select>
-                </div>
-            </div>
-
-            {% if practice %}
-            <div class="mb-4">
-                <label for="status" class="block mb-1.5 font-medium text-sm text-gray-700">Status</label>
-                <select id="status" name="status"
-                        class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
-                    <option value="scheduled" {% if practice.status == 'scheduled' %}selected{% endif %}>Scheduled</option>
-                    <option value="confirmed" {% if practice.status == 'confirmed' %}selected{% endif %}>Confirmed</option>
-                    <option value="in_progress" {% if practice.status == 'in_progress' %}selected{% endif %}>In Progress</option>
-                    <option value="cancelled" {% if practice.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
-                    <option value="completed" {% if practice.status == 'completed' %}selected{% endif %}>Completed</option>
-                </select>
-            </div>
-            {% endif %}
+      <section class="card">
+        <h2 class="section-label">When &amp; Where</h2>
+        <div class="field-row">
+          <div class="field">
+            <label for="date">Date &amp; Time</label>
+            <input type="datetime-local" id="date" name="date" required
+                   value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}">
+          </div>
+          <div class="field">
+            <label for="location_id">Location</label>
+            <select id="location_id" name="location_id" required>
+              <option value="">Select a location…</option>
+            </select>
+            <p class="field-hint">Weather-check location for Skipper</p>
+          </div>
         </div>
-
-        <!-- Practice Details -->
-        <div class="mb-7 pb-7 border-b border-gray-200">
-            <h2 class="font-semibold text-base text-tcsc-navy mb-4">Practice Details</h2>
-
-            <div class="mb-4">
-                <label class="block mb-1.5 font-medium text-sm text-gray-700">Activities</label>
-                <div id="activities-checkboxes" class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 mt-2">
-                    <!-- Populated via JavaScript -->
-                </div>
-            </div>
-
-            <div class="mb-4">
-                <label class="block mb-1.5 font-medium text-sm text-gray-700">Practice Types</label>
-                <div id="types-checkboxes" class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 mt-2">
-                    <!-- Populated via JavaScript -->
-                </div>
-            </div>
+        <div class="field-row">
+          <div class="field">
+            <label for="social_location_id">Post-Practice Social</label>
+            <select id="social_location_id" name="social_location_id">
+              <option value="">No Social</option>
+              {% for sl in social_locations %}
+              <option value="{{ sl.id }}" {% if practice and practice.social_location_id == sl.id %}selected{% endif %}>{{ sl.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="field">
+            <span class="label-text" id="dark-label">Dark Practice</span>
+            <label class="toggle-row" for="is_dark_practice">
+              <span>Lights needed</span>
+              <input type="checkbox" id="is_dark_practice" name="is_dark_practice"
+                     {% if practice and practice.is_dark_practice %}checked{% endif %}>
+              <span class="toggle-track" aria-hidden="true"></span>
+            </label>
+          </div>
         </div>
+      </section>
 
-        <!-- Coaches & Leads -->
-        <div class="mb-7 pb-7 border-b border-gray-200">
-            <h2 class="font-semibold text-base text-tcsc-navy mb-4">Coaches & Leads</h2>
-
-            <div class="mb-4">
-                <label class="block mb-1.5 font-medium text-sm text-gray-700">Coaches</label>
-                <div id="coaches-checkboxes" class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 mt-2">
-                    <!-- Populated via JavaScript -->
-                </div>
-            </div>
-
-            <div class="mb-4">
-                <label class="block mb-1.5 font-medium text-sm text-gray-700">Leads</label>
-                <div id="leads-checkboxes" class="grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-3 mt-2">
-                    <!-- Populated via JavaScript -->
-                </div>
-            </div>
+      <section class="card">
+        <h2 class="section-label">Activity &amp; Type</h2>
+        <div class="field">
+          <label>Activities</label>
+          <div id="activities-pills" class="pe-pill-group"></div>
         </div>
-
-        <!-- Workout Descriptions -->
-        <div class="mb-7 pb-7 border-b border-gray-200">
-            <h2 class="font-semibold text-base text-tcsc-navy mb-4">Workout Plan</h2>
-
-            <div class="mb-4">
-                <label for="warmup_description" class="block mb-1.5 font-medium text-sm text-gray-700">Warmup Description</label>
-                <textarea id="warmup_description" name="warmup_description"
-                          placeholder="Describe the warmup routine..."
-                          class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[100px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">{{ practice.warmup_description if practice else '' }}</textarea>
-            </div>
-
-            <div class="mb-4">
-                <label for="workout_description" class="block mb-1.5 font-medium text-sm text-gray-700">Workout Description</label>
-                <textarea id="workout_description" name="workout_description"
-                          placeholder="Describe the main workout..."
-                          class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[100px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">{{ practice.workout_description if practice else '' }}</textarea>
-            </div>
-
-            <div class="mb-4">
-                <label for="cooldown_description" class="block mb-1.5 font-medium text-sm text-gray-700">Cooldown Description</label>
-                <textarea id="cooldown_description" name="cooldown_description"
-                          placeholder="Describe the cooldown routine..."
-                          class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white min-h-[100px] resize-y focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">{{ practice.cooldown_description if practice else '' }}</textarea>
-            </div>
+        <div class="field">
+          <label>Practice Types</label>
+          <div id="types-pills" class="pe-pill-group"></div>
         </div>
+      </section>
 
-        <!-- Additional Options -->
-        <div class="mb-7 pb-7 border-b border-gray-200">
-            <h2 class="font-semibold text-base text-tcsc-navy mb-4">Additional Options</h2>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
-                <div class="mb-4">
-                    <label for="social_location_id" class="block mb-1.5 font-medium text-sm text-gray-700">Post-Practice Social</label>
-                    <select id="social_location_id" name="social_location_id"
-                            class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
-                        <option value="">No Social</option>
-                        {% for sl in social_locations %}
-                        <option value="{{ sl.id }}" {% if practice and practice.social_location_id == sl.id %}selected{% endif %}>{{ sl.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div class="flex items-center gap-2.5 mb-4">
-                <input type="checkbox" id="is_dark_practice" name="is_dark_practice"
-                       {% if practice and practice.is_dark_practice %}checked{% endif %}
-                       class="w-[18px] h-[18px] cursor-pointer">
-                <label for="is_dark_practice" class="mb-0 text-sm text-gray-700 cursor-pointer">Dark Practice (lights required)</label>
-            </div>
+      <section class="card">
+        <div class="section-head">
+          <h2 class="section-label">Coaches · Leads · Assists</h2>
+          <input type="text" id="people-search" class="people-search" placeholder="Filter by name…" aria-label="Filter people by name">
         </div>
-
-        <!-- Form Actions -->
-        <div class="flex gap-3 mt-7 pt-5 border-t border-gray-200">
-            <button type="submit" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">{{ 'Save Changes' if practice else 'Create Practice' }}</button>
-            <a href="{{ url_for('admin_practices.practices_list') }}" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Cancel</a>
+        <div class="field">
+          <label>Coaches</label>
+          <div id="coaches-summary" class="selected-summary"></div>
+          <div id="coaches-pills" class="person-pill-group"></div>
         </div>
-    </form>
-</div>
-
-{% if practice %}
-<!-- Skipper Evaluation Section -->
-<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 max-w-[900px] mt-6">
-    <div class="mb-0">
-        <h2 class="font-semibold text-base text-tcsc-navy mb-4">Skipper Evaluation</h2>
-        <p class="text-gray-500 text-sm mb-4">
-            AI-powered safety assessment for this practice
-        </p>
-        <div id="evaluation-container">
-            <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="loadEvaluation()">
-                Load Evaluation
+        <div class="field">
+          <label>Leads</label>
+          <div id="leads-summary" class="selected-summary"></div>
+          <div id="leads-pills" class="person-pill-group"></div>
+        </div>
+        <div class="field">
+          <div class="assists-head">
+            <label>Assists</label>
+            <button type="button" id="assists-toggle" class="assists-toggle" aria-expanded="false" onclick="toggleAssists()">
+              <span class="chevron" aria-hidden="true">&#9654;</span><span id="assists-toggle-text">Show</span>
             </button>
+          </div>
+          <div id="assists-summary" class="selected-summary"></div>
+          <div id="assists-collapsible" class="hidden">
+            <div id="assists-pills" class="person-pill-group"></div>
+          </div>
         </div>
-    </div>
-</div>
+      </section>
 
-<!-- RSVPs Section -->
-<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 max-w-[900px] mt-6">
-    <div class="mb-0">
-        <h2 class="font-semibold text-base text-tcsc-navy mb-4">RSVPs</h2>
-        <div id="rsvps-container">
-            <div id="rsvp-summary" class="mb-3"></div>
-            <div id="rsvp-list"></div>
+      <section class="card workout-anchor">
+        <h2 class="section-label">Workout Plan</h2>
+        <div class="field">
+          <label for="warmup_description">Warmup</label>
+          <textarea id="warmup_description" name="warmup_description" placeholder="e.g., 15 min easy classic, dynamic mobility, 4× pickups">{{ practice.warmup_description if practice else '' }}</textarea>
         </div>
+        <div class="field">
+          <label for="workout_description">Main Workout</label>
+          <textarea id="workout_description" name="workout_description" class="workout-main" placeholder="e.g., 4 × 6 min @ threshold, 3 min easy between. Cue: relaxed tempo, strong kick.">{{ practice.workout_description if practice else '' }}</textarea>
+        </div>
+        <div class="field">
+          <label for="cooldown_description">Cooldown</label>
+          <textarea id="cooldown_description" name="cooldown_description" placeholder="e.g., 10 min easy ski, light stretching">{{ practice.cooldown_description if practice else '' }}</textarea>
+        </div>
+      </section>
     </div>
-</div>
 
-<!-- Lead Confirmations Section -->
-<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 max-w-[900px] mt-6">
-    <div class="mb-0">
-        <h2 class="font-semibold text-base text-tcsc-navy mb-4">Lead Confirmations</h2>
-        <p class="text-gray-500 text-sm mb-4">
-            Click the toggle to confirm or unconfirm a lead
-        </p>
-        <div id="lead-confirmations-container">
-            <p class="text-gray-400">Loading...</p>
+    {% if practice %}
+    <aside class="rail-col">
+      <div class="rail-card">
+        <div class="rail-head"><span>Status &amp; Skipper</span></div>
+        <div class="rail-body">
+          <div class="field">
+            <label for="status">Status</label>
+            <select id="status" name="status">
+              <option value="scheduled" {% if practice.status == 'scheduled' %}selected{% endif %}>Scheduled</option>
+              <option value="confirmed" {% if practice.status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+              <option value="in_progress" {% if practice.status == 'in_progress' %}selected{% endif %}>In Progress</option>
+              <option value="cancelled" {% if practice.status == 'cancelled' %}selected{% endif %}>Cancelled</option>
+              <option value="completed" {% if practice.status == 'completed' %}selected{% endif %}>Completed</option>
+            </select>
+          </div>
+          <div id="evaluation-container">
+            <button type="button" class="btn-ghost btn-sm" onclick="loadEvaluation()">Load Skipper evaluation</button>
+          </div>
         </div>
+      </div>
+
+      <div class="rail-card">
+        <div class="rail-head"><span>RSVPs</span></div>
+        <div class="rail-body">
+          <div id="rsvp-summary"></div>
+          <div id="rsvp-list"></div>
+        </div>
+      </div>
+
+      <div class="rail-card">
+        <div class="rail-head"><span>Lead Confirmations</span></div>
+        <div class="rail-body">
+          <div id="lead-confirmations-container"><p class="pe-empty">Loading…</p></div>
+        </div>
+      </div>
+    </aside>
+    {% endif %}
+
+    <div class="sticky-bar">
+      <a href="{{ url_for('admin_practices.practices_list') }}" class="btn-ghost">Cancel</a>
+      <button type="submit" class="btn-primary">{{ 'Save Changes' if practice else 'Create Practice' }}</button>
     </div>
+  </form>
 </div>
-{% endif %}
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='practice_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='js/toast.js') }}"></script>
 <script>
-let locations = [];
-let activities = [];
-let types = [];
-let coachesData = [];
-let leadsData = [];
-const practiceId = {{ practice.id if practice else 'null' }};
-const practiceActivities = {{ (practice.activities | map(attribute='id') | list) | tojson if practice else '[]' }};
-const practiceTypes = {{ (practice.practice_types | map(attribute='id') | list) | tojson if practice else '[]' }};
-const practiceCoaches = {{ (practice.leads | selectattr('role', 'equalto', 'coach') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
-const practiceLeads = {{ (practice.leads | selectattr('role', 'equalto', 'lead') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
-
-document.addEventListener('DOMContentLoaded', async () => {
-    await loadFormData();
-    populateForm();
-});
-
-async function loadFormData() {
-    try {
-        // Load locations
-        const locationsResp = await fetch('/admin/practices/locations/data');
-        const locationsData = await locationsResp.json();
-        locations = locationsData.locations;
-
-        // Load activities
-        const activitiesResp = await fetch('/admin/practices/activities/data');
-        const activitiesData = await activitiesResp.json();
-        activities = activitiesData.activities;
-
-        // Load types
-        const typesResp = await fetch('/admin/practices/types/data');
-        const typesData = await typesResp.json();
-        types = typesData.types;
-
-        // Load coaches and leads (users with appropriate tags)
-        const peopleResp = await fetch('/admin/practices/people/data');
-        const peopleData = await peopleResp.json();
-        coachesData = peopleData.coaches || [];
-        leadsData = peopleData.leads || [];
-    } catch (err) {
-        console.error('Error loading form data:', err);
-        showToast('Error loading form data', 'error');
-    }
-}
-
-function populateForm() {
-    // Populate locations dropdown
-    const locationSelect = document.getElementById('location_id');
-    locations.forEach(loc => {
-        const option = document.createElement('option');
-        option.value = loc.id;
-        option.textContent = loc.name + (loc.spot ? ` — ${loc.spot}` : '');
-        {% if practice %}
-        if (loc.id === {{ practice.location_id }}) {
-            option.selected = true;
-        }
-        {% endif %}
-        locationSelect.appendChild(option);
-    });
-
-    // Populate activities checkboxes
-    const activitiesContainer = document.getElementById('activities-checkboxes');
-    activities.forEach(activity => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center gap-2';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `activity_${activity.id}`;
-        checkbox.name = 'activity_ids';
-        checkbox.value = activity.id;
-        checkbox.className = 'w-[18px] h-[18px] cursor-pointer';
-        if (practiceActivities.includes(activity.id)) {
-            checkbox.checked = true;
-        }
-
-        const label = document.createElement('label');
-        label.htmlFor = `activity_${activity.id}`;
-        label.textContent = activity.name;
-        label.className = 'mb-0 text-sm text-gray-700 cursor-pointer';
-
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        activitiesContainer.appendChild(div);
-    });
-
-    // Populate types checkboxes
-    const typesContainer = document.getElementById('types-checkboxes');
-    types.forEach(type => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center gap-2';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `type_${type.id}`;
-        checkbox.name = 'type_ids';
-        checkbox.value = type.id;
-        checkbox.className = 'w-[18px] h-[18px] cursor-pointer';
-        if (practiceTypes.includes(type.id)) {
-            checkbox.checked = true;
-        }
-
-        const label = document.createElement('label');
-        label.htmlFor = `type_${type.id}`;
-        label.textContent = type.name;
-        label.className = 'mb-0 text-sm text-gray-700 cursor-pointer';
-
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        typesContainer.appendChild(div);
-    });
-
-    // Populate coaches checkboxes
-    const coachesContainer = document.getElementById('coaches-checkboxes');
-    coachesData.forEach(coach => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center gap-2';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `coach_${coach.id}`;
-        checkbox.name = 'coach_ids';
-        checkbox.value = coach.id;
-        checkbox.className = 'w-[18px] h-[18px] cursor-pointer';
-        if (practiceCoaches.includes(coach.id)) {
-            checkbox.checked = true;
-        }
-
-        const label = document.createElement('label');
-        label.htmlFor = `coach_${coach.id}`;
-        label.textContent = coach.name;
-        label.className = 'mb-0 text-sm text-gray-700 cursor-pointer';
-
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        coachesContainer.appendChild(div);
-    });
-
-    // Populate leads checkboxes
-    const leadsContainer = document.getElementById('leads-checkboxes');
-    leadsData.forEach(lead => {
-        const div = document.createElement('div');
-        div.className = 'flex items-center gap-2';
-
-        const checkbox = document.createElement('input');
-        checkbox.type = 'checkbox';
-        checkbox.id = `lead_${lead.id}`;
-        checkbox.name = 'lead_ids';
-        checkbox.value = lead.id;
-        checkbox.className = 'w-[18px] h-[18px] cursor-pointer';
-        if (practiceLeads.includes(lead.id)) {
-            checkbox.checked = true;
-        }
-
-        const label = document.createElement('label');
-        label.htmlFor = `lead_${lead.id}`;
-        label.textContent = lead.name;
-        label.className = 'mb-0 text-sm text-gray-700 cursor-pointer';
-
-        div.appendChild(checkbox);
-        div.appendChild(label);
-        leadsContainer.appendChild(div);
-    });
-}
-
-// Handle form submission
-document.getElementById('practice-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-
-    const form = e.target;
-    const formData = new FormData(form);
-
-    // Collect checked activities, types, coaches, and leads
-    const activityIds = Array.from(form.querySelectorAll('input[name="activity_ids"]:checked'))
-        .map(cb => parseInt(cb.value));
-    const typeIds = Array.from(form.querySelectorAll('input[name="type_ids"]:checked'))
-        .map(cb => parseInt(cb.value));
-    const coachIds = Array.from(form.querySelectorAll('input[name="coach_ids"]:checked'))
-        .map(cb => parseInt(cb.value));
-    const leadIds = Array.from(form.querySelectorAll('input[name="lead_ids"]:checked'))
-        .map(cb => parseInt(cb.value));
-
-    // Build JSON payload
-    const socialLocationValue = formData.get('social_location_id');
-    const data = {
-        date: formData.get('date'),
-        location_id: parseInt(formData.get('location_id')),
-        social_location_id: socialLocationValue ? parseInt(socialLocationValue) : null,
-        warmup_description: formData.get('warmup_description') || null,
-        workout_description: formData.get('workout_description') || null,
-        cooldown_description: formData.get('cooldown_description') || null,
-        is_dark_practice: formData.get('is_dark_practice') === 'on',
-        activity_ids: activityIds,
-        type_ids: typeIds,
-        coach_ids: coachIds,
-        lead_ids: leadIds
-    };
-
-    if (practiceId) {
-        data.status = formData.get('status');
-    }
-
-    // Show loading state
-    form.classList.add('form-loading');
-
-    try {
-        const response = await fetch(form.action, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(data)
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast(result.message || 'Practice saved successfully', 'success');
-            setTimeout(() => {
-                window.location.href = '/admin/practices';
-            }, 1000);
-        } else {
-            showToast(result.error || 'Failed to save practice', 'error');
-            form.classList.remove('form-loading');
-        }
-    } catch (err) {
-        console.error('Error saving practice:', err);
-        showToast('Error saving practice: ' + err.message, 'error');
-        form.classList.remove('form-loading');
-    }
-});
-
-function showToast(message, type = 'info') {
-    const existing = document.querySelector('.toast');
-    if (existing) existing.remove();
-
-    const toast = document.createElement('div');
-    const bgColor = type === 'error' ? 'bg-red-600' : type === 'success' ? 'bg-green-600' : 'bg-tcsc-navy';
-    toast.className = `toast fixed bottom-5 right-5 px-5 py-3 rounded-md ${bgColor} text-white font-medium text-sm shadow-lg z-[1000]`;
-    toast.textContent = message;
-    document.body.appendChild(toast);
-
-    setTimeout(() => toast.remove(), 3000);
-}
-
-{% if practice %}
-// Load RSVPs on page load
-document.addEventListener('DOMContentLoaded', () => {
-    loadRSVPs();
-    loadLeadConfirmations();
-});
-
-async function loadEvaluation() {
-    const container = document.getElementById('evaluation-container');
-    container.innerHTML = '<p class="text-gray-400">Loading evaluation...</p>';
-
-    try {
-        const response = await fetch('/admin/practices/{{ practice.id }}/evaluation');
-        const data = await response.json();
-
-        if (!data.success) {
-            container.innerHTML = `<p class="text-red-500">Error: ${data.error}</p>`;
-            return;
-        }
-
-        const eval_ = data.evaluation;
-        let html = `
-            <div class="flex items-center gap-3 mb-4">
-                <span class="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold text-white ${eval_.is_go ? 'bg-green-500' : 'bg-red-500'}">
-                    ${eval_.is_go ? 'GO' : 'NO-GO'}
-                </span>
-                <span class="text-gray-500 text-sm">
-                    Confidence: ${Math.round(eval_.confidence * 100)}%
-                </span>
-            </div>
-        `;
-
-        // Weather conditions
-        if (eval_.weather) {
-            html += `
-                <div class="mb-3 p-3 bg-gray-50 rounded-md">
-                    <strong>Weather:</strong> ${eval_.weather.conditions_summary || 'N/A'}<br>
-                    Temperature: ${eval_.weather.temperature_f?.toFixed(1) || 'N/A'}F
-                    (feels like ${eval_.weather.feels_like_f?.toFixed(1) || 'N/A'}F)<br>
-                    Wind: ${eval_.weather.wind_speed_mph?.toFixed(1) || 'N/A'} mph<br>
-                    Precipitation: ${eval_.weather.precipitation_chance || 0}%
-                </div>
-            `;
-        }
-
-        // Trail conditions
-        if (eval_.trail_conditions) {
-            html += `
-                <div class="mb-3 p-3 bg-gray-50 rounded-md">
-                    <strong>Trail Conditions:</strong><br>
-                    Quality: ${eval_.trail_conditions.ski_quality || 'N/A'}<br>
-                    Trails Open: ${eval_.trail_conditions.trails_open || 'N/A'}<br>
-                    Groomed: ${eval_.trail_conditions.groomed ? 'Yes' : 'No'}
-                </div>
-            `;
-        }
-
-        // Air quality
-        if (eval_.air_quality) {
-            html += `
-                <div class="mb-3 p-3 bg-gray-50 rounded-md">
-                    <strong>Air Quality:</strong> AQI ${eval_.air_quality.aqi} (${eval_.air_quality.category})
-                </div>
-            `;
-        }
-
-        // Lead/workout status
-        html += `
-            <div class="mb-3">
-                <span class="mr-4">
-                    Lead Confirmed: ${eval_.has_confirmed_lead ? '&#10003;' : '&#10007;'}
-                </span>
-                <span>
-                    Workout Posted: ${eval_.has_posted_workout ? '&#10003;' : '&#10007;'}
-                </span>
-            </div>
-        `;
-
-        // Violations
-        if (eval_.violations && eval_.violations.length > 0) {
-            html += '<div class="mt-4"><strong>Violations:</strong></div>';
-            for (const v of eval_.violations) {
-                const bgClass = v.severity === 'critical' ? 'bg-red-500/10 border-red-500' : 'bg-amber-500/10 border-amber-500';
-                const textClass = v.severity === 'critical' ? 'text-red-500' : 'text-amber-600';
-                html += `
-                    <div class="p-2 px-3 mt-2 ${bgClass} border-l-4 rounded">
-                        <strong class="${textClass}">${v.severity.toUpperCase()}</strong>: ${v.message}
-                    </div>
-                `;
-            }
-        } else {
-            html += '<div class="text-green-500 mt-3">No violations detected &#10003;</div>';
-        }
-
-        container.innerHTML = html;
-    } catch (err) {
-        container.innerHTML = `<p class="text-red-500">Error loading evaluation: ${err.message}</p>`;
-    }
-}
-
-async function loadRSVPs() {
-    const summaryEl = document.getElementById('rsvp-summary');
-    const listEl = document.getElementById('rsvp-list');
-
-    try {
-        const response = await fetch('/admin/practices/{{ practice.id }}/rsvps');
-        const data = await response.json();
-
-        const { rsvps, summary } = data;
-
-        // Summary badges
-        summaryEl.innerHTML = `
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-green-500 text-white text-xs mr-2">
-                Going: ${summary.going}
-            </span>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-red-500 text-white text-xs mr-2">
-                Not Going: ${summary.not_going}
-            </span>
-            <span class="inline-flex items-center px-2.5 py-1 rounded-full bg-gray-500 text-white text-xs">
-                Maybe: ${summary.maybe}
-            </span>
-        `;
-
-        // RSVP list
-        if (rsvps.length === 0) {
-            listEl.innerHTML = '<p class="text-gray-400 text-sm">No RSVPs yet</p>';
-        } else {
-            let html = '<div class="mt-3">';
-            for (const rsvp of rsvps) {
-                const statusColors = {
-                    'going': 'bg-green-500',
-                    'not_going': 'bg-red-500',
-                    'maybe': 'bg-gray-500'
-                };
-                const bgClass = statusColors[rsvp.status] || 'bg-gray-500';
-                const textColors = {
-                    'going': 'text-green-500',
-                    'not_going': 'text-red-500',
-                    'maybe': 'text-gray-500'
-                };
-                const textClass = textColors[rsvp.status] || 'text-gray-500';
-                html += `
-                    <div class="flex items-center gap-2 py-2 border-b border-gray-200">
-                        <span class="w-2 h-2 rounded-full ${bgClass}"></span>
-                        <span class="flex-1">${rsvp.user_name}</span>
-                        <span class="${textClass} text-sm">${rsvp.status}</span>
-                    </div>
-                `;
-            }
-            html += '</div>';
-            listEl.innerHTML = html;
-        }
-    } catch (err) {
-        listEl.innerHTML = `<p class="text-red-500">Error loading RSVPs: ${err.message}</p>`;
-    }
-}
-
-async function loadLeadConfirmations() {
-    const container = document.getElementById('lead-confirmations-container');
-
-    try {
-        const response = await fetch('/admin/practices/{{ practice.id }}/leads/data');
-        const data = await response.json();
-
-        const leads = data.leads;
-
-        if (leads.length === 0) {
-            container.innerHTML = '<p class="text-gray-400 text-sm">No leads/coaches/assists assigned</p>';
-            return;
-        }
-
-        let html = '';
-        for (const lead of leads) {
-            const roleLabel = lead.role === 'coach' ? 'Coach' : lead.role === 'lead' ? 'Lead' : 'Assist';
-            html += `
-                <div class="flex items-center gap-3 py-3 border-b border-gray-200">
-                    <span class="flex-1">
-                        <strong>${lead.name}</strong>
-                        <span class="text-gray-500 text-xs ml-2">(${roleLabel})</span>
-                    </span>
-                    <label class="toggle relative inline-flex items-center cursor-pointer m-0">
-                        <input type="checkbox" ${lead.confirmed ? 'checked' : ''} onchange="toggleLeadConfirmation(${lead.id}, this.checked)" class="sr-only">
-                        <span class="toggle-slider"></span>
-                    </label>
-                    <span class="w-[70px] text-right text-xs ${lead.confirmed ? 'text-green-500' : 'text-gray-400'}">
-                        ${lead.confirmed ? 'Confirmed' : 'Pending'}
-                    </span>
-                </div>
-            `;
-        }
-        container.innerHTML = html;
-    } catch (err) {
-        container.innerHTML = `<p class="text-red-500">Error loading leads: ${err.message}</p>`;
-    }
-}
-
-async function toggleLeadConfirmation(leadId, confirmed) {
-    try {
-        const response = await fetch(`/admin/practices/{{ practice.id }}/leads/${leadId}/toggle-confirm`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (result.success) {
-            showToast(result.message, 'success');
-            loadLeadConfirmations(); // Refresh the list
-        } else {
-            showToast(result.error || 'Failed to toggle confirmation', 'error');
-            loadLeadConfirmations(); // Revert UI
-        }
-    } catch (err) {
-        showToast('Error: ' + err.message, 'error');
-        loadLeadConfirmations(); // Revert UI
-    }
-}
-{% endif %}
+{% include 'admin/practices/_detail_script.js' %}
 </script>
 {% endblock %}
