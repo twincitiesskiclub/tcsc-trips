@@ -1,6 +1,11 @@
 /* app/static/css/admin_ui.css
    Scoped styles for AdminUI foundation primitives. All selectors are .admin-ui-* . */
 
+/* Base reset: the `hidden` attribute must always win over a class `display:` rule.
+   Admin surfaces toggle modals/drawers/menus/empty-states via the hidden attribute,
+   and a class like `.modal{display:flex}` would otherwise override the UA [hidden] rule. */
+[hidden] { display: none !important; }
+
 /* --- Status badge --- */
 .admin-ui-badge {
   display: inline-flex; align-items: center; gap: 6px;
