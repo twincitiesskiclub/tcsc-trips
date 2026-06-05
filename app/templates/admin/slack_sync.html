@@ -3,7 +3,7 @@
 
 {% block extra_css %}
 <style>
-/* ===== Slack Sync — scoped styles (prefix: #slack-sync / .ss-*) ===== */
+/* ===== Slack Sync -- scoped styles (prefix: #slack-sync / .ss-*) ===== */
 #slack-sync,#slack-sync *{box-sizing:border-box;margin:0;padding:0}
 #slack-sync{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
 
@@ -12,12 +12,14 @@
 #slack-sync .ss-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;color:#1c2c44}
 #slack-sync .ss-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
-/* header buttons */
-#slack-sync .ss-btn{height:38px;display:inline-flex;align-items:center;gap:6px;border-radius:10px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border:none;text-decoration:none}
+/* header buttons -- 38px / radius 10px matching sibling geometry */
+#slack-sync .ss-btn{height:38px;display:inline-flex;align-items:center;gap:6px;border-radius:10px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border:none;text-decoration:none;white-space:nowrap}
 #slack-sync .ss-btn-primary{background:#1c2c44;color:#fff}
 #slack-sync .ss-btn-primary:hover{opacity:.9}
+#slack-sync .ss-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-btn-secondary{background:#fff;border:1.5px solid #e5e7eb;color:#475569}
 #slack-sync .ss-btn-secondary:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-btn-secondary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-btn-icon{}
 #slack-sync .ss-btn-text{}
 #slack-sync .ss-btn-progress{display:none}
@@ -26,44 +28,35 @@
 #slack-sync .ss-loading .ss-btn-text{display:none}
 #slack-sync .ss-loading .ss-btn-progress{display:inline}
 
-/* stats ribbon + channel card container */
-#slack-sync .ss-stats-row{display:flex;align-items:stretch;gap:12px;margin-bottom:16px}
+/* toolbar -- single filter band replacing stats ribbon + segmented tabs */
+#slack-sync .ss-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+#slack-sync .ss-toolbar-spacer{flex:1}
+#slack-sync .ss-count{font-size:13px;color:#64748b;white-space:nowrap;font-weight:500}
 
-/* stats ribbon */
-#slack-sync .ss-stats{flex:1;min-width:0;display:flex;align-items:center;gap:16px;flex-wrap:wrap;border:1px solid #e9edf3;border-radius:11px;background:#f8fafb;padding:0 20px;min-height:56px}
-#slack-sync .ss-stats-narrative{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex:1;min-width:0}
-#slack-sync .ss-seg-btn{background:transparent;border:none;padding:6px 10px;border-radius:8px;cursor:pointer;font-family:inherit;font-size:14px;font-weight:600;color:#1c2c44;transition:background .1s}
-#slack-sync .ss-seg-btn:hover{background:#f1f4f8}
-#slack-sync .ss-seg-btn[aria-pressed="true"]{background:#dbeafe;color:#1e40af}
-#slack-sync .ss-seg-btn-info{font-size:14px;font-weight:600;color:#1c2c44;padding:6px 10px}
-#slack-sync .ss-stats-dot{color:#94a3b8;font-size:14px}
-#slack-sync .ss-stats-divider{width:1px;height:32px;background:#e5e7eb;flex-shrink:0}
-#slack-sync .ss-stats-totals{font-size:12px;color:#64748b;white-space:nowrap}
-#slack-sync .ss-skel-stat{width:120px;height:18px;border-radius:6px;background:#e9edf3;animation:ss-pulse 1.5s ease-in-out infinite}
+/* view pills -- radius 9999px matching .mr-pill / .admin-ui-pill */
+#slack-sync .ss-pills{display:flex;gap:4px}
+#slack-sync .ss-pill{display:inline-flex;align-items:center;padding:6px 13px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
+#slack-sync .ss-pill:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-pill.is-active{border-color:#1c2c44;background:rgba(28,44,68,.08);color:#1c2c44;font-weight:600}
+#slack-sync .ss-pill:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
-/* channel sync tile */
-#slack-sync .ss-channel-card{flex-shrink:0;width:200px;display:flex;flex-direction:column;align-items:flex-start;gap:4px;border:1.5px solid #e5e7eb;border-radius:11px;padding:12px 16px;text-decoration:none;color:inherit;background:#fff;transition:border-color .12s,transform .12s,box-shadow .12s}
-#slack-sync .ss-channel-card:hover{border-color:#1c2c44;transform:translateY(-1px);box-shadow:0 4px 12px rgba(28,44,68,.1)}
-#slack-sync .ss-channel-card-status{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600}
-#slack-sync .ss-channel-card-link{font-size:12px;font-weight:600;color:#1c2c44}
-
-/* workspace controls */
-#slack-sync .ss-controls{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px}
-
-/* segmented tabs */
-#slack-sync .ss-seg{display:inline-flex;background:#f1f4f8;border-radius:10px;padding:3px}
-#slack-sync .ss-seg-tab{height:32px;padding:0 14px;border-radius:8px;font-size:13px;font-weight:600;border:none;cursor:pointer;font-family:inherit;background:transparent;color:#64748b;transition:background .1s,color .1s}
-#slack-sync .ss-seg-tab[aria-selected="true"]{background:#fff;color:#1c2c44;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-
-/* search */
-#slack-sync .ss-search{flex:1;min-width:200px;height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
+/* search -- matching .mr-search dimensions */
+#slack-sync .ss-search{flex:1;min-width:180px;height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
 #slack-sync .ss-search:focus{outline:none;border-color:#1c2c44}
 
-/* reconciliation list */
-#slack-sync .ss-list{display:flex;flex-direction:column;gap:8px}
+/* statline -- quiet inline sync-status numbers */
+#slack-sync .ss-statline{font-size:12.5px;color:#64748b;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#slack-sync .ss-statline-dot{color:#94a3b8}
+#slack-sync .ss-statline-spacer{flex:1}
+#slack-sync .ss-status-chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#475569;text-decoration:none;padding:2px 8px;border:1px solid #e5e7eb;border-radius:9999px;background:#fff;transition:border-color .12s}
+#slack-sync .ss-status-chip:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-skel-stat{display:inline-block;width:120px;height:14px;border-radius:6px;background:#e9edf3;animation:ss-pulse 1.5s ease-in-out infinite}
 
-/* skeleton cards */
-#slack-sync .ss-skel{border-radius:11px;height:72px;background:#f1f4f8;animation:ss-pulse 1.5s ease-in-out infinite}
+/* reconciliation list */
+#slack-sync .ss-list{display:flex;flex-direction:column;gap:7px}
+
+/* skeleton rows */
+#slack-sync .ss-skel{border-radius:11px;min-height:64px;background:#f1f4f8;animation:ss-pulse 1.5s ease-in-out infinite}
 @keyframes ss-pulse{0%,100%{opacity:1}50%{opacity:.5}}
 @media (prefers-reduced-motion:reduce){ #slack-sync .ss-skel,#slack-sync .ss-skel-stat{animation:none}}
 
@@ -74,40 +67,52 @@
 #slack-sync .ss-empty-sub{font-size:13px;color:#64748b}
 #slack-sync .ss-error{text-align:center;color:#c53030;font-size:14px;padding:32px 8px}
 
-/* cards (needs-attention) */
-#slack-sync .ss-card{border:1px solid #e9edf3;border-radius:11px;padding:12px 15px;background:#fff;display:flex;align-items:flex-start;gap:12px;cursor:pointer;font-family:inherit;color:inherit;text-align:left;width:100%;transition:border-color .12s}
-#slack-sync .ss-card:hover{border-color:#cdd5e0}
-#slack-sync .ss-card:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+/* ===== SINGLE ROW GEOMETRY (all three views) =====
+   Cloned from .pw-row-item / .mr-row: radius 11px, border #e9edf3, padding 12px 15px,
+   min-height 64px, gap 12px, hover border+shadow, is-active inset navy rail. */
+#slack-sync .ss-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:12px 15px;min-height:64px;cursor:pointer;font-family:inherit;color:inherit;text-align:left;width:100%;transition:border-color .12s,box-shadow .12s}
+#slack-sync .ss-row:hover{border-color:#cdd5e0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#slack-sync .ss-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+#slack-sync .ss-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
-/* initials chip */
-#slack-sync .ss-chip{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;font-weight:700;color:#fff;user-select:none}
+/* initials chip -- 40px for all views */
+#slack-sync .ss-row-chip{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;font-weight:700;color:#fff;user-select:none}
 
-/* card body */
-#slack-sync .ss-card-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-#slack-sync .ss-card-name{font-size:15px;font-weight:600;color:#1c2c44;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#slack-sync .ss-card-email{font-size:12.5px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#slack-sync .ss-card-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* primary column */
+#slack-sync .ss-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+#slack-sync .ss-row-name{font-size:15px;font-weight:600;color:#1c2c44;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#slack-sync .ss-row-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:#64748b}
+#slack-sync .ss-row-uid{font-size:11px;color:#94a3b8;font-family:monospace}
 
-/* card actions */
-#slack-sync .ss-card-actions{flex-shrink:0;display:flex;flex-direction:column;gap:6px;align-items:flex-end;pointer-events:auto}
+/* trailing actions column -- max two buttons at 32px, single row */
+#slack-sync .ss-row-actions{flex-shrink:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;pointer-events:auto}
 
-/* action buttons */
-#slack-sync .ss-act-primary{height:34px;border-radius:8px;background:#1c2c44;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap}
+/* action buttons -- uniform 32px height */
+#slack-sync .ss-act-primary{height:32px;border-radius:8px;background:#1c2c44;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap}
 #slack-sync .ss-act-primary:hover{opacity:.9}
-#slack-sync .ss-act-ghost{height:32px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 10px;border:1px solid #e5e7eb;cursor:pointer;font-family:inherit;white-space:nowrap}
+#slack-sync .ss-act-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-act-ghost{height:32px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 10px;border:1.5px solid #e5e7eb;cursor:pointer;font-family:inherit;white-space:nowrap}
 #slack-sync .ss-act-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-act-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-act-danger{height:32px;border-radius:8px;background:#fff;color:#c53030;font-size:12px;font-weight:500;padding:0 10px;border:none;cursor:pointer;font-family:inherit}
 #slack-sync .ss-act-danger:hover{text-decoration:underline}
+#slack-sync .ss-act-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
 #slack-sync .ss-act-confirm{height:32px;border-radius:8px;background:#c53030;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit}
 #slack-sync .ss-act-confirm:hover{opacity:.9}
-#slack-sync .ss-act-cancel{height:32px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 10px;border:1px solid #e5e7eb;cursor:pointer;font-family:inherit}
+#slack-sync .ss-act-confirm:focus-visible{outline:2px solid #c53030;outline-offset:2px}
+#slack-sync .ss-act-cancel{height:32px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 10px;border:1.5px solid #e5e7eb;cursor:pointer;font-family:inherit}
+#slack-sync .ss-act-cancel:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* overflow button (round) */
 #slack-sync .ss-overflow-btn{width:28px;height:28px;border-radius:50%;border:1px solid #e5e7eb;background:#fff;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0}
 #slack-sync .ss-overflow-btn:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-overflow-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
 /* overflow popover */
 #slack-sync .ss-popover{position:absolute;top:32px;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:20;min-width:160px;overflow:hidden}
 #slack-sync .ss-popover-item{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 14px;font-size:13px;font-weight:500;color:#1c2c44;cursor:pointer;font-family:inherit}
 #slack-sync .ss-popover-item:hover{background:#f8fafb}
+#slack-sync .ss-popover-item:focus-visible{outline:2px solid #1c2c44;outline-offset:-2px}
 #slack-sync .ss-popover-item-danger{color:#c53030}
 #slack-sync .ss-overflow-wrap{position:relative}
 
@@ -119,27 +124,10 @@
 /* bulk import button */
 #slack-sync .ss-bulk-import-btn{height:34px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#1c2c44;font-size:13px;font-weight:600;padding:0 14px;cursor:pointer;font-family:inherit}
 #slack-sync .ss-bulk-import-btn:hover{border-color:#1c2c44}
+#slack-sync .ss-bulk-import-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-bulk-import-note{font-size:12px;color:#64748b;margin-top:4px}
 #slack-sync .ss-bulk-confirm{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#92400e}
 #slack-sync .ss-bulk-confirm-actions{display:flex;gap:8px;margin-top:8px}
-
-/* All DB users roster */
-#slack-sync .ss-db-row{display:flex;align-items:center;gap:12px;border-bottom:1px solid #f1f5f9;padding:10px 4px;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;color:inherit;transition:background .1s}
-#slack-sync .ss-db-row:hover{background:#f8fafb}
-#slack-sync .ss-db-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-#slack-sync .ss-db-row-chip{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:700;color:#fff}
-#slack-sync .ss-db-row-body{flex:1;min-width:0}
-#slack-sync .ss-db-row-name{font-size:14px;font-weight:600;color:#1c2c44;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#slack-sync .ss-db-row-email{font-size:12px;color:#64748b;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#slack-sync .ss-db-row-badges{display:flex;align-items:center;gap:6px;flex-shrink:0}
-#slack-sync .ss-db-row-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;pointer-events:auto}
-
-/* Unclaimed Slack rows */
-#slack-sync .ss-slack-row{display:flex;align-items:center;gap:12px;border-bottom:1px solid #f1f5f9;padding:10px 4px;cursor:pointer;background:none;border-left:none;border-right:none;border-top:none;width:100%;text-align:left;font-family:inherit;color:inherit}
-#slack-sync .ss-slack-row:hover{background:#f8fafb}
-#slack-sync .ss-slack-chip{width:36px;height:36px;border-radius:50%;background:#4A154B;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px;font-weight:700;color:#fff}
-#slack-sync .ss-slack-uid{font-size:12px;color:#94a3b8;font-family:monospace;flex-shrink:0;max-width:100px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#slack-sync .ss-slack-row-actions{display:flex;align-items:center;gap:6px;flex-shrink:0;pointer-events:auto}
 
 /* inline link picker */
 #slack-sync .ss-picker{position:relative;width:100%}
@@ -149,6 +137,7 @@
 #slack-sync .ss-picker-dropdown.is-open{display:block}
 #slack-sync .ss-picker-option{padding:8px 12px;font-size:13px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
 #slack-sync .ss-picker-option:hover,[role=option].ss-picker-option[aria-selected=true]{background:#f8fafb}
+#slack-sync .ss-picker-option:focus-visible{outline:2px solid #1c2c44;outline-offset:-2px}
 #slack-sync .ss-picker-option-name{font-weight:600;color:#1c2c44}
 #slack-sync .ss-picker-option-email{font-size:11.5px;color:#64748b}
 #slack-sync .ss-picker-suggestion-badge{display:inline-block;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 5px;margin-left:5px}
@@ -157,36 +146,42 @@
 #slack-sync .ss-picker-confirm-row{display:flex;align-items:center;gap:6px}
 #slack-sync .ss-picker-confirm-btn{height:32px;border-radius:8px;background:#1c2c44;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap}
 #slack-sync .ss-picker-confirm-btn:hover{opacity:.9}
+#slack-sync .ss-picker-confirm-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-picker-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:2px 6px}
 
-/* drawer sections */
+/* drawer sections -- 8px/0 KV rows, 11px/700 uppercase section titles */
 #slack-sync .ss-dw-section{margin-bottom:16px}
 #slack-sync .ss-dw-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f1f5f9}
-#slack-sync .ss-dw-kv{display:flex;gap:8px;margin-bottom:6px;font-size:13px}
+#slack-sync .ss-dw-kv{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #f8fafb;font-size:13px}
+#slack-sync .ss-dw-kv:last-child{border-bottom:none}
 #slack-sync .ss-dw-key{width:80px;flex-shrink:0;color:#64748b;font-weight:500}
 #slack-sync .ss-dw-val{flex:1;color:#1c2c44;font-weight:500;word-break:break-all}
 #slack-sync .ss-dw-actions{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid #eef1f5;margin-top:16px}
 #slack-sync .ss-dw-confirm-zone{background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;padding:12px;font-size:13px;color:#c53030}
 #slack-sync .ss-dw-confirm-msg{font-weight:500;margin-bottom:8px}
 #slack-sync .ss-dw-confirm-actions{display:flex;gap:8px}
-#slack-sync .ss-dw-btn-primary{height:34px;border-radius:8px;background:#1c2c44;color:#fff;font-size:13px;font-weight:600;padding:0 14px;border:none;cursor:pointer;font-family:inherit}
-#slack-sync .ss-dw-btn-primary:hover{opacity:.9}
-#slack-sync .ss-dw-btn-danger{height:34px;border-radius:8px;background:#c53030;color:#fff;font-size:13px;font-weight:600;padding:0 14px;border:none;cursor:pointer;font-family:inherit}
+/* drawer footer buttons -- 40px matching .mr-act-primary */
+#slack-sync .ss-dw-btn-primary{height:40px;border-radius:9px;background:#1c2c44;color:#fff;font-size:14px;font-weight:600;padding:0 16px;border:none;cursor:pointer;font-family:inherit}
+#slack-sync .ss-dw-btn-primary:hover{background:#253c5e}
+#slack-sync .ss-dw-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-dw-btn-danger{height:40px;border-radius:9px;background:#c53030;color:#fff;font-size:14px;font-weight:600;padding:0 16px;border:none;cursor:pointer;font-family:inherit}
 #slack-sync .ss-dw-btn-danger:hover{opacity:.9}
-#slack-sync .ss-dw-btn-ghost{height:34px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 14px;border:1px solid #e5e7eb;cursor:pointer;font-family:inherit}
+#slack-sync .ss-dw-btn-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
+#slack-sync .ss-dw-btn-ghost{height:40px;border-radius:9px;background:#fff;color:#475569;font-size:14px;font-weight:600;padding:0 16px;border:1.5px solid #e5e7eb;cursor:pointer;font-family:inherit}
 #slack-sync .ss-dw-btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-dw-btn-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-dw-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:4px 8px;margin-top:4px}
-#slack-sync .ss-dw-match-badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:600;padding:3px 9px;border-radius:7px}
 
-/* Send Message modal */
+/* Send Message modal -- aligned to .mr-modal dimensions */
 #ssync-message-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000}
-#ssync-message-modal .ss-modal-inner{position:relative;background:#fff;border-radius:12px;width:100%;max-width:600px;margin:0 16px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;display:flex;flex-direction:column}
-#ssync-message-modal .ss-modal-header{display:flex;align-items:center;justify-content:space-between;padding:20px;border-bottom:1px solid #f1f5f9;flex-shrink:0}
-#ssync-message-modal .ss-modal-title{font-size:16px;font-weight:600;color:#1c2c44}
-#ssync-message-modal .ss-modal-close{width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:24px;color:#9ca3af;cursor:pointer;border:none;background:none;border-radius:8px}
+#ssync-message-modal .ss-modal-inner{position:relative;background:#fff;border-radius:14px;width:100%;max-width:600px;margin:0 16px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;display:flex;flex-direction:column}
+#ssync-message-modal .ss-modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #e4e7ec;flex-shrink:0}
+#ssync-message-modal .ss-modal-title{font-size:17px;font-weight:600;color:#1c2c44;margin:0}
+#ssync-message-modal .ss-modal-close{width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#9ca3af;cursor:pointer;border:none;background:none;border-radius:8px}
 #ssync-message-modal .ss-modal-close:hover{color:#374151}
+#ssync-message-modal .ss-modal-close:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #ssync-message-modal .ss-modal-body{padding:20px;overflow-y:auto;flex:1}
-#ssync-message-modal .ss-modal-footer{padding:16px 20px;border-top:1px solid #f1f5f9;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0}
+#ssync-message-modal .ss-modal-footer{padding:16px 20px;border-top:1px solid #e4e7ec;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0}
 #ssync-message-modal .ss-field-label{display:block;font-size:14px;font-weight:500;color:#374151;margin-bottom:6px}
 #ssync-message-modal .ss-user-checkboxes{max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#f9fafb}
 #ssync-message-modal .ss-recipient-item{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:14px}
@@ -208,23 +203,18 @@
 @media (max-width:767px){
   #slack-sync .ss-head{flex-direction:column;align-items:flex-start}
   #slack-sync .ss-head-actions{width:100%}
-  #slack-sync .ss-stats-row{flex-direction:column}
-  #slack-sync .ss-stats{min-height:48px;padding:12px 16px}
-  #slack-sync .ss-channel-card{width:auto;align-self:stretch}
-  #slack-sync .ss-controls{flex-direction:column;align-items:stretch}
-  #slack-sync .ss-seg{width:100%}
-  #slack-sync .ss-seg-tab{flex:1}
+  #slack-sync .ss-toolbar{flex-direction:column;align-items:stretch}
+  #slack-sync .ss-pills{flex-wrap:wrap}
+  #slack-sync .ss-pill{flex:1;justify-content:center}
   #slack-sync .ss-search{width:100%;height:44px;min-width:unset}
-  #slack-sync .ss-card{flex-direction:column}
-  #slack-sync .ss-card-actions{align-items:flex-start;width:100%}
-  #slack-sync .ss-act-primary,#slack-sync .ss-act-ghost,#slack-sync .ss-act-confirm{width:100%;justify-content:center}
-  #slack-sync .ss-db-row{flex-wrap:wrap}
-  #slack-sync .ss-db-row-badges,#slack-sync .ss-db-row-actions{margin-left:48px}
+  #slack-sync .ss-statline{flex-direction:column;align-items:flex-start;gap:4px}
+  #slack-sync .ss-row{flex-wrap:wrap}
+  #slack-sync .ss-row-actions{margin-left:52px;width:calc(100% - 52px)}
+  #slack-sync .ss-act-primary,#slack-sync .ss-act-ghost,#slack-sync .ss-act-confirm{justify-content:center}
   #slack-sync .ss-picker-dropdown{position:fixed;bottom:0;left:0;right:0;top:auto;max-height:50vh;border-radius:12px 12px 0 0;z-index:60}
   #slack-sync .ss-popover{position:fixed;bottom:0;left:0;right:0;top:auto;border-radius:12px 12px 0 0}
   #ssync-message-modal .ss-modal-inner{max-width:100%;margin:0;border-radius:12px 12px 0 0;position:fixed;bottom:0}
   #ssync-message-modal .ss-user-checkboxes{max-height:200px}
-  /* safe area for notch */
   #slack-sync .ss-dw-actions{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 }
 
@@ -238,7 +228,7 @@
 {% block content %}
 <div id="slack-sync" class="bg-white rounded-tcsc p-5">
 
-  <!-- ZONE 2: Header bar -->
+  <!-- Header band -->
   <div class="ss-head">
     <h1>Slack User Sync</h1>
     <div class="ss-head-actions">
@@ -259,45 +249,37 @@
     </div>
   </div>
 
-  <!-- ZONE 3+4: Stats ribbon + channel tile -->
-  <div class="ss-stats-row">
-    <div class="ss-stats" id="ssync-stats" aria-label="Sync status ribbon">
-      <!-- populated by ssyncRenderStats() -->
-      <div class="ss-skel-stat"></div>
-      <div class="ss-skel-stat"></div>
-      <div class="ss-skel-stat"></div>
-    </div>
-    <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="ss-channel-card" id="ssync-channel-card" aria-label="Channel Sync status">
-      <div class="ss-channel-card-status" id="ssync-channel-status">
-        <span>&#8212;</span><span>Channel Sync</span>
-      </div>
-      <div class="ss-channel-card-link">Channel Sync &#8594;</div>
-    </a>
-  </div>
-
-  <!-- ZONE 5: Workspace controls -->
-  <div class="ss-controls">
-    <div class="ss-seg" role="tablist" aria-label="Workspace view" id="ssync-tablist">
-      <button class="ss-seg-tab" role="tab" id="ssync-tab-attention" aria-selected="true" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('attention', this)">
+  <!-- Single toolbar band: pills + spacer + count + search -->
+  <div class="ss-toolbar" id="ssync-tablist" role="tablist" aria-label="Workspace view">
+    <div class="ss-pills">
+      <button class="ss-pill is-active" role="tab" id="ssync-tab-attention" aria-selected="true" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('attention', this)">
         Needs attention <span id="ssync-tab-attention-count"></span>
       </button>
-      <button class="ss-seg-tab" role="tab" id="ssync-tab-all_db" aria-selected="false" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('all_db', this)">
+      <button class="ss-pill" role="tab" id="ssync-tab-all_db" aria-selected="false" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('all_db', this)">
         All DB users <span id="ssync-tab-all_db-count"></span>
       </button>
-      <button class="ss-seg-tab" role="tab" id="ssync-tab-unclaimed_slack" aria-selected="false" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('unclaimed_slack', this)">
+      <button class="ss-pill" role="tab" id="ssync-tab-unclaimed_slack" aria-selected="false" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('unclaimed_slack', this)">
         Unclaimed Slack <span id="ssync-tab-unclaimed_slack-count"></span>
       </button>
     </div>
+    <div class="ss-toolbar-spacer"></div>
+    <span class="ss-count" id="ssync-visible-count"></span>
     <input type="text" id="ssync-search" class="ss-search"
            placeholder="Search name or email..."
            aria-label="Search users by name or email"
            oninput="ssyncOnSearch(this.value)">
   </div>
 
+  <!-- Quiet statline: sync numbers + channel-sync chip (informational only) -->
+  <div class="ss-statline" id="ssync-statline" aria-label="Sync status">
+    <span class="ss-skel-stat"></span>
+    <span class="ss-skel-stat"></span>
+  </div>
+
   <!-- sr-only live count -->
   <div class="ss-sr-only" id="ssync-count-announce" aria-live="polite"></div>
 
-  <!-- ZONE 6: Reconciliation list -->
+  <!-- Reconciliation list (single geometry for all three views) -->
   <div id="ssync-list" class="ss-list" role="tabpanel" aria-labelledby="ssync-tab-attention" aria-live="polite">
     <div class="ss-skel"></div>
     <div class="ss-skel"></div>
@@ -305,7 +287,7 @@
   </div>
 </div>
 
-<!-- ZONE 9: Send Message Modal -->
+<!-- Send Message Modal -->
 <div id="ssync-message-modal" role="dialog" aria-modal="true" aria-labelledby="ssync-modal-title">
   <div class="ss-modal-inner">
     <div class="ss-modal-header">
