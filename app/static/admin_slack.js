@@ -1,655 +1,1628 @@
-/**
- * Slack Sync Admin JavaScript
- * Handles Slack user synchronization and linking UI
- */
+// admin_slack.js — Slack User Sync surface.
+// All module-level identifiers are prefixed ssync to prevent global leakage.
+// Uses AdminUI.* foundation primitives (loaded before this file).
 
-let usersTable, slackOnlyTable;
-let allUsersData = [];
-let slackOnlyData = [];
-let currentFilter = 'all';
-let linkModalData = {};
+(function () {
+  'use strict';
 
-// Load data on page load
-document.addEventListener('DOMContentLoaded', function() {
-    loadStatus();
-    loadUsers();
-    loadSlackOnly();
-    loadChannelSyncStatus();
-});
+  // ─── Module state ────────────────────────────────────────────────────────────
+  var ssyncState = {
+    segment: 'attention',
+    search: '',
+    users: [],          // {id, email, first_name, last_name, full_name, status, slack_matched, slack_uid, slack_display_name}
+    unmatchedSlack: [], // {id, slack_uid, email, display_name, full_name}
+    unmatchedDb: [],    // {id, email, first_name, last_name, full_name, status}
+    status: null,       // {total_slack_users, total_db_users, matched_users, unmatched_slack_users, unmatched_db_users}
+    channelStatus: null // {config, credentials, scheduler}
+  };
 
-// Close modals on Escape key
-document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') {
-        closeLinkModal();
-        closeMessageModal();
+  // Track currently open popover element for singleton management
+  var ssyncOpenPopover = null;
+  // Track last focused element before drawer open
+  var ssyncDrawerTrigger = null;
+
+  // ─── Initials chip palette ───────────────────────────────────────────────────
+  var CHIP_PALETTE = [
+    { from: '#1c2c44', to: '#2d4a6a' },
+    { from: '#1e40af', to: '#3b82f6' },
+    { from: '#5b21b6', to: '#8b5cf6' },
+    { from: '#0f766e', to: '#14b8a6' },
+    { from: '#92400e', to: '#f59e0b' },
+    { from: '#9d174d', to: '#ec4899' }
+  ];
+
+  function ssyncChipColor(name) {
+    if (!name) return CHIP_PALETTE[0];
+    var hash = 0;
+    for (var i = 0; i < name.length; i++) { hash += name.charCodeAt(i); }
+    return CHIP_PALETTE[hash % CHIP_PALETTE.length];
+  }
+
+  function ssyncInitials(name) {
+    if (!name) return '?';
+    var parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  }
+
+  function ssyncChip(name, size) {
+    size = size || 40;
+    var pal = ssyncChipColor(name);
+    var chip = AdminUI.el('div', {
+      class: 'ss-chip',
+      style: 'width:' + size + 'px;height:' + size + 'px;background:linear-gradient(135deg,' + pal.from + ',' + pal.to + ')'
+    }, [ssyncInitials(name)]);
+    return chip;
+  }
+
+  // ─── Status badge variant helpers ────────────────────────────────────────────
+  function ssyncStatusVariant(status) {
+    return { ACTIVE: 'success', PENDING: 'warning', ALUMNI: 'neutral', DROPPED: 'danger' }[status] || 'neutral';
+  }
+
+  // ─── Suggested match engine ───────────────────────────────────────────────────
+  // Returns {candidate, confidence:'confident'|'strong'|'weak'|'none', reason}
+  function ssyncSuggestMatch(dbUser, slackPool) {
+    if (!slackPool || slackPool.length === 0) {
+      return { candidate: null, confidence: 'none', reason: 'No Slack accounts available' };
     }
-});
+    var dbEmail = (dbUser.email || '').toLowerCase().trim();
+    var dbName = (dbUser.full_name || '').toLowerCase().trim();
 
-async function loadStatus() {
-    try {
-        const resp = await fetch('/admin/slack/status');
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        document.getElementById('stat-slack-users').textContent = data.total_slack_users;
-        document.getElementById('stat-db-users').textContent = data.total_db_users;
-        document.getElementById('stat-matched').textContent = data.matched_users;
-        document.getElementById('stat-unmatched-slack').textContent = data.unmatched_slack_users;
-        document.getElementById('stat-unmatched-db').textContent = data.unmatched_db_users;
-    } catch (e) {
-        console.error('Failed to load status:', e);
-        showToast('Failed to load status', 'error');
+    // 1. Exact email match (confident)
+    for (var i = 0; i < slackPool.length; i++) {
+      var s = slackPool[i];
+      if (dbEmail && s.email && s.email.toLowerCase().trim() === dbEmail) {
+        return { candidate: s, confidence: 'confident', reason: 'Email match: ' + s.email };
+      }
     }
-}
 
-async function loadUsers() {
-    try {
-        const resp = await fetch('/admin/slack/users');
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
+    // 2. Normalized full-name equality (strong)
+    if (dbName) {
+      for (var j = 0; j < slackPool.length; j++) {
+        var s2 = slackPool[j];
+        var slackName = (s2.full_name || s2.display_name || '').toLowerCase().trim();
+        if (slackName && slackName === dbName) {
+          return { candidate: s2, confidence: 'strong', reason: 'Name match: ' + (s2.full_name || s2.display_name) };
         }
-        const data = await resp.json();
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        allUsersData = data.users;
-
-        if (usersTable) {
-            usersTable.replaceData(getFilteredUsers());
-        } else {
-            usersTable = new Tabulator("#users-table", {
-                data: getFilteredUsers(),
-                layout: "fitColumns",
-                placeholder: "No users found",
-                columns: [
-                    {title: "ID", field: "id", width: 60},
-                    {title: "Name", field: "full_name", minWidth: 150},
-                    {title: "Email", field: "email", minWidth: 200},
-                    {title: "Status", field: "status", width: 100, formatter: function(cell) {
-                        const status = cell.getValue();
-                        const classes = {
-                            'ACTIVE': 'status-badge status-active',
-                            'PENDING': 'status-badge status-pending',
-                            'ALUMNI': 'status-badge status-alumni',
-                            'DROPPED': 'status-badge status-canceled'
-                        };
-                        return `<span class="${classes[status] || 'status-badge'}">${status}</span>`;
-                    }},
-                    {title: "Slack", field: "slack_matched", width: 100, formatter: function(cell) {
-                        const matched = cell.getValue();
-                        if (matched) {
-                            return '<span class="status-badge status-active">Linked</span>';
-                        } else {
-                            return '<span class="status-badge status-draft">Not Linked</span>';
-                        }
-                    }},
-                    {title: "Slack UID", field: "slack_uid", width: 120},
-                    {title: "Slack Name", field: "slack_display_name", minWidth: 120},
-                    {title: "Actions", formatter: function(cell) {
-                        const row = cell.getData();
-                        if (row.slack_matched) {
-                            return `<button class="admin-btn admin-btn-sm admin-btn-secondary" onclick="unlinkUser(${row.id})">Unlink</button>`;
-                        } else {
-                            return `<div class="admin-actions"><button class="admin-btn admin-btn-sm admin-btn-primary" onclick="showLinkDbModal(${row.id})">Link</button>` +
-                                   `<button class="admin-btn admin-btn-sm admin-btn-danger" onclick="confirmDeleteUser(${row.id})">Delete</button></div>`;
-                        }
-                    }, width: 160, hozAlign: "center", headerSort: false}
-                ]
-            });
-        }
-    } catch (e) {
-        console.error('Failed to load users:', e);
-        showToast('Failed to load users', 'error');
+      }
     }
-}
 
-async function loadSlackOnly() {
-    try {
-        const resp = await fetch('/admin/slack/unmatched');
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-
-        if (data.error) {
-            throw new Error(data.error);
-        }
-
-        slackOnlyData = data.unmatched_slack_users;
-
-        if (slackOnlyTable) {
-            slackOnlyTable.replaceData(slackOnlyData);
-        } else {
-            slackOnlyTable = new Tabulator("#slack-only-table", {
-                data: slackOnlyData,
-                layout: "fitColumns",
-                placeholder: "No unmatched Slack users",
-                columns: [
-                    {title: "Slack UID", field: "slack_uid", width: 120},
-                    {title: "Email", field: "email", minWidth: 200},
-                    {title: "Display Name", field: "display_name", minWidth: 150},
-                    {title: "Full Name", field: "full_name", minWidth: 150},
-                    {title: "Actions", formatter: function(cell) {
-                        const id = cell.getData().id;
-                        return `<div class="admin-actions"><button class="admin-btn admin-btn-sm admin-btn-primary" onclick="showLinkSlackModal(${id})">Link</button>` +
-                               `<button class="admin-btn admin-btn-sm admin-btn-secondary" onclick="importSlackUser(${id})">Import</button></div>`;
-                    }, width: 180, hozAlign: "center", headerSort: false}
-                ]
-            });
-        }
-    } catch (e) {
-        console.error('Failed to load Slack users:', e);
-        showToast('Failed to load Slack users', 'error');
+    // 3. Token/startsWith overlap (weak)
+    if (dbName) {
+      var dbTokens = dbName.split(/\s+/);
+      var best = null, bestScore = 0;
+      for (var k = 0; k < slackPool.length; k++) {
+        var s3 = slackPool[k];
+        var sn = (s3.full_name || s3.display_name || '').toLowerCase();
+        if (!sn) continue;
+        var snTokens = sn.split(/\s+/);
+        var matches = 0;
+        dbTokens.forEach(function (t) {
+          if (snTokens.some(function (st) { return st.startsWith(t) || t.startsWith(st); })) matches++;
+        });
+        var score = matches / Math.max(dbTokens.length, snTokens.length);
+        if (score > bestScore) { bestScore = score; best = s3; }
+      }
+      if (best && bestScore >= 0.5) {
+        return { candidate: best, confidence: 'weak', reason: 'Partial name overlap' };
+      }
     }
-}
 
-function getFilteredUsers() {
-    if (currentFilter === 'all') {
-        return allUsersData;
-    } else if (currentFilter === 'matched') {
-        return allUsersData.filter(u => u.slack_matched);
+    return { candidate: null, confidence: 'none', reason: 'No match found' };
+  }
+
+  // Symmetric: for a Slack user, find best DB match
+  function ssyncSuggestMatchSlack(slackUser, dbPool) {
+    if (!dbPool || dbPool.length === 0) {
+      return { candidate: null, confidence: 'none', reason: 'No DB users available' };
+    }
+    var slackEmail = (slackUser.email || '').toLowerCase().trim();
+    var slackName = (slackUser.full_name || slackUser.display_name || '').toLowerCase().trim();
+
+    for (var i = 0; i < dbPool.length; i++) {
+      var d = dbPool[i];
+      if (slackEmail && d.email && d.email.toLowerCase().trim() === slackEmail) {
+        return { candidate: d, confidence: 'confident', reason: 'Email match: ' + d.email };
+      }
+    }
+    if (slackName) {
+      for (var j = 0; j < dbPool.length; j++) {
+        var d2 = dbPool[j];
+        var dn = (d2.full_name || '').toLowerCase().trim();
+        if (dn && dn === slackName) {
+          return { candidate: d2, confidence: 'strong', reason: 'Name match: ' + d2.full_name };
+        }
+      }
+    }
+    if (slackName) {
+      var sTokens = slackName.split(/\s+/);
+      var best = null, bestScore = 0;
+      for (var k = 0; k < dbPool.length; k++) {
+        var d3 = dbPool[k];
+        var dname = (d3.full_name || '').toLowerCase();
+        if (!dname) continue;
+        var dTokens = dname.split(/\s+/);
+        var matches = 0;
+        sTokens.forEach(function (t) {
+          if (dTokens.some(function (dt) { return dt.startsWith(t) || t.startsWith(dt); })) matches++;
+        });
+        var score = matches / Math.max(sTokens.length, dTokens.length);
+        if (score > bestScore) { bestScore = score; best = d3; }
+      }
+      if (best && bestScore >= 0.5) {
+        return { candidate: best, confidence: 'weak', reason: 'Partial name overlap' };
+      }
+    }
+    return { candidate: null, confidence: 'none', reason: 'No match found' };
+  }
+
+  // ─── Load all data ────────────────────────────────────────────────────────────
+  function ssyncLoadAll() {
+    return Promise.all([
+      AdminUI.fetchJSON('/admin/slack/status').then(function (d) { ssyncState.status = d; }).catch(function (e) {
+        console.error('status load failed', e);
+        if (window.showToast) showToast('Failed to load sync status', 'error');
+      }),
+      AdminUI.fetchJSON('/admin/slack/users').then(function (d) { ssyncState.users = d.users || []; }).catch(function (e) {
+        console.error('users load failed', e);
+        if (window.showToast) showToast('Failed to load users', 'error');
+      }),
+      AdminUI.fetchJSON('/admin/slack/unmatched').then(function (d) {
+        ssyncState.unmatchedSlack = d.unmatched_slack_users || [];
+        ssyncState.unmatchedDb = d.unmatched_db_users || [];
+      }).catch(function (e) {
+        console.error('unmatched load failed', e);
+        if (window.showToast) showToast('Failed to load unmatched users', 'error');
+      }),
+      AdminUI.fetchJSON('/admin/channel-sync/status').then(function (d) { ssyncState.channelStatus = d; }).catch(function (e) {
+        console.error('channel-sync status load failed', e);
+      })
+    ]).then(function () {
+      ssyncRenderStats();
+      ssyncRenderChannelCard();
+      ssyncUpdateTabCounts();
+      ssyncRenderList();
+    });
+  }
+
+  // ─── Stats ribbon ─────────────────────────────────────────────────────────────
+  function ssyncRenderStats() {
+    var el = document.getElementById('ssync-stats');
+    if (!el) return;
+    el.innerHTML = '';
+
+    var s = ssyncState.status;
+    if (!s) {
+      [1,2,3].forEach(function () { el.appendChild(AdminUI.el('div', { class: 'ss-skel-stat' }, [])); });
+      return;
+    }
+
+    // Narrative: {matched} matched · {db} DB users need Slack · {slack} Slack accounts unclaimed
+    var narrative = AdminUI.el('div', { class: 'ss-stats-narrative' }, []);
+
+    // Matched (informational, not a filter)
+    var matchedSpan = AdminUI.el('span', { class: 'ss-seg-btn-info' }, [
+      String(s.matched_users) + ' matched'
+    ]);
+    narrative.appendChild(matchedSpan);
+
+    var dot1 = AdminUI.el('span', { class: 'ss-stats-dot' }, ['·']);
+    narrative.appendChild(dot1);
+
+    // DB needs Slack (filter: attention)
+    var dbBtn = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-seg-btn',
+      'aria-pressed': ssyncState.segment === 'attention' ? 'true' : 'false'
+    }, [String(s.unmatched_db_users) + ' DB users need Slack']);
+    dbBtn.addEventListener('click', function () { ssyncSetSegment('attention', null); });
+    narrative.appendChild(dbBtn);
+
+    var dot2 = AdminUI.el('span', { class: 'ss-stats-dot' }, ['·']);
+    narrative.appendChild(dot2);
+
+    // Slack unclaimed (filter: unclaimed_slack)
+    var slackBtn = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-seg-btn',
+      'aria-pressed': ssyncState.segment === 'unclaimed_slack' ? 'true' : 'false'
+    }, [String(s.unmatched_slack_users) + ' Slack accounts unclaimed']);
+    slackBtn.addEventListener('click', function () { ssyncSetSegment('unclaimed_slack', null); });
+    narrative.appendChild(slackBtn);
+
+    el.appendChild(narrative);
+
+    // Divider + raw totals
+    el.appendChild(AdminUI.el('div', { class: 'ss-stats-divider' }, []));
+    el.appendChild(AdminUI.el('div', { class: 'ss-stats-totals' }, [
+      String(s.total_slack_users) + ' Slack · ' + String(s.total_db_users) + ' DB'
+    ]));
+  }
+
+  // ─── Channel sync tile ───────────────────────────────────────────────────────
+  function ssyncRenderChannelCard() {
+    var statusEl = document.getElementById('ssync-channel-status');
+    if (!statusEl) return;
+    statusEl.innerHTML = '';
+
+    var cs = ssyncState.channelStatus;
+    if (!cs) {
+      statusEl.appendChild(document.createTextNode('— Channel Sync'));
+      return;
+    }
+
+    var credsOk = cs.credentials && cs.credentials.valid;
+    var schedulerOk = cs.scheduler && cs.scheduler.running;
+
+    var icon, label, variant;
+    if (credsOk && schedulerOk) {
+      icon = '✓'; label = 'Ready'; variant = 'success';
+    } else if (credsOk) {
+      icon = '⏸'; label = 'Idle'; variant = 'warning';
     } else {
-        return allUsersData.filter(u => !u.slack_matched);
+      icon = '✗'; label = 'Config needed'; variant = 'danger';
     }
-}
 
-function setUserFilter(filter, btn) {
-    currentFilter = filter;
+    statusEl.appendChild(AdminUI.el('span', {}, [icon]));
+    statusEl.appendChild(AdminUI.statusBadge(label, variant));
+  }
 
-    // Update button states
-    document.querySelectorAll('.admin-pill-group .admin-pill').forEach(b => b.classList.remove('active'));
-    btn.classList.add('active');
+  // ─── Segment / tab switching ──────────────────────────────────────────────────
+  function ssyncSetSegment(key, _tabBtn) {
+    ssyncState.segment = key;
+    ssyncState.search = '';
+    var searchEl = document.getElementById('ssync-search');
+    if (searchEl) searchEl.value = '';
 
-    // Update table
-    if (usersTable) {
-        usersTable.replaceData(getFilteredUsers());
+    // Update tab aria-selected
+    ['attention', 'all_db', 'unclaimed_slack'].forEach(function (k) {
+      var tab = document.getElementById('ssync-tab-' + k);
+      if (tab) tab.setAttribute('aria-selected', k === key ? 'true' : 'false');
+    });
+
+    // Update tabpanel aria-labelledby
+    var list = document.getElementById('ssync-list');
+    if (list) list.setAttribute('aria-labelledby', 'ssync-tab-' + key);
+
+    ssyncRenderStats(); // Re-render to update aria-pressed on ribbon filters
+    ssyncRenderList();
+  }
+
+  function ssyncUpdateTabCounts() {
+    var attentionCount = ssyncState.unmatchedDb.length + ssyncState.unmatchedSlack.length;
+    var allDbCount = ssyncState.users.length;
+    var unclaimedCount = ssyncState.unmatchedSlack.length;
+
+    var ac = document.getElementById('ssync-tab-attention-count');
+    var dc = document.getElementById('ssync-tab-all_db-count');
+    var uc = document.getElementById('ssync-tab-unclaimed_slack-count');
+
+    if (ac) ac.textContent = '(' + attentionCount + ')';
+    if (dc) dc.textContent = '(' + allDbCount + ')';
+    if (uc) uc.textContent = '(' + unclaimedCount + ')';
+  }
+
+  function ssyncOnSearch(val) {
+    ssyncState.search = val;
+    ssyncRenderList();
+  }
+
+  function ssyncFilterBySearch(arr, q) {
+    if (!q) return arr;
+    var lq = q.toLowerCase();
+    return arr.filter(function (u) {
+      var name = (u.full_name || u.display_name || '').toLowerCase();
+      var email = (u.email || '').toLowerCase();
+      return name.includes(lq) || email.includes(lq);
+    });
+  }
+
+  // ─── Render list ──────────────────────────────────────────────────────────────
+  function ssyncRenderList() {
+    var listEl = document.getElementById('ssync-list');
+    if (!listEl) return;
+    listEl.innerHTML = '';
+    var q = ssyncState.search;
+
+    if (ssyncState.segment === 'attention') {
+      ssyncRenderAttentionList(listEl, q);
+    } else if (ssyncState.segment === 'all_db') {
+      ssyncRenderAllDbList(listEl, q);
+    } else {
+      ssyncRenderUnclaimedSlackList(listEl, q);
     }
-}
+  }
 
-async function runSync() {
-    const btn = document.getElementById('sync-btn');
+  // ZONE 6a: Needs attention
+  function ssyncRenderAttentionList(listEl, q) {
+    var dbUsers = ssyncFilterBySearch(ssyncState.unmatchedDb, q);
+    var slackUsers = ssyncFilterBySearch(ssyncState.unmatchedSlack, q);
 
-    btn.disabled = true;
-    btn.classList.add('loading');
+    if (dbUsers.length === 0 && slackUsers.length === 0 && !q) {
+      // Positive empty state
+      listEl.appendChild(AdminUI.el('div', { class: 'ss-empty' }, [
+        AdminUI.el('div', { class: 'ss-empty-icon' }, ['✓']),
+        AdminUI.el('div', { class: 'ss-empty-title' }, ['All users are linked']),
+        AdminUI.el('div', { class: 'ss-empty-sub' }, ['DB users and Slack accounts are fully matched.'])
+      ]));
+      return;
+    }
 
-    try {
-        const resp = await fetch('/admin/slack/sync', {method: 'POST'});
-        if (!resp.ok && resp.status !== 200) {
-            throw new Error(`HTTP ${resp.status}`);
+    if (dbUsers.length === 0 && slackUsers.length === 0) {
+      listEl.appendChild(AdminUI.el('div', { class: 'ss-empty' }, ['No results for "' + q + '"']));
+      return;
+    }
+
+    // Sort: confident > strong > weak/none, then alphabetical
+    var dbWithMatch = dbUsers.map(function (u) {
+      var match = ssyncSuggestMatch(u, ssyncState.unmatchedSlack);
+      return { user: u, match: match };
+    });
+
+    var confident = dbWithMatch.filter(function (x) { return x.match.confidence === 'confident'; });
+    var strong = dbWithMatch.filter(function (x) { return x.match.confidence === 'strong'; });
+    var weakNone = dbWithMatch.filter(function (x) { return x.match.confidence !== 'confident' && x.match.confidence !== 'strong'; });
+
+    function sortByName(a, b) {
+      return (a.user.full_name || '').localeCompare(b.user.full_name || '');
+    }
+    confident.sort(sortByName);
+    strong.sort(sortByName);
+    weakNone.sort(sortByName);
+
+    var orderedDb = confident.concat(strong).concat(weakNone);
+
+    orderedDb.forEach(function (item) {
+      listEl.appendChild(ssyncBuildDbAttentionCard(item.user, item.match));
+    });
+
+    // Unclaimed Slack cards
+    var sortedSlack = slackUsers.slice().sort(function (a, b) {
+      return (a.full_name || a.display_name || '').localeCompare(b.full_name || b.display_name || '');
+    });
+    sortedSlack.forEach(function (u) {
+      listEl.appendChild(ssyncBuildSlackAttentionCard(u));
+    });
+
+    // Announce count
+    var countEl = document.getElementById('ssync-count-announce');
+    if (countEl) countEl.textContent = (dbUsers.length + slackUsers.length) + ' items';
+  }
+
+  function ssyncBuildDbAttentionCard(user, match) {
+    var name = user.full_name || (user.first_name + ' ' + user.last_name) || user.email || '?';
+    var chip = ssyncChip(name, 40);
+
+    var body = AdminUI.el('div', { class: 'ss-card-body' }, [
+      AdminUI.el('div', { class: 'ss-card-name' }, [name]),
+      AdminUI.el('div', { class: 'ss-card-meta' }, [
+        AdminUI.el('span', { class: 'ss-card-email' }, [user.email || '']),
+        AdminUI.statusBadge(user.status, ssyncStatusVariant(user.status))
+      ])
+    ]);
+
+    var actionsEl = AdminUI.el('div', { class: 'ss-card-actions' }, []);
+
+    if (match.confidence === 'confident' && match.candidate) {
+      // One-click link button
+      var slackDisplayName = match.candidate.display_name || match.candidate.full_name || match.candidate.slack_uid || 'Slack user';
+      var slackEmail = match.candidate.email || '';
+      var warnTitle = 'DB email will be updated to ' + slackEmail;
+      var linkBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-act-primary',
+        title: warnTitle,
+        'aria-describedby': 'ssync-link-warn-' + user.id
+      }, ['Link to @' + slackDisplayName + ' (email match)']);
+      linkBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ssyncLink(user.id, match.candidate.id);
+      });
+
+      var warnSpan = AdminUI.el('span', {
+        id: 'ssync-link-warn-' + user.id,
+        class: 'ss-sr-only'
+      }, ['Note: DB email will be updated to ' + slackEmail]);
+
+      actionsEl.appendChild(linkBtn);
+      actionsEl.appendChild(warnSpan);
+
+      // Overflow button
+      var overflowWrap = AdminUI.el('div', { class: 'ss-overflow-wrap' }, []);
+      var overflowBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-overflow-btn',
+        'aria-label': 'More actions for ' + name
+      }, ['…']);
+      overflowBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ssyncTogglePopover(overflowWrap, user, match);
+      });
+      overflowWrap.appendChild(overflowBtn);
+      actionsEl.appendChild(overflowWrap);
+
+    } else {
+      // Inline link picker
+      var pickerEl = ssyncLinkPicker('db', user, match, ssyncState.unmatchedSlack, function (slackId) {
+        ssyncLink(user.id, slackId);
+      });
+      actionsEl.appendChild(pickerEl);
+
+      var deleteBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-act-danger',
+        'aria-label': 'Delete ' + name
+      }, ['Delete']);
+      deleteBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ssyncDelete(user.id);
+      });
+      actionsEl.appendChild(deleteBtn);
+    }
+
+    var card = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-card ss-card-db',
+      'aria-label': name + ', ' + (user.email || '') + ', ' + user.status + ', not linked to Slack'
+    }, [chip, body, actionsEl]);
+
+    card.addEventListener('click', function (e) {
+      // Only open drawer if click was not on a child interactive element
+      if (e.target === card || e.target === body || e.target.closest('.ss-card-body')) {
+        ssyncOpenDrawer({ type: 'db', user: user, match: match });
+      }
+    });
+
+    return card;
+  }
+
+  function ssyncBuildSlackAttentionCard(slackUser) {
+    var name = slackUser.display_name || slackUser.full_name || slackUser.slack_uid || '?';
+    var chip = AdminUI.el('div', { class: 'ss-chip', style: 'width:40px;height:40px;background:#4A154B' }, [
+      AdminUI.el('span', {}, [name[0] ? name[0].toUpperCase() : 'S'])
+    ]);
+
+    var body = AdminUI.el('div', { class: 'ss-card-body' }, [
+      AdminUI.el('div', { class: 'ss-card-name' }, [name]),
+      AdminUI.el('div', { class: 'ss-card-meta' }, [
+        AdminUI.el('span', { class: 'ss-card-email' }, [slackUser.email || '']),
+        AdminUI.el('span', { style: 'font-size:11px;color:#94a3b8;font-family:monospace' }, [slackUser.slack_uid || ''])
+      ])
+    ]);
+
+    var actionsEl = AdminUI.el('div', { class: 'ss-card-actions' }, []);
+
+    // Import button with inline confirm
+    var importZone = AdminUI.el('div', {}, []);
+    var importBtn = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-act-primary',
+      'aria-label': 'Import ' + name + ' as ALUMNI member'
+    }, ['Import']);
+    importBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ssyncShowImportConfirm(importZone, importBtn, slackUser);
+    });
+    importZone.appendChild(importBtn);
+    actionsEl.appendChild(importZone);
+
+    // Link to DB user picker
+    var match = ssyncSuggestMatchSlack(slackUser, ssyncState.unmatchedDb);
+    var pickerEl = ssyncLinkPicker('slack', slackUser, match, ssyncState.unmatchedDb, function (dbId) {
+      ssyncLink(dbId, slackUser.id);
+    });
+    actionsEl.appendChild(pickerEl);
+
+    var card = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-card ss-card-slack',
+      'aria-label': name + ', ' + (slackUser.email || '') + ', unclaimed Slack account'
+    }, [chip, body, actionsEl]);
+
+    card.addEventListener('click', function (e) {
+      if (e.target === card || e.target === body || e.target.closest('.ss-card-body')) {
+        ssyncOpenDrawer({ type: 'slack', user: slackUser });
+      }
+    });
+
+    return card;
+  }
+
+  function ssyncShowImportConfirm(zone, importBtn, slackUser) {
+    var name = slackUser.display_name || slackUser.full_name || slackUser.slack_uid || '?';
+    importBtn.style.display = 'none';
+
+    var confirmZone = AdminUI.el('div', { class: 'ss-inline-confirm', role: 'alert' }, [
+      AdminUI.el('div', { class: 'ss-inline-confirm-msg' }, [
+        'Import ' + name + ' (' + (slackUser.email || 'no email') + ') as ALUMNI member with a legacy season?'
+      ])
+    ]);
+    var confirmActions = AdminUI.el('div', { class: 'ss-inline-confirm-actions' }, []);
+
+    var confirmBtn = AdminUI.el('button', { type: 'button', class: 'ss-act-confirm' }, ['Confirm']);
+    confirmBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Importing...';
+      ssyncImport(slackUser.id);
+    });
+    var cancelBtn = AdminUI.el('button', { type: 'button', class: 'ss-act-cancel' }, ['Cancel']);
+    cancelBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      zone.removeChild(confirmZone);
+      importBtn.style.display = '';
+      importBtn.focus();
+    });
+
+    confirmActions.appendChild(confirmBtn);
+    confirmActions.appendChild(cancelBtn);
+    confirmZone.appendChild(confirmActions);
+    zone.appendChild(confirmZone);
+    confirmBtn.focus();
+  }
+
+  // ZONE 6b: All DB users
+  function ssyncRenderAllDbList(listEl, q) {
+    var users = ssyncFilterBySearch(ssyncState.users, q);
+
+    if (users.length === 0) {
+      listEl.appendChild(AdminUI.el('div', { class: 'ss-empty' }, [
+        q ? 'No users match "' + q + '"' : 'No users found'
+      ]));
+      return;
+    }
+
+    users.forEach(function (user) {
+      listEl.appendChild(ssyncBuildDbRow(user));
+    });
+
+    var countEl = document.getElementById('ssync-count-announce');
+    if (countEl) countEl.textContent = users.length + ' users';
+  }
+
+  function ssyncBuildDbRow(user) {
+    var name = user.full_name || (user.first_name + ' ' + (user.last_name || '')) || user.email || '?';
+    var chip = ssyncChip(name, 36);
+    chip.classList.add('ss-db-row-chip');
+
+    var bodyEl = AdminUI.el('div', { class: 'ss-db-row-body' }, [
+      AdminUI.el('div', { class: 'ss-db-row-name' }, [name]),
+      AdminUI.el('div', { class: 'ss-db-row-email' }, [user.email || ''])
+    ]);
+
+    var badgesEl = AdminUI.el('div', { class: 'ss-db-row-badges' }, [
+      AdminUI.statusBadge(user.status, ssyncStatusVariant(user.status)),
+      user.slack_matched
+        ? AdminUI.statusBadge('Linked', 'success')
+        : AdminUI.statusBadge('Not linked', 'neutral')
+    ]);
+
+    var actionsEl = AdminUI.el('div', { class: 'ss-db-row-actions' }, []);
+    actionsEl.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    if (user.slack_matched) {
+      var unlinkBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-act-ghost',
+        'aria-label': 'Unlink ' + name + ' from Slack'
+      }, ['Unlink']);
+      unlinkBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ssyncUnlink(user.id, name, user.slack_display_name);
+      });
+      actionsEl.appendChild(unlinkBtn);
+    } else {
+      var linkTrigger = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-act-ghost',
+        'aria-label': 'Link ' + name + ' to Slack'
+      }, ['Link']);
+
+      // Picker wrapper - expands inline when clicked
+      var pickerWrap = AdminUI.el('div', { style: 'position:relative' }, []);
+      linkTrigger.addEventListener('click', function (e) {
+        e.stopPropagation();
+        var existing = pickerWrap.querySelector('.ss-picker');
+        if (existing) { pickerWrap.removeChild(existing); pickerWrap.removeChild(linkTrigger); return; }
+
+        var match = ssyncSuggestMatch(user, ssyncState.unmatchedSlack);
+        var picker = ssyncLinkPicker('db', user, match, ssyncState.unmatchedSlack, function (slackId) {
+          ssyncLink(user.id, slackId);
+        });
+        pickerWrap.appendChild(picker);
+        pickerWrap.removeChild(linkTrigger);
+        picker.querySelector('.ss-picker-input').focus();
+      });
+      pickerWrap.appendChild(linkTrigger);
+      actionsEl.appendChild(pickerWrap);
+
+      var deleteBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-act-danger',
+        'aria-label': 'Delete ' + name
+      }, ['Delete']);
+      deleteBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ssyncDelete(user.id);
+      });
+      actionsEl.appendChild(deleteBtn);
+    }
+
+    var row = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-db-row',
+      'aria-label': name + ', ' + (user.email || '') + ', ' + user.status + ', ' + (user.slack_matched ? 'linked' : 'not linked')
+    }, [chip, bodyEl, badgesEl, actionsEl]);
+
+    row.addEventListener('click', function () {
+      var match = ssyncSuggestMatch(user, ssyncState.unmatchedSlack);
+      ssyncOpenDrawer({ type: 'db', user: user, match: match });
+    });
+
+    return row;
+  }
+
+  // ZONE 6c: Unclaimed Slack
+  function ssyncRenderUnclaimedSlackList(listEl, q) {
+    var users = ssyncFilterBySearch(ssyncState.unmatchedSlack, q);
+
+    // Bulk import button at top (when not searching)
+    if (!q && ssyncState.unmatchedSlack.length > 0) {
+      var bulkWrap = AdminUI.el('div', { style: 'margin-bottom:8px' }, []);
+      var bulkBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-bulk-import-btn'
+      }, ['Import all unclaimed (' + ssyncState.unmatchedSlack.length + ')']);
+      bulkBtn.addEventListener('click', function () {
+        ssyncShowBulkConfirm(bulkWrap, bulkBtn);
+      });
+      bulkWrap.appendChild(bulkBtn);
+      bulkWrap.appendChild(AdminUI.el('div', { class: 'ss-bulk-import-note' }, [
+        'Creates each as ALUMNI with a legacy season.'
+      ]));
+      listEl.appendChild(bulkWrap);
+    }
+
+    if (users.length === 0) {
+      listEl.appendChild(AdminUI.el('div', { class: 'ss-empty' }, [
+        q ? 'No unclaimed Slack accounts match "' + q + '"' : 'No unclaimed Slack accounts'
+      ]));
+      return;
+    }
+
+    var sorted = users.slice().sort(function (a, b) {
+      return (a.full_name || a.display_name || '').localeCompare(b.full_name || b.display_name || '');
+    });
+
+    sorted.forEach(function (u) {
+      listEl.appendChild(ssyncBuildSlackRow(u));
+    });
+  }
+
+  function ssyncBuildSlackRow(slackUser) {
+    var name = slackUser.display_name || slackUser.full_name || slackUser.slack_uid || '?';
+    var chip = AdminUI.el('div', { class: 'ss-slack-chip' }, [
+      name[0] ? name[0].toUpperCase() : 'S'
+    ]);
+
+    var bodyEl = AdminUI.el('div', { class: 'ss-db-row-body' }, [
+      AdminUI.el('div', { class: 'ss-db-row-name' }, [name]),
+      AdminUI.el('div', { class: 'ss-db-row-email' }, [slackUser.email || ''])
+    ]);
+
+    var uidEl = AdminUI.el('div', { class: 'ss-slack-uid' }, [slackUser.slack_uid || '']);
+
+    var actionsEl = AdminUI.el('div', { class: 'ss-slack-row-actions' }, []);
+    actionsEl.addEventListener('click', function (e) { e.stopPropagation(); });
+
+    var importZone = AdminUI.el('div', {}, []);
+    var importBtn = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-act-primary',
+      'aria-label': 'Import ' + name + ' as ALUMNI member'
+    }, ['Import']);
+    importBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      ssyncShowImportConfirm(importZone, importBtn, slackUser);
+    });
+    importZone.appendChild(importBtn);
+    actionsEl.appendChild(importZone);
+
+    var match = ssyncSuggestMatchSlack(slackUser, ssyncState.unmatchedDb);
+    var picker = ssyncLinkPicker('slack', slackUser, match, ssyncState.unmatchedDb, function (dbId) {
+      ssyncLink(dbId, slackUser.id);
+    });
+    actionsEl.appendChild(picker);
+
+    var row = AdminUI.el('button', {
+      type: 'button',
+      class: 'ss-slack-row',
+      'aria-label': name + ', ' + (slackUser.email || '') + ', unclaimed Slack account'
+    }, [chip, bodyEl, uidEl, actionsEl]);
+
+    row.addEventListener('click', function () {
+      ssyncOpenDrawer({ type: 'slack', user: slackUser });
+    });
+
+    return row;
+  }
+
+  function ssyncShowBulkConfirm(bulkWrap, bulkBtn) {
+    bulkBtn.style.display = 'none';
+    var n = ssyncState.unmatchedSlack.length;
+    var confirmEl = AdminUI.el('div', { class: 'ss-bulk-confirm', role: 'alert' }, [
+      AdminUI.el('div', {}, [
+        'Import all ' + n + ' unclaimed Slack accounts as ALUMNI members? This will process them one at a time.'
+      ])
+    ]);
+    var confirmActions = AdminUI.el('div', { class: 'ss-bulk-confirm-actions' }, []);
+    var confirmBtn = AdminUI.el('button', { type: 'button', class: 'ss-act-confirm' }, ['Confirm import']);
+    confirmBtn.addEventListener('click', function () {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = 'Importing...';
+      ssyncBulkImport(confirmEl, confirmActions);
+    });
+    var cancelBtn = AdminUI.el('button', { type: 'button', class: 'ss-act-cancel' }, ['Cancel']);
+    cancelBtn.addEventListener('click', function () {
+      bulkWrap.removeChild(confirmEl);
+      bulkBtn.style.display = '';
+      bulkBtn.focus();
+    });
+    confirmActions.appendChild(confirmBtn);
+    confirmActions.appendChild(cancelBtn);
+    confirmEl.appendChild(confirmActions);
+    bulkWrap.appendChild(confirmEl);
+    confirmBtn.focus();
+  }
+
+  // ─── Inline link picker ───────────────────────────────────────────────────────
+  // direction: 'db' (picking from Slack pool) | 'slack' (picking from DB pool)
+  function ssyncLinkPicker(direction, fromUser, match, pool, onLink) {
+    var uid = direction + '-' + (fromUser.id || Math.random());
+    var listId = 'ssync-picker-list-' + uid;
+
+    var wrapper = AdminUI.el('div', { class: 'ss-picker' }, []);
+
+    // Determine preselected text
+    var preselected = '';
+    if (match && match.candidate && (match.confidence === 'confident' || match.confidence === 'strong')) {
+      preselected = direction === 'db'
+        ? (match.candidate.display_name || match.candidate.full_name || match.candidate.slack_uid || '')
+        : (match.candidate.full_name || match.candidate.email || '');
+    }
+
+    var input = AdminUI.el('input', {
+      type: 'text',
+      class: 'ss-picker-input',
+      'aria-label': direction === 'db' ? 'Search Slack user to link' : 'Search DB user to link',
+      'aria-controls': listId,
+      'aria-expanded': 'false',
+      'aria-autocomplete': 'list',
+      placeholder: direction === 'db' ? 'Search Slack user...' : 'Search DB user...',
+      value: preselected
+    }, []);
+
+    var dropdown = AdminUI.el('div', {
+      class: 'ss-picker-dropdown',
+      id: listId,
+      role: 'listbox',
+      'aria-label': 'Matching users'
+    }, []);
+
+    wrapper.appendChild(input);
+    wrapper.appendChild(dropdown);
+
+    var selectedId = null;
+    var selectedName = '';
+    var selectedEmail = '';
+    var highlightedIndex = -1;
+
+    function getOptions(q) {
+      var ql = (q || '').toLowerCase();
+      return pool.filter(function (u) {
+        var name = (u.full_name || u.display_name || '').toLowerCase();
+        var email = (u.email || '').toLowerCase();
+        return !ql || name.includes(ql) || email.includes(ql);
+      });
+    }
+
+    function renderDropdown(q) {
+      dropdown.innerHTML = '';
+      var options = getOptions(q);
+
+      if (options.length === 0) {
+        dropdown.appendChild(AdminUI.el('div', { class: 'ss-picker-empty' }, ['No matches']));
+        return;
+      }
+
+      options.forEach(function (u, idx) {
+        var isMatch = match && match.candidate && match.candidate.id === u.id;
+        var name = u.full_name || u.display_name || u.slack_uid || '';
+        var email = u.email || '';
+
+        var nameEl = AdminUI.el('div', { class: 'ss-picker-option-name' }, [name]);
+        if (isMatch && match.confidence !== 'none') {
+          var badgeText = match.confidence === 'confident' ? 'email match' : 'name match';
+          nameEl.appendChild(AdminUI.el('span', { class: 'ss-picker-suggestion-badge' }, [badgeText]));
         }
-        const data = await resp.json();
 
+        var optEl = AdminUI.el('div', {
+          class: 'ss-picker-option',
+          role: 'option',
+          'aria-selected': 'false',
+          dataset: { id: String(u.id), name: name, email: email, idx: String(idx) }
+        }, [nameEl, AdminUI.el('div', { class: 'ss-picker-option-email' }, [email])]);
+
+        optEl.addEventListener('click', function () {
+          selectOption(u.id, name, email);
+        });
+
+        dropdown.appendChild(optEl);
+      });
+    }
+
+    function openDropdown() {
+      renderDropdown(input.value);
+      dropdown.classList.add('is-open');
+      input.setAttribute('aria-expanded', 'true');
+      highlightedIndex = -1;
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove('is-open');
+      input.setAttribute('aria-expanded', 'false');
+    }
+
+    function selectOption(id, name, email) {
+      selectedId = id;
+      selectedName = name;
+      selectedEmail = email;
+      input.value = name;
+      closeDropdown();
+      showConfirmRow();
+    }
+
+    var confirmRow = null;
+
+    function showConfirmRow() {
+      removeConfirmRow();
+      var fromEmail = fromUser.email || '';
+      var emailsDiffer = selectedEmail && fromEmail && selectedEmail.toLowerCase() !== fromEmail.toLowerCase();
+
+      confirmRow = AdminUI.el('div', { class: 'ss-picker-confirm' }, []);
+      var row = AdminUI.el('div', { class: 'ss-picker-confirm-row' }, []);
+
+      var confirmBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-picker-confirm-btn'
+      }, ['Link ' + selectedName]);
+
+      confirmBtn.addEventListener('click', function (e) {
+        e.stopPropagation();
+        onLink(selectedId);
+      });
+      row.appendChild(confirmBtn);
+
+      confirmRow.appendChild(row);
+
+      if (emailsDiffer) {
+        var warnMsg = direction === 'db'
+          ? 'Note: DB email will be updated to ' + selectedEmail
+          : 'Note: DB email will be updated to ' + selectedEmail;
+        var warnEl = AdminUI.el('div', { class: 'ss-picker-email-warn', role: 'alert' }, [warnMsg]);
+        confirmRow.appendChild(warnEl);
+      }
+
+      wrapper.appendChild(confirmRow);
+    }
+
+    function removeConfirmRow() {
+      if (confirmRow && confirmRow.parentNode) {
+        confirmRow.parentNode.removeChild(confirmRow);
+        confirmRow = null;
+      }
+    }
+
+    // Events
+    input.addEventListener('focus', function () { openDropdown(); });
+    input.addEventListener('input', function () {
+      selectedId = null;
+      removeConfirmRow();
+      openDropdown();
+    });
+
+    input.addEventListener('keydown', function (e) {
+      var opts = dropdown.querySelectorAll('.ss-picker-option');
+      if (e.key === 'Escape') { closeDropdown(); }
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedIndex = Math.min(highlightedIndex + 1, opts.length - 1);
+        updateHighlight(opts);
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedIndex = Math.max(highlightedIndex - 1, 0);
+        updateHighlight(opts);
+      }
+      if (e.key === 'Enter' && highlightedIndex >= 0 && opts[highlightedIndex]) {
+        e.preventDefault();
+        var opt = opts[highlightedIndex];
+        selectOption(parseInt(opt.dataset.id), opt.dataset.name, opt.dataset.email);
+      }
+    });
+
+    function updateHighlight(opts) {
+      Array.prototype.forEach.call(opts, function (o, i) {
+        o.setAttribute('aria-selected', i === highlightedIndex ? 'true' : 'false');
+        if (i === highlightedIndex) {
+          input.setAttribute('aria-activedescendant', o.id || '');
+        }
+      });
+    }
+
+    // Close on outside click
+    document.addEventListener('click', function onDocClick(e) {
+      if (!wrapper.contains(e.target)) {
+        closeDropdown();
+        document.removeEventListener('click', onDocClick);
+      }
+    });
+
+    return wrapper;
+  }
+
+  // ─── Overflow popover ─────────────────────────────────────────────────────────
+  function ssyncTogglePopover(wrapEl, user, match) {
+    if (ssyncOpenPopover && ssyncOpenPopover !== wrapEl) {
+      var old = ssyncOpenPopover.querySelector('.ss-popover');
+      if (old) ssyncOpenPopover.removeChild(old);
+      ssyncOpenPopover = null;
+    }
+
+    var existing = wrapEl.querySelector('.ss-popover');
+    if (existing) {
+      wrapEl.removeChild(existing);
+      ssyncOpenPopover = null;
+      return;
+    }
+
+    var popover = AdminUI.el('div', { class: 'ss-popover', role: 'menu' }, []);
+
+    var pickerItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item', role: 'menuitem' }, ['Link via picker']);
+    pickerItem.addEventListener('click', function () {
+      wrapEl.removeChild(popover);
+      ssyncOpenPopover = null;
+      // Replace actions zone with picker
+    });
+
+    var detailsItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item', role: 'menuitem' }, ['Open details']);
+    detailsItem.addEventListener('click', function () {
+      wrapEl.removeChild(popover);
+      ssyncOpenPopover = null;
+      ssyncOpenDrawer({ type: 'db', user: user, match: match });
+    });
+
+    var deleteItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item ss-popover-item-danger', role: 'menuitem' }, ['Delete user']);
+    deleteItem.addEventListener('click', function () {
+      wrapEl.removeChild(popover);
+      ssyncOpenPopover = null;
+      ssyncDelete(user.id);
+    });
+
+    popover.appendChild(pickerItem);
+    popover.appendChild(detailsItem);
+    popover.appendChild(deleteItem);
+    wrapEl.appendChild(popover);
+    ssyncOpenPopover = wrapEl;
+    pickerItem.focus();
+
+    // Close on Esc or outside click
+    function onKey(e) { if (e.key === 'Escape') { wrapEl.removeChild(popover); ssyncOpenPopover = null; document.removeEventListener('keydown', onKey); } }
+    function onDoc(e) { if (!wrapEl.contains(e.target)) { if (wrapEl.contains(popover)) wrapEl.removeChild(popover); ssyncOpenPopover = null; document.removeEventListener('click', onDoc); } }
+    document.addEventListener('keydown', onKey);
+    setTimeout(function () { document.addEventListener('click', onDoc); }, 0);
+  }
+
+  // ─── Drawer ───────────────────────────────────────────────────────────────────
+  function ssyncOpenDrawer(opts) {
+    var record = opts.user;
+    var type = opts.type;
+    var match = opts.match || null;
+
+    ssyncDrawerTrigger = document.activeElement;
+
+    var title = record.full_name || record.display_name || record.email || '?';
+    var content = AdminUI.el('div', {}, []);
+
+    // DB section
+    if (type === 'db') {
+      var dbSection = AdminUI.el('div', { class: 'ss-dw-section' }, [
+        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['DB record'])
+      ]);
+      [
+        ['ID', String(record.id || '')],
+        ['Email', record.email || ''],
+        ['Status', record.status || ''],
+      ].forEach(function (kv) {
+        dbSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, [kv[0]]),
+          AdminUI.el('div', { class: 'ss-dw-val' }, [kv[1]])
+        ]));
+      });
+      // Slack info if linked
+      if (record.slack_matched) {
+        dbSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, ['Slack UID']),
+          AdminUI.el('div', { class: 'ss-dw-val' }, [record.slack_uid || ''])
+        ]));
+        dbSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, ['Slack name']),
+          AdminUI.el('div', { class: 'ss-dw-val' }, [record.slack_display_name || ''])
+        ]));
+      }
+      content.appendChild(dbSection);
+    }
+
+    // Slack section
+    if (type === 'slack') {
+      var slackSection = AdminUI.el('div', { class: 'ss-dw-section' }, [
+        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['Slack record'])
+      ]);
+      [
+        ['Slack UID', record.slack_uid || ''],
+        ['Email', record.email || ''],
+        ['Display name', record.display_name || ''],
+        ['Full name', record.full_name || '']
+      ].forEach(function (kv) {
+        slackSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, [kv[0]]),
+          AdminUI.el('div', { class: 'ss-dw-val' }, [kv[1]])
+        ]));
+      });
+      content.appendChild(slackSection);
+    }
+
+    // Match analysis (for unlinked DB users)
+    if (type === 'db' && !record.slack_matched && match) {
+      var matchSection = AdminUI.el('div', { class: 'ss-dw-section' }, [
+        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['Match analysis'])
+      ]);
+      var confVariants = { confident: 'success', strong: 'info', weak: 'warning', none: 'neutral' };
+      matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+        AdminUI.el('div', { class: 'ss-dw-key' }, ['Confidence']),
+        AdminUI.statusBadge(match.confidence, confVariants[match.confidence] || 'neutral')
+      ]));
+      matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+        AdminUI.el('div', { class: 'ss-dw-key' }, ['Reason']),
+        AdminUI.el('div', { class: 'ss-dw-val' }, [match.reason || ''])
+      ]));
+      if (match.candidate) {
+        var cname = match.candidate.display_name || match.candidate.full_name || match.candidate.slack_uid || '';
+        matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, ['Candidate']),
+          AdminUI.el('div', { class: 'ss-dw-val' }, [cname + ' (' + (match.candidate.email || '') + ')'])
+        ]));
+      } else {
+        matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, ['Candidate']),
+          AdminUI.el('div', { class: 'ss-dw-val' }, ['No candidate found'])
+        ]));
+      }
+      content.appendChild(matchSection);
+    }
+
+    // Also suggest match for Slack-type drawer
+    if (type === 'slack') {
+      var slackMatch = ssyncSuggestMatchSlack(record, ssyncState.unmatchedDb);
+      var matchSection2 = AdminUI.el('div', { class: 'ss-dw-section' }, [
+        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['Match analysis'])
+      ]);
+      var confVariants2 = { confident: 'success', strong: 'info', weak: 'warning', none: 'neutral' };
+      matchSection2.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+        AdminUI.el('div', { class: 'ss-dw-key' }, ['Confidence']),
+        AdminUI.statusBadge(slackMatch.confidence, confVariants2[slackMatch.confidence] || 'neutral')
+      ]));
+      matchSection2.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+        AdminUI.el('div', { class: 'ss-dw-key' }, ['Reason']),
+        AdminUI.el('div', { class: 'ss-dw-val' }, [slackMatch.reason || ''])
+      ]));
+      if (slackMatch.candidate) {
+        matchSection2.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
+          AdminUI.el('div', { class: 'ss-dw-key' }, ['Candidate']),
+          AdminUI.el('div', { class: 'ss-dw-val' }, [slackMatch.candidate.full_name + ' (' + (slackMatch.candidate.email || '') + ')'])
+        ]));
+      }
+      content.appendChild(matchSection2);
+    }
+
+    // Actions zone
+    var actionsZone = AdminUI.el('div', { class: 'ss-dw-actions' }, []);
+
+    function renderActionsZone() {
+      actionsZone.innerHTML = '';
+
+      if (type === 'db' && record.slack_matched) {
+        // Unlink button
+        var unlinkBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Unlink from Slack']);
+        unlinkBtn.addEventListener('click', function () { showUnlinkConfirm(); });
+        actionsZone.appendChild(unlinkBtn);
+
+      } else if (type === 'db' && !record.slack_matched) {
+        // Link via picker
+        var dwMatch = match || ssyncSuggestMatch(record, ssyncState.unmatchedSlack);
+        var dwPicker = ssyncLinkPicker('db', record, dwMatch, ssyncState.unmatchedSlack, function (slackId) {
+          ssyncLink(record.id, slackId);
+        });
+        actionsZone.appendChild(dwPicker);
+
+        // Email overwrite warning if candidate exists
+        if (dwMatch && dwMatch.candidate && dwMatch.candidate.email) {
+          var fromEmail = record.email || '';
+          var toEmail = dwMatch.candidate.email || '';
+          if (toEmail.toLowerCase() !== fromEmail.toLowerCase()) {
+            actionsZone.appendChild(AdminUI.el('div', { class: 'ss-dw-email-warn' }, [
+              'Note: DB email will be updated to ' + toEmail
+            ]));
+          }
+        }
+
+        var deleteBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost', style: 'color:#c53030;border-color:#fed7d7' }, ['Delete user']);
+        deleteBtn.addEventListener('click', function () { showDeleteConfirm(); });
+        actionsZone.appendChild(deleteBtn);
+
+      } else if (type === 'slack') {
+        // Import button
+        var importBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-primary' }, ['Import as member']);
+        importBtn.addEventListener('click', function () { showImportConfirmDw(); });
+        actionsZone.appendChild(importBtn);
+
+        // Link to DB user
+        var slackMatch2 = ssyncSuggestMatchSlack(record, ssyncState.unmatchedDb);
+        var dwPickerSlack = ssyncLinkPicker('slack', record, slackMatch2, ssyncState.unmatchedDb, function (dbId) {
+          ssyncLink(dbId, record.id);
+        });
+        actionsZone.appendChild(dwPickerSlack);
+      }
+    }
+
+    function showUnlinkConfirm() {
+      actionsZone.innerHTML = '';
+      var slackName = record.slack_display_name || record.slack_uid || 'Slack';
+      var confirmZone = AdminUI.el('div', { class: 'ss-dw-confirm-zone', role: 'alert' }, [
+        AdminUI.el('div', { class: 'ss-dw-confirm-msg' }, [
+          'Unlink ' + (record.full_name || '') + ' from @' + slackName + '? Their DB email will not revert.'
+        ])
+      ]);
+      var confirmActions = AdminUI.el('div', { class: 'ss-dw-confirm-actions' }, []);
+      var yesBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-danger' }, ['Confirm unlink']);
+      yesBtn.addEventListener('click', function () { ssyncUnlinkById(record.id); });
+      var noBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Cancel']);
+      noBtn.addEventListener('click', function () { renderActionsZone(); noBtn.focus(); });
+      confirmActions.appendChild(yesBtn);
+      confirmActions.appendChild(noBtn);
+      confirmZone.appendChild(confirmActions);
+      actionsZone.appendChild(confirmZone);
+      yesBtn.focus();
+    }
+
+    function showDeleteConfirm() {
+      actionsZone.innerHTML = '';
+      var name = record.full_name || record.email || String(record.id);
+      var confirmZone = AdminUI.el('div', { class: 'ss-dw-confirm-zone', role: 'alert' }, [
+        AdminUI.el('div', { class: 'ss-dw-confirm-msg' }, [
+          'Permanently delete ' + name + ' (' + (record.email || '') + ')? This removes UserSeason records. Associated payments will be preserved with no user attached.'
+        ])
+      ]);
+      var confirmActions = AdminUI.el('div', { class: 'ss-dw-confirm-actions' }, []);
+      var yesBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-danger' }, ['Confirm delete']);
+      yesBtn.addEventListener('click', function () { ssyncDeleteById(record.id); });
+      var noBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Cancel']);
+      noBtn.addEventListener('click', function () { renderActionsZone(); noBtn.focus(); });
+      confirmActions.appendChild(yesBtn);
+      confirmActions.appendChild(noBtn);
+      confirmZone.appendChild(confirmActions);
+      actionsZone.appendChild(confirmZone);
+      yesBtn.focus();
+    }
+
+    function showImportConfirmDw() {
+      actionsZone.innerHTML = '';
+      var name = record.display_name || record.full_name || record.slack_uid || '?';
+      var confirmZone = AdminUI.el('div', { class: 'ss-dw-confirm-zone', role: 'alert' }, [
+        AdminUI.el('div', { class: 'ss-dw-confirm-msg' }, [
+          'Import ' + name + ' (' + (record.email || 'no email') + ') as an ALUMNI member with a legacy season?'
+        ])
+      ]);
+      var confirmActions = AdminUI.el('div', { class: 'ss-dw-confirm-actions' }, []);
+      var yesBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-primary' }, ['Confirm import']);
+      yesBtn.addEventListener('click', function () { ssyncImport(record.id); });
+      var noBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Cancel']);
+      noBtn.addEventListener('click', function () { renderActionsZone(); noBtn.focus(); });
+      confirmActions.appendChild(yesBtn);
+      confirmActions.appendChild(noBtn);
+      confirmZone.appendChild(confirmActions);
+      actionsZone.appendChild(confirmZone);
+      yesBtn.focus();
+    }
+
+    renderActionsZone();
+    content.appendChild(actionsZone);
+
+    AdminUI.drawer({ title: title, content: content });
+  }
+
+  // ─── Overflow unlink from a row (uses drawer confirm) ────────────────────────
+  function ssyncUnlink(userId, userName, slackName) {
+    // Find the full user record and open drawer in unlink-confirm mode
+    var user = ssyncState.users.find(function (u) { return u.id === userId; });
+    if (user) {
+      ssyncOpenDrawer({ type: 'db', user: user, match: null });
+    } else {
+      ssyncUnlinkById(userId);
+    }
+  }
+
+  // ─── Mutation wrappers ────────────────────────────────────────────────────────
+  function ssyncLink(userId, slackUserId) {
+    AdminUI.mutate('/admin/slack/link', { user_id: userId, slack_user_id: slackUserId })
+      .then(function () {
+        if (window.showToast) showToast('Linked successfully', 'success');
+        return ssyncLoadAll();
+      })
+      .catch(function (e) {
+        if (window.showToast) showToast('Failed to link: ' + e.message, 'error');
+      });
+  }
+
+  function ssyncUnlinkById(userId) {
+    AdminUI.mutate('/admin/slack/unlink', { user_id: userId })
+      .then(function () {
+        if (window.showToast) showToast('Unlinked successfully', 'success');
+        return ssyncLoadAll();
+      })
+      .catch(function (e) {
+        if (window.showToast) showToast('Failed to unlink: ' + e.message, 'error');
+      });
+  }
+
+  function ssyncDelete(userId) {
+    var user = ssyncState.users.find(function (u) { return u.id === userId; })
+      || ssyncState.unmatchedDb.find(function (u) { return u.id === userId; });
+    if (user) {
+      ssyncOpenDrawer({ type: 'db', user: user, match: null });
+    } else {
+      ssyncDeleteById(userId);
+    }
+  }
+
+  function ssyncDeleteById(userId) {
+    AdminUI.mutate('/admin/slack/delete-user', { user_id: userId })
+      .then(function () {
+        // AdminUI.mutate auto-toasts the {message} from envelope
+        return ssyncLoadAll();
+      })
+      .catch(function (e) {
+        if (window.showToast) showToast('Failed to delete: ' + e.message, 'error');
+      });
+  }
+
+  function ssyncImport(slackUserId) {
+    AdminUI.mutate('/admin/slack/import', { slack_user_id: slackUserId })
+      .then(function () {
+        // AdminUI.mutate auto-toasts the {message} from envelope
+        return ssyncLoadAll();
+      })
+      .catch(function (e) {
+        if (window.showToast) showToast('Failed to import: ' + e.message, 'error');
+      });
+  }
+
+  // ─── Bulk import ──────────────────────────────────────────────────────────────
+  function ssyncBulkImport(confirmEl, confirmActions) {
+    var items = ssyncState.unmatchedSlack.slice();
+    var total = items.length;
+    var succeeded = 0;
+    var errors = [];
+    var i = 0;
+
+    function processNext() {
+      if (i >= items.length) {
+        var summaryMsg = 'Imported ' + succeeded + ' of ' + total + '.';
+        if (errors.length > 0) summaryMsg += ' ' + errors.length + ' error(s): ' + errors.join(', ');
+        if (window.showToast) showToast(summaryMsg, errors.length > 0 ? 'info' : 'success');
+        ssyncLoadAll();
+        return;
+      }
+
+      var item = items[i];
+      i++;
+      if (window.showToast) showToast('Importing ' + i + ' of ' + total + '...', 'info');
+
+      fetch('/admin/slack/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+        body: JSON.stringify({ slack_user_id: item.id })
+      }).then(function (res) {
+        return res.json().then(function (d) {
+          if (!res.ok || d.error) {
+            errors.push((item.display_name || item.full_name || String(item.id)) + ': ' + (d.error || 'error'));
+          } else {
+            succeeded++;
+          }
+          processNext();
+        });
+      }).catch(function (e) {
+        errors.push((item.display_name || item.full_name || String(item.id)) + ': ' + e.message);
+        processNext();
+      });
+    }
+
+    processNext();
+  }
+
+  // ─── Sync from Slack ──────────────────────────────────────────────────────────
+  function ssyncRunPull() {
+    var btn = document.getElementById('ssync-pull-btn');
+    btn.classList.add('ss-loading');
+    btn.setAttribute('aria-busy', 'true');
+
+    fetch('/admin/slack/sync', { method: 'POST' })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
         if (data.error) {
-            showToast('Sync error: ' + data.error, 'error');
+          if (window.showToast) showToast('Sync error: ' + data.error, 'error');
         } else if (data.errors && data.errors.length > 0) {
-            showToast(`Sync completed with ${data.errors.length} error(s)`, 'info');
+          if (window.showToast) showToast('Sync done with ' + data.errors.length + ' error(s)', 'info');
         } else {
-            const parts = [];
-            if (data.slack_users_created > 0) parts.push(`${data.slack_users_created} created`);
-            if (data.slack_users_updated > 0) parts.push(`${data.slack_users_updated} updated`);
-            if (data.users_matched > 0) parts.push(`${data.users_matched} matched`);
-            const msg = parts.length > 0 ? parts.join(', ') : 'No changes';
-            showToast(msg, 'success');
+          var parts = [];
+          if (data.slack_users_created > 0) parts.push(data.slack_users_created + ' created');
+          if (data.slack_users_updated > 0) parts.push(data.slack_users_updated + ' updated');
+          if (data.users_matched > 0) parts.push(data.users_matched + ' matched');
+          var msg = parts.length > 0 ? parts.join(', ') : 'No changes';
+          if (window.showToast) showToast(msg, 'success');
         }
+        return ssyncLoadAll();
+      })
+      .catch(function (e) {
+        if (window.showToast) showToast('Sync failed: ' + e.message, 'error');
+      })
+      .finally(function () {
+        btn.classList.remove('ss-loading');
+        btn.setAttribute('aria-busy', 'false');
+      });
+  }
 
-        // Reload data
-        loadStatus();
-        loadUsers();
-        loadSlackOnly();
-    } catch (e) {
-        showToast('Sync failed: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.classList.remove('loading');
-    }
-}
+  // ─── Sync to Slack (batched push) ─────────────────────────────────────────────
+  function ssyncRunProfilePush() {
+    var btn = document.getElementById('ssync-push-btn');
+    var progressSpan = btn.querySelector('.ss-btn-progress');
+    btn.classList.add('ss-loading');
+    btn.setAttribute('aria-busy', 'true');
 
-async function runProfileSync() {
-    const btn = document.getElementById('profile-sync-btn');
-    const btnText = btn.querySelector('.btn-text');
-    const originalText = btnText.textContent;
+    var totalUpdated = 0;
+    var totalSkipped = 0;
+    var totalErrors = [];
+    var offset = 0;
+    var totalUsers = 0;
+    var batchSize = 10;
 
-    btn.disabled = true;
-    btn.classList.add('loading');
+    function doNextBatch() {
+      var progress = totalUsers > 0 ? offset + '/' + totalUsers : '...';
+      progressSpan.textContent = 'Syncing ' + progress;
 
-    let totalUpdated = 0;
-    let totalSkipped = 0;
-    let totalErrors = [];
-    let offset = 0;
-    let totalUsers = 0;
-    const batchSize = 10;
+      fetch('/admin/slack/sync-profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ batch_size: batchSize, offset: offset })
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.json();
+        })
+        .then(function (data) {
+          if (data.error) throw new Error(data.error);
 
-    try {
-        // Loop until all users are processed
-        while (true) {
-            const progress = totalUsers > 0 ? `${offset}/${totalUsers}` : '...';
-            btnText.textContent = `Syncing ${progress}`;
+          if (data.total && totalUsers === 0) totalUsers = data.total;
 
-            const resp = await fetch('/admin/slack/sync-profiles', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({batch_size: batchSize, offset: offset})
-            });
+          totalUpdated += data.users_updated || 0;
+          totalSkipped += data.users_skipped || 0;
+          if (data.errors) totalErrors = totalErrors.concat(data.errors);
 
-            if (!resp.ok) {
-                throw new Error(`HTTP ${resp.status}`);
+          if (data.remaining === 0) {
+            // Done
+            if (totalErrors.length > 0) {
+              if (window.showToast) showToast('Sync done with ' + totalErrors.length + ' error(s). Updated: ' + totalUpdated, 'info');
+            } else {
+              if (window.showToast) showToast('Updated ' + totalUpdated + ' profile(s)', 'success');
             }
-
-            const data = await resp.json();
-
-            if (data.error) {
-                throw new Error(data.error);
-            }
-
-            // Get total from first response
-            if (data.total && totalUsers === 0) {
-                totalUsers = data.total;
-            }
-
-            totalUpdated += data.users_updated || 0;
-            totalSkipped += data.users_skipped || 0;
-            if (data.errors) {
-                totalErrors = totalErrors.concat(data.errors);
-            }
-
-            // Check if we're done
-            if (data.remaining === 0) {
-                break;
-            }
-
+            btn.classList.remove('ss-loading');
+            btn.setAttribute('aria-busy', 'false');
+            progressSpan.textContent = 'Syncing...';
+            ssyncLoadAll();
+          } else {
             offset += batchSize;
-        }
-
-        // Show final result
-        if (totalErrors.length > 0) {
-            showToast(`Sync done with ${totalErrors.length} error(s). Updated: ${totalUpdated}`, 'info');
-        } else {
-            showToast(`Updated ${totalUpdated} profile(s)`, 'success');
-        }
-    } catch (e) {
-        showToast('Profile sync failed: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.classList.remove('loading');
-        btnText.textContent = originalText;
-    }
-}
-
-function showLinkSlackModal(slackUserId) {
-    linkModalData = {type: 'slack', slackUserId: slackUserId};
-
-    const slackUser = slackOnlyData.find(u => u.id === slackUserId);
-    if (!slackUser) return;
-
-    document.getElementById('link-modal-title').textContent = 'Link Slack User to Database User';
-    document.getElementById('link-modal-description').textContent =
-        `Link "${slackUser.display_name || slackUser.full_name}" (${slackUser.email}) to a database user:`;
-
-    // Populate select with unmatched DB users
-    const unmatchedDbUsers = allUsersData.filter(u => !u.slack_matched);
-    const select = document.getElementById('link-select');
-    select.innerHTML = '<option value="">Select a user...</option>';
-    unmatchedDbUsers.forEach(u => {
-        const option = document.createElement('option');
-        option.value = u.id;
-        option.textContent = `${u.full_name} (${u.email})`;
-        select.appendChild(option);
-    });
-
-    document.getElementById('link-modal').style.display = 'flex';
-}
-
-function showLinkDbModal(userId) {
-    linkModalData = {type: 'db', userId: userId};
-
-    const dbUser = allUsersData.find(u => u.id === userId);
-    if (!dbUser) return;
-
-    document.getElementById('link-modal-title').textContent = 'Link Database User to Slack User';
-    document.getElementById('link-modal-description').textContent =
-        `Link "${dbUser.full_name}" (${dbUser.email}) to a Slack user:`;
-
-    // Populate select with unmatched Slack users
-    const select = document.getElementById('link-select');
-    select.innerHTML = '<option value="">Select a Slack user...</option>';
-    slackOnlyData.forEach(u => {
-        const option = document.createElement('option');
-        option.value = u.id;
-        option.textContent = `${u.display_name || u.full_name} (${u.email})`;
-        select.appendChild(option);
-    });
-
-    document.getElementById('link-modal').style.display = 'flex';
-}
-
-function closeLinkModal() {
-    document.getElementById('link-modal').style.display = 'none';
-    linkModalData = {};
-}
-
-async function confirmLink() {
-    const select = document.getElementById('link-select');
-    const selectedId = parseInt(select.value);
-
-    if (!selectedId) {
-        showToast('Please select a user to link', 'error');
-        return;
-    }
-
-    let userId, slackUserId;
-    if (linkModalData.type === 'slack') {
-        slackUserId = linkModalData.slackUserId;
-        userId = selectedId;
-    } else {
-        userId = linkModalData.userId;
-        slackUserId = selectedId;
-    }
-
-    try {
-        const resp = await fetch('/admin/slack/link', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_id: userId, slack_user_id: slackUserId})
+            doNextBatch();
+          }
+        })
+        .catch(function (e) {
+          if (window.showToast) showToast('Profile sync failed: ' + e.message, 'error');
+          btn.classList.remove('ss-loading');
+          btn.setAttribute('aria-busy', 'false');
+          progressSpan.textContent = 'Syncing...';
         });
-
-        const data = await resp.json();
-
-        if (!resp.ok || data.error) {
-            throw new Error(data.error || `HTTP ${resp.status}`);
-        }
-
-        closeLinkModal();
-        showToast('Users linked successfully', 'success');
-        loadStatus();
-        loadUsers();
-        loadSlackOnly();
-    } catch (e) {
-        showToast('Failed to link: ' + e.message, 'error');
-    }
-}
-
-async function unlinkUser(userId) {
-    if (!confirm('Are you sure you want to unlink this user from Slack?')) {
-        return;
     }
 
-    try {
-        const resp = await fetch('/admin/slack/unlink', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_id: userId})
-        });
+    doNextBatch();
+  }
 
-        const data = await resp.json();
-
-        if (!resp.ok || data.error) {
-            throw new Error(data.error || `HTTP ${resp.status}`);
-        }
-
-        showToast('User unlinked from Slack', 'success');
-        loadStatus();
-        loadUsers();
-        loadSlackOnly();
-    } catch (e) {
-        showToast('Failed to unlink: ' + e.message, 'error');
-    }
-}
-
-function confirmDeleteUser(userId) {
-    const user = allUsersData.find(u => u.id === userId);
-    if (!user) return;
-
-    if (!confirm(`Are you sure you want to delete "${user.full_name}"?\n\nThis cannot be undone.`)) {
-        return;
-    }
-
-    deleteUser(userId);
-}
-
-async function deleteUser(userId) {
-    try {
-        const resp = await fetch('/admin/slack/delete-user', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({user_id: userId})
-        });
-
-        const data = await resp.json();
-
-        if (!resp.ok || data.error) {
-            throw new Error(data.error || `HTTP ${resp.status}`);
-        }
-
-        showToast(data.message || 'User deleted', 'success');
-        loadStatus();
-        loadUsers();
-        loadSlackOnly();
-    } catch (e) {
-        showToast('Failed to delete: ' + e.message, 'error');
-    }
-}
-
-async function importSlackUser(slackUserId) {
-    const slackUser = slackOnlyData.find(u => u.id === slackUserId);
-    if (!slackUser) return;
-
-    if (!confirm(`Import "${slackUser.display_name || slackUser.full_name}" (${slackUser.email}) as a new user with legacy season membership?`)) {
-        return;
-    }
-
-    try {
-        const resp = await fetch('/admin/slack/import', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({slack_user_id: slackUserId})
-        });
-
-        const data = await resp.json();
-
-        if (!resp.ok || data.error) {
-            throw new Error(data.error || `HTTP ${resp.status}`);
-        }
-
-        showToast(data.message || 'User imported successfully', 'success');
-        loadStatus();
-        loadUsers();
-        loadSlackOnly();
-    } catch (e) {
-        showToast('Failed to import: ' + e.message, 'error');
-    }
-}
-
-// ============================================
-// Send Message Modal Functions
-// ============================================
-
-function openMessageModal() {
-    const container = document.getElementById('user-checkboxes');
+  // ─── Send Message modal ───────────────────────────────────────────────────────
+  function ssyncMessageOpen() {
+    var modal = document.getElementById('ssync-message-modal');
+    var container = document.getElementById('ssync-user-checkboxes');
     container.innerHTML = '';
 
-    // Get users with Slack links, sorted by name
-    const linkedUsers = allUsersData
-        .filter(u => u.slack_matched)
-        .sort((a, b) => a.full_name.localeCompare(b.full_name));
+    var linkedUsers = ssyncState.users
+      .filter(function (u) { return u.slack_matched; })
+      .sort(function (a, b) { return (a.full_name || '').localeCompare(b.full_name || ''); });
 
     if (linkedUsers.length === 0) {
-        container.innerHTML = '<p class="mode-hint" style="margin: 8px 0;">No users linked to Slack. Sync and link users first.</p>';
-        document.getElementById('message-modal').style.display = 'flex';
-        updateSelectedCount();
-        return;
+      container.appendChild(AdminUI.el('p', { style: 'margin:8px 0;color:#94a3b8;font-size:13px' }, [
+        'No linked users - sync and link first.'
+      ]));
+      document.getElementById('ssync-send-btn').disabled = true;
+    } else {
+      document.getElementById('ssync-send-btn').disabled = false;
+      linkedUsers.forEach(function (user) {
+        var lbl = AdminUI.el('label', { class: 'ss-recipient-item' }, []);
+        var cb = AdminUI.el('input', {
+          type: 'checkbox',
+          class: 'ssync-user-checkbox',
+          value: String(user.id),
+          dataset: { name: user.full_name || '' }
+        }, []);
+        cb.addEventListener('change', ssyncMessageUpdateCount);
+        lbl.appendChild(cb);
+        lbl.appendChild(AdminUI.el('span', { class: 'ss-recipient-name' }, [user.full_name || '']));
+        lbl.appendChild(AdminUI.el('span', { class: 'ss-recipient-email' }, [user.email || '']));
+        container.appendChild(lbl);
+      });
     }
 
-    // Create checkbox for each linked user
-    linkedUsers.forEach(user => {
-        const label = document.createElement('label');
-        label.className = 'recipient-item';
-        label.innerHTML = `
-            <input type="checkbox" class="user-checkbox" value="${user.id}" data-name="${user.full_name}">
-            <span class="recipient-name">${user.full_name}</span>
-            <span class="recipient-email">${user.email}</span>
-        `;
-        container.appendChild(label);
-    });
-
-    // Setup search filter
-    const searchInput = document.getElementById('user-search');
+    // Setup search
+    var searchInput = document.getElementById('ssync-user-search');
     searchInput.value = '';
-    searchInput.oninput = function() {
-        const query = this.value.toLowerCase();
-        container.querySelectorAll('.recipient-item').forEach(item => {
-            const name = item.querySelector('.user-checkbox').dataset.name.toLowerCase();
-            const email = item.textContent.toLowerCase();
-            item.style.display = (name.includes(query) || email.includes(query)) ? '' : 'none';
-        });
+    searchInput.oninput = function () {
+      var q = this.value.toLowerCase();
+      container.querySelectorAll('.ss-recipient-item').forEach(function (item) {
+        var cb = item.querySelector('.ssync-user-checkbox');
+        var name = (cb ? cb.dataset.name || '' : '').toLowerCase();
+        var email = item.textContent.toLowerCase();
+        item.style.display = (!q || name.includes(q) || email.includes(q)) ? '' : 'none';
+      });
     };
 
-    // Setup checkbox change listeners
-    container.querySelectorAll('.user-checkbox').forEach(cb => {
-        cb.addEventListener('change', updateSelectedCount);
+    // Reset
+    document.getElementById('ssync-message-text').value = '';
+    var indvRadio = document.querySelector('input[name="ssync-message-mode"][value="individual"]');
+    if (indvRadio) indvRadio.checked = true;
+
+    ssyncMessageUpdateCount();
+    modal.style.display = 'flex';
+    AdminUI.trapFocus(modal);
+
+    // Esc closes
+    function onEsc(e) {
+      if (e.key === 'Escape') {
+        ssyncMessageClose();
+        document.removeEventListener('keydown', onEsc);
+      }
+    }
+    document.addEventListener('keydown', onEsc);
+  }
+
+  function ssyncMessageClose() {
+    document.getElementById('ssync-message-modal').style.display = 'none';
+  }
+
+  function ssyncMessageSelectAll() {
+    document.querySelectorAll('.ssync-user-checkbox').forEach(function (cb) {
+      var item = cb.closest('.ss-recipient-item');
+      if (!item || item.style.display !== 'none') cb.checked = true;
     });
+    ssyncMessageUpdateCount();
+  }
 
-    // Clear message textarea
-    document.getElementById('message-text').value = '';
+  function ssyncMessageDeselectAll() {
+    document.querySelectorAll('.ssync-user-checkbox').forEach(function (cb) { cb.checked = false; });
+    ssyncMessageUpdateCount();
+  }
 
-    // Reset mode to individual
-    document.querySelector('input[name="message-mode"][value="individual"]').checked = true;
+  function ssyncMessageUpdateCount() {
+    var count = document.querySelectorAll('.ssync-user-checkbox:checked').length;
+    var el = document.getElementById('ssync-selected-count');
+    if (el) el.textContent = String(count);
+  }
 
-    updateSelectedCount();
-    document.getElementById('message-modal').style.display = 'flex';
-}
+  function ssyncMessageSend() {
+    var selectedCbs = document.querySelectorAll('.ssync-user-checkbox:checked');
+    var userIds = Array.prototype.map.call(selectedCbs, function (cb) { return parseInt(cb.value); });
+    var message = (document.getElementById('ssync-message-text').value || '').trim();
+    var modeEl = document.querySelector('input[name="ssync-message-mode"]:checked');
+    var mode = modeEl ? modeEl.value : 'individual';
 
-function closeMessageModal() {
-    document.getElementById('message-modal').style.display = 'none';
-}
-
-function selectAllUsers() {
-    const container = document.getElementById('user-checkboxes');
-    container.querySelectorAll('.recipient-item').forEach(item => {
-        if (item.style.display !== 'none') {
-            item.querySelector('.user-checkbox').checked = true;
-        }
-    });
-    updateSelectedCount();
-}
-
-function deselectAllUsers() {
-    document.querySelectorAll('.user-checkbox').forEach(cb => {
-        cb.checked = false;
-    });
-    updateSelectedCount();
-}
-
-function updateSelectedCount() {
-    const count = document.querySelectorAll('.user-checkbox:checked').length;
-    document.getElementById('selected-count').textContent = count;
-}
-
-async function sendMessage() {
-    const selectedCheckboxes = document.querySelectorAll('.user-checkbox:checked');
-    const userIds = Array.from(selectedCheckboxes).map(cb => parseInt(cb.value));
-    const message = document.getElementById('message-text').value.trim();
-    const mode = document.querySelector('input[name="message-mode"]:checked').value;
-
-    // Validation
     if (userIds.length === 0) {
-        showToast('Please select at least one recipient', 'error');
-        return;
+      if (window.showToast) showToast('Please select at least one recipient', 'error');
+      return;
     }
     if (!message) {
-        showToast('Please enter a message', 'error');
-        return;
+      if (window.showToast) showToast('Please enter a message', 'error');
+      return;
     }
 
-    const btn = document.getElementById('send-message-btn');
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
+    var sendBtn = document.getElementById('ssync-send-btn');
+    sendBtn.disabled = true;
+    sendBtn.textContent = 'Sending...';
 
-    try {
-        const resp = await fetch('/admin/slack/send-message', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                user_ids: userIds,
-                message: message,
-                mode: mode
-            })
-        });
-
-        const data = await resp.json();
-
-        if (!resp.ok) {
-            throw new Error(data.error || `HTTP ${resp.status}`);
-        }
-
+    fetch('/admin/slack/send-message', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_ids: userIds, message: message, mode: mode })
+    })
+      .then(function (res) { return res.json(); })
+      .then(function (data) {
         if (data.success) {
-            showToast(`Message sent to ${data.sent} user(s)`, 'success');
-            closeMessageModal();
+          if (window.showToast) showToast('Message sent to ' + data.sent + ' user(s)', 'success');
+          ssyncMessageClose();
         } else {
-            const errorMsg = data.errors && data.errors.length > 0
-                ? data.errors.join('; ')
-                : 'Some messages failed to send';
-            showToast(`Sent: ${data.sent}, Failed: ${data.failed}. ${errorMsg}`, 'error');
+          var errMsg = data.errors && data.errors.length > 0 ? data.errors.join('; ') : 'Some messages failed';
+          if (window.showToast) showToast('Sent: ' + data.sent + ', Failed: ' + data.failed + '. ' + errMsg, 'error');
         }
-    } catch (e) {
-        showToast('Failed to send: ' + e.message, 'error');
-    } finally {
-        btn.disabled = false;
-        btn.textContent = 'Send Message';
-    }
-}
+      })
+      .catch(function (e) {
+        if (window.showToast) showToast('Failed to send: ' + e.message, 'error');
+      })
+      .finally(function () {
+        sendBtn.disabled = false;
+        sendBtn.textContent = 'Send Message';
+      });
+  }
 
-// ============================================
-// Channel Sync Status
-// ============================================
+  // ─── Arrow key navigation in tablist ─────────────────────────────────────────
+  function ssyncInitTablistKeys() {
+    var tablist = document.getElementById('ssync-tablist');
+    if (!tablist) return;
+    tablist.addEventListener('keydown', function (e) {
+      var tabs = Array.prototype.slice.call(tablist.querySelectorAll('[role=tab]'));
+      var idx = tabs.indexOf(document.activeElement);
+      if (idx < 0) return;
+      if (e.key === 'ArrowRight') {
+        e.preventDefault();
+        tabs[(idx + 1) % tabs.length].focus();
+      }
+      if (e.key === 'ArrowLeft') {
+        e.preventDefault();
+        tabs[(idx - 1 + tabs.length) % tabs.length].focus();
+      }
+    });
+  }
 
-async function loadChannelSyncStatus() {
-    const card = document.getElementById('channel-sync-card');
-    const stat = document.getElementById('stat-channel-sync');
+  // ─── Boot ─────────────────────────────────────────────────────────────────────
+  AdminUI.onReady(function () {
+    ssyncInitTablistKeys();
+    ssyncLoadAll();
+  });
 
-    if (!card || !stat) return;
+  // Expose to global for inline onclick handlers in HTML
+  window.ssyncRunPull = ssyncRunPull;
+  window.ssyncRunProfilePush = ssyncRunProfilePush;
+  window.ssyncMessageOpen = ssyncMessageOpen;
+  window.ssyncMessageClose = ssyncMessageClose;
+  window.ssyncMessageSelectAll = ssyncMessageSelectAll;
+  window.ssyncMessageDeselectAll = ssyncMessageDeselectAll;
+  window.ssyncMessageUpdateCount = ssyncMessageUpdateCount;
+  window.ssyncMessageSend = ssyncMessageSend;
+  window.ssyncSetSegment = ssyncSetSegment;
+  window.ssyncOnSearch = ssyncOnSearch;
 
-    try {
-        const resp = await fetch('/admin/channel-sync/status');
-        if (!resp.ok) {
-            throw new Error(`HTTP ${resp.status}`);
-        }
-        const data = await resp.json();
-
-        if (data.error) {
-            stat.textContent = '⚠️';
-            card.classList.add('status-error');
-            card.title = data.error;
-            return;
-        }
-
-        // Show status based on scheduler and credentials
-        const schedulerOk = data.scheduler?.running;
-        const credsOk = data.credentials?.valid;
-
-        if (schedulerOk && credsOk) {
-            stat.textContent = '✓ Ready';
-            card.classList.add('status-ok');
-            card.title = 'Channel sync is configured and running';
-        } else if (credsOk) {
-            stat.textContent = '⏸ Idle';
-            card.classList.add('status-warning');
-            card.title = 'Scheduler not running';
-        } else {
-            stat.textContent = '✗ Config';
-            card.classList.add('status-error');
-            card.title = 'Admin API credentials invalid';
-        }
-    } catch (e) {
-        console.error('Failed to load channel sync status:', e);
-        stat.textContent = '—';
-        card.title = 'Could not load status';
-    }
-}
+})();
