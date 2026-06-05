@@ -405,13 +405,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- AdminUI foundation (loaded here since admin_base.html is integration-branch managed) -->
-<script src="{{ url_for('static', filename='js/admin/_core.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/status_badge.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/drawer.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/filter_bar.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/data.js') }}"></script>
-<!-- Skipper decisions feed module -->
 <script src="{{ url_for('static', filename='admin_skipper.js') }}"></script>
 {% endblock %}

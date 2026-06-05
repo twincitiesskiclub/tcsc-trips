@@ -3,6 +3,7 @@
 // Depends on AdminUI foundation (_core.js, drawer.js, status_badge.js, filter_bar.js,
 // focus_trap.js, data.js) loaded before this script.
 
+(function () {
 'use strict';
 
 // ---------------------------------------------------------------------------
@@ -735,3 +736,12 @@ function sk_footerText(p) {
   }
   return 'No decision recorded';
 }
+
+// ---------------------------------------------------------------------------
+// Expose entry points needed by inline HTML handlers
+// ---------------------------------------------------------------------------
+window.approveProposal = approveProposal;
+window.rejectProposal = rejectProposal;
+window.refreshConfig = refreshConfig;
+
+})();

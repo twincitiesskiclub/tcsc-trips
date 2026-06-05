@@ -241,7 +241,7 @@
     var copyEmailBtn = el('button', {
       type: 'button',
       class: 'mr-copy-email-btn',
-      'aria-label': 'Copy ' + AdminUI.escapeHtml(user.email),
+      'aria-label': 'Copy ' + user.email,
       onclick: function (e) {
         e.stopPropagation();
         mr_copyToClipboard(user.email, 'Email copied');
@@ -283,7 +283,7 @@
     var selectCb = el('input', {
       type: 'checkbox',
       class: 'mr-select-cb',
-      'aria-label': 'Select ' + AdminUI.escapeHtml(user.full_name),
+      'aria-label': 'Select ' + user.full_name,
       onclick: function (e) {
         e.stopPropagation();
         mr_toggleSelect(user.id);
@@ -295,7 +295,7 @@
     var editBtn = el('button', {
       type: 'button',
       class: 'mr-edit-btn',
-      'aria-label': 'Edit ' + AdminUI.escapeHtml(user.full_name),
+      'aria-label': 'Edit ' + user.full_name,
       onclick: function (e) {
         e.stopPropagation();
         mr_openEditModal(user.id, e.currentTarget);
@@ -494,7 +494,7 @@
       user.tags.forEach(function (tag) {
         var chip = el('span', {
           class: 'mr-tag-chip',
-          style: 'background:' + AdminUI.escapeHtml(tag.gradient || DEFAULT_GRADIENT)
+          style: 'background:' + (tag.gradient || DEFAULT_GRADIENT)
         }, [(tag.emoji || '') + ' ' + (tag.display_name || tag.name || '')]);
         tagChildren.push(chip);
       });
@@ -693,7 +693,7 @@
         if (userTagIds.has(tag.id)) cb.checked = true;
         var badge = el('span', {
           class: 'mr-tag-badge-sm',
-          style: 'background:' + AdminUI.escapeHtml(tag.gradient || DEFAULT_GRADIENT)
+          style: 'background:' + (tag.gradient || DEFAULT_GRADIENT)
         }, [tag.display_name || tag.name]);
         var lbl = el('label', { class: 'mr-edit-tag-item' }, [cb, badge]);
         tagsContainer.appendChild(lbl);
@@ -741,7 +741,7 @@
           if (!bulkMode && userTagIdSet.has(tag.id)) cb.checked = true;
           var badge = el('span', {
             class: 'mr-tag-badge-sm',
-            style: 'background:' + AdminUI.escapeHtml(tag.gradient || DEFAULT_GRADIENT)
+            style: 'background:' + (tag.gradient || DEFAULT_GRADIENT)
           }, [tag.display_name || tag.name]);
           return el('label', { class: 'mr-tag-cb-item' }, [cb, badge]);
         }))
@@ -848,6 +848,7 @@
         var u = usersData.find(function (x) { return x.id === userId; });
         if (u && res.tags) u.tags = res.tags;
         mr_renderRow(u);
+        mr_applyFilters();
         mr_closeTagModal();
       } catch (e) {
         // AdminUI.mutate already showed an error toast

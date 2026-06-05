@@ -433,7 +433,8 @@
     var li = AdminUI.el('li', {
       class: 'pw-row-item' + (isSelected ? ' is-selected' : ''),
       tabindex: '0',
-      role: 'row'
+      role: 'row',
+      dataset: { paymentId: String(p.id) }
     }, [checkWrap, mainCol, amountEl, actions]);
 
     // Row click -> open drawer (excluding controls)
@@ -446,10 +447,14 @@
     });
 
     // Keyboard: Enter -> drawer, Space -> toggle select
+    // Guard: if focus is on the row checkbox or another interactive element,
+    // let the native event handle it (avoids double-toggle on Space).
     li.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') {
+        if (e.target === cb || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
         pay_openDrawer(p);
       } else if (e.key === ' ') {
+        if (e.target === cb || e.target.tagName === 'BUTTON' || e.target.tagName === 'INPUT') return;
         e.preventDefault();
         pay_toggleSelect(p.id, li);
       }
@@ -495,21 +500,17 @@
       ids.forEach(function (id) { state.selected.add(id); });
     }
 
-    // Update row DOM
+    // Update row DOM - look up by data-payment-id to avoid collisions on same name
     var content = document.getElementById('pw-content');
     if (content) {
       rows.forEach(function (p) {
         var isNowSelected = state.selected.has(p.id);
-        // Find the row by searching for the checkbox with matching aria-label
-        var escapedName = AdminUI.escapeHtml(p.name);
-        var rows2 = content.querySelectorAll('.pw-row-item');
-        rows2.forEach(function (rowEl) {
+        var rowEl = content.querySelector('.pw-row-item[data-payment-id="' + p.id + '"]');
+        if (rowEl) {
+          rowEl.classList.toggle('is-selected', isNowSelected);
           var cb2 = rowEl.querySelector('input[type="checkbox"]');
-          if (cb2 && cb2.getAttribute('aria-label') === 'Select payment for ' + escapedName) {
-            rowEl.classList.toggle('is-selected', isNowSelected);
-            cb2.checked = isNowSelected;
-          }
-        });
+          if (cb2) cb2.checked = isNowSelected;
+        }
       });
     }
 

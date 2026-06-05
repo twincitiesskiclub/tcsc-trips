@@ -164,11 +164,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<!-- AdminUI foundation (load _core first) -->
-<script src="{{ url_for('static', filename='js/admin/_core.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='js/admin/status_badge.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='js/admin/drawer.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='js/admin/data.js') }}?v=2"></script>
-<script src="{{ url_for('static', filename='admin_seasons.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='admin_seasons.js') }}"></script>
 {% endblock %}

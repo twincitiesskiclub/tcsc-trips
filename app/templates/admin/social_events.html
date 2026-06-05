@@ -153,10 +153,5 @@
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='js/admin/_core.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/status_badge.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/data.js') }}"></script>
-<script src="{{ url_for('static', filename='js/admin/drawer.js') }}"></script>
-<script src="{{ url_for('static', filename='admin_social_events.js') }}?v={{ range(1000000) | random }}"></script>
+<script src="{{ url_for('static', filename='admin_social_events.js') }}"></script>
 {% endblock %}
