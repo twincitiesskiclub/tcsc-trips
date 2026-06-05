@@ -18,9 +18,6 @@
 
   // Track currently open popover element for singleton management
   var ssyncOpenPopover = null;
-  // Track last focused element before drawer open
-  var ssyncDrawerTrigger = null;
-
   // ─── Initials chip palette ───────────────────────────────────────────────────
   var CHIP_PALETTE = [
     { from: '#1c2c44', to: '#2d4a6a' },
@@ -437,7 +434,26 @@
       }, ['…']);
       overflowBtn.addEventListener('click', function (e) {
         e.stopPropagation();
-        ssyncTogglePopover(overflowWrap, user, match);
+        ssyncTogglePopover(overflowWrap, user, match, function () {
+          // Switch card to inline-picker mode
+          actionsEl.innerHTML = '';
+          var inlinePicker = ssyncLinkPicker('db', user, match, ssyncState.unmatchedSlack, function (slackId) {
+            ssyncLink(user.id, slackId);
+          });
+          actionsEl.appendChild(inlinePicker);
+          var inlineDelete = AdminUI.el('button', {
+            type: 'button',
+            class: 'ss-act-danger',
+            'aria-label': 'Delete ' + name
+          }, ['Delete']);
+          inlineDelete.addEventListener('click', function (e) {
+            e.stopPropagation();
+            ssyncDelete(user.id);
+          });
+          actionsEl.appendChild(inlineDelete);
+          var pickerInput = inlinePicker.querySelector('.ss-picker-input');
+          if (pickerInput) { pickerInput.focus(); }
+        });
       });
       overflowWrap.appendChild(overflowBtn);
       actionsEl.appendChild(overflowWrap);
@@ -862,18 +878,6 @@
       });
     }
 
-    function openDropdown() {
-      renderDropdown(input.value);
-      dropdown.classList.add('is-open');
-      input.setAttribute('aria-expanded', 'true');
-      highlightedIndex = -1;
-    }
-
-    function closeDropdown() {
-      dropdown.classList.remove('is-open');
-      input.setAttribute('aria-expanded', 'false');
-    }
-
     function selectOption(id, name, email) {
       selectedId = id;
       selectedName = name;
@@ -924,6 +928,30 @@
       }
     }
 
+    // Outside-click handler -- attached on open, removed on close to avoid accumulation
+    function onDocClickOutside(e) {
+      if (!wrapper.contains(e.target)) {
+        closeDropdown();
+      }
+    }
+
+    function openDropdown() {
+      renderDropdown(input.value);
+      dropdown.classList.add('is-open');
+      input.setAttribute('aria-expanded', 'true');
+      highlightedIndex = -1;
+      // Bind once per open; setTimeout defers past the current click that triggered focus
+      setTimeout(function () {
+        document.addEventListener('click', onDocClickOutside);
+      }, 0);
+    }
+
+    function closeDropdown() {
+      dropdown.classList.remove('is-open');
+      input.setAttribute('aria-expanded', 'false');
+      document.removeEventListener('click', onDocClickOutside);
+    }
+
     // Events
     input.addEventListener('focus', function () { openDropdown(); });
     input.addEventListener('input', function () {
@@ -961,19 +989,11 @@
       });
     }
 
-    // Close on outside click
-    document.addEventListener('click', function onDocClick(e) {
-      if (!wrapper.contains(e.target)) {
-        closeDropdown();
-        document.removeEventListener('click', onDocClick);
-      }
-    });
-
     return wrapper;
   }
 
   // ─── Overflow popover ─────────────────────────────────────────────────────────
-  function ssyncTogglePopover(wrapEl, user, match) {
+  function ssyncTogglePopover(wrapEl, user, match, onLinkViaPicker) {
     if (ssyncOpenPopover && ssyncOpenPopover !== wrapEl) {
       var old = ssyncOpenPopover.querySelector('.ss-popover');
       if (old) ssyncOpenPopover.removeChild(old);
@@ -993,7 +1013,7 @@
     pickerItem.addEventListener('click', function () {
       wrapEl.removeChild(popover);
       ssyncOpenPopover = null;
-      // Replace actions zone with picker
+      if (onLinkViaPicker) { onLinkViaPicker(); }
     });
 
     var detailsItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item', role: 'menuitem' }, ['Open details']);
@@ -1029,8 +1049,6 @@
     var record = opts.user;
     var type = opts.type;
     var match = opts.match || null;
-
-    ssyncDrawerTrigger = document.activeElement;
 
     var title = record.full_name || record.display_name || record.email || '?';
     var content = AdminUI.el('div', {}, []);
