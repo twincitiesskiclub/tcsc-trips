@@ -2,22 +2,174 @@
 
 {% block title %}Seasons{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_ui.css') }}?v=2">
+<style>
+/* ===== Seasons timeline -- scoped styles (source of truth) ===== */
+#season-tl,#season-tl *{box-sizing:border-box;margin:0;padding:0}
+#season-tl{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* header */
+#season-tl .stl-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+#season-tl .stl-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;color:#1c2c44}
+#season-tl .stl-count{font-size:13px;color:#64748b;margin-bottom:20px;display:block}
+
+/* buttons */
+#season-tl .stl-btn{height:36px;display:inline-flex;align-items:center;justify-content:center;gap:5px;border-radius:9px;padding:0 14px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;border:1.5px solid transparent;white-space:nowrap;transition:opacity .12s,border-color .12s,color .12s}
+#season-tl .stl-btn-sm{height:32px;padding:0 11px;font-size:12.5px}
+#season-tl .stl-btn-primary{background:#1c2c44;color:#fff}
+#season-tl .stl-btn-primary:hover{opacity:.9}
+#season-tl .stl-btn-ghost{background:#fff;color:#475569;border-color:#e5e7eb}
+#season-tl .stl-btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+#season-tl .stl-btn:focus-visible,#season-tl button:focus-visible,#season-tl a.stl-btn:focus-visible,#season-tl a.stl-act:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* drawer actions */
+#season-tl .stl-act{height:40px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:6px;border:1.5px solid transparent;font-family:inherit;text-decoration:none;white-space:nowrap;transition:opacity .12s,border-color .12s,color .12s;padding:0 14px}
+#season-tl .stl-act-primary{flex:1;background:#1c2c44;color:#fff}
+#season-tl .stl-act-primary:hover{opacity:.9}
+#season-tl .stl-act-ghost{background:#fff;color:#475569;border-color:#e5e7eb}
+#season-tl .stl-act-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+#season-tl .stl-act-success{background:#fff;color:#166534;border-color:#bbf7d0}
+#season-tl .stl-act-success:hover{border-color:#86efac}
+#season-tl .stl-act-danger{background:#fff;color:#c53030;border-color:#f3c9c9}
+#season-tl .stl-act-danger:hover{border-color:#f87171}
+
+/* type pill */
+#season-tl .stl-pill{display:inline-flex;align-items:center;border:1.5px solid #e5e7eb;border-radius:20px;padding:1px 9px;font-size:11.5px;font-weight:500;color:#475569}
+
+/* hero card (current season) */
+#season-tl .stl-hero-card{background:#fff;border:1px solid #e9edf3;border-radius:12px;border-left:4px solid #1c2c44;padding:18px 20px 16px 16px;box-shadow:0 2px 8px rgba(28,44,68,.08);margin-bottom:24px;transition:box-shadow .12s;cursor:pointer}
+#season-tl .stl-hero-card:hover{box-shadow:0 4px 12px rgba(28,44,68,.12)}
+#season-tl .stl-hero-card.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44,0 2px 8px rgba(28,44,68,.12)}
+#season-tl .stl-hero-inner{display:flex;gap:18px;flex-wrap:wrap}
+#season-tl .stl-hero-left{flex:1;min-width:0}
+#season-tl .stl-hero-right{flex-shrink:0;width:220px;border-left:1px solid #f0f3f7;padding-left:18px;padding-top:4px}
+#season-tl .stl-id-row{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+#season-tl .stl-season-name{font-size:18px;font-weight:700;color:#1c2c44;overflow-wrap:anywhere}
+#season-tl .stl-year{font-size:13px;color:#64748b}
+#season-tl .stl-date-range{font-size:13px;color:#475569;margin-bottom:12px}
+#season-tl .stl-win-row{display:flex;align-items:center;gap:10px;margin-bottom:6px;flex-wrap:wrap}
+#season-tl .stl-win-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;width:80px;flex-shrink:0}
+#season-tl .stl-win-dates{font-size:13px;color:#1c2c44}
+#season-tl .stl-stat-lbl{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:2px}
+#season-tl .stl-stat-val{font-size:18px;font-weight:700;color:#1c2c44;margin-bottom:14px}
+#season-tl .stl-stat-val:last-child{margin-bottom:0}
+#season-tl .stl-count-slot{display:none}/* member_count: pending /data serializer field */
+#season-tl .stl-hero-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid #f0f3f7}
+
+/* timeline spine */
+#season-tl .stl-list{position:relative}
+#season-tl .stl-list::before{content:"";position:absolute;left:19px;top:10px;bottom:0;width:2px;background:#e1e6ee;pointer-events:none}
+
+/* timeline node */
+#season-tl .stl-node{position:relative;margin-bottom:10px;margin-left:40px}
+#season-tl .stl-dot{position:absolute;left:-26px;top:22px;width:10px;height:10px;border-radius:50%;background:#1c2c44;pointer-events:none}
+#season-tl .stl-card-body{width:100%;text-align:left;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:13px 15px;display:flex;flex-direction:column;gap:0;cursor:pointer;font-family:inherit;color:inherit;transition:border-color .12s,box-shadow .12s}
+#season-tl .stl-card-body:hover{border-color:#cdd5e0;box-shadow:0 1px 4px rgba(28,44,68,.06)}
+#season-tl .stl-card-body.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+#season-tl .stl-card-body:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#season-tl .stl-card-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+#season-tl .stl-card-name{font-size:15px;font-weight:600;color:#1c2c44}
+#season-tl .stl-card-year{font-size:12.5px;color:#64748b}
+#season-tl .stl-card-range{font-size:12.5px;color:#64748b}
+#season-tl .stl-card-wins{margin-bottom:4px}
+#season-tl .stl-card-win-row{display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap}
+#season-tl .stl-card-win-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;width:72px;flex-shrink:0}
+#season-tl .stl-card-win-dates{font-size:12.5px;color:#1c2c44}
+#season-tl .stl-card-actions{display:flex;gap:6px;margin-top:10px}
+
+/* drawer detail blocks */
+#season-tl .stl-dw-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px;padding-bottom:10px}
+#season-tl .stl-blk{padding:15px 0;border-bottom:1px solid #f1f5f9}
+#season-tl .stl-blk:last-child{border-bottom:none}
+#season-tl .stl-blk-h{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px}
+#season-tl .stl-kv{display:flex;gap:10px;margin-bottom:8px;font-size:13.5px}
+#season-tl .stl-kv:last-child{margin-bottom:0}
+#season-tl .stl-kv .k{color:#64748b;width:96px;flex-shrink:0}
+#season-tl .stl-kv .v{color:#1c2c44;font-weight:500}
+#season-tl .stl-desc-box{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:9px 11px}
+
+/* drawer footer */
+#season-tl .stl-dw-footer{padding:13px 18px;border-top:1px solid #eef1f5;display:flex;gap:8px;flex-wrap:wrap}
+
+/* empty/error states */
+#season-tl .stl-empty{padding:28px 8px;text-align:center;color:#94a3b8;font-size:14px}
+#season-tl .stl-error{padding:20px 8px;text-align:center;color:#c53030;font-size:14px}
+
+/* form input */
+#season-tl .stl-input{width:100%;height:38px;border:1.5px solid #e5e7eb;border-radius:9px;padding:0 12px;font-size:14px;font-family:inherit;color:#1c2c44;background:#fff;box-sizing:border-box}
+#season-tl .stl-input:focus{outline:none;border-color:#1c2c44}
+#season-tl .stl-input-err{font-size:12px;color:#c53030;margin-top:4px;display:none}
+#season-tl .stl-input-err.shown{display:block}
+#season-tl .stl-field-lbl{font-size:13px;font-weight:600;color:#1c2c44;display:block;margin-bottom:5px}
+#season-tl .stl-field-note{font-size:12px;color:#64748b;margin-top:4px}
+
+/* confirm / modal overlay */
+.stl-modal-scrim{position:fixed;inset:0;z-index:1099;background:rgba(20,30,50,.35)}
+.stl-modal-dlg{position:fixed;z-index:1101;background:#fff;border-radius:14px;max-width:420px;width:90%;padding:24px;box-shadow:0 8px 40px rgba(20,30,50,.22);top:50%;left:50%;transform:translate(-50%,-50%)}
+.stl-modal-dlg h3{font-size:17px;font-weight:700;color:#1c2c44;margin-bottom:10px}
+.stl-modal-dlg p{font-size:14px;line-height:1.5;color:#475569;margin-bottom:0}
+.stl-modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:20px;flex-wrap:wrap}
+.stl-modal-dlg button:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.stl-btn-confirm-danger{height:36px;display:inline-flex;align-items:center;padding:0 16px;border-radius:9px;font-size:13.5px;font-weight:600;cursor:pointer;font-family:inherit;border:1.5px solid #fca5a5;background:#fee2e2;color:#c53030}
+.stl-btn-confirm-danger:hover{border-color:#f87171}
+.stl-btn-confirm-danger:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* late-link step 2 URL row */
+#season-tl .stl-copy-row{display:flex;gap:8px;align-items:center}
+#season-tl .stl-copy-row .stl-input{flex:1;min-width:0}
+#season-tl .stl-aria-live{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap}
+
+/* mobile */
+@media (max-width:767px){
+  #season-tl .stl-head{flex-direction:column;align-items:flex-start;gap:8px}
+  #season-tl .stl-hero-inner{flex-direction:column}
+  #season-tl .stl-hero-right{border-left:none;padding-left:0;padding-top:14px;border-top:1px solid #f0f3f7;width:100%}
+  #season-tl button,#season-tl a.stl-btn,#season-tl a.stl-act{min-height:44px}
+  #season-tl .stl-dw-footer{padding-bottom:calc(13px + env(safe-area-inset-bottom,0px))}
+  .stl-modal-dlg{top:50%;transform:translate(-50%,-50%)}
+  #season-tl .stl-copy-row{flex-wrap:wrap}
+  #season-tl .stl-copy-row .stl-btn{min-width:80px;flex:0 0 auto}
+  .stl-modal-actions button{min-height:44px}
+}
+@media (prefers-reduced-motion:reduce){
+  #season-tl .stl-card-body,#season-tl .stl-hero-card{transition:none}
+}
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="bg-white rounded-tcsc p-5">
-    <div class="admin-header">
-        <h1>Seasons</h1>
-        <a href="{{ url_for('admin.new_season') }}" class="admin-btn admin-btn-lg admin-btn-primary">+ Create New Season</a>
-    </div>
+<div id="season-tl">
 
-    <div class="admin-toolbar">
-        <div class="admin-toolbar-spacer"></div>
-        <span class="admin-count" id="season-count">0</span>
-    </div>
+  <!-- aria-live region for copy confirmations -->
+  <span class="stl-aria-live" aria-live="polite" id="stl-copy-announce"></span>
 
-    <div id="seasons-table" class="admin-table tabulator-config"></div>
+  <div class="stl-head">
+    <h1>Seasons</h1>
+    <a href="{{ url_for('admin.new_season') }}" class="stl-btn stl-btn-primary">+ Create New Season</a>
+  </div>
+
+  <span id="stl-count" class="stl-count">Loading...</span>
+
+  <!-- Hero slot: JS inserts current-season hero card here -->
+  <div id="stl-hero"></div>
+
+  <!-- Timeline spine + node cards for all non-current seasons -->
+  <div id="stl-list" class="stl-list" aria-live="off">
+    <p class="stl-empty stl-loading">Loading seasons...</p>
+  </div>
+
+</div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='admin_seasons.js') }}?v={{ range(1000000) | random }}"></script>
+<!-- AdminUI foundation (load _core first) -->
+<script src="{{ url_for('static', filename='js/admin/_core.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/admin/status_badge.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/admin/drawer.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='js/admin/data.js') }}?v=2"></script>
+<script src="{{ url_for('static', filename='admin_seasons.js') }}?v=2"></script>
 {% endblock %}
