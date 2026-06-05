@@ -1,110 +1,658 @@
 {% extends 'admin/admin_base.html' %}
+{% block title %}Payments{% endblock %}
+
 {% block extra_css %}
+<!-- AdminUI foundation styles -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_ui.css') }}">
 <style>
-/* Bulk Summary in Modal */
-.bulk-summary {
-    display: flex;
-    gap: 24px;
-    margin: 16px 0;
-    padding: 16px;
-    background: #f9fafb;
-    border-radius: 8px;
+/* ===== Finance Worktable - scoped under #pay-root ===== */
+#pay-root, #pay-root * { box-sizing: border-box; margin: 0; padding: 0; }
+#pay-root {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #1c2c44;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
-.summary-stat {
-    display: flex;
+/* --- Page header --- */
+#pay-root .pw-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+}
+#pay-root .pw-head h1 {
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: #1c2c44;
+}
+#pay-root .pw-btn-ghost {
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  border-radius: 10px;
+  padding: 0 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  background: #fff;
+  color: #475569;
+  border: 1.5px solid #e5e7eb;
+  text-decoration: none;
+}
+#pay-root .pw-btn-ghost:hover { border-color: #1c2c44; color: #1c2c44; }
+#pay-root .pw-btn-ghost:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+
+/* --- Filter bar (uses .admin-ui-filterbar from foundation) --- */
+#pay-root .admin-ui-filterbar { margin-bottom: 18px; }
+#pay-root .admin-ui-filterbar__search,
+#pay-root .admin-ui-filterbar__select {
+  height: 38px;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 0 12px;
+  font-size: 14px;
+  color: #475569;
+  background: #fff;
+  font-family: inherit;
+}
+#pay-root .admin-ui-filterbar__search:focus,
+#pay-root .admin-ui-filterbar__select:focus {
+  outline: none;
+  border-color: #1c2c44;
+}
+#pay-root .admin-ui-filterbar__search { flex: 1; min-width: 180px; }
+
+/* --- Section groups --- */
+#pay-root .pw-section { margin-bottom: 24px; }
+
+#pay-root .pw-sec-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  padding: 0;
+  margin-bottom: 10px;
+  text-align: left;
+}
+#pay-root .pw-sec-header:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; border-radius: 4px; }
+
+#pay-root .pw-chevron {
+  font-size: 10px;
+  color: #94a3b8;
+  display: inline-block;
+  transition: transform 0.15s;
+  line-height: 1;
+  flex-shrink: 0;
+}
+#pay-root .pw-sec-header[aria-expanded="true"] .pw-chevron { transform: rotate(90deg); }
+
+#pay-root .pw-sec-title {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: #64748b;
+}
+#pay-root .pw-sec-count {
+  font-size: 11px;
+  font-weight: 700;
+  color: #94a3b8;
+}
+#pay-root .pw-sec-subtotal {
+  margin-left: auto;
+  font-size: 12px;
+  font-weight: 600;
+  color: #1c2c44;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Section select-all checkbox */
+#pay-root .pw-sec-selectall {
+  margin-left: 6px;
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+#pay-root .pw-sec-hr {
+  height: 1px;
+  background: #eceff3;
+  border: none;
+  margin-bottom: 8px;
+}
+
+#pay-root .pw-empty-section {
+  padding: 12px 4px;
+  font-size: 14px;
+  color: #94a3b8;
+}
+
+/* --- Ledger rows --- */
+#pay-root .pw-rows {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+#pay-root .pw-row-item {
+  display: flex;
+  align-items: stretch;
+  background: #fff;
+  border: 1px solid #e9edf3;
+  border-radius: 11px;
+  padding: 12px 15px;
+  gap: 12px;
+  cursor: pointer;
+  transition: border-color 0.12s, box-shadow 0.12s;
+  min-height: 64px;
+}
+#pay-root .pw-row-item:hover { border-color: #cdd5e0; }
+#pay-root .pw-row-item.is-selected {
+  border-color: #1c2c44;
+  box-shadow: inset 3px 0 0 #1c2c44;
+}
+#pay-root .pw-row-item:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+
+/* Leading checkbox */
+#pay-root .pw-row-check {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 4px;
+}
+#pay-root .pw-row-check input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+/* Main column */
+#pay-root .pw-row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+#pay-root .pw-row-line1 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+#pay-root .pw-row-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1c2c44;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+#pay-root .pw-row-line2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  color: #64748b;
+  font-size: 12.5px;
+}
+#pay-root .pw-row-sep { color: #94a3b8; }
+#pay-root .pw-row-forname {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline-block;
+}
+
+/* Type pill */
+#pay-root .pw-type-pill {
+  display: inline-flex;
+  align-items: center;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 20px;
+  padding: 1px 9px;
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #475569;
+}
+
+/* Amount */
+#pay-root .pw-row-amount {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  min-width: 72px;
+  text-align: right;
+  font-size: 15px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: #1c2c44;
+}
+#pay-root .pw-amount-hidden { color: #94a3b8; }
+
+/* Inline action buttons (desktop) */
+#pay-root .pw-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.1s;
+}
+#pay-root .pw-row-item:hover .pw-row-actions,
+#pay-root .pw-row-item.is-selected .pw-row-actions {
+  opacity: 1;
+  pointer-events: auto;
+}
+#pay-root .pw-row-act {
+  height: 32px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  white-space: nowrap;
+}
+#pay-root .pw-row-act:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+#pay-root .pw-row-act-accept {
+  background: #fff;
+  color: #166534;
+  border: 1.5px solid #bbf7d0;
+}
+#pay-root .pw-row-act-refund {
+  background: #fff;
+  color: #c53030;
+  border: 1.5px solid #f3c9c9;
+}
+#pay-root .pw-row-act:disabled,
+#pay-root .pw-row-act[disabled] {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* --- Drawer KV pairs --- */
+#pay-root .pw-kv-list { display: flex; flex-direction: column; }
+#pay-root .pw-kv-row {
+  display: flex;
+  gap: 10px;
+  font-size: 13.5px;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+#pay-root .pw-kv-row:last-child { border-bottom: none; }
+#pay-root .pw-kv-key {
+  width: 80px;
+  flex-shrink: 0;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 500;
+}
+#pay-root .pw-kv-val {
+  flex: 1;
+  color: #1c2c44;
+  font-weight: 500;
+  word-break: break-word;
+}
+#pay-root .pw-kv-mono {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+  word-break: break-all;
+}
+#pay-root .pw-dw-actions {
+  display: flex;
+  gap: 9px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #eef1f5;
+  flex-wrap: wrap;
+}
+#pay-root .pw-dw-act-accept {
+  flex: 1;
+  min-width: 120px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #1c2c44;
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+#pay-root .pw-dw-act-accept:disabled { opacity: 0.4; cursor: not-allowed; }
+#pay-root .pw-dw-act-accept:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+#pay-root .pw-dw-act-refund {
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 14px;
+  background: #fff;
+  color: #c53030;
+  border: 1.5px solid #f3c9c9;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  flex: 1;
+  min-width: 120px;
+}
+#pay-root .pw-dw-act-refund:disabled { opacity: 0.4; cursor: not-allowed; }
+#pay-root .pw-dw-act-refund:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+
+/* --- Bulk action bar --- */
+#pay-root .pw-bulk-bar-spacer { height: 72px; display: none; }
+#pay-root .pw-bulk-bar-spacer.is-visible { display: block; }
+
+.pw-bulk-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: 200;
+  height: 64px;
+  background: #1c2c44;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 0 24px;
+  transform: translateY(100%);
+  transition: transform 0.2s ease;
+}
+.pw-bulk-bar.is-visible { transform: translateY(0); }
+
+.pw-bulk-count {
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.pw-bulk-sum {
+  color: #fff;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.pw-bulk-spacer { flex: 1; }
+.pw-bulk-btn {
+  height: 36px;
+  display: inline-flex;
+  align-items: center;
+  padding: 0 14px;
+  font-size: 13px;
+  font-weight: 600;
+  border-radius: 10px;
+  cursor: pointer;
+  font-family: inherit;
+  border: 1px solid rgba(255,255,255,0.3);
+  white-space: nowrap;
+}
+.pw-bulk-btn:focus-visible { outline: 2px solid #fff; outline-offset: 2px; }
+.pw-bulk-accept {
+  background: #fff;
+  color: #166534;
+}
+.pw-bulk-refund {
+  background: #fff;
+  color: #c53030;
+}
+.pw-bulk-clear {
+  background: transparent;
+  color: #fff;
+  border-color: rgba(255,255,255,0.4);
+}
+.pw-bulk-btn[aria-disabled="true"] { opacity: 0.4; cursor: not-allowed; }
+
+/* --- Confirm modal --- */
+.pw-modal-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(20,30,50,0.45);
+  z-index: 300;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.pw-modal {
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 20px 60px rgba(20,30,50,0.22);
+  width: min(480px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  display: flex;
+  flex-direction: column;
+}
+.pw-modal-hd {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px 20px 16px;
+  border-bottom: 1px solid #eef1f5;
+}
+.pw-modal-title {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1c2c44;
+  margin: 0;
+}
+.pw-modal-x {
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 20px;
+  color: #64748b;
+  margin: -8px -8px 0 0;
+  border-radius: 8px;
+}
+.pw-modal-x:hover { background: #f1f5f9; }
+.pw-modal-x:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+.pw-modal-body {
+  padding: 16px 20px;
+  overflow-y: auto;
+  flex: 1;
+}
+.pw-modal-summary {
+  display: flex;
+  gap: 24px;
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.pw-modal-stat { display: flex; flex-direction: column; }
+.pw-modal-stat-val {
+  font-size: 24px;
+  font-weight: 600;
+  color: #1c2c44;
+  font-variant-numeric: tabular-nums;
+}
+.pw-modal-stat-lbl { font-size: 12px; color: #64748b; margin-top: 2px; }
+.pw-modal-warning {
+  background: #fefce8;
+  border-left: 3px solid #f59e0b;
+  border-radius: 6px;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: #854d0e;
+  margin-bottom: 12px;
+}
+.pw-modal-list {
+  list-style: none;
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e4e7ec;
+  border-radius: 6px;
+}
+.pw-modal-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 9px 12px;
+  border-bottom: 1px solid #e4e7ec;
+  font-size: 13px;
+}
+.pw-modal-item:last-child { border-bottom: none; }
+.pw-modal-item-amt {
+  font-variant-numeric: tabular-nums;
+  color: #1c2c44;
+  font-weight: 500;
+}
+.pw-modal-ft {
+  display: flex;
+  gap: 10px;
+  justify-content: flex-end;
+  padding: 16px 20px 20px;
+  border-top: 1px solid #eef1f5;
+}
+.pw-modal-cancel {
+  height: 38px;
+  padding: 0 16px;
+  background: #fff;
+  color: #475569;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pw-modal-cancel:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+.pw-modal-confirm {
+  height: 38px;
+  padding: 0 16px;
+  border: none;
+  border-radius: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  color: #fff;
+}
+.pw-modal-confirm:disabled { opacity: 0.7; cursor: not-allowed; }
+.pw-modal-confirm:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
+.pw-modal-confirm-accept { background: #1c2c44; }
+.pw-modal-confirm-refund { background: #c53030; }
+
+/* --- Loading / error / empty states --- */
+#pay-root .pw-loading,
+#pay-root .pw-empty {
+  padding: 40px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+}
+#pay-root .pw-error {
+  padding: 20px;
+  color: #c53030;
+  font-size: 14px;
+}
+
+/* --- Mobile --- */
+@media (max-width: 767px) {
+  #pay-root .pw-row-actions { display: none; }
+
+  #pay-root .pw-row-item {
     flex-direction: column;
-    align-items: center;
+    padding: 10px 12px;
+  }
+  #pay-root .pw-row-item > .pw-row-check {
+    /* keep checkbox at top-left in column layout */
+    align-self: flex-start;
+  }
+  #pay-root .pw-row-amount {
+    text-align: left;
+    justify-content: flex-start;
+    min-width: 0;
+  }
+
+  #pay-root .admin-ui-filterbar__search { flex: 1 1 100%; }
+  #pay-root .admin-ui-filterbar__select { flex: 1 1 calc(50% - 5px); }
+  #pay-root .admin-ui-filterbar__pills { flex: 1 1 auto; }
+
+  #pay-root .pw-sec-selectall { display: none; }
+
+  .pw-bulk-bar {
+    height: auto;
+    min-height: 64px;
+    flex-direction: column;
+    align-items: stretch;
+    padding: 12px 16px calc(12px + env(safe-area-inset-bottom)) 16px;
+    gap: 8px;
+  }
+  .pw-bulk-spacer { display: none; }
+  .pw-bulk-bar-info { display: flex; gap: 12px; align-items: center; }
+  .pw-bulk-bar-btns { display: flex; gap: 8px; width: 100%; }
+  .pw-bulk-btn { flex: 1; justify-content: center; }
+  .pw-bulk-accept { background: #1c2c44; color: #fff; border-color: #1c2c44; }
+  .pw-bulk-refund { background: #c53030; color: #fff; border-color: #c53030; }
+
+  .pw-modal-list { max-height: 160px; }
+
+  #pay-root .pw-row-item { min-height: 64px; }
+  #pay-root .pw-row-check input[type="checkbox"] { width: 20px; height: 20px; }
+
+  #pay-root .pw-dw-actions { flex-wrap: wrap; }
+  #pay-root .pw-dw-act-accept,
+  #pay-root .pw-dw-act-refund { height: 44px; }
 }
 
-.stat-value {
-    font-size: 24px;
-    font-weight: 600;
-    color: #1c2c44;
-}
-
-.stat-label {
-    font-size: 12px;
-    color: #667085;
-    margin-top: 4px;
-}
-
-.payment-list {
-    max-height: 200px;
-    overflow-y: auto;
-    border: 1px solid #e4e7ec;
-    border-radius: 6px;
-    margin-top: 12px;
-}
-
-.payment-item {
-    padding: 8px 12px;
-    border-bottom: 1px solid #e4e7ec;
-    font-size: 13px;
-}
-
-.payment-item:last-child {
-    border-bottom: none;
-}
-
-/* Hidden amounts */
-.amount-hidden {
-    color: #98a2b3;
-    font-style: italic;
+@media (prefers-reduced-motion: reduce) {
+  .pw-bulk-bar { transition: none; }
+  #pay-root .pw-chevron { transition: none; }
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-tcsc p-5">
-    <h1 class="text-xl font-semibold text-tcsc-navy mb-3">Payments</h1>
+<!-- AdminUI foundation scripts (loaded before admin_payments.js) -->
+<script src="{{ url_for('static', filename='js/admin/_core.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/status_badge.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/drawer.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/filter_bar.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/data.js') }}"></script>
 
-    <!-- Toolbar -->
-    <div class="admin-toolbar">
-        <input type="text" id="payments-search" class="admin-search" placeholder="Search...">
-        <select id="type-filter" class="admin-select">
-            <option value="">All Types</option>
-            <option value="trip">Trip</option>
-            <option value="season">Season</option>
-        </select>
-        <select id="status-filter" class="admin-select">
-            <option value="">All Statuses</option>
-            <option value="pending">Pending</option>
-            <option value="success">Success</option>
-            <option value="refunded">Refunded</option>
-            <option value="canceled">Canceled</option>
-        </select>
-        <span id="payment-count" class="admin-count">0</span>
-        <div class="admin-toolbar-spacer"></div>
-        <div class="flex gap-2">
-            <button id="bulk-accept" class="admin-btn admin-btn-md admin-btn-success" disabled>Accept Selected</button>
-            <button id="bulk-refund" class="admin-btn admin-btn-md admin-btn-danger" disabled>Refund Selected</button>
-        </div>
-    </div>
-
-    <div id="payments-table" class="tabulator-data"></div>
-
-    <div class="flex justify-end mt-4 pt-4 border-t border-gray-200">
-        <button id="export-csv" class="admin-btn admin-btn-md admin-btn-secondary">Export CSV</button>
-    </div>
+<div id="pay-root">
+  <!-- JS builds everything here -->
 </div>
 
-<!-- Bulk Action Confirmation Modal -->
-<div id="bulk-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
-    <div class="absolute inset-0 modal-overlay"></div>
-    <div class="relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl">
-        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
-            <h2 id="modal-title" class="text-lg font-semibold text-tcsc-navy">Confirm Action</h2>
-            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none modal-close">&times;</button>
-        </div>
-        <div class="p-5" id="modal-body">
-            <!-- Dynamic content -->
-        </div>
-        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" id="cancel-action">Cancel</button>
-            <button type="button" class="admin-btn admin-btn-md admin-btn-success" id="confirm-action">Confirm</button>
-        </div>
-    </div>
+<!-- Persistent bulk action bar (outside pay-root so it doesn't get cleared on re-render) -->
+<div id="pw-bulk-bar" class="pw-bulk-bar" role="region" aria-label="Bulk actions" aria-live="polite" hidden>
+  <span class="pw-bulk-count" id="pw-bulk-count">0 selected</span>
+  <span class="pw-bulk-sum" id="pw-bulk-sum" hidden></span>
+  <span class="pw-bulk-spacer"></span>
+  <button type="button" class="pw-bulk-btn pw-bulk-accept" id="pw-bulk-accept"
+    aria-disabled="true" aria-label="Accept selected payments">Accept Selected</button>
+  <button type="button" class="pw-bulk-btn pw-bulk-refund" id="pw-bulk-refund"
+    aria-disabled="true" aria-label="Refund selected payments">Refund Selected</button>
+  <button type="button" class="pw-bulk-btn pw-bulk-clear" id="pw-bulk-clear"
+    aria-label="Clear selection">Clear</button>
 </div>
 {% endblock %}
 
