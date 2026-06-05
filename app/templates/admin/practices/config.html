@@ -480,11 +480,16 @@ function attachTabListeners() {
 
 // ============================================================================
 // Data Loading
+// NOTE: Each loadX() mutates the existing array in place (splice + spread)
+// rather than reassigning the module-level variable. This keeps CFG_ENTITIES
+// pointing at the same array objects after the API response arrives, so
+// cfgAddDraft, the duplicate-draft guard, Escape-discard, and cfgEntityForRecord
+// all operate on the live data.
 // ============================================================================
 async function loadLocations() {
     try {
         const data = await AdminUI.fetchJSON('/admin/practices/locations/data');
-        locationsData = data.locations;
+        locationsData.splice(0, locationsData.length, ...data.locations);
         document.getElementById('location-count').textContent = locationsData.length;
     } catch (err) {
         cfgShowError('cfg-locations-list', 'locations', 'cfgRefreshLocations');
@@ -495,7 +500,7 @@ async function loadLocations() {
 async function loadActivities() {
     try {
         const data = await AdminUI.fetchJSON('/admin/practices/activities/data');
-        activitiesData = data.activities;
+        activitiesData.splice(0, activitiesData.length, ...data.activities);
         document.getElementById('activity-count').textContent = activitiesData.length;
     } catch (err) {
         cfgShowError('cfg-activities-list', 'activities', 'cfgRefreshActivities');
@@ -506,7 +511,7 @@ async function loadActivities() {
 async function loadTypes() {
     try {
         const data = await AdminUI.fetchJSON('/admin/practices/types/data');
-        typesData = data.types;
+        typesData.splice(0, typesData.length, ...data.types);
         document.getElementById('type-count').textContent = typesData.length;
     } catch (err) {
         cfgShowError('cfg-types-list', 'types', 'cfgRefreshTypes');
@@ -517,7 +522,7 @@ async function loadTypes() {
 async function loadSocialLocations() {
     try {
         const data = await AdminUI.fetchJSON('/admin/practices/social-locations/data');
-        socialLocationsData = data.social_locations;
+        socialLocationsData.splice(0, socialLocationsData.length, ...data.social_locations);
         document.getElementById('social-location-count').textContent = socialLocationsData.length;
     } catch (err) {
         cfgShowError('cfg-social-list', 'social locations', 'cfgRefreshSocialLocations');
@@ -664,40 +669,6 @@ function cfgChipInput(mountEl, initialArray, onChange) {
 
     renderChips();
     return { getChips: function() { return chips.slice(); } };
-}
-
-// ============================================================================
-// Generic cfgSave
-// ============================================================================
-async function cfgSave(entityKey, record, payload, dataArray, countId, refreshFn, renderFn) {
-    const isNew = !record.id;
-    const url = isNew
-        ? '/admin/practices/' + entityKey + '/create'
-        : '/admin/practices/' + entityKey + '/' + record.id + '/edit';
-
-    try {
-        const result = await AdminUI.mutate(url, payload);
-        // Determine the echoed record key
-        const echoKeys = { 'locations': 'location', 'activities': 'activity', 'types': 'type', 'social-locations': 'social_location' };
-        const echoKey = echoKeys[entityKey];
-        const echoed = result[echoKey];
-        if (echoed) {
-            const idx = dataArray.findIndex(function(r) { return r.id === record.id || (r.id === null && r._draftKey === record._draftKey); });
-            if (idx >= 0) {
-                dataArray[idx] = echoed;
-            }
-            // Update count on create
-            if (isNew) {
-                const countEl = document.getElementById(countId);
-                if (countEl) countEl.textContent = dataArray.length;
-            }
-            // Re-render just this card
-            renderFn();
-        }
-    } catch (err) {
-        // mutate already toasted; revert by re-fetching
-        await refreshFn();
-    }
 }
 
 // ============================================================================
