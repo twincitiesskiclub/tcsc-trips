@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>TCSC Admin - {% block title %}{{ title }}{% endblock %}</title>
-    <!-- Tabulator CSS (load first so our overrides take precedence) -->
-    <link href="https://unpkg.com/tabulator-tables@5.5.2/dist/css/tabulator.min.css" rel="stylesheet">
     <!-- Pure Tailwind CSS (no legacy CSS) -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
     <!-- AdminUI foundation styles -->
@@ -105,8 +103,6 @@
     <script src="{{ url_for('static', filename='js/admin/filter_bar.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/pills.js') }}"></script>
     <script src="{{ url_for('static', filename='js/admin/data.js') }}"></script>
-    <!-- Tabulator JS -->
-    <script type="text/javascript" src="https://unpkg.com/tabulator-tables@5.5.2/dist/js/tabulator.min.js"></script>
     {% block extra_js %}{% endblock %}
 </body>
 </html>
