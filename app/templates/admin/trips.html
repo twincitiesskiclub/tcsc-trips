@@ -2,29 +2,162 @@
 
 {% block title %}Trips{% endblock %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_ui.css') }}">
+<style>
+/* ===== Trips list — scoped "Quiet Precision" styles ===== */
+#trips-list,#trips-list *{box-sizing:border-box;margin:0;padding:0}
+#trips-list{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* header */
+#trips-list .tl-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+#trips-list .tl-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+#trips-list .tl-head a{display:inline-flex;align-items:center;height:36px;background:#1c2c44;color:#fff;border-radius:10px;padding:0 14px;font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap}
+#trips-list .tl-head a:hover{background:#243650}
+#trips-list .tl-head a:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* toolbar */
+#trips-list .tl-toolbar{position:sticky;top:0;z-index:10;background:#fff;padding:8px 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+#trips-list .tl-search{flex:1;min-width:160px;height:36px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
+#trips-list .tl-search:focus{outline:none;border-color:#1c2c44}
+#trips-list .tl-pills{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#trips-list .tl-pill{height:32px;padding:0 12px;border:1.5px solid #e5e7eb;border-radius:20px;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s}
+#trips-list .tl-pill:hover{border-color:#1c2c44;color:#1c2c44}
+#trips-list .tl-pill[aria-pressed="true"]{background:#1c2c44;border-color:#1c2c44;color:#fff}
+#trips-list .tl-pill:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#trips-list .tl-spacer{flex:1}
+#trips-list .tl-count{font-size:13px;font-weight:600;color:#64748b;white-space:nowrap}
+
+/* section heading */
+#trips-list .tl-sec{display:flex;align-items:center;gap:10px;margin:20px 2px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b}
+#trips-list .tl-sec:first-of-type{margin-top:2px}
+#trips-list .tl-sec-rule{flex:1;height:1px;background:#eceff3}
+#trips-list .tl-sec-count{color:#94a3b8}
+
+/* card */
+#trips-list .tl-card{width:100%;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:11px 15px;display:flex;align-items:flex-start;gap:12px;cursor:pointer;transition:border-color .12s}
+#trips-list .tl-card:hover{border-color:#cdd5e0}
+#trips-list .tl-card:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#trips-list .tl-card.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+#trips-list .tl-cards{display:flex;flex-direction:column;gap:7px}
+
+/* date block */
+#trips-list .tl-db{display:flex;flex-direction:column;align-items:center;width:52px;flex-shrink:0;padding-top:10px}
+#trips-list .tl-db .mo{font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b}
+#trips-list .tl-db .dn{font-size:26px;font-weight:700;line-height:1;color:#1c2c44}
+#trips-list .tl-db.is-today .dn{color:#1e40af}
+
+/* card main */
+#trips-list .tl-card-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;padding:10px 0}
+#trips-list .tl-card-main a{font-size:15px;font-weight:600;color:#1c2c44;text-decoration:none}
+#trips-list .tl-card-main a:hover{text-decoration:underline}
+#trips-list .tl-card-main a:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* meta line */
+#trips-list .tl-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:#64748b}
+#trips-list .tl-meta .sep{color:#cbd5e1}
+#trips-list .tl-meta .price{font-weight:500;color:#1c2c44}
+#trips-list .tl-cap{font-size:11.5px;color:#475569;border:1px solid #e9edf3;border-radius:16px;padding:1px 8px}
+#trips-list .tl-signup{font-size:11.5px;font-weight:600;border-radius:16px;padding:1px 9px}
+#trips-list .tl-signup.open{color:#166534;background:#dcfce7}
+#trips-list .tl-signup.opens{color:#1e40af;background:#dbeafe}
+#trips-list .tl-signup.closed{color:#64748b;background:#f1f5f9}
+
+/* card aside */
+#trips-list .tl-card-aside{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;padding:10px 0}
+#trips-list .tl-actions{display:flex;gap:6px}
+#trips-list .tl-edit,#trips-list .tl-delete{height:30px;padding:0 10px;font-size:12.5px;font-weight:600;border-radius:8px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;transition:background .12s}
+#trips-list .tl-edit{background:#f1f5f9;color:#1c2c44;border:1px solid #e2e8f0}
+#trips-list .tl-edit:hover{background:#e2e8f0}
+#trips-list .tl-delete{background:#fff;color:#c53030;border:1px solid #f3c9c9}
+#trips-list .tl-delete:hover{background:#fde8e8}
+#trips-list .tl-edit:focus-visible,#trips-list .tl-delete:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* past section */
+#trips-list .tl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#f1f4f8;border:1px solid #e1e6ee;border-radius:11px;padding:12px 15px;color:#475569;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;font-family:inherit;margin-top:24px}
+#trips-list .tl-past-toggle:hover{background:#e8ecf1}
+#trips-list .tl-past-toggle .chev{transition:transform .15s;color:#94a3b8}
+#trips-list .tl-past-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+#trips-list .tl-past-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#trips-list .tl-past-list{margin-top:8px;padding:0 0 0 6px;border-left:2px solid #eef1f5}
+#trips-list .tl-past-list .tl-card{background:#fbfcfd;border-color:#eef1f5}
+#trips-list .tl-past-list .tl-card:hover{border-color:#dce2ea}
+#trips-list .tl-past-list .tl-card-main a{color:#64748b}
+#trips-list .tl-past-list .tl-db .dn{color:#94a3b8}
+#trips-list .tl-past-list .tl-actions{opacity:.8}
+#trips-list .tl-loadmore{display:block;margin:8px auto 0;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px;padding:7px 16px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;font-family:inherit}
+#trips-list .tl-loadmore:hover{background:#f8fafc}
+#trips-list .tl-loadmore:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* empty/loading */
+#trips-list .tl-empty{padding:32px 8px;text-align:center;color:#94a3b8;font-size:14px}
+#trips-list .tl-empty a{color:#1c2c44;text-decoration:underline}
+
+/* drawer footer (sticky inside overflow-y:auto body) */
+#trips-list .tl-dwfooter{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:13px 18px;display:flex;gap:9px;margin-top:auto}
+#trips-list .tl-dw-edit,#trips-list .tl-dw-delete{height:40px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid transparent;font-family:inherit;text-decoration:none;transition:background .12s}
+#trips-list .tl-dw-edit{flex:1;background:#1c2c44;color:#fff}
+#trips-list .tl-dw-edit:hover{background:#243650}
+#trips-list .tl-dw-delete{padding:0 16px;background:#fff;color:#c53030;border-color:#f3c9c9}
+#trips-list .tl-dw-delete:hover{background:#fde8e8}
+#trips-list .tl-dw-edit:focus-visible,#trips-list .tl-dw-delete:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* drawer key-value */
+#trips-list .tl-kv{display:flex;gap:10px;margin-bottom:8px;font-size:13.5px}
+#trips-list .tl-kv .k{color:#64748b;width:90px;flex-shrink:0;font-size:12px}
+#trips-list .tl-kv .v{color:#1c2c44;font-weight:500;flex:1}
+#trips-list .tl-dw-sub{font-size:13px;color:#475569;margin:0 0 12px}
+
+/* mobile */
+@media (max-width:767px){
+  #trips-list .tl-toolbar{gap:6px}
+  #trips-list .tl-card-aside{flex-direction:column;align-items:flex-end;gap:6px}
+  #trips-list .tl-db{width:44px}
+  #trips-list .tl-edit,#trips-list .tl-delete{height:36px;padding:0 12px}
+  #trips-list .tl-dwfooter{padding-bottom:calc(13px + env(safe-area-inset-bottom))}
+  #trips-list .tl-dw-edit,#trips-list .tl-dw-delete{min-height:44px}
+}
+@media (max-width:480px){
+  #trips-list .tl-head{flex-direction:column;align-items:flex-start}
+  #trips-list .tl-head a{width:100%;justify-content:center}
+}
+@media (prefers-reduced-motion:reduce){
+  #trips-list .tl-card{transition:none}
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="bg-white rounded-tcsc p-5">
-    <div class="admin-header">
-        <h1>Trips</h1>
-        <a href="{{ url_for('admin.new_trip') }}" class="admin-btn admin-btn-lg admin-btn-primary">+ Create New Trip</a>
-    </div>
+<div id="trips-list">
+  <div class="tl-head">
+    <h1>Trips</h1>
+    <a href="{{ url_for('admin.new_trip') }}">+ Create New Trip</a>
+  </div>
 
-    <div class="admin-toolbar">
-        <input type="text" id="trips-search" class="admin-search" placeholder="Search trips...">
-        <div class="admin-pill-group">
-            <button class="admin-pill active" data-status="all">All</button>
-            <button class="admin-pill" data-status="active">Active</button>
-            <button class="admin-pill" data-status="draft">Draft</button>
-            <button class="admin-pill" data-status="closed">Closed</button>
-        </div>
-        <div class="admin-toolbar-spacer"></div>
-        <span class="admin-count" id="trip-count">0</span>
+  <div class="tl-toolbar" role="group" aria-label="Filter trips">
+    <input type="search" id="trips-search" class="tl-search"
+           placeholder="Search trips..." aria-label="Search trips" aria-controls="trips-rows">
+    <div class="tl-pills" role="group" aria-label="Filter by status">
+      <button type="button" class="tl-pill" data-status="all" aria-pressed="true">All</button>
+      <button type="button" class="tl-pill" data-status="active" aria-pressed="false">Active</button>
+      <button type="button" class="tl-pill" data-status="draft" aria-pressed="false">Draft</button>
+      <button type="button" class="tl-pill" data-status="closed" aria-pressed="false">Closed</button>
     </div>
+    <span class="tl-spacer"></span>
+    <span class="tl-count" id="trip-count">0 trips</span>
+  </div>
 
-    <div id="trips-table" class="admin-table tabulator-config"></div>
+  <div id="trips-rows" aria-live="polite">
+    <p class="tl-empty">Loading...</p>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/admin/_core.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/status_badge.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/data.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/drawer.js') }}"></script>
 <script src="{{ url_for('static', filename='admin_trips.js') }}?v={{ range(1000000) | random }}"></script>
 {% endblock %}
