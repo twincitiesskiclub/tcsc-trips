@@ -50,6 +50,8 @@
 #roles-studio .rs-badge{display:inline-flex;align-items:center;white-space:nowrap;color:rgba(255,255,255,.92);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;flex-shrink:0;text-shadow:0 1px 2px rgba(0,0,0,.18)}
 /* Larger badge variant for editor preview */
 #roles-studio .rs-badge.rs-preview-badge{font-size:15px;padding:6px 14px}
+/* Emoji aside shown next to preview badge (not part of the product badge itself) */
+#roles-studio .rs-preview-emoji{font-size:22px;margin-left:10px;vertical-align:middle}
 
 /* --- User count chip --- */
 #roles-studio .rs-chip{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f1f5f9;color:#475569;white-space:nowrap}
@@ -69,7 +71,7 @@
 /* Preview block */
 #roles-studio .rs-preview-block{padding-bottom:20px;border-bottom:1px solid #f0f2f5;margin-bottom:20px}
 #roles-studio .rs-preview-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px}
-#roles-studio #rs-preview{min-height:32px}
+#roles-studio #rs-preview{min-height:32px;display:flex;align-items:center}
 #roles-studio .rs-preview-subtext{font-size:11px;color:#94a3b8;margin-top:6px}
 
 /* Form fields */
@@ -187,15 +189,21 @@
 
   /* ============================================================
      BADGE BUILDER (single source of truth)
+
+     Matches the real product badge in admin_users.js getTagBadges():
+       <span class="tag-badge" style="background:{gradient}">{display_name}</span>
+     The badge shows display_name only -- no emoji. The emoji is surfaced
+     separately in the rail row (as the left icon) and, in the editor
+     preview, as a labeled aside next to the badge so editors can see its
+     visual contribution without the preview misrepresenting the actual
+     Members admin badge.
   ============================================================ */
   function rsLiveBadge(role, preview) {
     var gradient = (role && role.gradient) || DEFAULT_GRADIENT;
-    var emoji = (role && role.emoji) || '';
     var displayName = (role && role.display_name) || 'New Role';
-    var text = emoji ? (emoji + ' ' + displayName) : displayName;
     var cls = preview ? 'rs-badge rs-preview-badge' : 'rs-badge';
-    var node = el('span', { 'class': cls, style: 'background:' + gradient }, [text]);
-    return node;
+    // display_name only -- matches getTagBadges() in admin_users.js (line 56)
+    return el('span', { 'class': cls, style: 'background:' + gradient }, [displayName]);
   }
 
   /* ============================================================
@@ -331,10 +339,15 @@
   }
 
   /* ============================================================
-     RENDER EDITOR (right panel)
+     RENDER EDITOR (right panel or arbitrary container)
+
+     target: optional DOM element to render into. Defaults to
+     document.getElementById('rs-editor'). Passing an explicit
+     container is used by rsOpenEditorMobile so the mobile path
+     never creates a duplicate #rs-editor element.
   ============================================================ */
-  function rsRenderEditor(role) {
-    var editor = document.getElementById('rs-editor');
+  function rsRenderEditor(role, target) {
+    var editor = target || document.getElementById('rs-editor');
     if (!editor) return;
 
     // null = placeholder
@@ -357,12 +370,21 @@
     var ctxLabel = el('div', { 'class': 'rs-editor-ctx' }, [ctxText]);
 
     // Preview block
+    // The badge matches the real product badge (display_name only, from
+    // getTagBadges() in admin_users.js). The emoji is shown as a separate
+    // aside so editors know its visual contribution without the preview
+    // misrepresenting the Members admin badge.
     var previewNode = rsLiveBadge(role, true);
-    var previewSlot = el('div', { id: 'rs-preview' }, [previewNode]);
+    var emojiAside = el('span', {
+      'class': 'rs-preview-emoji',
+      'aria-label': 'emoji (appears in Slack and profiles, not inside the badge)',
+      'title': 'Emoji -- shown in Slack and profiles, not inside this badge'
+    }, [role.emoji || '']);
+    var previewSlot = el('div', { id: 'rs-preview' }, [previewNode, emojiAside]);
     var previewBlock = el('div', { 'class': 'rs-preview-block' }, [
-      el('div', { 'class': 'rs-preview-label' }, ['Live Preview']),
+      el('div', { 'class': 'rs-preview-label' }, ['Live Preview (badge as shown in Members admin)']),
       previewSlot,
-      el('div', { 'class': 'rs-preview-subtext' }, ['(Updates as you type)'])
+      el('div', { 'class': 'rs-preview-subtext' }, ['Updates as you type. Emoji appears beside the badge for reference.'])
     ]);
 
     // Helper to update live preview from current input values
@@ -380,6 +402,12 @@
       if (slot) {
         slot.innerHTML = '';
         slot.appendChild(newBadge);
+        var newEmoji = el('span', {
+          'class': 'rs-preview-emoji',
+          'aria-label': 'emoji (appears in Slack and profiles, not inside the badge)',
+          'title': 'Emoji -- shown in Slack and profiles, not inside this badge'
+        }, [fakeRole.emoji || '']);
+        slot.appendChild(newEmoji);
       }
     }
 
@@ -540,38 +568,34 @@
 
   /* ============================================================
      MOBILE EDITOR (via AdminUI.drawer)
+
+     Fix: rsRenderEditor now accepts an explicit target container so
+     we never create a second element with id='rs-editor'. Building
+     into a plain detached div avoids the duplicate-id bug where
+     getElementById('rs-editor') would return the real (hidden) panel
+     instead of the temp container, leaving the drawer empty and all
+     Save/Delete buttons unwired.
   ============================================================ */
   function rsOpenEditorMobile(role) {
     var isDraft = !role || !role.id;
     var title = isDraft ? 'New Role' : (role.display_name || role.name || 'Edit Role');
 
-    // Build editor DOM (same function - renders into a temp container)
-    var tempId = rsState.selectedId;
+    // Build editor DOM into a plain detached container.
+    // No id is set on editorContainer -- avoids duplicate #rs-editor
+    // and the getElementById resolution bug that caused blank drawers.
     var editorContainer = document.createElement('div');
-    editorContainer.id = 'rs-editor';
     editorContainer.style.padding = '0';
-    document.body.appendChild(editorContainer);
+    rsRenderEditor(role, editorContainer);
 
-    rsRenderEditor(role);
-
-    // Grab the built content and move it
+    // Move children into the final content node for the drawer
     var content = document.createElement('div');
     while (editorContainer.firstChild) {
       content.appendChild(editorContainer.firstChild);
     }
-    document.body.removeChild(editorContainer);
-
-    // Restore the real #rs-editor to placeholder
-    document.getElementById('rs-editor').innerHTML = '';
 
     var drawerApi = AdminUI.drawer({ title: title, content: content });
 
-    // After drawer open, post-process the save/delete buttons to close drawer on success
-    // We do this by monkey-patching the buttons' click handlers after the drawer opens
-    // (The rsSave/rsDelete callbacks will call drawerApi.close() themselves via the
-    //  onSuccess callbacks we wire below)
-
-    // Re-wire save button inside the drawer
+    // Re-wire save button inside the drawer to close on success
     var saveBtnInDrawer = content.querySelector('#rs-save-btn');
     if (saveBtnInDrawer) {
       saveBtnInDrawer.replaceWith(saveBtnInDrawer.cloneNode(true));
@@ -813,13 +837,11 @@
      WIRE UP
   ============================================================ */
   AdminUI.onReady(function () {
-    // Render placeholder immediately
-    rsRenderEditor(null);
-
     // Wire new role button
     var newBtn = document.getElementById('rs-new-btn');
     if (newBtn) newBtn.addEventListener('click', rsNewRole);
 
+    // Load roles; rsLoad calls rsRenderEditor(null) after data arrives
     rsLoad();
   });
 
