@@ -1,257 +1,850 @@
 {% extends 'admin/admin_base.html' %}
-{% block title %}Role Management{% endblock %}
+{% block title %}Roles{% endblock %}
+
 {% block extra_css %}
+<!-- AdminUI foundation CSS -->
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_ui.css') }}">
 <style>
-/* Emoji preview in grid */
-.role-emoji-preview {
-    font-size: 20px;
-    text-align: center;
+/* ===== Roles Studio -- scoped styles (prefix: #roles-studio or .rs-) ===== */
+#roles-studio,#roles-studio *{box-sizing:border-box}
+#roles-studio{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* --- Header --- */
+#roles-studio .rs-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+#roles-studio .rs-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;color:#1c2c44;margin:0}
+#roles-studio .rs-head-left{display:flex;align-items:center;gap:8px}
+#roles-studio #rs-count{font-size:13px;font-weight:600;color:#64748b;background:#f1f5f9;border-radius:9999px;padding:2px 10px}
+
+/* --- Buttons --- */
+#roles-studio .rs-btn{height:38px;display:inline-flex;align-items:center;border-radius:10px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border:none}
+#roles-studio .rs-btn-primary{background:#1c2c44;color:#fff}
+#roles-studio .rs-btn-primary:hover{background:#243553}
+#roles-studio .rs-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#roles-studio .rs-btn-danger{background:#fff;color:#c53030;border:1.5px solid #c53030}
+#roles-studio .rs-btn-danger:hover:not([aria-disabled="true"]){background:#fef2f2}
+#roles-studio .rs-btn-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
+#roles-studio .rs-btn-danger[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
+
+/* --- Two-column body --- */
+#rs-body{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 220px);overflow:hidden}
+
+/* --- Left rail --- */
+#rs-list{overflow-y:auto;overflow-x:hidden;border-right:1px solid #e9edf3}
+#rs-list[aria-live]{} /* a11y marker */
+
+/* Row */
+#roles-studio .rs-row{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:transparent;border:none;border-bottom:1px solid #f0f2f5;padding:10px 14px;cursor:pointer;font-family:inherit;color:inherit}
+#roles-studio .rs-row:hover:not(.is-active){background:#fafbfc;border-bottom-color:#cdd5e0}
+#roles-studio .rs-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#roles-studio .rs-row.is-active{background:#f6f8fb;box-shadow:inset 3px 0 0 #1c2c44;padding-left:11px}
+
+/* Row interior */
+#roles-studio .rs-row-names{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px}
+#roles-studio .rs-row-display{font-size:13px;font-weight:600;color:#1c2c44;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:130px}
+#roles-studio .rs-row-system{font-size:11px;font-family:monospace;color:#64748b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+/* Empty / loading state in rail */
+#roles-studio .rs-empty-row{font-size:13px;color:#94a3b8;text-align:center;padding:32px 16px;border-bottom:1px solid #f0f2f5}
+
+/* --- Live badge (shared builder) --- */
+#roles-studio .rs-badge{display:inline-flex;align-items:center;white-space:nowrap;color:rgba(255,255,255,.92);font-size:12px;font-weight:600;padding:3px 10px;border-radius:20px;flex-shrink:0;text-shadow:0 1px 2px rgba(0,0,0,.18)}
+/* Larger badge variant for editor preview */
+#roles-studio .rs-badge.rs-preview-badge{font-size:15px;padding:6px 14px}
+/* Emoji aside shown next to preview badge (not part of the product badge itself) */
+#roles-studio .rs-preview-emoji{font-size:22px;margin-left:10px;vertical-align:middle}
+
+/* --- User count chip --- */
+#roles-studio .rs-chip{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f1f5f9;color:#475569;white-space:nowrap}
+#roles-studio .rs-chip.has-users{background:#d1fae5;color:#065f46}
+
+/* --- Right panel --- */
+#rs-editor{overflow-y:auto;padding:20px 24px}
+
+/* Placeholder empty state */
+#roles-studio .rs-placeholder{margin-top:60px;text-align:center;color:#94a3b8}
+#roles-studio .rs-placeholder-icon{font-size:32px;display:block;margin-bottom:12px}
+#roles-studio .rs-placeholder-text{font-size:14px}
+
+/* Editor context label (draft vs system name) */
+#roles-studio .rs-editor-ctx{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:16px}
+
+/* Preview block */
+#roles-studio .rs-preview-block{padding-bottom:20px;border-bottom:1px solid #f0f2f5;margin-bottom:20px}
+#roles-studio .rs-preview-label{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px}
+#roles-studio #rs-preview{min-height:32px;display:flex;align-items:center}
+#roles-studio .rs-preview-subtext{font-size:11px;color:#94a3b8;margin-top:6px}
+
+/* Form fields */
+#roles-studio .rs-fields{display:flex;flex-direction:column;gap:16px}
+#roles-studio .rs-field{display:flex;flex-direction:column;gap:4px}
+#roles-studio .rs-label{font-size:12px;font-weight:600;color:#374151}
+#roles-studio .rs-input,#roles-studio .rs-textarea{width:100%;border:1.5px solid #e5e7eb;border-radius:8px;padding:0 10px;font-size:14px;color:#1c2c44;font-family:inherit}
+#roles-studio .rs-input{height:38px}
+#roles-studio .rs-textarea{padding:8px 10px;resize:vertical;min-height:72px}
+#roles-studio .rs-input:focus,#roles-studio .rs-textarea:focus{border-color:#1c2c44;outline:none}
+#roles-studio .rs-input:focus-visible,#roles-studio .rs-textarea:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#roles-studio .rs-input.rs-mono{font-family:monospace}
+#roles-studio .rs-helper{font-size:11px;color:#64748b;margin-top:2px}
+#roles-studio .rs-field.has-error .rs-label{color:#c53030}
+#roles-studio .rs-field.has-error .rs-input,#roles-studio .rs-field.has-error .rs-textarea{border-color:#c53030}
+#roles-studio .rs-field-error-msg{font-size:11px;color:#c53030;margin-top:2px}
+
+/* --- Gradient picker --- */
+#roles-studio .rs-gradient-picker{display:flex;flex-direction:column;gap:10px}
+#roles-studio .rs-swatches-group{display:flex;flex-direction:column;gap:6px}
+#roles-studio .rs-swatches-label{font-size:10px;color:#94a3b8;font-weight:500;letter-spacing:.04em}
+#roles-studio .rs-swatches{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+#roles-studio .rs-swatch{width:100%;aspect-ratio:1;border-radius:8px;border:2px solid transparent;cursor:pointer;transition:border-color .1s}
+#roles-studio .rs-swatch:focus-visible{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+#roles-studio .rs-swatch[aria-pressed="true"]{border-color:#1c2c44}
+#roles-studio .rs-gradient-raw{display:flex;align-items:center;gap:8px}
+#roles-studio .rs-gradient-preview{width:24px;height:24px;border-radius:5px;border:1px solid #e5e7eb;flex-shrink:0}
+#roles-studio .rs-gradient-input{flex:1}
+
+/* --- Save bar --- */
+#roles-studio .rs-savebar{display:flex;gap:12px;justify-content:flex-end;position:sticky;bottom:0;background:#fff;border-top:1px solid #e4e4e7;padding:12px 0}
+
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion:reduce){
+  .admin-ui-drawer{transition:none}
 }
 
-/* Gradient preview in grid */
-.gradient-preview {
-    display: inline-block;
-    width: 100px;
-    height: 24px;
-    border-radius: 4px;
-    vertical-align: middle;
-}
-
-/* User count badge */
-.user-count-badge {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 24px;
-    height: 24px;
-    padding: 0 8px;
-    background: #f2f4f7;
-    border-radius: 12px;
-    font-weight: 500;
-    font-size: 12px;
-    color: #344054;
-}
-
-.user-count-badge.has-users {
-    background: #d4f5e9;
-    color: #1c2c44;
-}
-
-/* Inline editor styling */
-.tabulator-edit-box {
-    padding: 4px 8px;
-    border: 2px solid #1c2c44 !important;
-    border-radius: 4px;
-    font-size: 14px;
+/* --- Mobile (<=767px) --- */
+@media (max-width:767px){
+  #rs-body{grid-template-columns:1fr;height:auto}
+  #rs-editor{display:none}
+  #rs-list{border-right:none;height:auto;min-height:calc(100vh - 160px)}
+  #roles-studio .rs-row{padding:12px 16px}
+  #roles-studio .rs-row.is-active{padding-left:13px}
+  #roles-studio .rs-row-system{display:none}
+  #roles-studio .rs-swatches{grid-template-columns:repeat(5,1fr)}
+  #roles-studio .rs-swatch{aspect-ratio:1;min-height:44px}
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-tcsc p-5">
-    <div class="admin-header">
-        <h1>Role Management</h1>
-        <button class="admin-btn admin-btn-lg admin-btn-primary" onclick="addNewRole()">+ Add New Role</button>
+<div class="bg-white rounded-tcsc p-5" id="roles-studio">
+  <!-- Bespoke header -->
+  <div class="rs-head">
+    <div class="rs-head-left">
+      <h1>Roles</h1>
+      <span id="rs-count">0</span>
+    </div>
+    <button class="rs-btn rs-btn-primary" type="button" id="rs-new-btn">+ New Role</button>
+  </div>
+
+  <!-- Two-column body -->
+  <div id="rs-body">
+    <!-- Left rail -->
+    <div id="rs-list" aria-live="polite" aria-label="Roles list">
+      <div class="rs-empty-row">Loading roles...</div>
     </div>
 
-    <div class="admin-toolbar">
-        <div class="admin-toolbar-spacer"></div>
-        <span class="admin-count" id="role-count">0</span>
+    <!-- Right panel -->
+    <div id="rs-editor">
+      <!-- Placeholder rendered by JS -->
     </div>
-
-    <div id="roles-table" class="tabulator-config"></div>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
+<!-- AdminUI foundation scripts (load order matters) -->
+<script src="{{ url_for('static', filename='js/admin/_core.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/focus_trap.js') }}"></script>
+<script src="{{ url_for('static', filename='js/admin/drawer.js') }}"></script>
 <script>
-let rolesTable;
-let rolesData = [];
+(function () {
+  /* ============================================================
+     CONSTANTS
+  ============================================================ */
+  var DEFAULT_GRADIENT = 'linear-gradient(135deg,#868e96 0%,#adb5bd 100%)';
 
-const DEFAULT_GRADIENT = 'linear-gradient(135deg, #868e96 0%, #adb5bd 100%)';
+  var RS_GRADIENTS = [
+    { label: 'Gray (default)',   value: 'linear-gradient(135deg,#868e96 0%,#adb5bd 100%)' },
+    { label: 'Navy',             value: 'linear-gradient(135deg,#1c2c44 0%,#2d4a6e 100%)' },
+    { label: 'Green',            value: 'linear-gradient(135deg,#166534 0%,#16a34a 100%)' },
+    { label: 'Teal',             value: 'linear-gradient(135deg,#0e7490 0%,#0891b2 100%)' },
+    { label: 'Blue',             value: 'linear-gradient(135deg,#1d4ed8 0%,#3b82f6 100%)' },
+    { label: 'Purple',           value: 'linear-gradient(135deg,#7c3aed 0%,#8b5cf6 100%)' },
+    { label: 'Amber',            value: 'linear-gradient(135deg,#b45309 0%,#d97706 100%)' },
+    { label: 'Orange',           value: 'linear-gradient(135deg,#c2410c 0%,#ea580c 100%)' },
+    { label: 'Red',              value: 'linear-gradient(135deg,#be123c 0%,#e11d48 100%)' },
+    { label: 'Pink',             value: 'linear-gradient(135deg,#9d174d 0%,#db2777 100%)' },
+    { label: 'Teal-Cyan',        value: 'linear-gradient(135deg,#0f766e 0%,#14b8a6 100%)' },
+    { label: 'Slate',            value: 'linear-gradient(135deg,#374151 0%,#6b7280 100%)' }
+  ];
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Fetch roles data
-    const response = await fetch('/admin/tags/data');
-    const data = await response.json();
-    rolesData = data.tags;
+  var el = AdminUI.el;
 
-    document.getElementById('role-count').textContent = rolesData.length;
+  /* ============================================================
+     STATE
+  ============================================================ */
+  var rsState = {
+    roles: [],
+    selectedId: null,  // null | number
+    draft: null        // null | object (draft new role)
+  };
 
-    // Initialize Tabulator with inline editing
-    rolesTable = new Tabulator("#roles-table", {
-        data: rolesData,
-        layout: "fitColumns",
-        height: "calc(100vh - 320px)",
+  /* ============================================================
+     BADGE BUILDER (single source of truth)
 
-        columns: [
-            {
-                title: "Emoji",
-                field: "emoji",
-                width: 70,
-                hozAlign: "center",
-                editor: "input",
-                formatter: function(cell) {
-                    const emoji = cell.getValue() || '';
-                    return `<span class="role-emoji-preview">${emoji || '—'}</span>`;
-                },
-                cellEdited: function(cell) {
-                    saveRole(cell.getRow().getData());
-                }
-            },
-            {
-                title: "Name",
-                field: "name",
-                minWidth: 140,
-                editor: "input",
-                validator: "required",
-                cellEdited: function(cell) {
-                    saveRole(cell.getRow().getData());
-                }
-            },
-            {
-                title: "Display Name",
-                field: "display_name",
-                minWidth: 140,
-                editor: "input",
-                validator: "required",
-                cellEdited: function(cell) {
-                    saveRole(cell.getRow().getData());
-                }
-            },
-            {
-                title: "Gradient",
-                field: "gradient",
-                minWidth: 200,
-                editor: "input",
-                formatter: function(cell) {
-                    const gradient = cell.getValue() || DEFAULT_GRADIENT;
-                    return `<span class="gradient-preview" style="background: ${gradient};" title="${gradient}"></span>`;
-                },
-                cellEdited: function(cell) {
-                    saveRole(cell.getRow().getData());
-                }
-            },
-            {
-                title: "Users",
-                field: "user_count",
-                width: 80,
-                hozAlign: "center",
-                formatter: function(cell) {
-                    const count = cell.getValue() || 0;
-                    const cls = count > 0 ? 'user-count-badge has-users' : 'user-count-badge';
-                    return `<span class="${cls}">${count}</span>`;
-                }
-            },
-            {
-                title: "Actions",
-                width: 100,
-                hozAlign: "center",
-                formatter: function(cell) {
-                    const data = cell.getRow().getData();
-                    const canDelete = !data.user_count || data.user_count === 0;
-                    const deleteBtn = canDelete
-                        ? `<button class="admin-btn admin-btn-sm admin-btn-danger" onclick="deleteRole(${data.id}, '${data.display_name}')">Delete</button>`
-                        : `<button class="admin-btn admin-btn-sm admin-btn-danger" disabled title="Cannot delete - has users">Delete</button>`;
-                    return `<div class="admin-actions">${deleteBtn}</div>`;
-                },
-                headerSort: false
-            }
-        ]
+     Matches the real product badge in admin_users.js getTagBadges():
+       <span class="tag-badge" style="background:{gradient}">{display_name}</span>
+     The badge shows display_name only -- no emoji. The emoji is surfaced
+     separately in the rail row (as the left icon) and, in the editor
+     preview, as a labeled aside next to the badge so editors can see its
+     visual contribution without the preview misrepresenting the actual
+     Members admin badge.
+  ============================================================ */
+  function rsLiveBadge(role, preview) {
+    var gradient = (role && role.gradient) || DEFAULT_GRADIENT;
+    var displayName = (role && role.display_name) || 'New Role';
+    var cls = preview ? 'rs-badge rs-preview-badge' : 'rs-badge';
+    // display_name only -- matches getTagBadges() in admin_users.js (line 56)
+    return el('span', { 'class': cls, style: 'background:' + gradient }, [displayName]);
+  }
+
+  /* ============================================================
+     USER COUNT CHIP
+  ============================================================ */
+  function rsUserChip(count, roleId) {
+    var n = count || 0;
+    var cls = n > 0 ? 'rs-chip has-users' : 'rs-chip';
+    // data-role-id is a stub for a future "members with this role" drawer
+    return el('span', {
+      'class': cls,
+      'data-role-id': roleId || '',
+      'aria-label': n + ' user' + (n === 1 ? '' : 's')
+    }, [String(n)]);
+  }
+
+  /* ============================================================
+     RENDER LIST (left rail)
+  ============================================================ */
+  function rsRenderList() {
+    var list = document.getElementById('rs-list');
+    if (!list) return;
+
+    // Update count
+    var countEl = document.getElementById('rs-count');
+    if (countEl) countEl.textContent = String(rsState.roles.length);
+
+    // Empty state
+    if (rsState.roles.length === 0) {
+      list.innerHTML = '';
+      list.appendChild(el('div', { 'class': 'rs-empty-row' }, ['No roles found.']));
+      return;
+    }
+
+    // Build rows
+    var frag = document.createDocumentFragment();
+    rsState.roles.forEach(function (role) {
+      var isActive = (rsState.selectedId === role.id && !rsState.draft);
+      var rowCls = 'rs-row' + (isActive ? ' is-active' : '');
+
+      var row = el('button', {
+        'class': rowCls,
+        'type': 'button',
+        'data-id': String(role.id),
+        'aria-label': (role.display_name || role.name) + ' role, ' + (role.user_count || 0) + ' users'
+      }, [
+        rsLiveBadge(role, false),
+        el('div', { 'class': 'rs-row-names' }, [
+          el('div', { 'class': 'rs-row-display' }, [role.display_name || '']),
+          el('div', { 'class': 'rs-row-system' }, [role.name || ''])
+        ]),
+        rsUserChip(role.user_count, role.id)
+      ]);
+
+      row.addEventListener('click', function () { rsSelect(role.id); });
+      frag.appendChild(row);
     });
-});
 
-async function saveRole(data) {
-    // If no ID, this is a new role
-    const url = data.id ? `/admin/tags/${data.id}/edit` : '/admin/tags/create';
+    list.innerHTML = '';
+    list.appendChild(frag);
+  }
 
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: data.name,
-                display_name: data.display_name,
-                emoji: data.emoji,
-                gradient: data.gradient,
-                description: data.description
-            })
-        });
+  /* ============================================================
+     GRADIENT PICKER
+  ============================================================ */
+  function rsGradientPicker(currentGradient, onChange) {
+    var currentVal = currentGradient || '';
 
-        const result = await response.json();
+    // Swatch group
+    var swatchEls = RS_GRADIENTS.map(function (g) {
+      var isPressed = (g.value === currentVal);
+      var btn = el('button', {
+        'class': 'rs-swatch',
+        'type': 'button',
+        'aria-pressed': isPressed ? 'true' : 'false',
+        'title': g.label,
+        'style': 'background:' + g.value
+      }, []);
+      btn.addEventListener('click', function () {
+        // Set this swatch active, clear others
+        var allSwatches = btn.closest('.rs-swatches').querySelectorAll('.rs-swatch');
+        allSwatches.forEach(function (s) { s.setAttribute('aria-pressed', 'false'); });
+        btn.setAttribute('aria-pressed', 'true');
+        // Sync raw input
+        var rawInput = btn.closest('.rs-gradient-picker').querySelector('.rs-gradient-input');
+        var previewDiv = btn.closest('.rs-gradient-picker').querySelector('.rs-gradient-preview');
+        if (rawInput) rawInput.value = g.value;
+        if (previewDiv) previewDiv.style.background = g.value;
+        onChange(g.value);
+      });
+      return btn;
+    });
 
-        if (response.ok && result.success) {
-            // Update local data with returned tag (especially for new tags getting their ID)
-            if (result.tag) {
-                const idx = rolesData.findIndex(r => r.id === data.id || (!r.id && r.name === data.name));
-                if (idx >= 0) {
-                    rolesData[idx] = result.tag;
-                    rolesTable.updateData([result.tag]);
-                }
-            }
-            showToast('Role saved successfully', 'success');
-        } else {
-            showToast(result.error || 'Failed to save role', 'error');
-            // Reload data to reset
-            refreshData();
-        }
-    } catch (err) {
-        showToast('Error saving role: ' + err.message, 'error');
-        refreshData();
+    var swatchesGroup = el('div', {
+      'class': 'rs-swatches',
+      'role': 'group',
+      'aria-label': 'Gradient presets'
+    }, swatchEls);
+
+    // Live preview swatch
+    var previewDiv = el('div', {
+      'class': 'rs-gradient-preview',
+      'style': 'background:' + (currentVal || DEFAULT_GRADIENT),
+      'aria-hidden': 'true'
+    }, []);
+
+    // Raw CSS input
+    var rawInput = el('input', {
+      'class': 'rs-input rs-gradient-input',
+      'type': 'text',
+      'placeholder': 'linear-gradient(...)',
+      'value': currentVal,
+      'aria-label': 'Custom gradient CSS'
+    }, []);
+    rawInput.addEventListener('input', function () {
+      var val = rawInput.value;
+      // Clear swatch selection
+      swatchEls.forEach(function (s) { s.setAttribute('aria-pressed', 'false'); });
+      // Update mini preview
+      previewDiv.style.background = val || DEFAULT_GRADIENT;
+      onChange(val);
+    });
+
+    var rawRow = el('div', { 'class': 'rs-gradient-raw' }, [previewDiv, rawInput]);
+
+    return el('div', { 'class': 'rs-gradient-picker' }, [
+      el('div', { 'class': 'rs-swatches-group' }, [
+        el('div', { 'class': 'rs-swatches-label' }, ['Presets']),
+        swatchesGroup
+      ]),
+      rawRow
+    ]);
+  }
+
+  /* ============================================================
+     RENDER EDITOR (right panel or arbitrary container)
+
+     target: optional DOM element to render into. Defaults to
+     document.getElementById('rs-editor'). Passing an explicit
+     container is used by rsOpenEditorMobile so the mobile path
+     never creates a duplicate #rs-editor element.
+  ============================================================ */
+  function rsRenderEditor(role, target) {
+    var editor = target || document.getElementById('rs-editor');
+    if (!editor) return;
+
+    // null = placeholder
+    if (!role) {
+      editor.innerHTML = '';
+      editor.appendChild(
+        el('div', { 'class': 'rs-placeholder' }, [
+          el('span', { 'class': 'rs-placeholder-icon', 'aria-hidden': 'true' }, ['🏷']),
+          el('p', { 'class': 'rs-placeholder-text' }, ['Select a role to edit, or create one.'])
+        ])
+      );
+      return;
     }
-}
 
-async function deleteRole(id, name) {
-    if (!confirm(`Delete role "${name}"?\n\nThis cannot be undone.`)) {
-        return;
+    var isDraft = !role.id;
+    var currentGradient = role.gradient || '';
+
+    // Context label
+    var ctxText = isDraft ? 'New Role' : (role.name || '');
+    var ctxLabel = el('div', { 'class': 'rs-editor-ctx' }, [ctxText]);
+
+    // Preview block
+    // The badge matches the real product badge (display_name only, from
+    // getTagBadges() in admin_users.js). The emoji is shown as a separate
+    // aside so editors know its visual contribution without the preview
+    // misrepresenting the Members admin badge.
+    var previewNode = rsLiveBadge(role, true);
+    var emojiAside = el('span', {
+      'class': 'rs-preview-emoji',
+      'aria-label': 'emoji (appears in Slack and profiles, not inside the badge)',
+      'title': 'Emoji -- shown in Slack and profiles, not inside this badge'
+    }, [role.emoji || '']);
+    var previewSlot = el('div', { id: 'rs-preview' }, [previewNode, emojiAside]);
+    var previewBlock = el('div', { 'class': 'rs-preview-block' }, [
+      el('div', { 'class': 'rs-preview-label' }, ['Live Preview (badge as shown in Members admin)']),
+      previewSlot,
+      el('div', { 'class': 'rs-preview-subtext' }, ['Updates as you type. Emoji appears beside the badge for reference.'])
+    ]);
+
+    // Helper to update live preview from current input values
+    function updatePreview() {
+      var dispInput = editor.querySelector('#rs-f-display-name');
+      var emojiInput = editor.querySelector('#rs-f-emoji');
+      var gradInput = editor.querySelector('.rs-gradient-input');
+      var fakeRole = {
+        display_name: dispInput ? dispInput.value : '',
+        emoji: emojiInput ? emojiInput.value : '',
+        gradient: gradInput ? gradInput.value : ''
+      };
+      var newBadge = rsLiveBadge(fakeRole, true);
+      var slot = editor.querySelector('#rs-preview');
+      if (slot) {
+        slot.innerHTML = '';
+        slot.appendChild(newBadge);
+        var newEmoji = el('span', {
+          'class': 'rs-preview-emoji',
+          'aria-label': 'emoji (appears in Slack and profiles, not inside the badge)',
+          'title': 'Emoji -- shown in Slack and profiles, not inside this badge'
+        }, [fakeRole.emoji || '']);
+        slot.appendChild(newEmoji);
+      }
     }
 
-    try {
-        const response = await fetch(`/admin/tags/${id}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
+    // Display Name field
+    var dispInput = el('input', {
+      'class': 'rs-input',
+      'type': 'text',
+      'id': 'rs-f-display-name',
+      'placeholder': 'e.g. Head Coach',
+      'aria-required': 'true',
+      'value': role.display_name || ''
+    }, []);
+    dispInput.addEventListener('input', updatePreview);
+    var dispField = el('div', { 'class': 'rs-field' }, [
+      el('label', { 'class': 'rs-label', 'for': 'rs-f-display-name' }, ['Display Name *']),
+      dispInput
+    ]);
 
-        const result = await response.json();
+    // System Name field
+    var nameInput = el('input', {
+      'class': 'rs-input rs-mono',
+      'type': 'text',
+      'id': 'rs-f-name',
+      'placeholder': 'e.g. HEAD_COACH',
+      'aria-required': 'true',
+      'value': role.name || ''
+    }, []);
+    var nameField = el('div', { 'class': 'rs-field' }, [
+      el('label', { 'class': 'rs-label', 'for': 'rs-f-name' }, ['System Name']),
+      nameInput,
+      el('div', { 'class': 'rs-helper' }, ['Saved as uppercase with underscores (e.g. HEAD_COACH). Must be unique.'])
+    ]);
 
-        if (response.ok && result.success) {
-            showToast(result.message, 'success');
-            refreshData();
-        } else {
-            showToast(result.error || 'Failed to delete role', 'error');
-        }
-    } catch (err) {
-        showToast('Error deleting role: ' + err.message, 'error');
+    // Emoji field
+    var emojiInput = el('input', {
+      'class': 'rs-input',
+      'type': 'text',
+      'id': 'rs-f-emoji',
+      'placeholder': 'e.g. ⛷',
+      'maxlength': '10',
+      'value': role.emoji || ''
+    }, []);
+    emojiInput.addEventListener('input', updatePreview);
+    var emojiField = el('div', { 'class': 'rs-field' }, [
+      el('label', { 'class': 'rs-label', 'for': 'rs-f-emoji' }, ['Emoji']),
+      emojiInput
+    ]);
+
+    // Gradient picker
+    var pickerNode = rsGradientPicker(currentGradient, function (val) {
+      currentGradient = val;
+      updatePreview();
+    });
+    var gradField = el('div', { 'class': 'rs-field' }, [
+      el('label', { 'class': 'rs-label' }, ['Gradient']),
+      pickerNode
+    ]);
+
+    // Description field
+    var descInput = el('textarea', {
+      'class': 'rs-textarea',
+      'id': 'rs-f-description',
+      'rows': '3',
+      'placeholder': 'Optional. Describe when this role is assigned.'
+    }, [role.description || '']);
+    var descField = el('div', { 'class': 'rs-field' }, [
+      el('label', { 'class': 'rs-label', 'for': 'rs-f-description' }, ['Description']),
+      descInput
+    ]);
+
+    var fields = el('div', { 'class': 'rs-fields' }, [
+      dispField, nameField, emojiField, gradField, descField
+    ]);
+
+    // Save button
+    var saveBtn = el('button', {
+      'class': 'rs-btn rs-btn-primary',
+      'type': 'button',
+      'id': 'rs-save-btn'
+    }, ['Save Role']);
+    saveBtn.addEventListener('click', function () { rsSave(role); });
+
+    // Delete button (hidden for draft)
+    var deleteBtn = null;
+    if (!isDraft) {
+      var userCount = role.user_count || 0;
+      var deleteDisabled = userCount > 0;
+      deleteBtn = el('button', {
+        'class': 'rs-btn rs-btn-danger',
+        'type': 'button',
+        'id': 'rs-delete-btn',
+        'aria-disabled': deleteDisabled ? 'true' : 'false',
+        'title': deleteDisabled ? ('Cannot delete - ' + userCount + ' user' + (userCount === 1 ? '' : 's') + ' assigned') : ''
+      }, ['Delete Role']);
+      deleteBtn.addEventListener('click', function () {
+        if (deleteBtn.getAttribute('aria-disabled') === 'true') return;
+        rsDelete(role);
+      });
     }
-}
 
-function addNewRole() {
-    // Add a new empty row at the top
-    const newRole = {
-        id: null,
-        name: 'NEW_ROLE',
-        display_name: 'New Role',
-        emoji: '',
-        gradient: '',
-        user_count: 0
+    var savebar = el('div', { 'class': 'rs-savebar admin-ui-sticky-bar' },
+      deleteBtn ? [deleteBtn, saveBtn] : [saveBtn]
+    );
+
+    editor.innerHTML = '';
+    editor.appendChild(ctxLabel);
+    editor.appendChild(previewBlock);
+    editor.appendChild(fields);
+    editor.appendChild(savebar);
+
+    // Autofocus display name after DOM settles
+    requestAnimationFrame(function () {
+      var inp = editor.querySelector('#rs-f-display-name');
+      if (inp) inp.focus();
+    });
+  }
+
+  /* ============================================================
+     SELECT
+  ============================================================ */
+  function rsSelect(id) {
+    rsState.selectedId = id;
+    rsState.draft = null;
+
+    var role = rsState.roles.find(function (r) { return r.id === id; });
+    if (!role) return;
+
+    if (window.matchMedia('(max-width:767px)').matches) {
+      rsOpenEditorMobile(role);
+    } else {
+      rsRenderList();
+      rsRenderEditor(role);
+    }
+  }
+
+  /* ============================================================
+     NEW ROLE
+  ============================================================ */
+  function rsNewRole() {
+    rsState.draft = {
+      id: null,
+      name: '',
+      display_name: '',
+      emoji: '',
+      gradient: '',
+      description: '',
+      user_count: 0
     };
-    rolesTable.addRow(newRole, true);
+    rsState.selectedId = null;
 
-    // Focus the name cell for editing
-    setTimeout(() => {
-        const rows = rolesTable.getRows();
-        if (rows.length > 0) {
-            rows[0].getCell('name').edit();
+    if (window.matchMedia('(max-width:767px)').matches) {
+      rsOpenEditorMobile(rsState.draft);
+    } else {
+      rsRenderList();
+      rsRenderEditor(rsState.draft);
+    }
+  }
+
+  /* ============================================================
+     MOBILE EDITOR (via AdminUI.drawer)
+
+     Fix: rsRenderEditor now accepts an explicit target container so
+     we never create a second element with id='rs-editor'. Building
+     into a plain detached div avoids the duplicate-id bug where
+     getElementById('rs-editor') would return the real (hidden) panel
+     instead of the temp container, leaving the drawer empty and all
+     Save/Delete buttons unwired.
+  ============================================================ */
+  function rsOpenEditorMobile(role) {
+    var isDraft = !role || !role.id;
+    var title = isDraft ? 'New Role' : (role.display_name || role.name || 'Edit Role');
+
+    // Build editor DOM into a plain detached container.
+    // No id is set on editorContainer -- avoids duplicate #rs-editor
+    // and the getElementById resolution bug that caused blank drawers.
+    var editorContainer = document.createElement('div');
+    editorContainer.style.padding = '0';
+    rsRenderEditor(role, editorContainer);
+
+    // Move children into the final content node for the drawer
+    var content = document.createElement('div');
+    while (editorContainer.firstChild) {
+      content.appendChild(editorContainer.firstChild);
+    }
+
+    var drawerApi = AdminUI.drawer({ title: title, content: content });
+
+    // Re-wire save button inside the drawer to close on success
+    var saveBtnInDrawer = content.querySelector('#rs-save-btn');
+    if (saveBtnInDrawer) {
+      saveBtnInDrawer.replaceWith(saveBtnInDrawer.cloneNode(true));
+      saveBtnInDrawer = content.querySelector('#rs-save-btn');
+      saveBtnInDrawer.addEventListener('click', function () {
+        rsSaveFromContainer(role, content, drawerApi);
+      });
+    }
+
+    var deleteBtnInDrawer = content.querySelector('#rs-delete-btn');
+    if (deleteBtnInDrawer) {
+      deleteBtnInDrawer.replaceWith(deleteBtnInDrawer.cloneNode(true));
+      deleteBtnInDrawer = content.querySelector('#rs-delete-btn');
+      deleteBtnInDrawer.addEventListener('click', function () {
+        if (deleteBtnInDrawer.getAttribute('aria-disabled') === 'true') return;
+        rsDeleteWithDrawer(role, drawerApi);
+      });
+    }
+
+    requestAnimationFrame(function () {
+      var inp = content.querySelector('#rs-f-display-name');
+      if (inp) inp.focus();
+    });
+  }
+
+  /* ============================================================
+     SAVE (reads from the editor DOM)
+  ============================================================ */
+  function rsReadFormValues(container) {
+    var c = container || document.getElementById('rs-editor');
+    var dispInput = c.querySelector('#rs-f-display-name');
+    var nameInput = c.querySelector('#rs-f-name');
+    var emojiInput = c.querySelector('#rs-f-emoji');
+    var gradInput = c.querySelector('.rs-gradient-input');
+    var descInput = c.querySelector('#rs-f-description');
+    return {
+      display_name: dispInput ? dispInput.value.trim() : '',
+      name: nameInput ? nameInput.value.trim() : '',
+      emoji: emojiInput ? emojiInput.value : '',
+      gradient: gradInput ? gradInput.value : '',
+      description: descInput ? descInput.value : ''
+    };
+  }
+
+  function rsValidate(values, container) {
+    var c = container || document.getElementById('rs-editor');
+    var valid = true;
+
+    // Clear previous errors
+    c.querySelectorAll('.rs-field.has-error').forEach(function (f) {
+      f.classList.remove('has-error');
+      var msg = f.querySelector('.rs-field-error-msg');
+      if (msg) msg.remove();
+    });
+
+    if (!values.display_name) {
+      var dispField = c.querySelector('#rs-f-display-name') && c.querySelector('#rs-f-display-name').closest('.rs-field');
+      if (dispField) {
+        dispField.classList.add('has-error');
+        var errMsg = el('div', { 'class': 'rs-field-error-msg' }, ['Required']);
+        dispField.appendChild(errMsg);
+        var inp = dispField.querySelector('.rs-input');
+        if (inp) {
+          inp.focus();
+          inp.addEventListener('input', function () {
+            dispField.classList.remove('has-error');
+            var m = dispField.querySelector('.rs-field-error-msg');
+            if (m) m.remove();
+          }, { once: true });
         }
-    }, 100);
-}
+      }
+      valid = false;
+    }
 
-async function refreshData() {
-    const response = await fetch('/admin/tags/data');
-    const data = await response.json();
-    rolesData = data.tags;
-    rolesTable.setData(rolesData);
-    document.getElementById('role-count').textContent = rolesData.length;
-}
+    if (!values.name) {
+      var nameField = c.querySelector('#rs-f-name') && c.querySelector('#rs-f-name').closest('.rs-field');
+      if (nameField) {
+        nameField.classList.add('has-error');
+        var errMsg2 = el('div', { 'class': 'rs-field-error-msg' }, ['Required']);
+        nameField.appendChild(errMsg2);
+        if (!values.display_name) {
+          // display_name already focused; only focus name if display_name was OK
+        } else {
+          var inp2 = nameField.querySelector('.rs-input');
+          if (inp2) {
+            inp2.focus();
+            inp2.addEventListener('input', function () {
+              nameField.classList.remove('has-error');
+              var m = nameField.querySelector('.rs-field-error-msg');
+              if (m) m.remove();
+            }, { once: true });
+          }
+        }
+      }
+      valid = false;
+    }
+
+    return valid;
+  }
+
+  function rsSave(roleRef) {
+    rsSaveFromContainer(roleRef, document.getElementById('rs-editor'), null);
+  }
+
+  function rsSaveFromContainer(roleRef, container, drawerApi) {
+    var values = rsReadFormValues(container);
+    if (!rsValidate(values, container)) return;
+
+    var url = roleRef && roleRef.id ? ('/admin/tags/' + roleRef.id + '/edit') : '/admin/tags/create';
+
+    var saveBtn = container.querySelector('#rs-save-btn');
+    if (saveBtn) {
+      saveBtn.textContent = 'Saving...';
+      saveBtn.style.pointerEvents = 'none';
+      saveBtn.style.opacity = '.65';
+    }
+
+    fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(values)
+    })
+    .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
+    .then(function (result) {
+      if (saveBtn) {
+        saveBtn.textContent = 'Save Role';
+        saveBtn.style.pointerEvents = '';
+        saveBtn.style.opacity = '';
+      }
+
+      if (result.ok && result.data.success) {
+        var returnedTag = result.data.tag;
+        // Update local state
+        if (roleRef && roleRef.id) {
+          // Edit: replace in array
+          var idx = rsState.roles.findIndex(function (r) { return r.id === roleRef.id; });
+          if (idx >= 0) rsState.roles[idx] = returnedTag;
+        } else {
+          // Create: add to array
+          rsState.roles.push(returnedTag);
+          rsState.draft = null;
+        }
+        rsState.selectedId = returnedTag.id;
+
+        if (typeof showToast === 'function') showToast('Role saved', 'success');
+
+        if (drawerApi) {
+          drawerApi.close();
+        }
+
+        rsRenderList();
+        if (!drawerApi) {
+          rsRenderEditor(returnedTag);
+        }
+      } else {
+        // Error toast (AdminUI auto-toast pattern: server returns {error:...})
+        var errMsg = (result.data && result.data.error) || 'Failed to save role';
+        if (typeof showToast === 'function') showToast(errMsg, 'error');
+        // Editor stays open with attempted values
+      }
+    })
+    .catch(function (err) {
+      if (saveBtn) {
+        saveBtn.textContent = 'Save Role';
+        saveBtn.style.pointerEvents = '';
+        saveBtn.style.opacity = '';
+      }
+      if (typeof showToast === 'function') showToast('Error saving role: ' + err.message, 'error');
+    });
+  }
+
+  /* ============================================================
+     DELETE
+  ============================================================ */
+  function rsDelete(role) {
+    rsDeleteWithDrawer(role, null);
+  }
+
+  function rsDeleteWithDrawer(role, drawerApi) {
+    if (!role || !role.id) return;
+    if ((role.user_count || 0) > 0) return;
+
+    if (!confirm('Delete role "' + role.display_name + '"? This cannot be undone.')) return;
+
+    fetch('/admin/tags/' + role.id + '/delete', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' }
+    })
+    .then(function (resp) { return resp.json().then(function (data) { return { ok: resp.ok, data: data }; }); })
+    .then(function (result) {
+      if (result.ok && result.data.success) {
+        var msg = (result.data && result.data.message) || 'Role deleted';
+        if (typeof showToast === 'function') showToast(msg, 'success');
+
+        rsState.roles = rsState.roles.filter(function (r) { return r.id !== role.id; });
+        rsState.selectedId = null;
+
+        if (drawerApi) drawerApi.close();
+
+        rsRenderList();
+        if (!drawerApi) {
+          rsRenderEditor(null);
+        }
+      } else {
+        var errMsg = (result.data && result.data.error) || 'Failed to delete role';
+        if (typeof showToast === 'function') showToast(errMsg, 'error');
+      }
+    })
+    .catch(function (err) {
+      if (typeof showToast === 'function') showToast('Error deleting role: ' + err.message, 'error');
+    });
+  }
+
+  /* ============================================================
+     LOAD
+  ============================================================ */
+  function rsLoad() {
+    fetch('/admin/tags/data')
+      .then(function (resp) {
+        if (!resp.ok) throw new Error('HTTP ' + resp.status);
+        return resp.json();
+      })
+      .then(function (data) {
+        rsState.roles = data.tags || [];
+        rsRenderList();
+        rsRenderEditor(null);
+      })
+      .catch(function (err) {
+        var list = document.getElementById('rs-list');
+        if (list) {
+          list.innerHTML = '';
+          list.appendChild(el('div', { 'class': 'rs-empty-row' }, ['Failed to load roles. Reload the page.']));
+        }
+        if (typeof showToast === 'function') showToast('Failed to load roles', 'error');
+      });
+  }
+
+  /* ============================================================
+     WIRE UP
+  ============================================================ */
+  AdminUI.onReady(function () {
+    // Wire new role button
+    var newBtn = document.getElementById('rs-new-btn');
+    if (newBtn) newBtn.addEventListener('click', rsNewRole);
+
+    // Load roles; rsLoad calls rsRenderEditor(null) after data arrives
+    rsLoad();
+  });
+
+})();
 </script>
 {% endblock %}
