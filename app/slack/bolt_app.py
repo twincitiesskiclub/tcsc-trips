@@ -689,20 +689,20 @@ if _bot_token:
                         slot_defaults = day_config.get('defaults')
                         break
 
-            # Load ref data (locations, activities, types)
+            # Load ref data (locations, activities, types) + eligible people
             locations, all_activities, all_types = _load_modal_ref_data()
+            eligible_coaches, eligible_leads = _load_eligible_people()
 
             # Get channel and message_ts from the source message for updating
             channel_id = body.get("channel", {}).get("id")
             message_ts = body.get("message", {}).get("ts")
 
-            # Pack silent defaults into metadata (social_location_id, coach_ids)
+            # social_location_id is still applied silently (no UI control for it
+            # here). Coaches/leads are now chosen in the modal, pre-filled from
+            # the slot defaults (coach_ids / lead_ids).
             silent_defaults = {}
-            if slot_defaults:
-                if slot_defaults.get('social_location_id'):
-                    silent_defaults['social_location_id'] = slot_defaults['social_location_id']
-                if slot_defaults.get('coach_ids'):
-                    silent_defaults['coach_ids'] = slot_defaults['coach_ids']
+            if slot_defaults and slot_defaults.get('social_location_id'):
+                silent_defaults['social_location_id'] = slot_defaults['social_location_id']
 
             # Build and open the modal
             modal = build_practice_create_modal(
@@ -710,7 +710,8 @@ if _bot_token:
                 channel_id=channel_id, message_ts=message_ts,
                 all_activities=all_activities, all_types=all_types,
                 slot_defaults=slot_defaults,
-                silent_defaults=silent_defaults if silent_defaults else None
+                silent_defaults=silent_defaults if silent_defaults else None,
+                eligible_coaches=eligible_coaches, eligible_leads=eligible_leads
             )
             client.views_open(trigger_id=trigger_id, view=modal)
 
@@ -720,23 +721,27 @@ if _bot_token:
 
     @bolt_app.view("practice_create")
     def handle_practice_create_submission(ack, body, view, client, logger):
-        """Handle practice create modal submission from weekly summary.
+        """Handle practice create modal submission from the weekly summary.
 
-        Creates a new practice and updates the summary post.
+        Creates the practice synchronously (fast), acks so the modal closes,
+        then refreshes the summary post + posts a confirmation in a background
+        thread.
+
+        The slow Slack API calls must NOT run before the ack: with
+        process_before_response=True the ack is only sent once this listener
+        returns, and Slack rejects view submissions that take longer than ~3s
+        (the user sees "there was an unexpected error" even though the practice
+        was created). See _post_practice_create_updates.
         """
-        ack()
-
         user_id = body["user"]["id"]
         metadata_str = view.get("private_metadata", "{}")
         values = _safe_get(view, "state", "values", default={})
 
         with get_app_context():
             import json
-            from datetime import timedelta
-            from app.practices.models import Practice
-            from app.practices.service import convert_practice_to_info
-            from app.models import db, AppConfig
-            from app.slack.blocks import build_coach_weekly_summary_blocks
+            from app.practices.models import (
+                Practice, PracticeActivity, PracticeType, PracticeLead)
+            from app.models import db, User
 
             # Parse metadata (JSON with date, channel_id, message_ts)
             try:
@@ -747,6 +752,8 @@ if _bot_token:
                 practice_date = datetime.strptime(date_str, '%Y-%m-%d')
             except (json.JSONDecodeError, ValueError) as e:
                 logger.error(f"Invalid metadata: {metadata_str} - {e}")
+                ack(response_action="errors", errors={
+                    "location_block": "Something went wrong reading the form. Please try again."})
                 return
 
             # Extract form values
@@ -763,14 +770,18 @@ if _bot_token:
             # Extract activities and types from modal
             selected_activities = _safe_get(values, "activities_block", "activity_ids", "selected_options", default=[])
             activity_ids = [int(opt.get("value")) for opt in selected_activities]
-
             selected_types = _safe_get(values, "types_block", "type_ids", "selected_options", default=[])
             type_ids = [int(opt.get("value")) for opt in selected_types]
 
-            # Read silent defaults from metadata
+            # Coaches and leads now come from the modal pickers
+            selected_coaches = _safe_get(values, "coaches_block", "coach_ids", "selected_options", default=[])
+            coach_ids = [int(opt.get("value")) for opt in selected_coaches]
+            selected_leads = _safe_get(values, "leads_block", "lead_ids", "selected_options", default=[])
+            lead_ids = [int(opt.get("value")) for opt in selected_leads]
+
+            # social_location_id is still applied silently, only if "Social afterwards" is checked
             silent = metadata.get('silent', {})
-            social_location_id = silent.get('social_location_id')
-            coach_ids = silent.get('coach_ids', [])
+            social_location_id = silent.get('social_location_id') if has_social else None
 
             # Parse time and combine with date
             try:
@@ -779,99 +790,64 @@ if _bot_token:
             except (ValueError, AttributeError):
                 practice_datetime = practice_date.replace(hour=18, minute=0)
 
-            # Only apply social_location_id from silent defaults if user checked "Social afterwards"
-            effective_social_location_id = social_location_id if has_social else None
-
             # Create the practice
-            practice = Practice(
-                date=practice_datetime,
-                day_of_week=practice_datetime.strftime('%A'),
-                status='scheduled',
-                location_id=int(location_id) if location_id else None,
-                social_location_id=effective_social_location_id,
-                workout_description=workout,
-                is_dark_practice=is_dark_practice,
-                slack_coach_summary_ts=message_ts  # Link to summary for edit threading
-            )
-            db.session.add(practice)
-            db.session.flush()  # Get practice.id for M2M and PracticeLead
-
-            # Assign activities (from modal)
-            if activity_ids:
-                from app.practices.models import PracticeActivity
-                practice.activities = PracticeActivity.query.filter(
-                    PracticeActivity.id.in_(activity_ids)).all()
-
-            # Assign types (from modal)
-            if type_ids:
-                from app.practices.models import PracticeType
-                practice.practice_types = PracticeType.query.filter(
-                    PracticeType.id.in_(type_ids)).all()
-
-            # Apply coach defaults silently (with existence check)
-            if coach_ids:
-                from app.practices.models import PracticeLead
-                from app.models import User
-                existing_users = {u.id for u in User.query.filter(User.id.in_(coach_ids)).all()}
-                for uid in coach_ids:
-                    if uid in existing_users:
-                        db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='coach'))
-                    else:
-                        logger.warning(f"Skipping coach default: user {uid} not found")
-
-            db.session.commit()
-
-            logger.info(f"Practice #{practice.id} created by {user_id} for {practice_datetime}")
-
-            # Update the summary post if we have the channel and message_ts
-            if channel_id and message_ts:
-                try:
-                    # Calculate week boundaries from the practice date
-                    # Week starts on Monday
-                    days_since_monday = practice_date.weekday()
-                    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-                        hour=0, minute=0, second=0, microsecond=0
-                    )
-                    week_end = week_start + timedelta(days=7)
-
-                    # Get all practices for the week
-                    practices = Practice.query.filter(
-                        Practice.date >= week_start,
-                        Practice.date < week_end
-                    ).order_by(Practice.date).all()
-
-                    # Get expected days from config
-                    expected_days = AppConfig.get('practice_days', [
-                        {"day": "tuesday", "time": "18:00", "active": True},
-                        {"day": "thursday", "time": "18:00", "active": True},
-                        {"day": "saturday", "time": "09:00", "active": True}
-                    ])
-
-                    # Rebuild blocks
-                    practice_infos = [convert_practice_to_info(p) for p in practices]
-                    blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
-
-                    # Update the message
-                    client.chat_update(
-                        channel=channel_id,
-                        ts=message_ts,
-                        blocks=blocks,
-                        text=f"Coach Review: Week of {week_start.strftime('%B %-d')}"
-                    )
-                    logger.info(f"Updated summary post in {channel_id}")
-                except Exception as e:
-                    logger.error(f"Failed to update summary post: {e}")
-
-            # Notify the user
             try:
-                if channel_id:
-                    client.chat_postEphemeral(
-                        channel=channel_id,
-                        user=user_id,
-                        text=f":white_check_mark: Created practice for {practice_datetime.strftime('%A, %B %-d at %-I:%M %p')}"
-                    )
-            except Exception as e:
-                logger.warning(f"Could not send ephemeral confirmation: {e}")
+                practice = Practice(
+                    date=practice_datetime,
+                    day_of_week=practice_datetime.strftime('%A'),
+                    status='scheduled',
+                    location_id=int(location_id) if location_id else None,
+                    social_location_id=social_location_id,
+                    workout_description=workout,
+                    is_dark_practice=is_dark_practice,
+                    slack_coach_summary_ts=message_ts  # Link to summary for edit threading
+                )
+                db.session.add(practice)
+                db.session.flush()  # Get practice.id for M2M and PracticeLead
+
+                if activity_ids:
+                    practice.activities = PracticeActivity.query.filter(
+                        PracticeActivity.id.in_(activity_ids)).all()
+                if type_ids:
+                    practice.practice_types = PracticeType.query.filter(
+                        PracticeType.id.in_(type_ids)).all()
+
+                # Assign coaches + leads (existence-checked so a stale id can't 500)
+                wanted_ids = set(coach_ids) | set(lead_ids)
+                existing = ({u.id for u in User.query.filter(User.id.in_(wanted_ids)).all()}
+                            if wanted_ids else set())
+                for role, ids in (('coach', coach_ids), ('lead', lead_ids)):
+                    for uid in ids:
+                        if uid in existing:
+                            db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role=role))
+                        else:
+                            logger.warning(f"Skipping {role}: user {uid} not found")
+
+                db.session.commit()
+                practice_id = practice.id
+            except Exception:
+                db.session.rollback()
+                logger.exception("practice_create: failed to create practice")
+                ack(response_action="errors", errors={
+                    "location_block": "Could not create the practice. Please try again."})
+                return
+
+            logger.info(f"Practice #{practice_id} created by {user_id} for {practice_datetime}")
+
+        # Success: close the modal now. Heavy Slack work runs off-thread so the
+        # ack returns well within Slack's ~3s view_submission window.
+        ack()
+
+        confirm_text = (
+            ":white_check_mark: Created practice for "
+            f"{practice_datetime.strftime('%A, %B %-d at %-I:%M %p')}"
+        )
+        threading.Thread(
+            target=_post_practice_create_updates,
+            args=(client, channel_id, message_ts, practice_date, user_id, confirm_text),
+            daemon=True,
+            name="practice-create-post",
+        ).start()
 
     @bolt_app.view("practice_edit")
     def handle_practice_edit_submission(ack, body, view, client, logger):
@@ -1477,6 +1453,84 @@ def _load_modal_ref_data():
         (t.id, t.name) for t in PracticeType.query.order_by(PracticeType.name).all()
     ]
     return locations, all_activities, all_types
+
+
+def _load_eligible_people():
+    """Load eligible coaches and leads for practice modal pickers.
+
+    Returns:
+        Tuple of (eligible_coaches, eligible_leads), each a list of
+        (user_id, "First Last", slack_uid) tuples for Slack-linked users only.
+    """
+    from app.models import Tag, User
+    coach_tag_ids = [t.id for t in Tag.query.filter(
+        Tag.name.in_(['HEAD_COACH', 'ASSISTANT_COACH'])).all()]
+    lead_tag_ids = [t.id for t in Tag.query.filter(
+        Tag.name.in_(['PRACTICES_LEAD'])).all()]
+
+    def _people(tag_ids):
+        return [
+            (u.id, f"{u.first_name} {u.last_name}", u.slack_user.slack_uid)
+            for u in User.query.filter(User.tags.any(Tag.id.in_(tag_ids)))
+            .order_by(User.first_name).all()
+            if u.slack_user and u.slack_user.slack_uid
+        ]
+
+    return _people(coach_tag_ids), _people(lead_tag_ids)
+
+
+def _post_practice_create_updates(client, channel_id, message_ts, practice_date,
+                                  user_id, confirm_text):
+    """Refresh the weekly coach-summary post and post a confirmation.
+
+    Runs in a background thread (see handle_practice_create_submission) so the
+    slow Slack API calls stay off the view_submission request path and the ack
+    returns within Slack's ~3s limit. All work is best-effort.
+    """
+    from datetime import timedelta
+    from app.practices.models import Practice
+    from app.practices.service import convert_practice_to_info
+    from app.models import AppConfig
+    from app.slack.blocks import build_coach_weekly_summary_blocks
+
+    with get_app_context():
+        if channel_id and message_ts:
+            try:
+                # Week starts on Monday
+                days_since_monday = practice_date.weekday()
+                week_start = (practice_date - timedelta(days=days_since_monday)).replace(
+                    hour=0, minute=0, second=0, microsecond=0)
+                week_end = week_start + timedelta(days=7)
+
+                practices = Practice.query.filter(
+                    Practice.date >= week_start,
+                    Practice.date < week_end,
+                ).order_by(Practice.date).all()
+
+                expected_days = AppConfig.get('practice_days', [
+                    {"day": "tuesday", "time": "18:00", "active": True},
+                    {"day": "thursday", "time": "18:00", "active": True},
+                    {"day": "saturday", "time": "09:00", "active": True},
+                ])
+
+                practice_infos = [convert_practice_to_info(p) for p in practices]
+                blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
+
+                client.chat_update(
+                    channel=channel_id,
+                    ts=message_ts,
+                    blocks=blocks,
+                    text=f"Coach Review: Week of {week_start.strftime('%B %-d')}",
+                )
+                logger.info(f"Updated summary post in {channel_id}")
+            except Exception as e:
+                logger.error(f"Failed to update summary post: {e}")
+
+        if channel_id:
+            try:
+                client.chat_postEphemeral(channel=channel_id, user=user_id, text=confirm_text)
+            except Exception as e:
+                logger.warning(f"Could not send ephemeral confirmation: {e}")
 
 
 def _process_rsvp(practice_id: int, status: str, user_id: str, user_name: str) -> dict:
