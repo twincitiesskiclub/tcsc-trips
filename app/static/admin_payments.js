@@ -86,13 +86,7 @@
 
     // Page header
     var h1 = AdminUI.el('h1', null, ['Payments']);
-    var exportBtn = AdminUI.el('button', {
-      type: 'button',
-      class: 'pw-btn-ghost',
-      id: 'pw-export-csv',
-      onclick: pay_exportCsv
-    }, ['Export CSV']);
-    var head = AdminUI.el('div', { class: 'pw-head' }, [h1, exportBtn]);
+    var head = AdminUI.el('div', { class: 'pw-head' }, [h1]);
     root.appendChild(head);
 
     // Filter bar mount point
@@ -106,6 +100,35 @@
     // Spacer for bulk bar height
     var spacer = AdminUI.el('div', { class: 'pw-bulk-bar-spacer', id: 'pw-spacer' }, []);
     root.appendChild(spacer);
+
+    // Export bar
+    var exportSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    exportSvg.setAttribute('width', '13');
+    exportSvg.setAttribute('height', '13');
+    exportSvg.setAttribute('viewBox', '0 0 16 16');
+    exportSvg.setAttribute('fill', 'none');
+    exportSvg.setAttribute('aria-hidden', 'true');
+    exportSvg.style.flexShrink = '0';
+    var path1 = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+    path1.setAttribute('d', 'M8 11L3 6h3V1h4v5h3L8 11Z');
+    path1.setAttribute('fill', 'currentColor');
+    var rect1 = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+    rect1.setAttribute('x', '2');
+    rect1.setAttribute('y', '13');
+    rect1.setAttribute('width', '12');
+    rect1.setAttribute('height', '2');
+    rect1.setAttribute('rx', '1');
+    rect1.setAttribute('fill', 'currentColor');
+    exportSvg.appendChild(path1);
+    exportSvg.appendChild(rect1);
+    var exportBtn = AdminUI.el('button', {
+      type: 'button',
+      class: 'admin-ui-export-btn',
+      id: 'pw-export-csv',
+      onclick: pay_exportCsv
+    }, [exportSvg, 'Export CSV']);
+    var exportBar = AdminUI.el('div', { class: 'admin-ui-export-bar' }, [exportBtn]);
+    root.appendChild(exportBar);
 
     // Build filter bar
     AdminUI.filterBar(filterMount, {
@@ -880,34 +903,35 @@
     var kvRows = [
       pay_kvRow('Email', AdminUI.el('span', null, [p.email || ''])),
       pay_kvRow('Amount', pay_amountNode(p)),
-      pay_kvRow('Type', AdminUI.el('span', { class: 'pw-type-pill' }, [
+      pay_kvRow('Type', AdminUI.el('span', { class: 'admin-ui-dw-pill' }, [
         TYPE_LABELS[p.payment_type] || (p.payment_type || '')
       ])),
       pay_kvRow('For', AdminUI.el('span', null, [p.for_name || ''])),
       pay_kvRow('Status', AdminUI.statusBadge(badgeDef.label, badgeDef.variant)),
       pay_kvRow('Created', AdminUI.el('span', null, [p.created_at || ''])),
-      pay_kvRow('Intent ID', AdminUI.el('span', { class: 'pw-kv-mono' }, [p.payment_intent_id || '']))
+      pay_kvRow('Intent ID', AdminUI.el('span', { class: 'admin-ui-dw-val--mono' }, [p.payment_intent_id || '']))
     ];
 
-    var kvList = AdminUI.el('div', { class: 'pw-kv-list' }, kvRows);
+    var kvList = AdminUI.el('div', { class: 'admin-ui-dw' }, kvRows);
 
     // Action buttons in drawer
     var dwAcceptBtn = AdminUI.el('button', {
       type: 'button',
-      class: 'pw-dw-act-accept'
+      class: 'admin-ui-dw-btn-primary'
     }, ['Accept']);
     if (!canAccept) dwAcceptBtn.setAttribute('disabled', '');
 
     var dwRefundBtn = AdminUI.el('button', {
       type: 'button',
-      class: 'pw-dw-act-refund'
+      class: 'admin-ui-dw-btn-danger'
     }, ['Refund']);
     if (!canRefund) dwRefundBtn.setAttribute('disabled', '');
 
-    var actRow = AdminUI.el('div', { class: 'pw-dw-actions' }, [dwAcceptBtn, dwRefundBtn]);
-    var bodyNode = AdminUI.el('div', null, [kvList, actRow]);
+    var actRow = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [dwAcceptBtn, dwRefundBtn]);
+    var content = AdminUI.el('div', null, [kvList]);
+    content.appendChild(actRow);
 
-    var drawerApi = AdminUI.drawer({ title: p.name || 'Payment', content: bodyNode });
+    var drawerApi = AdminUI.drawer({ title: p.name || 'Payment', content: content });
     state.openDrawer = drawerApi;
 
     dwAcceptBtn.addEventListener('click', function () {
@@ -924,9 +948,9 @@
   }
 
   function pay_kvRow(label, valueNode) {
-    return AdminUI.el('div', { class: 'pw-kv-row' }, [
-      AdminUI.el('span', { class: 'pw-kv-key' }, [label]),
-      AdminUI.el('div', { class: 'pw-kv-val' }, [valueNode])
+    return AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+      AdminUI.el('span', { class: 'admin-ui-dw-key' }, [label]),
+      AdminUI.el('div', { class: 'admin-ui-dw-val' }, [valueNode])
     ]);
   }
 
