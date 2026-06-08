@@ -4,7 +4,7 @@
 
 {% block extra_css %}
 <style>
-/* ===== Social Events list — scoped "Quiet Precision" styles ===== */
+/* ===== Social Events list - scoped "Quiet Precision" styles ===== */
 #sev-list,#sev-list *{box-sizing:border-box;margin:0;padding:0}
 #sev-list{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
 
@@ -92,29 +92,12 @@
 #sev-list .sl-empty{padding:32px 8px;text-align:center;color:#94a3b8;font-size:14px}
 #sev-list .sl-empty a{color:#1c2c44;text-decoration:underline}
 
-/* drawer footer */
-#sev-list .sl-dwfooter{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:13px 18px;display:flex;gap:9px;margin-top:auto}
-#sev-list .sl-dw-edit,#sev-list .sl-dw-delete{height:40px;border-radius:10px;font-size:13.5px;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;border:1.5px solid transparent;font-family:inherit;text-decoration:none;transition:background .12s}
-#sev-list .sl-dw-edit{flex:1;background:#1c2c44;color:#fff}
-#sev-list .sl-dw-edit:hover{background:#243650}
-#sev-list .sl-dw-delete{padding:0 16px;background:#fff;color:#c53030;border-color:#f3c9c9}
-#sev-list .sl-dw-delete:hover{background:#fde8e8}
-#sev-list .sl-dw-edit:focus-visible,#sev-list .sl-dw-delete:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-
-/* drawer key-value */
-#sev-list .sl-kv{display:flex;gap:10px;margin-bottom:8px;font-size:13.5px}
-#sev-list .sl-kv .k{color:#64748b;width:90px;flex-shrink:0;font-size:12px}
-#sev-list .sl-kv .v{color:#1c2c44;font-weight:500;flex:1}
-#sev-list .sl-dw-sub{font-size:13px;color:#475569;margin:0 0 12px}
-
 /* mobile */
 @media (max-width:767px){
   #sev-list .sl-toolbar{gap:6px}
   #sev-list .sl-card-aside{flex-direction:column;align-items:flex-end;gap:6px}
   #sev-list .sl-db{width:44px}
   #sev-list .sl-edit,#sev-list .sl-delete{height:36px;padding:0 12px}
-  #sev-list .sl-dwfooter{padding-bottom:calc(13px + env(safe-area-inset-bottom))}
-  #sev-list .sl-dw-edit,#sev-list .sl-dw-delete{min-height:44px}
 }
 @media (max-width:480px){
   #sev-list .sl-head{flex-direction:column;align-items:flex-start}

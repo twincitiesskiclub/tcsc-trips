@@ -1,4 +1,4 @@
-// admin_social_events.js — Social Events bespoke event-ledger UI
+// admin_social_events.js - Social Events bespoke event-ledger UI
 // Replaces Tabulator grid with a date-forward card list grouped into Upcoming/Past.
 // Reads GET /admin/social-events/data; mutations POST /admin/social-events/{id}/delete.
 //
@@ -286,7 +286,7 @@
       }, [
         AdminUI.el('span', { class: 'chev', 'aria-hidden': 'true' }, ['▸']),
         ' Past events ',
-        AdminUI.el('span', { class: 'sl-past-dim' }, ['— ' + past.length])
+        AdminUI.el('span', { class: 'sl-past-dim' }, ['· ' + past.length])
       ]);
       root.appendChild(toggleBtn);
 
@@ -335,11 +335,10 @@
     if (toolbarEl) toolbarEl.inert = true;
     if (headEl) headEl.inert = true;
 
-    var esc = AdminUI.escapeHtml;
     var dateTimeText = evt.event_date || '';
     if (evt.event_time) dateTimeText += ' at ' + evt.event_time;
 
-    var subLine = AdminUI.el('p', { class: 'sl-dw-sub' }, [
+    var subLine = AdminUI.el('p', { class: 'admin-ui-dw-sub' }, [
       (evt.location || '') + (dateTimeText ? ' · ' + dateTimeText : '')
     ]);
 
@@ -372,20 +371,21 @@
         : 'No limit'
     });
 
-    var contentDiv = AdminUI.el('div', null, []);
+    var contentDiv = AdminUI.el('div', { class: 'admin-ui-dw' }, []);
     contentDiv.appendChild(subLine);
     kvRows.forEach(function (row) {
       contentDiv.appendChild(
-        AdminUI.el('div', { class: 'sl-kv' }, [
-          AdminUI.el('span', { class: 'k' }, [row.k]),
-          AdminUI.el('span', { class: 'v' }, [row.v])
+        AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('span', { class: 'admin-ui-dw-key' }, [row.k]),
+          AdminUI.el('span', { class: 'admin-ui-dw-val' }, [row.v])
         ])
       );
     });
 
-    var badgeRow = AdminUI.el('div', { class: 'sl-kv' }, [
-      AdminUI.el('span', { class: 'k' }, ['Status']),
-      AdminUI.el('span', { class: 'v' }, [
+    // Status badge row
+    var badgeRow = AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+      AdminUI.el('span', { class: 'admin-ui-dw-key' }, ['Status']),
+      AdminUI.el('span', { class: 'admin-ui-dw-val' }, [
         AdminUI.statusBadge(
           evt.status ? (evt.status.charAt(0).toUpperCase() + evt.status.slice(1)) : '',
           sevStatusVariant(evt.status)
@@ -394,22 +394,45 @@
     ]);
     contentDiv.appendChild(badgeRow);
 
-    var drawer = AdminUI.drawer({ title: evt.name || 'Event', content: contentDiv });
-    sevCurrentDrawer = { close: drawer.close, id: evt.id };
-
+    // Footer actions (last child of contentDiv, before drawer() call so sticky works)
     var editA = AdminUI.el('a', {
-      class: 'sl-dw-edit',
+      class: 'admin-ui-dw-btn-primary',
       href: '/admin/social-events/' + evt.id + '/edit'
     }, ['Edit']);
     var deleteB = AdminUI.el('button', {
       type: 'button',
-      class: 'sl-dw-delete',
+      class: 'admin-ui-dw-btn-danger',
       onclick: function () { sevDelete(evt.id, evt.name); }
     }, ['Delete']);
-    var footer = AdminUI.el('div', { class: 'sl-dwfooter' }, [editA, deleteB]);
-    drawer.body.appendChild(footer);
+    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, deleteB]);
+    contentDiv.appendChild(footer);
 
-    // Watch for drawer panel removal (Esc / scrim close) to restore state
+    var drawer = AdminUI.drawer({ title: evt.name || 'Event', content: contentDiv });
+    sevCurrentDrawer = { close: drawer.close, id: evt.id };
+
+    // On drawer close: restore inert + active state + focus
+    var origClose = drawer.close;
+    sevCurrentDrawer.close = function () {
+      origClose();
+      if (rowsEl) rowsEl.inert = false;
+      if (toolbarEl) toolbarEl.inert = false;
+      if (headEl) headEl.inert = false;
+      document.querySelectorAll('#sev-rows .sl-card.is-active').forEach(function (c) {
+        c.classList.remove('is-active');
+      });
+      if (sevLastFocused) {
+        sevLastFocused.focus();
+        sevLastFocused = null;
+      }
+      sevCurrentDrawer = null;
+    };
+
+    // Patch the original close references inside drawer to also clean up
+    // (Esc and scrim click use origClose; we need them to also run our cleanup)
+    // We do this by overriding the drawer API close with our wrapped version.
+    // The drawer internally calls origClose; by reassigning current.close the
+    // drawer module itself won't call our wrapper, but Esc/scrim are wired to
+    // origClose. So we listen for the panel removal via MutationObserver.
     var panelEl = document.querySelector('.admin-ui-drawer');
     if (panelEl) {
       var obs = new MutationObserver(function (mutations) {
@@ -434,22 +457,6 @@
       });
       obs.observe(document.body, { childList: true });
     }
-
-    var origClose = drawer.close;
-    sevCurrentDrawer.close = function () {
-      origClose();
-      if (rowsEl) rowsEl.inert = false;
-      if (toolbarEl) toolbarEl.inert = false;
-      if (headEl) headEl.inert = false;
-      document.querySelectorAll('#sev-rows .sl-card.is-active').forEach(function (c) {
-        c.classList.remove('is-active');
-      });
-      if (sevLastFocused) {
-        sevLastFocused.focus();
-        sevLastFocused = null;
-      }
-      sevCurrentDrawer = null;
-    };
   }
 
   /* ---- delete handler ---- */
