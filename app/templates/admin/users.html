@@ -1,449 +1,370 @@
 {% extends 'admin/admin_base.html' %}
 {% block extra_css %}
 <style>
-#global-season-select {
-    min-width: 130px;
+/* ===== Member Roster -- scoped styles (prefix: #member-roster or .mr-) ===== */
+#member-roster,#member-roster *{box-sizing:border-box}
+#member-roster{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* --- Quick-filter chip row --- */
+.mr-quickfilters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.mr-qf-chip{display:inline-flex;align-items:center;padding:4px 12px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .12s,background .12s}
+.mr-qf-chip:hover{border-color:#1c2c44;color:#1c2c44}
+.mr-qf-chip.mr-qf-chip--on{border-color:#1c2c44;background:rgba(28,44,68,.06);color:#1c2c44}
+.mr-qf-chip:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* --- Toolbar --- */
+.mr-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+.mr-toolbar-spacer{flex:1}
+
+/* View pills */
+.mr-pills{display:flex;gap:4px}
+.mr-pill{display:inline-flex;align-items:center;padding:6px 13px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
+.mr-pill:hover{border-color:#1c2c44;color:#1c2c44}
+.mr-pill.is-active{border-color:#1c2c44;background:rgba(28,44,68,.08);color:#1c2c44;font-weight:600}
+.mr-pill:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* Selects */
+.mr-select{height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 10px;font-size:14px;color:#475569;background:#fff;font-family:inherit;cursor:pointer}
+.mr-select:focus{outline:none;border-color:#1c2c44}
+
+/* Search */
+.mr-search{flex:1;min-width:180px;height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
+.mr-search:focus{outline:none;border-color:#1c2c44}
+
+/* Count */
+.mr-count{font-size:13px;color:#64748b;white-space:nowrap;font-weight:500}
+
+/* Select-mode toggle button */
+.mr-select-toggle{height:38px;display:inline-flex;align-items:center;padding:0 14px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.mr-select-toggle:hover{border-color:#1c2c44;color:#1c2c44}
+.mr-select-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-select-toggle.is-active{border-color:#1c2c44;background:rgba(28,44,68,.08);color:#1c2c44}
+
+/* Role popover button */
+.mr-role-btn{height:38px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;text-align:left}
+.mr-role-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-role-btn.has-selection{border-color:#1c2c44;background:rgba(28,44,68,.04)}
+
+/* Role popover menu */
+.mr-role-dropdown{position:relative}
+.mr-role-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;padding:12px;width:320px}
+.mr-role-menu.show{display:block}
+.mr-role-menu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e4e7ec}
+.mr-role-menu-header span{font-weight:600;font-size:12px;color:#667085;text-transform:uppercase;letter-spacing:.5px}
+.mr-role-menu-header button{padding:4px 8px;border:none;background:none;font-weight:500;font-size:12px;color:#1c2c44;cursor:pointer;font-family:inherit}
+.mr-role-menu-header button:hover{text-decoration:underline}
+.mr-role-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+
+/* Role toggle buttons in the popover */
+.mr-role-toggle{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border:2px solid #e4e7ec;border-radius:8px;background:#fff;font-size:20px;cursor:pointer;transition:all .15s;position:relative;font-family:inherit}
+.mr-role-toggle:hover{border-color:#98a2b3;background:#f9fafb;transform:scale(1.05)}
+.mr-role-toggle[aria-pressed="true"]{border-color:#1c2c44;background:rgba(28,44,68,.08);box-shadow:0 0 0 2px rgba(28,44,68,.1)}
+.mr-role-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-role-toggle::after{content:attr(data-tooltip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%) translateY(-6px);padding:5px 8px;background:#1c2c44;color:#fff;font-size:11px;font-weight:500;white-space:nowrap;border-radius:4px;opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s;pointer-events:none;z-index:10}
+.mr-role-toggle:hover::after{opacity:1;visibility:visible}
+.mr-role-count{background:#1c2c44;color:#fff;font-size:11px;font-weight:600;padding:2px 6px;border-radius:10px}
+
+/* --- Bulk action bar --- */
+.mr-bulk-bar{display:none;align-items:center;gap:10px;flex-wrap:wrap;background:#f6f8fc;border:1px solid #e1e6ee;border-radius:10px;padding:10px 14px;margin-bottom:10px;font-size:13px;color:#475569}
+.mr-bulk-bar.show{display:flex}
+.mr-bulk-count{font-weight:600;color:#1c2c44;flex-shrink:0}
+.mr-bulk-action{height:32px;padding:0 12px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit}
+.mr-bulk-action:hover:not(:disabled){border-color:#1c2c44;color:#1c2c44}
+.mr-bulk-action:disabled{opacity:.45;cursor:not-allowed}
+.mr-bulk-action:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-bulk-clear{background:none;border:none;color:#64748b;font-size:13px;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
+.mr-bulk-note{background:#fefce8;color:#854d0e;font-size:13px;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-weight:500}
+
+/* --- Member roster list --- */
+#member-roster-list{list-style:none;padding:0;margin:0}
+
+/* Empty / error states */
+.mr-empty,.mr-error{padding:28px 8px;text-align:center;color:#94a3b8;font-size:14px}
+#mr-empty-state{display:none;padding:28px 8px;text-align:center;color:#94a3b8;font-size:14px}
+.mr-retry{background:none;border:none;color:#1c2c44;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:14px}
+
+/* --- Member row --- */
+.mr-row{display:grid;grid-template-columns:40px 1fr auto auto;gap:0 12px;align-items:center;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:12px 15px;margin-bottom:7px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+.mr-row:hover{border-color:#cdd5e0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+.mr-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+.mr-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* Avatar chip */
+.mr-avatar{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:700;color:#fff;flex-shrink:0}
+
+/* Primary content */
+.mr-primary{min-width:0;display:flex;flex-direction:column;gap:4px}
+.mr-name-row{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.mr-name{font-size:15px;font-weight:600;color:#1c2c44;text-decoration:none}
+.mr-name:hover{text-decoration:underline}
+.mr-name:focus-visible{outline:2px solid #1c2c44;outline-offset:2px;border-radius:3px}
+.mr-email{font-size:13px;color:#64748b}
+.mr-roles{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
+.mr-role-emoji{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;font-size:18px;cursor:default;position:relative;transition:transform .12s}
+.mr-role-emoji:hover{transform:scale(1.1)}
+.mr-role-emoji::after{content:attr(data-tooltip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%) translateY(-4px);padding:5px 8px;background:#1c2c44;color:#fff;font-size:11px;font-weight:500;white-space:nowrap;border-radius:4px;opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s;pointer-events:none;z-index:100}
+.mr-role-emoji:hover::after{opacity:1;visibility:visible}
+.mr-no-roles{font-size:13px;color:#d0d5dd}
+
+/* Status cell (member badge + season sub-line) */
+.mr-status-cell{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.mr-status-sub{font-size:12px;color:#64748b;font-weight:500;text-align:right;white-space:nowrap}
+
+/* Actions zone */
+.mr-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
+.mr-edit-btn{height:32px;padding:0 12px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap}
+.mr-edit-btn:hover{border-color:#1c2c44;color:#1c2c44}
+.mr-edit-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* Select checkbox */
+.mr-select-cb{display:none;width:16px;height:16px;accent-color:#1c2c44;cursor:pointer}
+#member-roster-list.mr-select-mode .mr-select-cb{display:block}
+
+/* Copy email hover button (pointer devices only) */
+@media (hover: hover){
+  .mr-copy-email-btn{opacity:0;transition:opacity .12s;background:none;border:none;cursor:pointer;color:#64748b;font-size:12px;padding:1px 5px;border-radius:4px;font-family:inherit;line-height:1.4}
+  .mr-row:hover .mr-copy-email-btn{opacity:1}
+  .mr-copy-email-btn:hover{color:#1c2c44;text-decoration:underline}
+  .mr-copy-email-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px;opacity:1}
+}
+@media (hover: none){.mr-copy-email-btn{display:none}}
+
+/* --- Drawer content --- */
+.mr-dw-content{display:flex;flex-direction:column;gap:0}
+.mr-dw-sep{border:none;border-top:1px solid #f1f5f9;margin:16px 0}
+.mr-dw-blk{margin-bottom:4px}
+.mr-dw-blk-hrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mr-dw-blk-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b}
+.mr-drawer-action-sm{background:none;border:none;color:#1c2c44;font-size:12px;font-weight:600;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
+.mr-kv{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.mr-k{width:90px;flex-shrink:0;color:#64748b;font-size:13.5px}
+.mr-v{color:#1c2c44;font-weight:500;font-size:13.5px}
+.mr-v--empty{color:#94a3b8;font-weight:400}
+.mr-email-row{display:flex;align-items:center;gap:6px}
+.mr-copy-btn{background:none;border:none;cursor:pointer;color:#64748b;font-size:12px;font-weight:500;padding:2px 6px;border-radius:4px;font-family:inherit;line-height:1.4}
+.mr-copy-btn:hover{color:#1c2c44;text-decoration:underline}
+.mr-copy-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-tag-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600;margin:2px 3px 2px 0;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+.mr-no-roles-note{color:#94a3b8;font-size:13.5px}
+.mr-dw-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:13px 18px;display:flex;gap:9px}
+.mr-act-primary{flex:1;height:40px;background:#1c2c44;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
+.mr-act-primary:hover{background:#253c5e}
+.mr-act-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-act-ghost{display:inline-flex;align-items:center;justify-content:center;flex:1;height:40px;background:#fff;color:#475569;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none}
+.mr-act-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+.mr-act-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* --- Tag / edit modals --- */
+.mr-modal{position:fixed;inset:0;background:rgba(0,0,0,.5);display:flex;align-items:center;justify-content:center;z-index:500}
+.mr-modal-box{position:relative;background:#fff;border-radius:14px;width:100%;max-width:500px;margin:16px;box-shadow:0 20px 60px rgba(0,0,0,.18);display:flex;flex-direction:column;max-height:90vh}
+.mr-modal-box--wide{max-width:580px}
+.mr-modal-head{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #e4e7ec;flex-shrink:0}
+.mr-modal-title{font-size:17px;font-weight:600;color:#1c2c44;margin:0}
+.mr-modal-close{font-size:22px;line-height:1;background:none;border:0;cursor:pointer;color:#94a3b8;padding:4px 8px;border-radius:6px}
+.mr-modal-close:hover{color:#64748b;background:#f1f5f9}
+.mr-modal-close:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+.mr-modal-body{padding:20px;overflow-y:auto;flex:1}
+.mr-modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid #e4e7ec;flex-shrink:0}
+
+/* Form fields */
+.mr-form-group{margin-bottom:14px}
+.mr-form-group label{display:block;font-size:13px;font-weight:600;color:#344054;margin-bottom:6px}
+.mr-form-group input{width:100%;height:40px;border:1.5px solid #d0d5dd;border-radius:8px;padding:0 12px;font-size:14px;color:#1c2c44;font-family:inherit}
+.mr-form-group input:focus{outline:none;border-color:#1c2c44}
+.mr-status-note{font-size:12px;color:#667085;font-style:italic;margin-left:10px}
+.mr-status-row{display:flex;align-items:center;padding:8px 0}
+
+/* Inline tag checkboxes in edit modal */
+.mr-edit-tags{display:flex;flex-wrap:wrap;gap:6px;padding:8px 0}
+.mr-edit-tag-item{display:inline-flex;align-items:center;gap:4px;cursor:pointer;padding:2px 4px;border-radius:4px;transition:background .12s}
+.mr-edit-tag-item:hover{background:rgba(0,0,0,.04)}
+.mr-edit-tag-item input[type="checkbox"]{width:14px;height:14px;margin:0;cursor:pointer;accent-color:#1c2c44}
+.mr-tag-badge-sm{display:inline-block;padding:3px 9px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.2)}
+
+/* Category-grouped tag checkboxes */
+.mr-tag-category{margin-bottom:16px}
+.mr-tag-category:last-child{margin-bottom:0}
+.mr-tag-cat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#667085;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e4e7ec}
+.mr-tag-cat-items{display:flex;flex-wrap:wrap;gap:8px}
+.mr-tag-cb-item{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
+.mr-tag-cb-item:hover{background:rgba(0,0,0,.04)}
+.mr-tag-cb-item input[type="checkbox"]{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#1c2c44}
+.mr-tag-cb-item:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+
+/* ===== Mobile breakpoints ===== */
+@media (max-width:767px){
+  .mr-toolbar{gap:8px}
+  .mr-pills{flex-basis:100%;order:-1}
+  .mr-pill{flex:1;justify-content:center}
+  .mr-search{width:100%;flex-basis:100%}
+  .mr-toolbar-spacer{display:none}
+  .mr-count,.mr-select-toggle{align-self:center}
+
+  .mr-row{grid-template-columns:40px 1fr;grid-template-rows:auto auto}
+  .mr-status-cell,.mr-actions{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .mr-edit-btn{height:36px;margin-left:auto}
+
+  .mr-k{width:80px}
+  .mr-bulk-bar{flex-direction:column;align-items:flex-start;gap:8px}
+  .mr-dw-footer{padding-bottom:calc(13px + env(safe-area-inset-bottom,0px))}
+  .mr-modal-box{margin:12px;max-height:calc(100% - 24px)}
+
+  .mr-role-toggle{width:42px;height:42px}
+  .mr-edit-btn{min-height:44px}
+  .mr-pill{min-height:42px}
+}
+@media (max-width:479px){
+  .mr-row{padding:10px 12px}
+  .mr-select{min-width:0;width:100%;flex-basis:100%}
 }
 
-/* Role Filter Dropdown */
-.role-filter-dropdown {
-    position: relative;
+/* prefers-reduced-motion */
+@media (prefers-reduced-motion:reduce){
+  .mr-row,.mr-role-emoji{transition:none}
+  .admin-ui-drawer{transition:none}
 }
-
-#role-filter-btn.has-selection {
-    border-color: #1c2c44;
-    background-color: rgba(28,44,68,0.03);
-}
-
-.role-filter-menu {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    margin-top: 4px;
-    background: white;
-    border: 1px solid #d0d5dd;
-    border-radius: 8px;
-    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
-    z-index: 1000;
-    padding: 12px;
-    width: 320px;
-}
-
-.role-filter-menu.show {
-    display: block;
-}
-
-.role-filter-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 10px;
-    padding-bottom: 8px;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-.role-filter-header span {
-    font-weight: 600;
-    font-size: 12px;
-    color: #667085;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-.role-filter-header button {
-    padding: 4px 8px;
-    border: none;
-    background: none;
-    font-weight: 500;
-    font-size: 12px;
-    color: #1c2c44;
-    cursor: pointer;
-}
-
-.role-filter-header button:hover {
-    text-decoration: underline;
-}
-
-.role-filter-grid {
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
-}
-
-.role-toggle {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 42px;
-    height: 42px;
-    border: 2px solid #e4e7ec;
-    border-radius: 8px;
-    background: white;
-    font-size: 20px;
-    cursor: pointer;
-    transition: all 0.15s;
-    position: relative;
-}
-
-.role-toggle:hover {
-    border-color: #98a2b3;
-    background: #f9fafb;
-    transform: scale(1.05);
-}
-
-.role-toggle.selected {
-    border-color: #1c2c44;
-    background: rgba(28,44,68,0.08);
-    box-shadow: 0 0 0 2px rgba(28,44,68,0.1);
-}
-
-.role-toggle input {
-    position: absolute;
-    opacity: 0;
-    pointer-events: none;
-}
-
-/* Tooltip for role toggles */
-.role-toggle::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-6px);
-    padding: 5px 8px;
-    background: #1c2c44;
-    color: white;
-    font-size: 11px;
-    font-weight: 500;
-    white-space: nowrap;
-    border-radius: 4px;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.15s, visibility 0.15s;
-    pointer-events: none;
-    z-index: 10;
-}
-
-.role-toggle:hover::after {
-    opacity: 1;
-    visibility: visible;
-}
-
-.role-filter-count {
-    background: #1c2c44;
-    color: white;
-    font-size: 11px;
-    font-weight: 600;
-    padding: 2px 6px;
-    border-radius: 10px;
-}
-
-/* Tag Badges */
-.tag-badge {
-    display: inline-block;
-    padding: 3px 8px;
-    border-radius: 12px;
-    font-size: 11px;
-    font-weight: 600;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    margin: 2px 3px 2px 0;
-    white-space: nowrap;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-}
-
-.tag-badge-small {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 600;
-    color: white;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.2);
-    box-shadow: 0 1px 3px rgba(0,0,0,0.12);
-}
-
-.tag-empty {
-    color: #d0d5dd;
-    font-size: 13px;
-}
-
-/* Compact emoji display for table cells */
-.tags-cell-compact {
-    display: flex;
-    gap: 2px;
-    padding: 4px 0;
-    align-items: center;
-    overflow: visible;
-}
-
-/* Allow tooltip overflow in Tabulator */
-.tabulator-cell:has(.tags-cell-compact),
-.tabulator-cell:has(.tag-emoji) {
-    overflow: visible !important;
-}
-
-.tabulator-row {
-    overflow: visible !important;
-}
-
-.tag-emoji {
-    font-size: 16px;
-    cursor: help;
-    transition: transform 0.15s;
-    position: relative;
-    display: inline-block;
-}
-
-.tag-emoji:hover {
-    transform: scale(1.2);
-    z-index: 1000;
-}
-
-/* Custom tooltip */
-.tag-emoji::after {
-    content: attr(data-tooltip);
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%) translateY(-4px);
-    padding: 6px 10px;
-    background: #1c2c44;
-    color: white;
-    font-size: 12px;
-    font-weight: 500;
-    white-space: nowrap;
-    border-radius: 6px;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s, visibility 0.2s;
-    pointer-events: none;
-    z-index: 1001;
-    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
-}
-
-/* Tooltip arrow */
-.tag-emoji::before {
-    content: '';
-    position: absolute;
-    bottom: 100%;
-    left: 50%;
-    transform: translateX(-50%) translateY(2px);
-    border: 5px solid transparent;
-    border-top-color: #1c2c44;
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.2s, visibility 0.2s;
-    pointer-events: none;
-    z-index: 1001;
-}
-
-.tag-emoji:hover::after,
-.tag-emoji:hover::before {
-    opacity: 1;
-    visibility: visible;
-}
-
-/* Full badge display (kept for modals) */
-.tags-cell {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 2px;
-    cursor: pointer;
-    padding: 4px 0;
-    min-height: 24px;
-    align-items: center;
-}
-
-.tags-cell:hover {
-    background: rgba(0,0,0,0.03);
-    border-radius: 4px;
-}
-
-/* Tag Modal */
-.tag-category {
-    margin-bottom: 16px;
-}
-
-.tag-category:last-child {
-    margin-bottom: 0;
-}
-
-.tag-category-label {
-    font-size: 11px;
-    font-weight: 600;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: #667085;
-    margin-bottom: 8px;
-    padding-bottom: 4px;
-    border-bottom: 1px solid #e4e7ec;
-}
-
-.tag-category-items {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-}
-
-.tag-checkbox-item {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    cursor: pointer;
-    padding: 4px 6px;
-    border-radius: 6px;
-    transition: background 0.15s;
-}
-
-.tag-checkbox-item:hover {
-    background: rgba(0,0,0,0.04);
-}
-
-.tag-checkbox-item input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    cursor: pointer;
-    accent-color: #1c2c44;
-}
-
-/* Inline tag checkboxes for edit modal */
-.edit-modal-tags {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 6px;
-    padding: 8px 0;
-}
-
-.tag-checkbox-inline {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    cursor: pointer;
-    padding: 2px 4px;
-    border-radius: 4px;
-    transition: background 0.15s;
-}
-
-.tag-checkbox-inline:hover {
-    background: rgba(0,0,0,0.04);
-}
-
-.tag-checkbox-inline input[type="checkbox"] {
-    width: 14px;
-    height: 14px;
-    margin: 0;
-    cursor: pointer;
-    accent-color: #1c2c44;
-}
-
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="bg-white rounded-tcsc p-5">
-    <h1 class="text-xl font-semibold text-tcsc-navy mb-3" id="view-title">Members</h1>
+  <!-- Heading row -->
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+    <h1 id="view-title" class="text-xl font-semibold text-tcsc-navy">Members</h1>
+  </div>
 
-    <!-- Toolbar -->
-    <div class="admin-toolbar">
-        <!-- View switcher -->
-        <div class="admin-pill-group">
-            <button class="admin-pill active" data-view="all">All</button>
-            <button class="admin-pill" data-view="current">Current</button>
-            <button class="admin-pill" data-view="alumni">Alumni</button>
-            <button class="admin-pill" data-view="waitlist">Waitlist</button>
-        </div>
-        <!-- Filters -->
-        <select id="global-season-select" class="admin-select">
-            <option value="">Season...</option>
-            {% for season in all_seasons %}
-            <option value="{{ season.id }}">{{ season.name }}</option>
-            {% endfor %}
-        </select>
-        <select id="status-filter" class="admin-select">
-            <option value="">Status</option>
-            <option value="ACTIVE">Active</option>
-            <option value="PENDING">Pending</option>
-            <option value="ALUMNI">Alumni</option>
-            <option value="DROPPED">Dropped</option>
-        </select>
-        <div class="role-filter-dropdown relative" id="role-filter-dropdown">
-            <button type="button" class="admin-select text-left" id="role-filter-btn" onclick="toggleRoleDropdown()">
-                <span id="role-filter-label">Roles</span>
-            </button>
-            <div class="role-filter-menu" id="role-filter-menu">
-                <div class="role-filter-header">
-                    <span>Filter by Role</span>
-                    <button type="button" onclick="clearAllRoles()">Clear all</button>
-                </div>
-                <div class="role-filter-grid" id="role-filter-grid">
-                    <!-- Populated by JS -->
-                </div>
-            </div>
-        </div>
-        <select id="season-filter" class="admin-select">
-            <option value="">Season Status</option>
-            <option value="ACTIVE">Active</option>
-            <option value="PENDING_LOTTERY">Pending Lottery</option>
-            <option value="DROPPED_LOTTERY">Dropped (Lottery)</option>
-            <option value="DROPPED_VOLUNTARY">Dropped (Voluntary)</option>
-            <option value="DROPPED_CAUSE">Dropped (Cause)</option>
-            <option value="registered">Registered</option>
-            <option value="not_registered">Not Registered</option>
-        </select>
-        <!-- Count and search pushed right -->
-        <div class="admin-toolbar-spacer"></div>
-        <span id="member-count" class="admin-count">0</span>
-        <input type="text" id="users-search" class="admin-search" placeholder="Search...">
+  <!-- Quick-filter chips -->
+  <div class="mr-quickfilters" id="mr-quickfilters">
+    <button type="button" class="mr-qf-chip" data-chip="active-members" aria-pressed="false">Active members</button>
+    <button type="button" class="mr-qf-chip" data-chip="unlinked-slack" aria-pressed="false">Unlinked Slack</button>
+    <button type="button" class="mr-qf-chip" data-chip="no-roles" aria-pressed="false">No roles</button>
+  </div>
+
+  <!-- Toolbar -->
+  <div class="mr-toolbar" id="mr-toolbar">
+    <!-- View pills -->
+    <div class="mr-pills" role="group" aria-label="View">
+      <button type="button" class="mr-pill is-active" data-view="all" aria-pressed="true">All</button>
+      <button type="button" class="mr-pill" data-view="current" aria-pressed="false">Current</button>
+      <button type="button" class="mr-pill" data-view="alumni" aria-pressed="false">Alumni</button>
+      <button type="button" class="mr-pill" data-view="waitlist" aria-pressed="false">Waitlist</button>
     </div>
-
-    <div id="users-table" class="tabulator-data"></div>
-
-    <div class="flex justify-end mt-4 pt-4 border-t border-gray-200">
-        <button id="export-csv" class="admin-btn admin-btn-md admin-btn-secondary">Export CSV</button>
+    <!-- Season -->
+    <select id="mr-season-select" class="mr-select" aria-label="Season">
+      <option value="">Season...</option>
+    </select>
+    <!-- Status -->
+    <select id="mr-status-filter" class="mr-select" aria-label="Status">
+      <option value="">Status</option>
+      <option value="ACTIVE">Active</option>
+      <option value="PENDING">Pending</option>
+      <option value="ALUMNI">Alumni</option>
+      <option value="DROPPED">Dropped</option>
+    </select>
+    <!-- Season status -->
+    <select id="mr-season-filter" class="mr-select" aria-label="Season Status">
+      <option value="">Season Status</option>
+      <option value="ACTIVE">Active</option>
+      <option value="PENDING_LOTTERY">Pending Lottery</option>
+      <option value="DROPPED_LOTTERY">Dropped (Lottery)</option>
+      <option value="DROPPED_VOLUNTARY">Dropped (Voluntary)</option>
+      <option value="DROPPED_CAUSE">Dropped (Cause)</option>
+      <option value="registered">Registered (any)</option>
+      <option value="not_registered">Not Registered</option>
+    </select>
+    <!-- Role popover -->
+    <div class="mr-role-dropdown" id="mr-role-dropdown">
+      <button type="button" class="mr-role-btn" id="mr-role-btn" aria-haspopup="true" aria-expanded="false">
+        <span id="mr-role-label">Roles</span>
+      </button>
+      <div class="mr-role-menu" id="mr-role-menu" role="dialog" aria-label="Filter by Role">
+        <div class="mr-role-menu-header">
+          <span>Filter by Role</span>
+          <button type="button" id="mr-role-clear">Clear all</button>
+        </div>
+        <div class="mr-role-grid" id="mr-role-grid">
+          <!-- Populated by JS -->
+        </div>
+      </div>
     </div>
+    <div class="mr-toolbar-spacer"></div>
+    <span id="mr-count" class="mr-count" aria-live="polite" aria-atomic="true">0 members</span>
+    <button type="button" class="mr-select-toggle" id="mr-select-toggle">Select</button>
+    <input type="search" id="mr-search" class="mr-search" placeholder="Search name, email, phone, Slack ID..." aria-label="Search members">
+  </div>
+
+  <!-- Bulk action bar -->
+  <div class="mr-bulk-bar" id="mr-bulk-bar" aria-live="polite">
+    <span class="mr-bulk-count" id="mr-bulk-count">0 selected</span>
+    <button type="button" class="mr-bulk-action" id="mr-bulk-assign" disabled aria-disabled="true">Assign roles</button>
+    <button type="button" class="mr-bulk-action" id="mr-bulk-copy" disabled aria-disabled="true">Copy emails</button>
+    <button type="button" class="mr-bulk-clear" id="mr-bulk-clear">Clear</button>
+  </div>
+
+  <!-- Roster mount -->
+  <div id="member-roster" role="list" aria-label="Member roster" aria-live="off" aria-busy="true">
+    <p class="mr-empty">Loading members...</p>
+  </div>
+
+  <!-- Empty state (sibling, shown when 0 results) -->
+  <p id="mr-empty-state" aria-live="polite">No members match the current filters.</p>
+
+  <!-- Export footer -->
+  <div class="admin-ui-export-bar"><button id="mr-export-csv" class="admin-ui-export-btn"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink:0"><path d="M8 11L3 6h3V1h4v5h3L8 11Z" fill="currentColor"/><rect x="2" y="13" width="12" height="2" rx="1" fill="currentColor"/></svg>Export CSV</button></div>
 </div>
 
-<!-- Edit Modal -->
-<div id="edit-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
-    <div class="absolute inset-0" onclick="closeModal()"></div>
-    <div class="relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl">
-        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
-            <h2 id="modal-title" class="text-lg font-semibold text-tcsc-navy">Edit Member</h2>
-            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeModal()">&times;</button>
-        </div>
-        <div class="p-5">
-            <form id="edit-user-form" method="POST">
-                <input type="hidden" name="form_type" value="quick">
-                <div id="modal-form-fields"></div>
-            </form>
-        </div>
-        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" onclick="closeModal()">Cancel</button>
-            <a href="#" class="admin-btn admin-btn-md admin-btn-secondary" id="view-details-link">View Details</a>
-            <button type="submit" form="edit-user-form" class="admin-btn admin-btn-md admin-btn-primary">Save Changes</button>
-        </div>
+<!-- Quick-edit modal -->
+<div id="mr-edit-modal" class="mr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="mr-edit-modal-title">
+  <div class="mr-modal-box">
+    <div class="mr-modal-head">
+      <h2 id="mr-edit-modal-title" class="mr-modal-title">Edit Member</h2>
+      <button type="button" class="mr-modal-close" id="mr-edit-close" aria-label="Close">&times;</button>
     </div>
+    <div class="mr-modal-body">
+      <form id="mr-edit-form" method="POST">
+        <input type="hidden" name="form_type" value="quick">
+        <div class="mr-form-group">
+          <label for="mr-edit-email">Email</label>
+          <input type="email" id="mr-edit-email" name="email" required>
+        </div>
+        <div class="mr-form-group">
+          <label>Status</label>
+          <div class="mr-status-row">
+            <span id="mr-edit-status-badge"></span>
+            <span class="mr-status-note">Derived from season registration</span>
+          </div>
+        </div>
+        <div class="mr-form-group">
+          <label>Roles</label>
+          <div class="mr-edit-tags" id="mr-edit-tags"></div>
+        </div>
+      </form>
+    </div>
+    <div class="mr-modal-footer">
+      <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" id="mr-edit-cancel">Cancel</button>
+      <a href="#" class="admin-btn admin-btn-md admin-btn-secondary" id="mr-edit-view-link">View Details</a>
+      <button type="submit" form="mr-edit-form" class="admin-btn admin-btn-md admin-btn-primary">Save Changes</button>
+    </div>
+  </div>
 </div>
 
-<!-- Tag Assignment Modal -->
-<div id="tag-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
-    <div class="absolute inset-0" onclick="closeTagModal()"></div>
-    <div class="relative bg-white rounded-tcsc w-full max-w-[550px] mx-4 shadow-xl">
-        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
-            <h2 id="tag-modal-title" class="text-lg font-semibold text-tcsc-navy">Assign Tags</h2>
-            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeTagModal()">&times;</button>
-        </div>
-        <div class="p-5">
-            <div id="tag-checkboxes"></div>
-        </div>
-        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" onclick="closeTagModal()">Cancel</button>
-            <button type="button" class="admin-btn admin-btn-md admin-btn-primary" onclick="saveUserTags()">Save Tags</button>
-        </div>
+<!-- Tag-assign modal -->
+<div id="mr-tag-modal" class="mr-modal" hidden role="dialog" aria-modal="true" aria-labelledby="mr-tag-modal-title">
+  <div class="mr-modal-box mr-modal-box--wide">
+    <div class="mr-modal-head">
+      <h2 id="mr-tag-modal-title" class="mr-modal-title">Assign Tags</h2>
+      <button type="button" class="mr-modal-close" id="mr-tag-close" aria-label="Close">&times;</button>
     </div>
+    <div class="mr-modal-body">
+      <div id="mr-tag-bulk-note" class="mr-bulk-note" style="display:none"></div>
+      <div id="mr-tag-checkboxes"></div>
+    </div>
+    <div class="mr-modal-footer">
+      <button type="button" class="admin-btn admin-btn-md admin-btn-secondary" id="mr-tag-cancel">Cancel</button>
+      <button type="button" class="admin-btn admin-btn-md admin-btn-primary" id="mr-tag-save">Save Tags</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 

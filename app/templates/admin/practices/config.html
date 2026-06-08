@@ -4,8 +4,11 @@
 
 {% block extra_css %}
 <style>
-/* Toggle slider for defaults editor */
-.defaults-toggle-slider {
+/* ============================================================
+   Shared toggle (used by Settings tab dark-practice toggle
+   and Type cards has_intervals toggle)
+   ============================================================ */
+.cfg-toggle-slider {
     position: relative;
     width: 40px;
     height: 22px;
@@ -14,7 +17,7 @@
     transition: background 0.2s;
     flex-shrink: 0;
 }
-.defaults-toggle-slider::after {
+.cfg-toggle-slider::after {
     content: '';
     position: absolute;
     top: 2px;
@@ -26,11 +29,263 @@
     transition: transform 0.2s;
     box-shadow: 0 1px 3px rgba(0,0,0,0.2);
 }
-.defaults-toggle-input:checked + .defaults-toggle-slider {
+.cfg-toggle-input:checked + .cfg-toggle-slider {
     background: #1c2c44;
 }
-.defaults-toggle-input:checked + .defaults-toggle-slider::after {
+.cfg-toggle-input:checked + .cfg-toggle-slider::after {
     transform: translateX(18px);
+}
+
+/* ============================================================
+   Config card list - scoped under #cfg-*-list ids
+   ============================================================ */
+.cfg-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.cfg-card {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    background: white;
+    border: 1px solid rgba(28,44,68,0.1);
+    border-radius: var(--rounded-tcsc, 6px);
+    padding: 10px 12px;
+    transition: box-shadow 0.15s;
+}
+.cfg-card:focus-within {
+    box-shadow: 0 0 0 2px rgba(28,44,68,0.15);
+}
+.cfg-card:hover {
+    background: rgba(28,44,68,0.015);
+}
+.cfg-card-draft {
+    border-left: 4px solid rgba(28,44,68,0.3);
+}
+.cfg-fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 8px;
+    flex: 1;
+    min-width: 0;
+}
+.cfg-field {
+    height: 32px;
+    padding: 0 8px;
+    border: 1px solid rgba(28,44,68,0.12);
+    border-radius: 4px;
+    font-size: 0.8125rem;
+    background: white;
+    color: #1c2c44;
+    transition: border-color 0.15s;
+    min-width: 80px;
+}
+.cfg-field:focus-visible {
+    outline: 2px solid #1c2c44;
+    outline-offset: 1px;
+    border-color: #1c2c44;
+}
+.cfg-field-name {
+    font-weight: 600;
+    min-width: 160px;
+}
+.cfg-field-wide {
+    min-width: 200px;
+    flex: 1;
+}
+.cfg-field-narrow {
+    width: 80px;
+    min-width: 60px;
+}
+.cfg-field.cfg-field-error {
+    border-color: #dc2626;
+}
+.cfg-rail {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-shrink: 0;
+    padding-left: 4px;
+}
+/* Chip editor */
+.cfg-chip-editor {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    border: 1px solid rgba(28,44,68,0.12);
+    border-radius: 4px;
+    padding: 2px 6px;
+    min-height: 32px;
+    background: white;
+    min-width: 140px;
+    cursor: text;
+}
+.cfg-chip-editor:focus-within {
+    outline: 2px solid #1c2c44;
+    outline-offset: 1px;
+}
+.cfg-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: rgba(28,44,68,0.08);
+    color: #1c2c44;
+    border-radius: 9999px;
+    padding: 0 8px 0 10px;
+    font-size: 0.75rem;
+    font-weight: 500;
+    height: 22px;
+    white-space: nowrap;
+}
+.cfg-chip-remove {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 0.9rem;
+    color: #6b7280;
+    line-height: 1;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+}
+.cfg-chip-remove:focus-visible {
+    outline: 2px solid #1c2c44;
+    outline-offset: 1px;
+    border-radius: 2px;
+}
+.cfg-chip-add-input {
+    border: none;
+    outline: none;
+    background: transparent;
+    font-size: 0.8125rem;
+    min-width: 80px;
+    height: 22px;
+    padding: 0;
+}
+/* Toggle label for has_intervals */
+.cfg-toggle-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+}
+.cfg-toggle-input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+/* Map expansion for Location */
+.cfg-map-expansion {
+    padding-top: 6px;
+    border-top: 1px solid rgba(28,44,68,0.06);
+    margin-top: 6px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.cfg-map-img {
+    width: 100%;
+    max-width: 400px;
+    height: 120px;
+    object-fit: cover;
+    border-radius: 4px;
+    border: 1px solid rgba(28,44,68,0.1);
+    display: block;
+}
+.cfg-map-link {
+    flex-shrink: 0;
+}
+/* Delete button focus ring */
+.cfg-delete:focus-visible {
+    outline: 2px solid #dc2626;
+    outline-offset: 2px;
+}
+/* Map toggle focus ring */
+.cfg-map-toggle:focus-visible {
+    outline: 2px solid #1c2c44;
+    outline-offset: 2px;
+}
+
+/* Mobile responsive */
+@media (max-width: 767px) {
+    .cfg-card {
+        flex-direction: column;
+        gap: 10px;
+    }
+    .cfg-fields {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 8px;
+    }
+    .cfg-field,
+    .cfg-field-name,
+    .cfg-field-wide,
+    .cfg-field-narrow {
+        width: 100%;
+        min-width: 0;
+        box-sizing: border-box;
+    }
+    .cfg-rail {
+        flex-direction: row;
+        justify-content: flex-end;
+        padding-left: 0;
+        padding-top: 4px;
+        border-top: 1px solid rgba(28,44,68,0.08);
+        width: 100%;
+    }
+    .cfg-chip-editor {
+        width: 100%;
+        box-sizing: border-box;
+    }
+    .cfg-chip {
+        height: 32px;
+        padding: 0 10px 0 12px;
+    }
+    .cfg-toggle-label {
+        display: flex;
+        justify-content: space-between;
+        width: 100%;
+    }
+    .cfg-map-img {
+        max-width: 100%;
+    }
+    .cfg-map-toggle {
+        width: 100%;
+    }
+    .cfg-map-link {
+        display: block;
+        margin-top: 4px;
+    }
+    .cfg-toggle-label {
+        min-height: 44px;
+    }
+    .cfg-chip-remove {
+        padding: 0 6px;
+        min-height: 32px;
+    }
+}
+
+/* Reduce motion for map animation */
+@media (prefers-reduced-motion: no-preference) {
+    .cfg-map-preview {
+        transition: opacity 0.15s;
+    }
+}
+
+/* Tab nav scrollable on mobile */
+.config-tab-nav {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+}
+.config-tab-nav::-webkit-scrollbar { display: none; }
+.config-tab {
+    white-space: nowrap;
 }
 </style>
 {% endblock %}
@@ -45,57 +300,63 @@
 
 <div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
     <!-- Tab Navigation -->
-    <div class="flex gap-0 border-b-2 border-gray-200 mb-5">
-        <button class="config-tab active py-3 px-6 text-sm font-medium text-tcsc-navy bg-transparent border-none border-b-2 border-tcsc-navy -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="locations">Locations</button>
-        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="activities">Activities</button>
-        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="types">Types</button>
-        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="social-locations">Social Locations</button>
-        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="settings">Settings</button>
-        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy" data-tab="status-reference">Status Reference</button>
+    <div class="config-tab-nav flex gap-0 border-b-2 border-gray-200 mb-5" role="tablist" aria-label="Practices configuration sections">
+        <button class="config-tab active py-3 px-6 text-sm font-medium text-tcsc-navy bg-transparent border-none border-b-2 border-tcsc-navy -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy"
+            data-tab="locations" id="tab-btn-locations" role="tab" aria-selected="true" aria-controls="locations-tab">Locations</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy"
+            data-tab="activities" id="tab-btn-activities" role="tab" aria-selected="false" aria-controls="activities-tab">Activities</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy"
+            data-tab="types" id="tab-btn-types" role="tab" aria-selected="false" aria-controls="types-tab">Types</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy"
+            data-tab="social-locations" id="tab-btn-social-locations" role="tab" aria-selected="false" aria-controls="social-locations-tab">Social Locations</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy"
+            data-tab="settings" id="tab-btn-settings" role="tab" aria-selected="false" aria-controls="settings-tab">Settings</button>
+        <button class="config-tab py-3 px-6 text-sm font-medium text-gray-500 bg-transparent border-none border-b-2 border-transparent -mb-0.5 cursor-pointer transition-all hover:text-tcsc-navy"
+            data-tab="status-reference" id="tab-btn-status-reference" role="tab" aria-selected="false" aria-controls="status-reference-tab">Status Reference</button>
     </div>
 
     <!-- Tab Content: Locations -->
-    <div id="locations-tab" class="tab-content">
+    <div id="locations-tab" class="tab-content" role="tabpanel" aria-labelledby="tab-btn-locations">
         <div class="toolbar">
-            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewLocation()">Add Location</button>
+            <button class="toolbar-btn toolbar-btn-primary" id="add-location-btn" onclick="cfgAddDraft('locations')">Add Location</button>
             <div class="toolbar-spacer"></div>
             <span class="toolbar-count">Total: <strong id="location-count">0</strong> locations</span>
         </div>
-        <div id="locations-table" class="tabulator-config"></div>
+        <div id="cfg-locations-list" class="cfg-list" role="list" aria-label="Practice locations"></div>
     </div>
 
     <!-- Tab Content: Activities -->
-    <div id="activities-tab" class="tab-content hidden">
+    <div id="activities-tab" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-activities">
         <div class="toolbar">
-            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewActivity()">Add Activity</button>
+            <button class="toolbar-btn toolbar-btn-primary" id="add-activity-btn" onclick="cfgAddDraft('activities')">Add Activity</button>
             <div class="toolbar-spacer"></div>
             <span class="toolbar-count">Total: <strong id="activity-count">0</strong> activities</span>
         </div>
-        <div id="activities-table" class="tabulator-config"></div>
+        <div id="cfg-activities-list" class="cfg-list" role="list" aria-label="Practice activities"></div>
     </div>
 
     <!-- Tab Content: Types -->
-    <div id="types-tab" class="tab-content hidden">
+    <div id="types-tab" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-types">
         <div class="toolbar">
-            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewType()">Add Type</button>
+            <button class="toolbar-btn toolbar-btn-primary" id="add-type-btn" onclick="cfgAddDraft('types')">Add Type</button>
             <div class="toolbar-spacer"></div>
             <span class="toolbar-count">Total: <strong id="type-count">0</strong> types</span>
         </div>
-        <div id="types-table" class="tabulator-config"></div>
+        <div id="cfg-types-list" class="cfg-list" role="list" aria-label="Practice types"></div>
     </div>
 
     <!-- Tab Content: Social Locations -->
-    <div id="social-locations-tab" class="tab-content hidden">
+    <div id="social-locations-tab" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-social-locations">
         <div class="toolbar">
-            <button class="toolbar-btn toolbar-btn-primary" onclick="addNewSocialLocation()">Add Social Location</button>
+            <button class="toolbar-btn toolbar-btn-primary" id="add-social-btn" onclick="cfgAddDraft('social')">Add Social Location</button>
             <div class="toolbar-spacer"></div>
             <span class="toolbar-count">Total: <strong id="social-location-count">0</strong> social locations</span>
         </div>
-        <div id="social-locations-table" class="tabulator-config"></div>
+        <div id="cfg-social-list" class="cfg-list" role="list" aria-label="Social locations"></div>
     </div>
 
     <!-- Tab Content: Settings -->
-    <div id="settings-tab" class="tab-content hidden">
+    <div id="settings-tab" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-settings">
         <div class="max-w-[1100px]">
             <h3 class="font-semibold text-base text-tcsc-navy mb-2">Practice Days</h3>
             <p class="text-sm text-gray-500 mb-5 leading-relaxed">Configure which days practices are expected and set default values that auto-fill the Slack create modal.</p>
@@ -112,7 +373,7 @@
     </div>
 
     <!-- Tab Content: Status Reference (Read-Only) -->
-    <div id="status-reference-tab" class="tab-content hidden">
+    <div id="status-reference-tab" class="tab-content hidden" role="tabpanel" aria-labelledby="tab-btn-status-reference">
         <div class="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-5">
             <div class="bg-gray-50 rounded-lg p-4">
                 <h3 class="font-semibold text-sm text-gray-700 mb-3 pb-2 border-b border-gray-200">Practice Status</h3>
@@ -137,29 +398,53 @@
 
 {% block extra_js %}
 <script>
+// ============================================================================
 // State
-let locationsTable, activitiesTable, typesTable, socialLocationsTable;
+// ============================================================================
 let locationsData = [], activitiesData = [], typesData = [], socialLocationsData = [];
 let coachesData = [];
 let statusData = {};
 let practiceDays = [];
 
+// ============================================================================
 // Initialize on DOM ready
+// ============================================================================
 document.addEventListener('DOMContentLoaded', async () => {
-    // Load all data in parallel
-    await Promise.all([
-        loadLocations(),
-        loadActivities(),
-        loadTypes(),
-        loadSocialLocations(),
-        loadStatuses(),
-        loadSettings()
-    ]);
+    // Disable add buttons while loading
+    ['add-location-btn', 'add-activity-btn', 'add-type-btn', 'add-social-btn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = true;
+    });
 
-    initLocationsTable();
-    initActivitiesTable();
-    initTypesTable();
-    initSocialLocationsTable();
+    // Show loading placeholders
+    cfgShowLoading('cfg-locations-list', 'locations');
+    cfgShowLoading('cfg-activities-list', 'activities');
+    cfgShowLoading('cfg-types-list', 'types');
+    cfgShowLoading('cfg-social-list', 'social locations');
+
+    try {
+        await Promise.all([
+            loadLocations(),
+            loadActivities(),
+            loadTypes(),
+            loadSocialLocations(),
+            loadStatuses(),
+            loadSettings()
+        ]);
+    } catch (err) {
+        // Individual loaders handle their own error states
+    }
+
+    // Re-enable add buttons
+    ['add-location-btn', 'add-activity-btn', 'add-type-btn', 'add-social-btn'].forEach(id => {
+        const btn = document.getElementById(id);
+        if (btn) btn.disabled = false;
+    });
+
+    cfgRenderLocations();
+    cfgRenderActivities();
+    cfgRenderTypes();
+    cfgRenderSocialLocations();
     renderStatusReference();
     renderPracticeDays();
     attachTabListeners();
@@ -171,18 +456,18 @@ document.addEventListener('DOMContentLoaded', async () => {
 function attachTabListeners() {
     document.querySelectorAll('.config-tab').forEach(tab => {
         tab.addEventListener('click', () => {
-            // Remove active from all tabs and content
             document.querySelectorAll('.config-tab').forEach(t => {
                 t.classList.remove('active');
                 t.classList.remove('text-tcsc-navy', 'border-tcsc-navy');
                 t.classList.add('text-gray-500', 'border-transparent');
+                t.setAttribute('aria-selected', 'false');
             });
             document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
 
-            // Activate clicked tab
             tab.classList.add('active');
             tab.classList.remove('text-gray-500', 'border-transparent');
             tab.classList.add('text-tcsc-navy', 'border-tcsc-navy');
+            tab.setAttribute('aria-selected', 'true');
             document.getElementById(tab.dataset.tab + '-tab').classList.remove('hidden');
         });
     });
@@ -190,592 +475,1000 @@ function attachTabListeners() {
 
 // ============================================================================
 // Data Loading
+// NOTE: Each loadX() mutates the existing array in place (splice + spread)
+// rather than reassigning the module-level variable. This keeps CFG_ENTITIES
+// pointing at the same array objects after the API response arrives, so
+// cfgAddDraft, the duplicate-draft guard, Escape-discard, and cfgEntityForRecord
+// all operate on the live data.
 // ============================================================================
 async function loadLocations() {
-    const response = await fetch('/admin/practices/locations/data');
-    const data = await response.json();
-    locationsData = data.locations;
-    document.getElementById('location-count').textContent = locationsData.length;
+    try {
+        const data = await AdminUI.fetchJSON('/admin/practices/locations/data');
+        locationsData.splice(0, locationsData.length, ...data.locations);
+        document.getElementById('location-count').textContent = locationsData.length;
+    } catch (err) {
+        cfgShowError('cfg-locations-list', 'locations', 'cfgRefreshLocations');
+        throw err;
+    }
 }
 
 async function loadActivities() {
-    const response = await fetch('/admin/practices/activities/data');
-    const data = await response.json();
-    activitiesData = data.activities;
-    document.getElementById('activity-count').textContent = activitiesData.length;
+    try {
+        const data = await AdminUI.fetchJSON('/admin/practices/activities/data');
+        activitiesData.splice(0, activitiesData.length, ...data.activities);
+        document.getElementById('activity-count').textContent = activitiesData.length;
+    } catch (err) {
+        cfgShowError('cfg-activities-list', 'activities', 'cfgRefreshActivities');
+        throw err;
+    }
 }
 
 async function loadTypes() {
-    const response = await fetch('/admin/practices/types/data');
-    const data = await response.json();
-    typesData = data.types;
-    document.getElementById('type-count').textContent = typesData.length;
+    try {
+        const data = await AdminUI.fetchJSON('/admin/practices/types/data');
+        typesData.splice(0, typesData.length, ...data.types);
+        document.getElementById('type-count').textContent = typesData.length;
+    } catch (err) {
+        cfgShowError('cfg-types-list', 'types', 'cfgRefreshTypes');
+        throw err;
+    }
 }
 
 async function loadSocialLocations() {
-    const response = await fetch('/admin/practices/social-locations/data');
-    const data = await response.json();
-    socialLocationsData = data.social_locations;
-    document.getElementById('social-location-count').textContent = socialLocationsData.length;
+    try {
+        const data = await AdminUI.fetchJSON('/admin/practices/social-locations/data');
+        socialLocationsData.splice(0, socialLocationsData.length, ...data.social_locations);
+        document.getElementById('social-location-count').textContent = socialLocationsData.length;
+    } catch (err) {
+        cfgShowError('cfg-social-list', 'social locations', 'cfgRefreshSocialLocations');
+        throw err;
+    }
 }
 
 async function loadStatuses() {
-    const response = await fetch('/admin/practices/statuses/data');
-    statusData = await response.json();
+    const data = await AdminUI.fetchJSON('/admin/practices/statuses/data');
+    statusData = data;
 }
 
 // ============================================================================
-// Locations Tab
+// Refresh functions (re-fetch + re-render, used after failed saves)
 // ============================================================================
-function initLocationsTable() {
-    locationsTable = new Tabulator("#locations-table", {
-        data: locationsData,
-        layout: "fitColumns",
-        height: "calc(100vh - 380px)",
-        columns: [
-            {
-                title: "Name",
-                field: "name",
-                minWidth: 140,
-                editor: "input",
-                validator: "required",
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
-                title: "Spot",
-                field: "spot",
-                minWidth: 120,
-                editor: "input",
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
-                title: "Address",
-                field: "address",
-                minWidth: 180,
-                editor: "input",
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
-                title: "Lat",
-                field: "latitude",
-                width: 90,
-                editor: "number",
-                editorParams: { step: 0.0001 },
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
-                title: "Lng",
-                field: "longitude",
-                width: 90,
-                editor: "number",
-                editorParams: { step: 0.0001 },
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
-                title: "Parking Notes",
-                field: "parking_notes",
-                minWidth: 150,
-                editor: "input",
-                cellEdited: (cell) => saveLocation(cell.getRow().getData())
-            },
-            {
-                title: "Practices",
-                field: "practice_count",
-                width: 90,
-                hozAlign: "center",
-                formatter: (cell) => formatCount(cell.getValue())
-            },
-            {
-                title: "Actions",
-                width: 100,
-                hozAlign: "center",
-                headerSort: false,
-                formatter: (cell) => formatDeleteButton(cell, 'Location', 'practice_count')
-            }
-        ]
-    });
-}
-
-async function saveLocation(data) {
-    const url = data.id ? `/admin/practices/locations/${data.id}/edit` : '/admin/practices/locations/create';
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: data.name,
-                spot: data.spot,
-                address: data.address,
-                google_maps_url: data.google_maps_url,
-                latitude: data.latitude,
-                longitude: data.longitude,
-                parking_notes: data.parking_notes
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            if (result.location) {
-                const idx = locationsData.findIndex(l => l.id === data.id || (!l.id && l.name === data.name));
-                if (idx >= 0) {
-                    locationsData[idx] = result.location;
-                    locationsTable.updateData([result.location]);
-                }
-            }
-            showToast('Location saved successfully', 'success');
-        } else {
-            showToast(result.error || 'Failed to save location', 'error');
-            refreshLocations();
-        }
-    } catch (err) {
-        showToast('Error saving location: ' + err.message, 'error');
-        refreshLocations();
-    }
-}
-
-async function deleteLocation(id, name) {
-    if (!confirm(`Delete location "${name}"?\n\nThis cannot be undone.`)) return;
-
-    try {
-        const response = await fetch(`/admin/practices/locations/${id}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast(result.message, 'success');
-            refreshLocations();
-        } else {
-            showToast(result.error || 'Failed to delete location', 'error');
-        }
-    } catch (err) {
-        showToast('Error deleting location: ' + err.message, 'error');
-    }
-}
-
-function addNewLocation() {
-    const newLoc = {
-        id: null,
-        name: 'New Location',
-        spot: '',
-        address: '',
-        latitude: null,
-        longitude: null,
-        parking_notes: '',
-        practice_count: 0
-    };
-    locationsTable.addRow(newLoc, true);
-    setTimeout(() => {
-        const rows = locationsTable.getRows();
-        if (rows.length > 0) rows[0].getCell('name').edit();
-    }, 100);
-}
-
-async function refreshLocations() {
+async function cfgRefreshLocations() {
     await loadLocations();
-    locationsTable.setData(locationsData);
+    cfgRenderLocations();
 }
 
-// ============================================================================
-// Activities Tab
-// ============================================================================
-function initActivitiesTable() {
-    activitiesTable = new Tabulator("#activities-table", {
-        data: activitiesData,
-        layout: "fitColumns",
-        height: "calc(100vh - 380px)",
-        columns: [
-            {
-                title: "Name",
-                field: "name",
-                minWidth: 200,
-                editor: "input",
-                validator: "required",
-                cellEdited: (cell) => saveActivity(cell.getRow().getData())
-            },
-            {
-                title: "Gear Required (comma-separated)",
-                field: "gear_required",
-                minWidth: 300,
-                editor: "input",
-                formatter: (cell) => formatJsonArray(cell.getValue()),
-                cellEdited: (cell) => {
-                    const data = cell.getRow().getData();
-                    // Convert string to array
-                    const rawValue = cell.getValue();
-                    if (typeof rawValue === 'string') {
-                        data.gear_required = rawValue.split(',').map(s => s.trim()).filter(s => s);
-                    }
-                    saveActivity(data);
-                }
-            },
-            {
-                title: "Practices",
-                field: "practice_count",
-                width: 90,
-                hozAlign: "center",
-                formatter: (cell) => formatCount(cell.getValue())
-            },
-            {
-                title: "Actions",
-                width: 100,
-                hozAlign: "center",
-                headerSort: false,
-                formatter: (cell) => formatDeleteButton(cell, 'Activity', 'practice_count')
-            }
-        ]
-    });
-}
-
-async function saveActivity(data) {
-    const url = data.id ? `/admin/practices/activities/${data.id}/edit` : '/admin/practices/activities/create';
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: data.name,
-                gear_required: data.gear_required
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            if (result.activity) {
-                const idx = activitiesData.findIndex(a => a.id === data.id || (!a.id && a.name === data.name));
-                if (idx >= 0) {
-                    activitiesData[idx] = result.activity;
-                    activitiesTable.updateData([result.activity]);
-                }
-            }
-            showToast('Activity saved successfully', 'success');
-        } else {
-            showToast(result.error || 'Failed to save activity', 'error');
-            refreshActivities();
-        }
-    } catch (err) {
-        showToast('Error saving activity: ' + err.message, 'error');
-        refreshActivities();
-    }
-}
-
-async function deleteActivity(id, name) {
-    if (!confirm(`Delete activity "${name}"?\n\nThis cannot be undone.`)) return;
-
-    try {
-        const response = await fetch(`/admin/practices/activities/${id}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast(result.message, 'success');
-            refreshActivities();
-        } else {
-            showToast(result.error || 'Failed to delete activity', 'error');
-        }
-    } catch (err) {
-        showToast('Error deleting activity: ' + err.message, 'error');
-    }
-}
-
-function addNewActivity() {
-    const newActivity = {
-        id: null,
-        name: 'New Activity',
-        gear_required: [],
-        practice_count: 0
-    };
-    activitiesTable.addRow(newActivity, true);
-    setTimeout(() => {
-        const rows = activitiesTable.getRows();
-        if (rows.length > 0) rows[0].getCell('name').edit();
-    }, 100);
-}
-
-async function refreshActivities() {
+async function cfgRefreshActivities() {
     await loadActivities();
-    activitiesTable.setData(activitiesData);
+    cfgRenderActivities();
 }
 
-// ============================================================================
-// Types Tab
-// ============================================================================
-function initTypesTable() {
-    typesTable = new Tabulator("#types-table", {
-        data: typesData,
-        layout: "fitColumns",
-        height: "calc(100vh - 380px)",
-        columns: [
-            {
-                title: "Name",
-                field: "name",
-                minWidth: 200,
-                editor: "input",
-                validator: "required",
-                cellEdited: (cell) => saveType(cell.getRow().getData())
-            },
-            {
-                title: "Fitness Goals (comma-separated)",
-                field: "fitness_goals",
-                minWidth: 300,
-                editor: "input",
-                formatter: (cell) => formatJsonArray(cell.getValue()),
-                cellEdited: (cell) => {
-                    const data = cell.getRow().getData();
-                    // Convert string to array
-                    const rawValue = cell.getValue();
-                    if (typeof rawValue === 'string') {
-                        data.fitness_goals = rawValue.split(',').map(s => s.trim()).filter(s => s);
-                    }
-                    saveType(data);
-                }
-            },
-            {
-                title: "Has Intervals",
-                field: "has_intervals",
-                width: 110,
-                hozAlign: "center",
-                editor: "tickCross",
-                formatter: "tickCross",
-                cellEdited: (cell) => saveType(cell.getRow().getData())
-            },
-            {
-                title: "Practices",
-                field: "practice_count",
-                width: 90,
-                hozAlign: "center",
-                formatter: (cell) => formatCount(cell.getValue())
-            },
-            {
-                title: "Actions",
-                width: 100,
-                hozAlign: "center",
-                headerSort: false,
-                formatter: (cell) => formatDeleteButton(cell, 'Type', 'practice_count')
-            }
-        ]
-    });
-}
-
-async function saveType(data) {
-    const url = data.id ? `/admin/practices/types/${data.id}/edit` : '/admin/practices/types/create';
-
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: data.name,
-                fitness_goals: data.fitness_goals,
-                has_intervals: data.has_intervals
-            })
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            if (result.type) {
-                const idx = typesData.findIndex(t => t.id === data.id || (!t.id && t.name === data.name));
-                if (idx >= 0) {
-                    typesData[idx] = result.type;
-                    typesTable.updateData([result.type]);
-                }
-            }
-            showToast('Type saved successfully', 'success');
-        } else {
-            showToast(result.error || 'Failed to save type', 'error');
-            refreshTypes();
-        }
-    } catch (err) {
-        showToast('Error saving type: ' + err.message, 'error');
-        refreshTypes();
-    }
-}
-
-async function deleteType(id, name) {
-    if (!confirm(`Delete type "${name}"?\n\nThis cannot be undone.`)) return;
-
-    try {
-        const response = await fetch(`/admin/practices/types/${id}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast(result.message, 'success');
-            refreshTypes();
-        } else {
-            showToast(result.error || 'Failed to delete type', 'error');
-        }
-    } catch (err) {
-        showToast('Error deleting type: ' + err.message, 'error');
-    }
-}
-
-function addNewType() {
-    const newType = {
-        id: null,
-        name: 'New Type',
-        fitness_goals: [],
-        has_intervals: false,
-        practice_count: 0
-    };
-    typesTable.addRow(newType, true);
-    setTimeout(() => {
-        const rows = typesTable.getRows();
-        if (rows.length > 0) rows[0].getCell('name').edit();
-    }, 100);
-}
-
-async function refreshTypes() {
+async function cfgRefreshTypes() {
     await loadTypes();
-    typesTable.setData(typesData);
+    cfgRenderTypes();
+}
+
+async function cfgRefreshSocialLocations() {
+    await loadSocialLocations();
+    cfgRenderSocialLocations();
 }
 
 // ============================================================================
-// Social Locations Tab
+// Loading / Error / Empty states
 // ============================================================================
-function initSocialLocationsTable() {
-    socialLocationsTable = new Tabulator("#social-locations-table", {
-        data: socialLocationsData,
-        layout: "fitColumns",
-        height: "calc(100vh - 380px)",
-        columns: [
-            {
-                title: "Name",
-                field: "name",
-                minWidth: 200,
-                editor: "input",
-                validator: "required",
-                cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
-            },
-            {
-                title: "Address",
-                field: "address",
-                minWidth: 250,
-                editor: "input",
-                cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
-            },
-            {
-                title: "Google Maps URL",
-                field: "google_maps_url",
-                minWidth: 200,
-                editor: "input",
-                formatter: (cell) => {
-                    const url = cell.getValue();
-                    if (!url) return '<span class="text-gray-500">—</span>';
-                    return `<a href="${url}" target="_blank" class="text-tcsc-navy hover:underline">View Map</a>`;
-                },
-                cellEdited: (cell) => saveSocialLocation(cell.getRow().getData())
-            },
-            {
-                title: "Linked Practices",
-                field: "practice_count",
-                width: 130,
-                hozAlign: "center",
-                formatter: (cell) => formatCount(cell.getValue())
-            },
-            {
-                title: "Actions",
-                width: 100,
-                hozAlign: "center",
-                headerSort: false,
-                formatter: (cell) => formatDeleteButton(cell, 'SocialLocation', 'practice_count')
+function cfgShowLoading(mountId, entityLabel) {
+    const el = document.getElementById(mountId);
+    if (!el) return;
+    el.innerHTML = '';
+    el.appendChild(AdminUI.el('p', { class: 'cfg-list-loading text-sm text-gray-400 py-8 text-center' }, ['Loading...']));
+}
+
+function cfgShowError(mountId, entityLabel, refreshFnName) {
+    const el = document.getElementById(mountId);
+    if (!el) return;
+    el.innerHTML = '';
+    const retryBtn = AdminUI.el('button', {
+        class: 'underline',
+        onclick: function() { window[refreshFnName](); }
+    }, ['Retry']);
+    const p = AdminUI.el('p', { class: 'cfg-list-error text-sm text-red-600 py-8 text-center' }, [
+        'Failed to load ' + entityLabel + '. ',
+        retryBtn
+    ]);
+    el.appendChild(p);
+}
+
+function cfgShowEmpty(mountId, entityLabel, addLabel) {
+    const el = document.getElementById(mountId);
+    if (!el) return;
+    el.innerHTML = '';
+    el.appendChild(AdminUI.el('p', { class: 'cfg-list-empty text-sm text-gray-400 py-8 text-center' },
+        ['No ' + entityLabel + ' yet. Click "Add ' + addLabel + '" to create one.']));
+}
+
+// ============================================================================
+// Chip Input Component
+// ============================================================================
+function cfgChipInput(mountEl, initialArray, onChange) {
+    const chips = (initialArray || []).slice();
+    mountEl.innerHTML = '';
+
+    function renderChips() {
+        // Remove all except the add-input (which will be re-appended)
+        while (mountEl.firstChild) mountEl.removeChild(mountEl.firstChild);
+
+        chips.forEach(function(text, i) {
+            const chip = AdminUI.el('span', {
+                class: 'cfg-chip',
+                role: 'option',
+                'aria-label': text + ', remove'
+            }, [
+                text,
+                AdminUI.el('button', {
+                    class: 'cfg-chip-remove',
+                    type: 'button',
+                    'aria-label': 'Remove ' + text,
+                    onclick: function() {
+                        chips.splice(i, 1);
+                        renderChips();
+                        onChange(chips.slice());
+                    }
+                }, ['×'])
+            ]);
+            mountEl.appendChild(chip);
+        });
+
+        const addInput = AdminUI.el('input', {
+            class: 'cfg-chip-add-input',
+            type: 'text',
+            'aria-label': 'Add item',
+            'aria-describedby': mountEl.id ? mountEl.id + '-hint' : null,
+            placeholder: chips.length === 0 ? 'Add item...' : ''
+        }, []);
+
+        addInput.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ',') {
+                e.preventDefault();
+                const val = addInput.value.trim();
+                if (val && !chips.includes(val)) {
+                    chips.push(val);
+                    renderChips();
+                    onChange(chips.slice());
+                }
+                addInput.value = '';
+            } else if (e.key === 'Backspace' && addInput.value === '' && chips.length > 0) {
+                chips.pop();
+                renderChips();
+                onChange(chips.slice());
             }
-        ]
+        });
+
+        addInput.addEventListener('blur', function() {
+            const val = addInput.value.trim();
+            if (val && !chips.includes(val)) {
+                chips.push(val);
+                renderChips();
+                onChange(chips.slice());
+            }
+        });
+
+        mountEl.appendChild(addInput);
+
+        // Click on container focuses the input
+        mountEl.onclick = function(e) {
+            if (e.target === mountEl || e.target.classList.contains('cfg-chip')) {
+                addInput.focus();
+            }
+        };
+    }
+
+    renderChips();
+    return { getChips: function() { return chips.slice(); } };
+}
+
+// ============================================================================
+// Generic cfgDelete
+// ============================================================================
+async function cfgDelete(entityKey, record, dataArray, countId, refreshFn) {
+    if (!confirm('Delete "' + record.name + '"? This cannot be undone.')) return;
+    try {
+        await AdminUI.mutate('/admin/practices/' + entityKey + '/' + record.id + '/delete', {});
+        const idx = dataArray.findIndex(function(r) { return r.id === record.id; });
+        if (idx >= 0) dataArray.splice(idx, 1);
+        const countEl = document.getElementById(countId);
+        if (countEl) countEl.textContent = dataArray.length;
+        // Re-render after deletion
+        await refreshFn();
+    } catch (err) {
+        // mutate toasted already
+    }
+}
+
+// ============================================================================
+// Generic cfgAddDraft
+// ============================================================================
+function cfgAddDraft(entity) {
+    const cfg = CFG_ENTITIES[entity];
+    if (!cfg) return;
+
+    // Prevent duplicate drafts
+    const existingDraft = cfg.data.find(function(r) { return r.id === null; });
+    if (existingDraft) {
+        // Focus the existing draft name field
+        const mountEl = document.getElementById(cfg.mountId);
+        if (mountEl) {
+            const input = mountEl.querySelector('.cfg-field-name');
+            if (input) input.focus();
+        }
+        return;
+    }
+
+    const draft = Object.assign({ id: null, practice_count: 0, _draftKey: Date.now() }, cfg.emptyRecord);
+    cfg.data.unshift(draft);
+    const countEl = document.getElementById(cfg.countId);
+    // Don't update count for unsaved draft
+
+    cfg.renderFn();
+
+    // Focus the name input in the first card (draft)
+    requestAnimationFrame(function() {
+        const mountEl = document.getElementById(cfg.mountId);
+        if (mountEl) {
+            const input = mountEl.querySelector('.cfg-card-draft .cfg-field-name');
+            if (input) input.focus();
+        }
     });
 }
 
-async function saveSocialLocation(data) {
-    const url = data.id ? `/admin/practices/social-locations/${data.id}/edit` : '/admin/practices/social-locations/create';
+// ============================================================================
+// Shared card builder helper
+// ============================================================================
+function cfgBuildRail(record, entityKey, dataArray, countId, refreshFn) {
+    const count = record.practice_count || 0;
+    const badge = AdminUI.statusBadge(String(count), count > 0 ? 'info' : 'neutral');
+    const srLabel = AdminUI.el('span', { class: 'sr-only' }, [count + ' practice(s)']);
 
-    try {
-        const response = await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                name: data.name,
-                address: data.address,
-                google_maps_url: data.google_maps_url
-            })
-        });
+    const guardId = 'cfg-delete-guard-' + (record.id || 'draft');
+    const guardSpan = AdminUI.el('span', {
+        id: guardId,
+        class: 'sr-only'
+    }, ['Cannot delete - ' + count + ' practice(s) reference this']);
 
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            if (result.social_location) {
-                const idx = socialLocationsData.findIndex(s => s.id === data.id || (!s.id && s.name === data.name));
-                if (idx >= 0) {
-                    socialLocationsData[idx] = result.social_location;
-                    socialLocationsTable.updateData([result.social_location]);
-                }
+    let deleteBtn;
+    if (count === 0 && record.id) {
+        deleteBtn = AdminUI.el('button', {
+            class: 'tbl-btn tbl-btn-danger cfg-delete',
+            type: 'button',
+            onclick: function() {
+                cfgDelete(entityKey, record, dataArray, countId, refreshFn);
             }
-            showToast('Social location saved successfully', 'success');
-        } else {
-            showToast(result.error || 'Failed to save social location', 'error');
-            refreshSocialLocations();
-        }
-    } catch (err) {
-        showToast('Error saving social location: ' + err.message, 'error');
-        refreshSocialLocations();
+        }, ['Delete']);
+    } else if (!record.id) {
+        // Draft - allow removal without confirm
+        deleteBtn = AdminUI.el('button', {
+            class: 'tbl-btn tbl-btn-secondary cfg-delete',
+            type: 'button',
+            onclick: function() {
+                const idx = dataArray.findIndex(function(r) { return r.id === null && r._draftKey === record._draftKey; });
+                if (idx >= 0) dataArray.splice(idx, 1);
+                CFG_ENTITIES[entityKey].renderFn();
+            }
+        }, ['Discard']);
+    } else {
+        deleteBtn = AdminUI.el('button', {
+            class: 'tbl-btn tbl-btn-secondary cfg-delete',
+            type: 'button',
+            disabled: '',
+            title: 'Cannot delete - ' + count + ' practice(s) reference this',
+            'aria-disabled': 'true',
+            'aria-describedby': guardId
+        }, ['Delete']);
     }
-}
 
-async function deleteSocialLocation(id, name) {
-    if (!confirm(`Delete social location "${name}"?\n\nThis cannot be undone.`)) return;
-
-    try {
-        const response = await fetch(`/admin/practices/social-locations/${id}/delete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' }
-        });
-
-        const result = await response.json();
-
-        if (response.ok && result.success) {
-            showToast(result.message, 'success');
-            refreshSocialLocations();
-        } else {
-            showToast(result.error || 'Failed to delete social location', 'error');
-        }
-    } catch (err) {
-        showToast('Error deleting social location: ' + err.message, 'error');
-    }
-}
-
-function addNewSocialLocation() {
-    const newLoc = {
-        id: null,
-        name: 'New Social Location',
-        address: '',
-        google_maps_url: '',
-        practice_count: 0
-    };
-    socialLocationsTable.addRow(newLoc, true);
-    setTimeout(() => {
-        const rows = socialLocationsTable.getRows();
-        if (rows.length > 0) rows[0].getCell('name').edit();
-    }, 100);
-}
-
-async function refreshSocialLocations() {
-    await loadSocialLocations();
-    socialLocationsTable.setData(socialLocationsData);
+    const rail = AdminUI.el('div', { class: 'cfg-rail' }, [badge, srLabel, guardSpan, deleteBtn]);
+    return rail;
 }
 
 // ============================================================================
-// Status Reference Tab (Read-Only)
+// Inline field helpers
+// ============================================================================
+function cfgTextField(record, field, props, onSave) {
+    const input = AdminUI.el('input', Object.assign({
+        type: 'text',
+        class: 'cfg-field' + (field === 'name' ? ' cfg-field-name' : ''),
+        value: record[field] || ''
+    }, props), []);
+    input.dataset.original = record[field] || '';
+
+    input.addEventListener('input', function() {
+        input.classList.remove('cfg-field-error');
+    });
+
+    input.addEventListener('blur', function() {
+        const val = input.value.trim();
+        if (val === input.dataset.original) return;
+        onSave(field, val, input);
+    });
+
+    // Escape to discard draft (only for empty name on draft)
+    if (field === 'name') {
+        input.addEventListener('keydown', function(e) {
+            if (e.key === 'Escape' && !record.id && !input.value.trim()) {
+                const cfg = cfgEntityForRecord(record);
+                if (cfg) {
+                    const idx = cfg.data.findIndex(function(r) { return r.id === null && r._draftKey === record._draftKey; });
+                    if (idx >= 0) cfg.data.splice(idx, 1);
+                    cfg.renderFn();
+                }
+            }
+        });
+    }
+
+    return input;
+}
+
+function cfgNumberField(record, field, props, onSave) {
+    const input = AdminUI.el('input', Object.assign({
+        type: 'number',
+        class: 'cfg-field cfg-field-narrow',
+        step: '0.0001',
+        value: record[field] != null ? String(record[field]) : ''
+    }, props), []);
+    input.dataset.original = record[field] != null ? String(record[field]) : '';
+
+    input.addEventListener('input', function() {
+        input.classList.remove('cfg-field-error');
+    });
+
+    input.addEventListener('blur', function() {
+        const raw = input.value.trim();
+        const val = raw === '' ? null : parseFloat(raw);
+        const orig = input.dataset.original === '' ? null : parseFloat(input.dataset.original);
+        if (val === orig) return;
+        onSave(field, val, input);
+    });
+
+    return input;
+}
+
+function cfgUrlField(record, field, props, onSave, onUrlChange) {
+    const input = AdminUI.el('input', Object.assign({
+        type: 'url',
+        class: 'cfg-field cfg-field-wide',
+        value: record[field] || ''
+    }, props), []);
+    input.dataset.original = record[field] || '';
+
+    input.addEventListener('input', function() {
+        input.classList.remove('cfg-field-error');
+        if (onUrlChange) onUrlChange(input.value);
+    });
+
+    input.addEventListener('blur', function() {
+        const val = input.value.trim();
+        if (val === input.dataset.original) return;
+        // Validate: if non-empty, must start with http
+        if (val && !val.startsWith('http')) {
+            showToast('URL must start with http', 'error');
+            input.classList.add('cfg-field-error');
+            return;
+        }
+        onSave(field, val, input);
+    });
+
+    return input;
+}
+
+// Look up which cfg entity a record belongs to
+function cfgEntityForRecord(record) {
+    for (const key of Object.keys(CFG_ENTITIES)) {
+        const cfg = CFG_ENTITIES[key];
+        if (cfg.data.includes(record)) return cfg;
+    }
+    return null;
+}
+
+// ============================================================================
+// LOCATIONS
+// ============================================================================
+function cfgRenderLocations() {
+    const mount = document.getElementById('cfg-locations-list');
+    if (!mount) return;
+    mount.innerHTML = '';
+
+    if (locationsData.length === 0) {
+        cfgShowEmpty('cfg-locations-list', 'locations', 'Location');
+        return;
+    }
+
+    locationsData.forEach(function(record) {
+        mount.appendChild(cfgBuildLocationCard(record));
+    });
+}
+
+function cfgBuildLocationCard(record) {
+    const isDraft = !record.id;
+
+    function onSave(field, val, input) {
+        const payload = {
+            name: record.name,
+            spot: record.spot,
+            address: record.address,
+            google_maps_url: record.google_maps_url,
+            latitude: record.latitude,
+            longitude: record.longitude,
+            parking_notes: record.parking_notes
+        };
+        payload[field] = val;
+
+        // Required name check
+        if (field === 'name' && !val) {
+            showToast('Name is required', 'error');
+            input.classList.add('cfg-field-error');
+            return;
+        }
+
+        // Optimistically update local record
+        const prevVal = record[field];
+        record[field] = val;
+
+        AdminUI.mutate(
+            record.id
+                ? '/admin/practices/locations/' + record.id + '/edit'
+                : '/admin/practices/locations/create',
+            payload
+        ).then(function(result) {
+            if (result.location) {
+                const idx = locationsData.indexOf(record);
+                if (idx >= 0) locationsData[idx] = result.location;
+                if (!record.id && result.location.id) {
+                    const countEl = document.getElementById('location-count');
+                    if (countEl) countEl.textContent = locationsData.length;
+                }
+                input.dataset.original = String(val == null ? '' : val);
+                // Re-render to update id on card (for map toggle etc.)
+                cfgRenderLocations();
+            }
+        }).catch(function() {
+            record[field] = prevVal;
+            input.value = prevVal != null ? String(prevVal) : '';
+            input.dataset.original = prevVal != null ? String(prevVal) : '';
+            input.classList.add('cfg-field-error');
+        });
+    }
+
+    const nameField = cfgTextField(record, 'name', { 'aria-label': 'Location name', required: '', 'aria-required': 'true' }, onSave);
+    const spotField = cfgTextField(record, 'spot', { 'aria-label': 'Spot', placeholder: 'Spot' }, onSave);
+    const addrField = cfgTextField(record, 'address', { 'aria-label': 'Address', placeholder: 'Address', class: 'cfg-field cfg-field-wide' }, onSave);
+
+    // google_maps_url - view map link
+    let mapsLink = null;
+    function updateMapsLink(url) {
+        if (mapsLink) {
+            if (url && url.startsWith('http')) {
+                mapsLink.href = url;
+                mapsLink.hidden = false;
+            } else {
+                mapsLink.hidden = true;
+            }
+        }
+    }
+    const mapsUrlField = cfgUrlField(record, 'google_maps_url', {
+        'aria-label': 'Google Maps URL',
+        placeholder: 'Google Maps URL',
+        class: 'cfg-field cfg-field-wide'
+    }, onSave, updateMapsLink);
+
+    mapsLink = AdminUI.el('a', {
+        href: record.google_maps_url || '#',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        class: 'cfg-map-link text-xs text-tcsc-navy hover:underline',
+        'aria-label': 'View map (opens in new tab)',
+        hidden: (!record.google_maps_url || !record.google_maps_url.startsWith('http')) ? '' : null
+    }, ['View Map']);
+
+    const latField = cfgNumberField(record, 'latitude', { 'aria-label': 'Latitude', placeholder: 'Lat' }, onSave);
+    const lngField = cfgNumberField(record, 'longitude', { 'aria-label': 'Longitude', placeholder: 'Lng' }, onSave);
+    const parkingField = cfgTextField(record, 'parking_notes', { 'aria-label': 'Parking notes', placeholder: 'Parking notes' }, onSave);
+
+    const fieldsDiv = AdminUI.el('div', { class: 'cfg-fields' }, [
+        nameField,
+        isDraft ? AdminUI.el('span', { class: 'cfg-draft-indicator text-xs text-gray-400 ml-1' }, ['(unsaved)']) : null,
+        spotField,
+        addrField,
+        mapsUrlField,
+        mapsLink,
+        latField,
+        lngField,
+        parkingField
+    ]);
+
+    const rail = cfgBuildRail(record, 'locations', locationsData, 'location-count', cfgRefreshLocations);
+
+    // Main row
+    const mainRow = AdminUI.el('div', { class: 'flex items-start gap-2 flex-1 min-w-0 flex-wrap' }, [fieldsDiv, rail]);
+
+    const cardChildren = [mainRow];
+
+    // Map expansion (only when lat+lng are present AND record has an id)
+    if (record.id && record.latitude != null && record.longitude != null) {
+        const mapPreviewId = 'cfg-map-' + record.id;
+        const mapPreview = AdminUI.el('div', {
+            id: mapPreviewId,
+            class: 'cfg-map-preview',
+            hidden: ''
+        }, []);
+
+        const mapToggle = AdminUI.el('button', {
+            class: 'cfg-map-toggle tbl-btn tbl-btn-secondary',
+            type: 'button',
+            'aria-expanded': 'false',
+            'aria-controls': mapPreviewId
+        }, ['Map']);
+
+        let mapImgWritten = false;
+        mapToggle.addEventListener('click', function() {
+            const expanded = mapToggle.getAttribute('aria-expanded') === 'true';
+            if (!expanded) {
+                if (!mapImgWritten) {
+                    const lat = record.latitude;
+                    const lng = record.longitude;
+                    const imgSrc = 'https://staticmap.openstreetmap.de/staticmap.php?center=' + lat + ',' + lng + '&zoom=14&size=400x120&markers=' + lat + ',' + lng + ',red-pushpin';
+                    const mapLink = AdminUI.el('a', {
+                        href: 'https://www.openstreetmap.org/?mlat=' + lat + '&mlon=' + lng + '&zoom=15',
+                        target: '_blank',
+                        rel: 'noopener noreferrer',
+                        'aria-label': 'View ' + (record.name || 'location') + ' on OpenStreetMap (opens in new tab)'
+                    }, [
+                        AdminUI.el('img', {
+                            src: imgSrc,
+                            alt: 'Map showing location of ' + (record.name || 'location'),
+                            class: 'cfg-map-img',
+                            loading: 'lazy',
+                            width: '400',
+                            height: '120'
+                        }, [])
+                    ]);
+                    mapPreview.appendChild(mapLink);
+                    mapImgWritten = true;
+                }
+                mapPreview.removeAttribute('hidden');
+                mapToggle.setAttribute('aria-expanded', 'true');
+                mapToggle.textContent = 'Hide Map';
+            } else {
+                mapPreview.setAttribute('hidden', '');
+                mapToggle.setAttribute('aria-expanded', 'false');
+                mapToggle.textContent = 'Map';
+            }
+        });
+
+        const mapExpansion = AdminUI.el('div', { class: 'cfg-map-expansion' }, [mapToggle, mapPreview]);
+        cardChildren.push(mapExpansion);
+    }
+
+    const card = AdminUI.el('div', {
+        class: 'cfg-card' + (isDraft ? ' cfg-card-draft' : ''),
+        role: 'listitem'
+    }, cardChildren);
+
+    return card;
+}
+
+// ============================================================================
+// ACTIVITIES
+// ============================================================================
+function cfgRenderActivities() {
+    const mount = document.getElementById('cfg-activities-list');
+    if (!mount) return;
+    mount.innerHTML = '';
+
+    if (activitiesData.length === 0) {
+        cfgShowEmpty('cfg-activities-list', 'activities', 'Activity');
+        return;
+    }
+
+    activitiesData.forEach(function(record) {
+        mount.appendChild(cfgBuildActivityCard(record));
+    });
+}
+
+function cfgBuildActivityCard(record) {
+    const isDraft = !record.id;
+
+    function doSave(nameVal, gearVal) {
+        const payload = {
+            name: nameVal,
+            gear_required: gearVal
+        };
+
+        const prevName = record.name;
+        const prevGear = record.gear_required;
+        record.name = nameVal;
+        record.gear_required = gearVal;
+
+        AdminUI.mutate(
+            record.id
+                ? '/admin/practices/activities/' + record.id + '/edit'
+                : '/admin/practices/activities/create',
+            payload
+        ).then(function(result) {
+            if (result.activity) {
+                const idx = activitiesData.indexOf(record);
+                if (idx >= 0) activitiesData[idx] = result.activity;
+                if (!record.id && result.activity.id) {
+                    const countEl = document.getElementById('activity-count');
+                    if (countEl) countEl.textContent = activitiesData.length;
+                }
+                cfgRenderActivities();
+            }
+        }).catch(function() {
+            record.name = prevName;
+            record.gear_required = prevGear;
+            cfgRefreshActivities();
+        });
+    }
+
+    let currentGear = (record.gear_required || []).slice();
+
+    const nameField = AdminUI.el('input', {
+        type: 'text',
+        class: 'cfg-field cfg-field-name',
+        'aria-label': 'Activity name',
+        required: '',
+        'aria-required': 'true',
+        value: record.name || ''
+    }, []);
+    nameField.dataset.original = record.name || '';
+
+    nameField.addEventListener('input', function() { nameField.classList.remove('cfg-field-error'); });
+    nameField.addEventListener('blur', function() {
+        const val = nameField.value.trim();
+        if (val === nameField.dataset.original) return;
+        if (!val) {
+            showToast('Name is required', 'error');
+            nameField.classList.add('cfg-field-error');
+            return;
+        }
+        nameField.dataset.original = val;
+        doSave(val, currentGear);
+    });
+    nameField.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isDraft && !nameField.value.trim()) {
+            const idx = activitiesData.findIndex(function(r) { return r.id === null && r._draftKey === record._draftKey; });
+            if (idx >= 0) activitiesData.splice(idx, 1);
+            cfgRenderActivities();
+        }
+    });
+
+    const gearLabel = AdminUI.el('span', { class: 'text-xs text-gray-500' }, ['Gear:']);
+    const chipMountId = 'gear-chips-' + (record.id || 'draft-' + (record._draftKey || ''));
+    const chipMount = AdminUI.el('div', {
+        id: chipMountId,
+        class: 'cfg-chip-editor',
+        role: 'group',
+        'aria-label': 'Gear required'
+    }, []);
+
+    cfgChipInput(chipMount, record.gear_required || [], function(arr) {
+        currentGear = arr;
+        doSave(nameField.value.trim() || record.name, arr);
+    });
+
+    const fieldsDiv = AdminUI.el('div', { class: 'cfg-fields' }, [
+        nameField,
+        isDraft ? AdminUI.el('span', { class: 'cfg-draft-indicator text-xs text-gray-400 ml-1' }, ['(unsaved)']) : null,
+        gearLabel,
+        chipMount
+    ]);
+
+    const rail = cfgBuildRail(record, 'activities', activitiesData, 'activity-count', cfgRefreshActivities);
+
+    const card = AdminUI.el('div', {
+        class: 'cfg-card' + (isDraft ? ' cfg-card-draft' : ''),
+        role: 'listitem'
+    }, [fieldsDiv, rail]);
+
+    return card;
+}
+
+// ============================================================================
+// TYPES
+// ============================================================================
+function cfgRenderTypes() {
+    const mount = document.getElementById('cfg-types-list');
+    if (!mount) return;
+    mount.innerHTML = '';
+
+    if (typesData.length === 0) {
+        cfgShowEmpty('cfg-types-list', 'types', 'Type');
+        return;
+    }
+
+    typesData.forEach(function(record) {
+        mount.appendChild(cfgBuildTypeCard(record));
+    });
+}
+
+function cfgBuildTypeCard(record) {
+    const isDraft = !record.id;
+
+    function doSave(nameVal, goalsVal, intervalsVal) {
+        const payload = {
+            name: nameVal,
+            fitness_goals: goalsVal,
+            has_intervals: intervalsVal
+        };
+
+        const prevName = record.name;
+        const prevGoals = record.fitness_goals;
+        const prevIntervals = record.has_intervals;
+        record.name = nameVal;
+        record.fitness_goals = goalsVal;
+        record.has_intervals = intervalsVal;
+
+        AdminUI.mutate(
+            record.id
+                ? '/admin/practices/types/' + record.id + '/edit'
+                : '/admin/practices/types/create',
+            payload
+        ).then(function(result) {
+            if (result.type) {
+                const idx = typesData.indexOf(record);
+                if (idx >= 0) typesData[idx] = result.type;
+                if (!record.id && result.type.id) {
+                    const countEl = document.getElementById('type-count');
+                    if (countEl) countEl.textContent = typesData.length;
+                }
+                cfgRenderTypes();
+            }
+        }).catch(function() {
+            record.name = prevName;
+            record.fitness_goals = prevGoals;
+            record.has_intervals = prevIntervals;
+            cfgRefreshTypes();
+        });
+    }
+
+    let currentGoals = (record.fitness_goals || []).slice();
+    let currentIntervals = !!record.has_intervals;
+
+    const nameField = AdminUI.el('input', {
+        type: 'text',
+        class: 'cfg-field cfg-field-name',
+        'aria-label': 'Type name',
+        required: '',
+        'aria-required': 'true',
+        value: record.name || ''
+    }, []);
+    nameField.dataset.original = record.name || '';
+
+    nameField.addEventListener('input', function() { nameField.classList.remove('cfg-field-error'); });
+    nameField.addEventListener('blur', function() {
+        const val = nameField.value.trim();
+        if (val === nameField.dataset.original) return;
+        if (!val) {
+            showToast('Name is required', 'error');
+            nameField.classList.add('cfg-field-error');
+            return;
+        }
+        nameField.dataset.original = val;
+        doSave(val, currentGoals, currentIntervals);
+    });
+    nameField.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isDraft && !nameField.value.trim()) {
+            const idx = typesData.findIndex(function(r) { return r.id === null && r._draftKey === record._draftKey; });
+            if (idx >= 0) typesData.splice(idx, 1);
+            cfgRenderTypes();
+        }
+    });
+
+    const goalsLabel = AdminUI.el('span', { class: 'text-xs text-gray-500' }, ['Goals:']);
+    const chipMount = AdminUI.el('div', {
+        class: 'cfg-chip-editor',
+        role: 'group',
+        'aria-label': 'Fitness goals'
+    }, []);
+
+    cfgChipInput(chipMount, record.fitness_goals || [], function(arr) {
+        currentGoals = arr;
+        doSave(nameField.value.trim() || record.name, arr, currentIntervals);
+    });
+
+    // has_intervals toggle
+    const toggleInput = AdminUI.el('input', {
+        type: 'checkbox',
+        class: 'cfg-toggle-input',
+        'aria-label': 'Has intervals'
+    }, []);
+    if (record.has_intervals) toggleInput.checked = true;
+    toggleInput.dataset.original = record.has_intervals ? 'true' : 'false';
+
+    toggleInput.addEventListener('change', function() {
+        currentIntervals = toggleInput.checked;
+        doSave(nameField.value.trim() || record.name, currentGoals, currentIntervals);
+    });
+
+    const toggleLabel = AdminUI.el('label', { class: 'cfg-toggle-label' }, [
+        toggleInput,
+        AdminUI.el('span', { class: 'cfg-toggle-slider', 'aria-hidden': 'true' }, []),
+        AdminUI.el('span', { class: 'cfg-toggle-text text-xs text-gray-600' }, ['Intervals'])
+    ]);
+
+    const fieldsDiv = AdminUI.el('div', { class: 'cfg-fields' }, [
+        nameField,
+        isDraft ? AdminUI.el('span', { class: 'cfg-draft-indicator text-xs text-gray-400 ml-1' }, ['(unsaved)']) : null,
+        goalsLabel,
+        chipMount,
+        toggleLabel
+    ]);
+
+    const rail = cfgBuildRail(record, 'types', typesData, 'type-count', cfgRefreshTypes);
+
+    const card = AdminUI.el('div', {
+        class: 'cfg-card' + (isDraft ? ' cfg-card-draft' : ''),
+        role: 'listitem'
+    }, [fieldsDiv, rail]);
+
+    return card;
+}
+
+// ============================================================================
+// SOCIAL LOCATIONS
+// ============================================================================
+function cfgRenderSocialLocations() {
+    const mount = document.getElementById('cfg-social-list');
+    if (!mount) return;
+    mount.innerHTML = '';
+
+    if (socialLocationsData.length === 0) {
+        cfgShowEmpty('cfg-social-list', 'social locations', 'Social Location');
+        return;
+    }
+
+    socialLocationsData.forEach(function(record) {
+        mount.appendChild(cfgBuildSocialCard(record));
+    });
+}
+
+function cfgBuildSocialCard(record) {
+    const isDraft = !record.id;
+
+    function onSave(field, val, input) {
+        const payload = {
+            name: record.name,
+            address: record.address,
+            google_maps_url: record.google_maps_url
+        };
+        payload[field] = val;
+
+        if (field === 'name' && !val) {
+            showToast('Name is required', 'error');
+            input.classList.add('cfg-field-error');
+            return;
+        }
+
+        const prevVal = record[field];
+        record[field] = val;
+
+        AdminUI.mutate(
+            record.id
+                ? '/admin/practices/social-locations/' + record.id + '/edit'
+                : '/admin/practices/social-locations/create',
+            payload
+        ).then(function(result) {
+            if (result.social_location) {
+                const idx = socialLocationsData.indexOf(record);
+                if (idx >= 0) socialLocationsData[idx] = result.social_location;
+                if (!record.id && result.social_location.id) {
+                    const countEl = document.getElementById('social-location-count');
+                    if (countEl) countEl.textContent = socialLocationsData.length;
+                }
+                input.dataset.original = String(val == null ? '' : val);
+                cfgRenderSocialLocations();
+            }
+        }).catch(function() {
+            record[field] = prevVal;
+            input.value = prevVal != null ? String(prevVal) : '';
+            input.dataset.original = prevVal != null ? String(prevVal) : '';
+            input.classList.add('cfg-field-error');
+        });
+    }
+
+    const nameField = cfgTextField(record, 'name', { 'aria-label': 'Social location name', required: '', 'aria-required': 'true' }, onSave);
+    const addrField = cfgTextField(record, 'address', { 'aria-label': 'Address', placeholder: 'Address', class: 'cfg-field cfg-field-wide' }, onSave);
+
+    // View map link for social location
+    let viewMapLink = null;
+    function updateViewMapLink(url) {
+        if (viewMapLink) {
+            if (url && url.startsWith('http')) {
+                viewMapLink.href = url;
+                viewMapLink.hidden = false;
+            } else {
+                viewMapLink.hidden = true;
+            }
+        }
+    }
+
+    const mapsUrlField = cfgUrlField(record, 'google_maps_url', {
+        'aria-label': 'Google Maps URL',
+        placeholder: 'https://maps.google.com/...',
+        class: 'cfg-field cfg-field-wide'
+    }, onSave, updateViewMapLink);
+
+    viewMapLink = AdminUI.el('a', {
+        href: record.google_maps_url || '#',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        class: 'cfg-map-link text-xs text-tcsc-navy hover:underline',
+        'aria-label': 'View map (opens in new tab)',
+        hidden: (!record.google_maps_url || !record.google_maps_url.startsWith('http')) ? '' : null
+    }, ['View Map']);
+
+    // Escape to discard draft
+    nameField.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape' && isDraft && !nameField.value.trim()) {
+            const idx = socialLocationsData.findIndex(function(r) { return r.id === null && r._draftKey === record._draftKey; });
+            if (idx >= 0) socialLocationsData.splice(idx, 1);
+            cfgRenderSocialLocations();
+        }
+    });
+
+    const fieldsDiv = AdminUI.el('div', { class: 'cfg-fields' }, [
+        nameField,
+        isDraft ? AdminUI.el('span', { class: 'cfg-draft-indicator text-xs text-gray-400 ml-1' }, ['(unsaved)']) : null,
+        addrField,
+        mapsUrlField,
+        viewMapLink
+    ]);
+
+    const rail = cfgBuildRail(record, 'social-locations', socialLocationsData, 'social-location-count', cfgRefreshSocialLocations);
+
+    const card = AdminUI.el('div', {
+        class: 'cfg-card' + (isDraft ? ' cfg-card-draft' : ''),
+        role: 'listitem'
+    }, [fieldsDiv, rail]);
+
+    return card;
+}
+
+// ============================================================================
+// Entity registry (for generic cfgAddDraft dispatch)
+// ============================================================================
+const CFG_ENTITIES = {
+    locations: {
+        data: locationsData,
+        mountId: 'cfg-locations-list',
+        countId: 'location-count',
+        emptyRecord: { name: '', spot: '', address: '', google_maps_url: '', latitude: null, longitude: null, parking_notes: '' },
+        renderFn: cfgRenderLocations
+    },
+    activities: {
+        data: activitiesData,
+        mountId: 'cfg-activities-list',
+        countId: 'activity-count',
+        emptyRecord: { name: '', gear_required: [] },
+        renderFn: cfgRenderActivities
+    },
+    types: {
+        data: typesData,
+        mountId: 'cfg-types-list',
+        countId: 'type-count',
+        emptyRecord: { name: '', fitness_goals: [], has_intervals: false },
+        renderFn: cfgRenderTypes
+    },
+    social: {
+        data: socialLocationsData,
+        mountId: 'cfg-social-list',
+        countId: 'social-location-count',
+        emptyRecord: { name: '', address: '', google_maps_url: '' },
+        renderFn: cfgRenderSocialLocations
+    }
+};
+
+// ============================================================================
+// Status Reference Tab (Read-Only) - unchanged
 // ============================================================================
 function renderStatusReference() {
     renderStatusList('practice_status', 'practice-status-list');
@@ -802,7 +1495,7 @@ function renderStatusList(key, elementId) {
 }
 
 // ============================================================================
-// Settings Tab
+// Settings Tab - unchanged (uses cfg-toggle-slider renamed from defaults-toggle-slider)
 // ============================================================================
 async function loadSettings() {
     const [settingsResp, peopleResp] = await Promise.all([
@@ -876,7 +1569,7 @@ function renderPracticeDays() {
 }
 
 function renderDefaultsSummary(defaults) {
-    if (!defaults) return '— not configured';
+    if (!defaults) return '-- not configured';
     const parts = [];
     if (defaults.location_id) {
         const loc = locationsData.find(l => l.id === defaults.location_id);
@@ -889,7 +1582,7 @@ function renderDefaultsSummary(defaults) {
     if (defaults.coach_ids?.length) parts.push(`${defaults.coach_ids.length} coach${defaults.coach_ids.length > 1 ? 'es' : ''}`);
     if (defaults.is_dark_practice) parts.push('Dark');
     if (defaults.workout) parts.push('Workout template');
-    return parts.length ? '— ' + parts.join(' · ') : '— not configured';
+    return parts.length ? '-- ' + parts.join(' · ') : '-- not configured';
 }
 
 function renderDefaultsEditor(index, defaults) {
@@ -904,7 +1597,7 @@ function renderDefaultsEditor(index, defaults) {
                     <select onchange="updateDefault(${index}, 'location_id', this.value ? parseInt(this.value) : null)"
                         class="w-full py-2.5 px-3 border border-gray-300 rounded-md text-sm text-gray-800 bg-white focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-navy/10">
                         <option value="">None</option>
-                        ${locationsData.map(l => `<option value="${l.id}" ${d.location_id === l.id ? 'selected' : ''}>${l.name}${l.spot ? ' — ' + l.spot : ''}</option>`).join('')}
+                        ${locationsData.map(l => `<option value="${l.id}" ${d.location_id === l.id ? 'selected' : ''}>${l.name}${l.spot ? ' - ' + l.spot : ''}</option>`).join('')}
                     </select>
                 </div>
                 <div>
@@ -917,8 +1610,8 @@ function renderDefaultsEditor(index, defaults) {
                 </div>
                 <div class="flex items-end pb-1">
                     <label class="toggle flex items-center gap-3 cursor-pointer px-3 py-2 bg-gray-50 border border-gray-200 rounded-md transition-all hover:bg-gray-100 w-full">
-                        <input type="checkbox" ${d.is_dark_practice ? 'checked' : ''} onchange="updateDefault(${index}, 'is_dark_practice', this.checked)" class="hidden defaults-toggle-input">
-                        <span class="defaults-toggle-slider"></span>
+                        <input type="checkbox" ${d.is_dark_practice ? 'checked' : ''} onchange="updateDefault(${index}, 'is_dark_practice', this.checked)" class="hidden cfg-toggle-input">
+                        <span class="cfg-toggle-slider"></span>
                         <span class="text-sm text-gray-700">Dark practice</span>
                     </label>
                 </div>
@@ -1017,9 +1710,6 @@ function updateDefault(index, field, value) {
     if (Object.keys(practiceDays[index].defaults).length === 0) {
         practiceDays[index].defaults = null;
     }
-    // Update summary without full re-render to preserve focus
-    const summaryEl = document.querySelector(`[data-index="${index}"] .defaults-summary-text`);
-    // Full re-render only on dropdown/toggle changes (not text)
     if (['location_id', 'social_location_id', 'is_dark_practice'].includes(field)) {
         renderPracticeDays();
     }
@@ -1073,7 +1763,6 @@ function removePracticeDay(index) {
 
 async function savePracticeDays() {
     try {
-        // Strip internal state (_expanded) before saving
         const cleanDays = practiceDays.map(({_expanded, ...rest}) => rest);
         const response = await fetch('/admin/practices/settings/practice-days', {
             method: 'POST',
@@ -1093,37 +1782,5 @@ async function savePracticeDays() {
         showToast('Error saving practice days: ' + err.message, 'error');
     }
 }
-
-// ============================================================================
-// Helpers
-// ============================================================================
-function formatJsonArray(val) {
-    if (!val || !Array.isArray(val) || val.length === 0) {
-        return '<span class="text-gray-500">—</span>';
-    }
-    return `<span class="text-sm text-gray-500">${val.join(', ')}</span>`;
-}
-
-function formatCount(count) {
-    const hasItems = count > 0;
-    return `<span class="inline-flex items-center justify-center min-w-[24px] h-6 px-2 rounded-full text-xs font-medium ${hasItems ? 'bg-tcsc-secondary text-tcsc-navy' : 'bg-gray-100 text-gray-700'}">${count || 0}</span>`;
-}
-
-function formatDeleteButton(cell, entityType, countField) {
-    const data = cell.getRow().getData();
-    const count = data[countField] || 0;
-    const canDelete = count === 0;
-    const funcName = `delete${entityType}`;
-
-    if (canDelete) {
-        return `<div class="tbl-actions justify-center">
-            <button class="tbl-btn tbl-btn-danger" onclick="${funcName}(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Delete</button>
-        </div>`;
-    }
-    return `<div class="tbl-actions justify-center">
-        <button class="tbl-btn tbl-btn-secondary" disabled title="Cannot delete - has references">Delete</button>
-    </div>`;
-}
-
 </script>
 {% endblock %}

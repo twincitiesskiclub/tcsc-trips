@@ -198,7 +198,7 @@ def get_admin_payments():
 @admin.route('/admin/payments/data')
 @admin_required
 def get_payments_data():
-    """Return all payments as JSON for the Tabulator data grid."""
+    """Return all payments as JSON for the admin data grid."""
     payments = Payment.query.order_by(Payment.created_at.desc()).all()
     can_view_amounts = is_finance_authorized()
 
@@ -292,7 +292,7 @@ def delete_trip(trip_id):
 @admin.route('/admin/trips/data')
 @admin_required
 def trips_data():
-    """JSON data endpoint for trips Tabulator grid."""
+    """JSON data endpoint for trips admin grid."""
     trips = Trip.query.order_by(Trip.start_date.desc()).all()
     return jsonify({
         'trips': [{
@@ -316,7 +316,7 @@ def trips_data():
 @admin.route('/admin/trips/<int:trip_id>/delete', methods=['POST'])
 @admin_required
 def delete_trip_json(trip_id):
-    """JSON API for deleting a trip (used by Tabulator grid)."""
+    """JSON API for deleting a trip (used by admin grid)."""
     trip = Trip.query.get_or_404(trip_id)
     try:
         db.session.delete(trip)
@@ -394,7 +394,7 @@ def generate_late_link(season_id):
 @admin.route('/admin/seasons/data')
 @admin_required
 def seasons_data():
-    """JSON data endpoint for seasons Tabulator grid."""
+    """JSON data endpoint for seasons admin grid."""
     seasons = Season.query.order_by(Season.year.desc(), Season.start_date.desc()).all()
     return jsonify({
         'seasons': [{
@@ -550,7 +550,7 @@ def delete_social_event(event_id):
 @admin.route('/admin/social-events/data')
 @admin_required
 def social_events_data():
-    """JSON data endpoint for social events Tabulator grid."""
+    """JSON data endpoint for social events admin grid."""
     events = SocialEvent.query.order_by(SocialEvent.event_date.desc()).all()
     return jsonify({
         'events': [{

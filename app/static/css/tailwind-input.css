@@ -60,7 +60,7 @@
     @apply bg-zinc-600/10 text-zinc-700;
   }
 
-  /* === Tabulator Table Cell Buttons === */
+  /* === Table Cell Buttons === */
   .tbl-btn {
     @apply px-2.5 py-1 text-xs font-medium rounded transition-all inline-flex items-center;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
@@ -82,7 +82,7 @@
     @apply bg-green-100 text-green-700 hover:bg-green-200;
   }
 
-  /* === Tabulator Toolbar Buttons === */
+  /* === Toolbar Buttons === */
   .toolbar-btn {
     @apply h-9 px-4 rounded-tcsc text-sm font-medium transition-all shrink-0;
     @apply inline-flex items-center gap-2 whitespace-nowrap;
@@ -105,7 +105,7 @@
     @apply bg-green-100 text-green-700 hover:bg-green-200;
   }
 
-  /* === Tabulator Filter Dropdowns === */
+  /* === Filter Dropdowns === */
   .tbl-select {
     @apply h-9 px-3 pr-8 rounded-md bg-white text-sm text-gray-700;
     @apply border border-tcsc-gray-100 shadow-sm;
@@ -117,7 +117,7 @@
     background-position: right 0.75rem center;
   }
 
-  /* === Tabulator Search Input === */
+  /* === Search Input === */
   .tbl-search {
     @apply h-9 w-44 px-3 rounded-md bg-white text-sm text-gray-700 shrink-0;
     @apply border border-tcsc-gray-100 shadow-sm;
@@ -321,40 +321,6 @@
     @apply flex justify-end gap-3 px-5 py-4 border-t border-tcsc-gray-100;
   }
 
-  /* --- Table Enhancements for admin-table wrapper --- */
-  .admin-table .tabulator-header {
-    background-color: rgba(28,44,68,0.03);
-    border-bottom: 1px solid rgba(28,44,68,0.15);
-  }
-
-  .admin-table .tabulator-header .tabulator-col {
-    background-color: transparent;
-  }
-
-  .admin-table .tabulator-header .tabulator-col-title {
-    @apply text-sm font-semibold text-tcsc-navy;
-  }
-
-  .admin-table .tabulator-row {
-    border-bottom: 1px solid rgba(28,44,68,0.08);
-  }
-
-  .admin-table .tabulator-row:hover {
-    background-color: rgba(28,44,68,0.03);
-  }
-
-  .admin-table .tabulator-row.tabulator-selected {
-    background-color: rgba(28,44,68,0.08);
-  }
-
-  .admin-table .tabulator-frozen-left {
-    box-shadow: 2px 0 4px -2px rgba(0,0,0,0.1);
-  }
-
-  .admin-table .tabulator-frozen-right {
-    box-shadow: -2px 0 4px -2px rgba(0,0,0,0.1);
-  }
-
   /* Actions cell helper */
   .admin-actions {
     @apply flex items-center gap-1.5;
@@ -362,129 +328,7 @@
 }
 
 /* ============================================
-   TABULATOR TABLE THEMES
-   ============================================
-   Two themes available:
-   - .tabulator-data: Dark navy header for data/viewing tables (users, payments, practices)
-   - .tabulator-config: Light gray header for config/editing tables (roles, settings)
-   ============================================ */
-
-/* === Base Tabulator Styles (shared by both themes) === */
-.tabulator-data,
-.tabulator-config {
-  border: 1px solid #e4e7ec;
-  border-radius: 8px;
-  overflow: hidden;
-  font-size: 14px;
-}
-
-.tabulator-data .tabulator-tableHolder,
-.tabulator-config .tabulator-tableHolder {
-  overflow: auto;
-}
-
-.tabulator-data .tabulator-row.tabulator-row-even,
-.tabulator-config .tabulator-row.tabulator-row-even {
-  background-color: #f9fafb;
-}
-
-.tabulator-data .tabulator-row:hover,
-.tabulator-config .tabulator-row:hover {
-  background-color: #f3f4f6;
-}
-
-.tabulator-data .tabulator-cell,
-.tabulator-config .tabulator-cell {
-  padding: 10px 12px;
-  border-right: none;
-}
-
-.tabulator-data .tabulator-placeholder,
-.tabulator-config .tabulator-placeholder {
-  padding: 20px;
-  color: #6b7280;
-  font-style: italic;
-}
-
-/* === Data Table Theme (Dark Navy Header) === */
-.tabulator-data .tabulator-header {
-  background-color: #1c2c44;
-  border-bottom: none;
-}
-
-.tabulator-data .tabulator-header .tabulator-col {
-  background-color: #1c2c44;
-  border-right: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.tabulator-data .tabulator-header .tabulator-col:last-child {
-  border-right: none;
-}
-
-.tabulator-data .tabulator-header .tabulator-col-content {
-  padding: 12px;
-}
-
-.tabulator-data .tabulator-header .tabulator-col-title {
-  color: white;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.tabulator-data .tabulator-header .tabulator-col.tabulator-sortable:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-}
-
-.tabulator-data .tabulator-header .tabulator-col .tabulator-col-sorter .tabulator-arrow {
-  border-bottom-color: rgba(255, 255, 255, 0.5);
-}
-
-/* === Config Table Theme (Light Gray Header) === */
-.tabulator-config .tabulator-header {
-  background-color: #f9fafb;
-  border-bottom: 1px solid #e4e7ec;
-}
-
-.tabulator-config .tabulator-header .tabulator-col {
-  background-color: #f9fafb;
-  border-right: none;
-}
-
-.tabulator-config .tabulator-header .tabulator-col-content {
-  padding: 10px 12px;
-}
-
-.tabulator-config .tabulator-header .tabulator-col-title {
-  color: #344054;
-  font-weight: 600;
-  font-size: 13px;
-}
-
-.tabulator-config .tabulator-header .tabulator-col.tabulator-sortable:hover {
-  background-color: #f3f4f6;
-}
-
-/* === Tabulator Inline Editing Styles === */
-.tabulator-config .tabulator-cell.tabulator-editing {
-  padding: 2px;
-}
-
-.tabulator-config .tabulator-cell.tabulator-editing input {
-  padding: 8px;
-  border: 2px solid #1c2c44;
-  border-radius: 4px;
-  font-size: 14px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.tabulator-config .tabulator-cell.tabulator-editing input:focus {
-  outline: none;
-  box-shadow: 0 0 0 3px rgba(28, 44, 68, 0.1);
-}
-
-/* ============================================
-   STATUS BADGES (for Tabulator cells)
+   STATUS BADGES
    ============================================ */
 
 .status-badge {

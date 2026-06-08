@@ -1,137 +1,515 @@
-let eventsTable;
-let eventsData = [];
+// admin_social_events.js - Social Events bespoke event-ledger UI
+// Replaces Tabulator grid with a date-forward card list grouped into Upcoming/Past.
+// Reads GET /admin/social-events/data; mutations POST /admin/social-events/{id}/delete.
+//
+// NOTE: event_date is a pre-formatted 'Month D, YYYY' display string (e.g. 'June 4, 2026').
+// This format is reliably parseable in all modern JS engines via new Date().
+// If parsing yields NaN, the event is treated as upcoming (fail open).
+(function () {
+  'use strict';
 
-// Format price from cents
-function formatPrice(cents) {
+  /* ---- module state ---- */
+  var sevData = [];
+  var sevFilterStatus = 'all';
+  var sevSearchQ = '';
+  var sevPastExpanded = false;
+  var sevPastLimit = 20;
+  var sevCurrentDrawer = null; // { close, id }
+  var sevLastFocused = null;
+
+  /* ---- date helpers (Central, date-string based) ---- */
+  function chicagoTodayYMD() {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Chicago',
+      year: 'numeric', month: '2-digit', day: '2-digit'
+    }).format(new Date());
+  }
+
+  // Parse 'Month D, YYYY' -> 'YYYY-MM-DD' for comparison.
+  // Returns null if unparseable (fail open: treat as upcoming).
+  function sevParseEventDate(displayDate) {
+    if (!displayDate) return null;
+    // new Date('January 15, 2026') is reliably parsed in V8, JavaScriptCore, SpiderMonkey.
+    var d = new Date(displayDate);
+    if (isNaN(d.getTime())) return null;
+    // Build YYYY-MM-DD from local Date parts to avoid UTC offset issues.
+    // Since the display string has no time, getMonth/getDate are local-time.
+    var y = d.getFullYear();
+    var m = String(d.getMonth() + 1).padStart(2, '0');
+    var day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+  }
+
+  /* ---- price formatter (social events: 0/null -> 'Free'; cents -> $N.NN) ---- */
+  function sevFormatPrice(cents) {
     if (!cents) return 'Free';
     return '$' + (cents / 100).toFixed(2);
-}
+  }
 
-// Status badge HTML
-function getStatusBadge(status) {
-    const classes = {
-        'active': 'admin-badge admin-badge-active',
-        'draft': 'admin-badge admin-badge-inactive',
-        'closed': 'admin-badge admin-badge-error'
-    };
-    return `<span class="${classes[status] || 'admin-badge'}">${status}</span>`;
-}
+  /* ---- signup-window pill element ---- */
+  function sevSignupPill(signup_start, signup_end) {
+    if (!signup_start && !signup_end) return null;
+    var today = chicagoTodayYMD();
+    var cls, label;
+    if (signup_start && today < signup_start) {
+      var d = new Date(signup_start + 'T12:00:00Z');
+      var mon = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+      var dayN = d.getUTCDate();
+      cls = 'sl-signup opens';
+      label = 'Opens ' + mon + ' ' + dayN;
+    } else if (signup_end && today > signup_end) {
+      cls = 'sl-signup closed';
+      label = 'Signups closed';
+    } else {
+      cls = 'sl-signup open';
+      label = 'Signups open';
+    }
+    return AdminUI.el('span', { class: cls }, [label]);
+  }
 
-document.addEventListener('DOMContentLoaded', async () => {
-    // Fetch events data
-    const response = await fetch('/admin/social-events/data');
-    const data = await response.json();
-    eventsData = data.events;
+  /* ---- capacity chip element ---- */
+  function sevCapChip(max_participants) {
+    var label, ariaLabel;
+    if (max_participants === null || max_participants === undefined) {
+      label = 'No limit';
+      ariaLabel = 'Capacity: no limit';
+    } else {
+      label = max_participants + ' seats';
+      ariaLabel = 'Capacity: ' + max_participants + ' seats';
+    }
+    return AdminUI.el('span', { class: 'sl-cap', 'aria-label': ariaLabel }, [label]);
+  }
 
-    document.getElementById('event-count').textContent = eventsData.length;
+  /* ---- status badge variant mapping ---- */
+  function sevStatusVariant(status) {
+    if (status === 'active') return 'success';
+    if (status === 'closed') return 'danger';
+    return 'neutral'; // draft or unknown
+  }
 
-    // Initialize Tabulator
-    eventsTable = new Tabulator("#events-table", {
-        data: eventsData,
-        layout: "fitDataStretch",
-        height: "calc(100vh - 320px)",
-        placeholder: "No social events found",
+  /* ---- filter predicate ---- */
+  function sevMatchesFilters(evt) {
+    if (sevFilterStatus !== 'all' && evt.status !== sevFilterStatus) return false;
+    if (!sevSearchQ) return true;
+    var hay = ((evt.name || '') + ' ' + (evt.location || '')).toLowerCase();
+    return hay.includes(sevSearchQ);
+  }
 
-        columns: [
-            {
-                title: "Name",
-                field: "name",
-                frozen: true,
-                minWidth: 180,
-                formatter: function(cell) {
-                    const id = cell.getRow().getData().id;
-                    return `<a href="/admin/social-events/${id}/edit" class="text-tcsc-navy hover:underline font-medium">${cell.getValue()}</a>`;
-                }
-            },
-            {title: "Location", field: "location", minWidth: 150},
-            {title: "Date", field: "event_date", minWidth: 130},
-            {title: "Time", field: "event_time", minWidth: 90},
-            {
-                title: "Price",
-                field: "price",
-                minWidth: 80,
-                formatter: function(cell) {
-                    return formatPrice(cell.getValue());
-                }
-            },
-            {title: "Capacity", field: "max_participants", minWidth: 80},
-            {
-                title: "Status",
-                field: "status",
-                minWidth: 100,
-                formatter: function(cell) {
-                    return getStatusBadge(cell.getValue());
-                }
-            },
-            {
-                title: "Actions",
-                frozen: true,
-                hozAlign: "right",
-                minWidth: 140,
-                formatter: function(cell) {
-                    const data = cell.getRow().getData();
-                    return `<div class="admin-actions">
-                        <a href="/admin/social-events/${data.id}/edit" class="admin-btn admin-btn-sm admin-btn-primary">Edit</a>
-                        <button class="admin-btn admin-btn-sm admin-btn-danger" onclick="confirmDeleteEvent(${data.id}, '${data.name.replace(/'/g, "\\'")}')">Delete</button>
-                    </div>`;
-                },
-                headerSort: false
-            }
-        ]
+  /* ---- group upcoming/past ---- */
+  function sevGroupUpcomingPast(rows) {
+    var today = chicagoTodayYMD();
+    var upcoming = [], past = [];
+    rows.forEach(function (evt) {
+      var ymd = sevParseEventDate(evt.event_date);
+      if (ymd && ymd < today) {
+        past.push(evt);
+      } else {
+        // Fail open: null parse or >= today -> upcoming
+        upcoming.push(evt);
+      }
     });
-
-    // Search filter
-    document.getElementById('events-search').addEventListener('input', function(e) {
-        const value = e.target.value.toLowerCase();
-        eventsTable.setFilter(function(data) {
-            return data.name.toLowerCase().includes(value) ||
-                   (data.location && data.location.toLowerCase().includes(value));
-        });
-        updateCount();
+    // Upcoming: soonest first; Past: most recent first
+    upcoming.sort(function (a, b) {
+      var da = sevParseEventDate(a.event_date) || '';
+      var db = sevParseEventDate(b.event_date) || '';
+      return da < db ? -1 : da > db ? 1 : 0;
     });
-
-    // Status filter pills
-    document.querySelectorAll('.admin-pill[data-status]').forEach(pill => {
-        pill.addEventListener('click', function() {
-            document.querySelectorAll('.admin-pill[data-status]').forEach(p => p.classList.remove('active'));
-            this.classList.add('active');
-
-            const status = this.dataset.status;
-            if (status === 'all') {
-                eventsTable.clearFilter();
-            } else {
-                eventsTable.setFilter('status', '=', status);
-            }
-            updateCount();
-        });
+    past.sort(function (a, b) {
+      var da = sevParseEventDate(a.event_date) || '';
+      var db = sevParseEventDate(b.event_date) || '';
+      return da > db ? -1 : da < db ? 1 : 0;
     });
-});
+    return { upcoming: upcoming, past: past };
+  }
 
-function updateCount() {
-    const count = eventsTable.getDataCount('active');
-    document.getElementById('event-count').textContent = count;
-}
+  /* ---- date block element from 'Month D, YYYY' string ---- */
+  function sevDateBlock(displayDate) {
+    var cls = 'sl-db';
+    var mon = '', dayStr = '';
+    if (displayDate) {
+      var ymd = sevParseEventDate(displayDate);
+      if (ymd) {
+        var today = chicagoTodayYMD();
+        if (ymd === today) cls += ' is-today';
+        var d = new Date(displayDate);
+        mon = d.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+        dayStr = String(d.getDate());
+      }
+    }
+    return AdminUI.el('div', { class: cls }, [
+      AdminUI.el('span', { class: 'mo' }, [mon]),
+      AdminUI.el('span', { class: 'dn' }, [dayStr])
+    ]);
+  }
 
-function confirmDeleteEvent(id, name) {
-    if (!confirm(`Delete event "${name}"?\n\nThis cannot be undone.`)) {
-        return;
+  /* ---- render a single card ---- */
+  function sevRenderCard(evt, isPast) {
+    var el = AdminUI.el;
+    var esc = AdminUI.escapeHtml;
+
+    var priceText = sevFormatPrice(evt.price);
+    var dateTimeText = evt.event_date || '';
+    if (evt.event_time) dateTimeText += ' at ' + evt.event_time;
+
+    // Meta line children
+    var metaChildren = [];
+    if (evt.location) {
+      metaChildren.push(el('span', null, [evt.location]));
+    }
+    if (dateTimeText) {
+      if (metaChildren.length) metaChildren.push(el('span', { class: 'sep', 'aria-hidden': 'true' }, ['·']));
+      metaChildren.push(el('span', null, [dateTimeText]));
+    }
+    metaChildren.push(el('span', { class: 'sep', 'aria-hidden': 'true' }, ['·']));
+    metaChildren.push(el('span', { class: 'price' }, [priceText]));
+    metaChildren.push(el('span', { class: 'sep', 'aria-hidden': 'true' }, ['·']));
+    metaChildren.push(sevCapChip(evt.max_participants));
+    var pill = sevSignupPill(evt.signup_start, evt.signup_end);
+    if (pill) {
+      metaChildren.push(el('span', { class: 'sep', 'aria-hidden': 'true' }, ['·']));
+      metaChildren.push(pill);
     }
 
-    fetch(`/admin/social-events/${id}/delete`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' }
-    })
-    .then(response => response.json())
-    .then(data => {
-        if (data.success) {
-            showToast('Event deleted', 'success');
-            eventsTable.deleteRow(id);
-            updateCount();
-        } else {
-            showToast(data.error || 'Failed to delete event', 'error');
-        }
-    })
-    .catch(err => {
-        showToast('Error: ' + err.message, 'error');
+    var nameLink = el('a', {
+      href: '/admin/social-events/' + evt.id + '/edit',
+      'aria-label': 'Edit ' + esc(evt.name),
+      onclick: function (e) { e.stopPropagation(); }
+    }, [evt.name || '']);
+
+    var editBtn = el('a', {
+      class: 'sl-edit',
+      href: '/admin/social-events/' + evt.id + '/edit',
+      'aria-label': 'Edit ' + esc(evt.name),
+      onclick: function (e) { e.stopPropagation(); }
+    }, ['Edit']);
+
+    var deleteBtn = el('button', {
+      type: 'button',
+      class: 'sl-delete',
+      'aria-label': 'Delete ' + esc(evt.name),
+      onclick: function (e) { e.stopPropagation(); sevDelete(evt.id, evt.name); }
+    }, ['Delete']);
+
+    var badge = AdminUI.statusBadge(
+      evt.status ? (evt.status.charAt(0).toUpperCase() + evt.status.slice(1)) : '',
+      sevStatusVariant(evt.status)
+    );
+
+    var cardAriaLabel = (evt.name || '') + ', ' +
+      (evt.event_date || '') + ', ' +
+      (evt.status || '') + '. Press Enter to preview.';
+
+    var card = el('div', {
+      class: 'sl-card',
+      tabindex: '0',
+      role: 'button',
+      'aria-label': cardAriaLabel,
+      dataset: { id: String(evt.id) }
+    }, [
+      sevDateBlock(evt.event_date),
+      el('div', { class: 'sl-card-main' }, [
+        nameLink,
+        el('div', { class: 'sl-meta' }, metaChildren)
+      ]),
+      el('div', { class: 'sl-card-aside' }, [
+        badge,
+        el('div', { class: 'sl-actions' }, [editBtn, deleteBtn])
+      ])
+    ]);
+
+    card.addEventListener('click', function () {
+      sevOpenDrawer(evt, card);
     });
-}
+    card.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        sevOpenDrawer(evt, card);
+      }
+    });
+
+    return card;
+  }
+
+  /* ---- render section header ---- */
+  function sevSecHeader(label, count) {
+    return AdminUI.el('div', { class: 'sl-sec' }, [
+      label,
+      AdminUI.el('span', { class: 'sl-sec-rule' }, []),
+      AdminUI.el('span', { class: 'sl-sec-count' }, [String(count)])
+    ]);
+  }
+
+  /* ---- update count chip ---- */
+  function sevUpdateCount(n) {
+    var chip = document.getElementById('sev-count');
+    if (chip) chip.textContent = n === 1 ? '1 event' : n + ' events';
+  }
+
+  /* ---- main render ---- */
+  function sevRender() {
+    var root = document.getElementById('sev-rows');
+    if (!root) return;
+
+    var filtered = sevData.filter(sevMatchesFilters);
+    var groups = sevGroupUpcomingPast(filtered);
+    var upcoming = groups.upcoming;
+    var past = groups.past;
+    var total = filtered.length;
+
+    sevUpdateCount(total);
+
+    while (root.firstChild) root.removeChild(root.firstChild);
+
+    if (total === 0 && sevData.length === 0) {
+      root.appendChild(AdminUI.el('p', { class: 'sl-empty' }, ['No social events yet.']));
+      return;
+    }
+
+    if (total === 0) {
+      root.appendChild(AdminUI.el('p', { class: 'sl-empty' }, ['No events match your search.']));
+      return;
+    }
+
+    if (upcoming.length > 0) {
+      root.appendChild(sevSecHeader('Upcoming', upcoming.length));
+      var upCards = AdminUI.el('div', { class: 'sl-cards' }, []);
+      upcoming.forEach(function (evt) { upCards.appendChild(sevRenderCard(evt, false)); });
+      root.appendChild(upCards);
+    }
+
+    if (past.length > 0) {
+      var toggleBtn = AdminUI.el('button', {
+        type: 'button',
+        class: 'sl-past-toggle',
+        'aria-expanded': sevPastExpanded ? 'true' : 'false',
+        'aria-controls': 'sl-past-list'
+      }, [
+        AdminUI.el('span', { class: 'chev', 'aria-hidden': 'true' }, ['▸']),
+        ' Past events ',
+        AdminUI.el('span', { class: 'sl-past-dim' }, ['· ' + past.length])
+      ]);
+      root.appendChild(toggleBtn);
+
+      if (sevPastExpanded) {
+        var slice = past.slice(0, sevPastLimit);
+        var remaining = past.length - slice.length;
+        var pastList = AdminUI.el('div', { class: 'sl-past-list sl-cards', id: 'sl-past-list' }, []);
+        slice.forEach(function (evt) { pastList.appendChild(sevRenderCard(evt, true)); });
+
+        if (remaining > 0) {
+          var loadBtn = AdminUI.el('button', {
+            type: 'button',
+            class: 'sl-loadmore',
+            onclick: function () {
+              sevPastLimit += 20;
+              sevRender();
+            }
+          }, ['Load more (' + remaining + ')']);
+          pastList.appendChild(loadBtn);
+        }
+        root.appendChild(pastList);
+      }
+
+      toggleBtn.addEventListener('click', function () {
+        sevPastExpanded = !sevPastExpanded;
+        sevRender();
+        var newToggle = root.querySelector('.sl-past-toggle');
+        if (newToggle) newToggle.focus();
+      });
+    }
+  }
+
+  /* ---- drawer ---- */
+  function sevOpenDrawer(evt, cardEl) {
+    sevLastFocused = cardEl;
+
+    document.querySelectorAll('#sev-rows .sl-card.is-active').forEach(function (c) {
+      c.classList.remove('is-active');
+    });
+    if (cardEl) cardEl.classList.add('is-active');
+
+    var rowsEl = document.getElementById('sev-rows');
+    var toolbarEl = document.querySelector('#sev-list .sl-toolbar');
+    var headEl = document.querySelector('#sev-list .sl-head');
+    if (rowsEl) rowsEl.inert = true;
+    if (toolbarEl) toolbarEl.inert = true;
+    if (headEl) headEl.inert = true;
+
+    var dateTimeText = evt.event_date || '';
+    if (evt.event_time) dateTimeText += ' at ' + evt.event_time;
+
+    var subLine = AdminUI.el('p', { class: 'admin-ui-dw-sub' }, [
+      (evt.location || '') + (dateTimeText ? ' · ' + dateTimeText : '')
+    ]);
+
+    var kvRows = [
+      { k: 'Location', v: evt.location || '-' },
+      { k: 'Date', v: evt.event_date || '-' },
+      { k: 'Time', v: evt.event_time || '-' }
+    ];
+
+    var swText = '';
+    if (evt.signup_start || evt.signup_end) {
+      var today = chicagoTodayYMD();
+      if (evt.signup_start && today < evt.signup_start) {
+        var d = new Date(evt.signup_start + 'T12:00:00Z');
+        var mon = d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' });
+        swText = 'Opens ' + mon + ' ' + d.getUTCDate();
+      } else if (evt.signup_end && today > evt.signup_end) {
+        swText = 'Signups closed';
+      } else {
+        swText = 'Signups open';
+      }
+    }
+    if (swText) kvRows.push({ k: 'Signups', v: swText });
+
+    kvRows.push({ k: 'Price', v: sevFormatPrice(evt.price) });
+    kvRows.push({
+      k: 'Max participants',
+      v: evt.max_participants !== null && evt.max_participants !== undefined
+        ? String(evt.max_participants)
+        : 'No limit'
+    });
+
+    var contentDiv = AdminUI.el('div', { class: 'admin-ui-dw' }, []);
+    contentDiv.appendChild(subLine);
+    kvRows.forEach(function (row) {
+      contentDiv.appendChild(
+        AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('span', { class: 'admin-ui-dw-key' }, [row.k]),
+          AdminUI.el('span', { class: 'admin-ui-dw-val' }, [row.v])
+        ])
+      );
+    });
+
+    // Status badge row
+    var badgeRow = AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+      AdminUI.el('span', { class: 'admin-ui-dw-key' }, ['Status']),
+      AdminUI.el('span', { class: 'admin-ui-dw-val' }, [
+        AdminUI.statusBadge(
+          evt.status ? (evt.status.charAt(0).toUpperCase() + evt.status.slice(1)) : '',
+          sevStatusVariant(evt.status)
+        )
+      ])
+    ]);
+    contentDiv.appendChild(badgeRow);
+
+    // Footer actions (last child of contentDiv, before drawer() call so sticky works)
+    var editA = AdminUI.el('a', {
+      class: 'admin-ui-dw-btn-primary',
+      href: '/admin/social-events/' + evt.id + '/edit'
+    }, ['Edit']);
+    var deleteB = AdminUI.el('button', {
+      type: 'button',
+      class: 'admin-ui-dw-btn-danger',
+      onclick: function () { sevDelete(evt.id, evt.name); }
+    }, ['Delete']);
+    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, deleteB]);
+    contentDiv.appendChild(footer);
+
+    var drawer = AdminUI.drawer({ title: evt.name || 'Event', content: contentDiv });
+    sevCurrentDrawer = { close: drawer.close, id: evt.id };
+
+    // On drawer close: restore inert + active state + focus
+    var origClose = drawer.close;
+    sevCurrentDrawer.close = function () {
+      origClose();
+      if (rowsEl) rowsEl.inert = false;
+      if (toolbarEl) toolbarEl.inert = false;
+      if (headEl) headEl.inert = false;
+      document.querySelectorAll('#sev-rows .sl-card.is-active').forEach(function (c) {
+        c.classList.remove('is-active');
+      });
+      if (sevLastFocused) {
+        sevLastFocused.focus();
+        sevLastFocused = null;
+      }
+      sevCurrentDrawer = null;
+    };
+
+    // Patch the original close references inside drawer to also clean up
+    // (Esc and scrim click use origClose; we need them to also run our cleanup)
+    // We do this by overriding the drawer API close with our wrapped version.
+    // The drawer internally calls origClose; by reassigning current.close the
+    // drawer module itself won't call our wrapper, but Esc/scrim are wired to
+    // origClose. So we listen for the panel removal via MutationObserver.
+    var panelEl = document.querySelector('.admin-ui-drawer');
+    if (panelEl) {
+      var obs = new MutationObserver(function (mutations) {
+        mutations.forEach(function (m) {
+          m.removedNodes.forEach(function (n) {
+            if (n === panelEl) {
+              obs.disconnect();
+              if (rowsEl) rowsEl.inert = false;
+              if (toolbarEl) toolbarEl.inert = false;
+              if (headEl) headEl.inert = false;
+              document.querySelectorAll('#sev-rows .sl-card.is-active').forEach(function (c) {
+                c.classList.remove('is-active');
+              });
+              if (sevLastFocused) {
+                sevLastFocused.focus();
+                sevLastFocused = null;
+              }
+              sevCurrentDrawer = null;
+            }
+          });
+        });
+      });
+      obs.observe(document.body, { childList: true });
+    }
+  }
+
+  /* ---- delete handler ---- */
+  function sevDelete(id, name) {
+    if (!confirm('Delete event "' + (name || '') + '"?\n\nThis cannot be undone.')) return;
+    AdminUI.mutate('/admin/social-events/' + id + '/delete').then(function () {
+      if (window.showToast) showToast('Event deleted', 'success');
+      if (sevCurrentDrawer && sevCurrentDrawer.id === id) {
+        sevCurrentDrawer.close();
+      }
+      sevData = sevData.filter(function (e) { return e.id !== id; });
+      sevRender();
+    }).catch(function () {
+      // AdminUI.mutate already toasts the error
+    });
+  }
+
+  /* ---- attach toolbar listeners ---- */
+  function sevAttachListeners() {
+    var searchEl = document.getElementById('events-search');
+    if (searchEl) {
+      searchEl.addEventListener('input', function (e) {
+        sevSearchQ = e.target.value.toLowerCase().trim();
+        sevRender();
+      });
+    }
+
+    document.querySelectorAll('#sev-list .sl-pill').forEach(function (pill) {
+      pill.addEventListener('click', function () {
+        document.querySelectorAll('#sev-list .sl-pill').forEach(function (p) {
+          p.setAttribute('aria-pressed', 'false');
+        });
+        pill.setAttribute('aria-pressed', 'true');
+        sevFilterStatus = pill.dataset.status || 'all';
+        sevRender();
+      });
+    });
+  }
+
+  /* ---- init ---- */
+  AdminUI.onReady(function () {
+    sevAttachListeners();
+    AdminUI.fetchJSON('/admin/social-events/data').then(function (data) {
+      sevData = data.events || [];
+      sevRender();
+    }).catch(function () {
+      if (window.showToast) showToast('Failed to load events. Reload the page to retry.', 'error');
+      var root = document.getElementById('sev-rows');
+      if (root) {
+        while (root.firstChild) root.removeChild(root.firstChild);
+        root.appendChild(AdminUI.el('p', { class: 'sl-empty' }, ['Something went wrong. Try reloading.']));
+      }
+      sevUpdateCount(0);
+    });
+  });
+})();

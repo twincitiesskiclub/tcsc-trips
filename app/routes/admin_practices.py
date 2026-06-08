@@ -59,7 +59,7 @@ def practices_calendar():
 @admin_practices_bp.route('/data')
 @admin_required
 def practices_data():
-    """Return all practices as JSON for Tabulator grid."""
+    """Return all practices as JSON for the admin grid."""
     # Eager load relationships to avoid N+1 queries
     practices = Practice.query.options(
         joinedload(Practice.location),

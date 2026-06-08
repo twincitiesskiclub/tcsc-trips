@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AdminUI foundation harness</title>
+  <link rel="stylesheet" href="../css/admin_ui.css">
+  <style> body { padding: 24px; font-family: system-ui, sans-serif; color: #1c2c44; } h2 { margin-top: 28px; } </style>
+</head>
+<body>
+  <h1>AdminUI foundation harness</h1>
+  <p>Open the browser console. Every check must log <strong>PASS</strong>; no assertion should fire.</p>
+
+  <h2>Status badges</h2>
+  <div id="badges"></div>
+
+  <h2>Filter bar</h2>
+  <div id="filter"></div>
+  <pre id="filter-state">(interact with the filter bar; state prints here)</pre>
+
+  <h2>Form pills</h2>
+  <div id="pills"></div>
+
+  <h2>Drawer</h2>
+  <button id="open-drawer" class="admin-ui-pill" type="button">Open drawer</button>
+
+  <script src="../js/admin/_core.js"></script>
+  <script src="../js/admin/status_badge.js"></script>
+  <script src="../js/admin/focus_trap.js"></script>
+  <script src="../js/admin/drawer.js"></script>
+  <script src="../js/admin/filter_bar.js"></script>
+  <script src="../js/admin/pills.js"></script>
+  <script src="../js/admin/data.js"></script>
+  <script>
+    function check(name, cond) {
+      console.assert(cond, 'FAIL: ' + name);
+      if (cond) console.log('PASS: ' + name);
+    }
+
+    // _core
+    check('escapeHtml escapes', AdminUI.escapeHtml('<a>&"\'') === '&lt;a&gt;&amp;&quot;&#39;');
+    check('el sets class', AdminUI.el('div', { class: 'x' }, ['hi']).className === 'x');
+    check('el sets dataset', AdminUI.el('div', { dataset: { id: 5 } }, []).dataset.id === '5');
+
+    // status badge
+    var b = AdminUI.statusBadge('Active', 'success');
+    document.getElementById('badges').append(
+      AdminUI.statusBadge('Active', 'success'),
+      AdminUI.statusBadge('Refunded', 'danger'),
+      AdminUI.statusBadge('Pending', 'warning'),
+      AdminUI.statusBadge('Unknown')
+    );
+    check('badge has dot', b.querySelector('.admin-ui-badge__dot') !== null);
+    check('badge has text', b.textContent.indexOf('Active') !== -1);
+
+    // filter bar
+    var fb = AdminUI.filterBar(document.getElementById('filter'), {
+      search: { placeholder: 'Search members...' },
+      selects: [{ key: 'status', label: 'Status', options: [{ value: 'ACTIVE', label: 'Active' }] }],
+      pills: [{ key: 'tier', label: 'Tier', multi: true,
+                options: [{ value: 'a', label: 'A' }, { value: 'b', label: 'B' }] }]
+    }, function (s) { document.getElementById('filter-state').textContent = JSON.stringify(s); });
+    check('filter initial state shape', 'search' in fb.state && 'status' in fb.state && Array.isArray(fb.state.tier));
+
+    // form pills
+    var p = AdminUI.pills(document.getElementById('pills'),
+      [{ id: 1, label: 'Coach' }, { id: 2, label: 'Lead' }], { multi: true, selected: [1] });
+    check('pills preselected', p.getSelected().length === 1 && p.getSelected()[0] === 1);
+
+    // data layer present
+    check('fetchJSON defined', typeof AdminUI.fetchJSON === 'function');
+    check('mutate defined', typeof AdminUI.mutate === 'function');
+
+    // drawer (manual + assert)
+    document.getElementById('open-drawer').addEventListener('click', function () {
+      AdminUI.drawer({ title: 'Member detail',
+        content: AdminUI.el('p', null, ['Drawer body. Esc or click the scrim to close.']) });
+      check('drawer mounted', document.querySelector('.admin-ui-drawer') !== null);
+    });
+
+    console.log('Harness loaded. Click "Open drawer" to verify drawer + focus-trap manually.');
+  </script>
+</body>
+</html>

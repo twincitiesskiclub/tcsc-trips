@@ -2,29 +2,139 @@
 
 {% block title %}Social Events{% endblock %}
 
+{% block extra_css %}
+<style>
+/* ===== Social Events list - scoped "Quiet Precision" styles ===== */
+#sev-list,#sev-list *{box-sizing:border-box;margin:0;padding:0}
+#sev-list{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* header */
+#sev-list .sl-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+#sev-list .sl-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em}
+#sev-list .sl-head a{display:inline-flex;align-items:center;height:36px;background:#1c2c44;color:#fff;border-radius:10px;padding:0 14px;font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap}
+#sev-list .sl-head a:hover{background:#243650}
+#sev-list .sl-head a:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* toolbar */
+#sev-list .sl-toolbar{position:sticky;top:0;z-index:10;background:#fff;padding:8px 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
+#sev-list .sl-search{flex:1;min-width:160px;height:36px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
+#sev-list .sl-search:focus{outline:none;border-color:#1c2c44}
+#sev-list .sl-pills{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#sev-list .sl-pill{height:32px;padding:0 12px;border:1.5px solid #e5e7eb;border-radius:20px;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:background .12s,border-color .12s}
+#sev-list .sl-pill:hover{border-color:#1c2c44;color:#1c2c44}
+#sev-list .sl-pill[aria-pressed="true"]{background:#1c2c44;border-color:#1c2c44;color:#fff}
+#sev-list .sl-pill:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#sev-list .sl-spacer{flex:1}
+#sev-list .sl-count{font-size:13px;font-weight:600;color:#64748b;white-space:nowrap}
+
+/* section heading */
+#sev-list .sl-sec{display:flex;align-items:center;gap:10px;margin:20px 2px 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b}
+#sev-list .sl-sec:first-of-type{margin-top:2px}
+#sev-list .sl-sec-rule{flex:1;height:1px;background:#eceff3}
+#sev-list .sl-sec-count{color:#94a3b8}
+
+/* card */
+#sev-list .sl-card{width:100%;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:11px 15px;display:flex;align-items:flex-start;gap:12px;cursor:pointer;transition:border-color .12s}
+#sev-list .sl-card:hover{border-color:#cdd5e0}
+#sev-list .sl-card:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#sev-list .sl-card.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+#sev-list .sl-cards{display:flex;flex-direction:column;gap:7px}
+
+/* date block */
+#sev-list .sl-db{display:flex;flex-direction:column;align-items:center;width:52px;flex-shrink:0;padding-top:10px}
+#sev-list .sl-db .mo{font-size:10px;font-weight:700;text-transform:uppercase;color:#64748b}
+#sev-list .sl-db .dn{font-size:26px;font-weight:700;line-height:1;color:#1c2c44}
+#sev-list .sl-db.is-today .dn{color:#1e40af}
+
+/* card main */
+#sev-list .sl-card-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px;padding:10px 0}
+#sev-list .sl-card-main a{font-size:15px;font-weight:600;color:#1c2c44;text-decoration:none}
+#sev-list .sl-card-main a:hover{text-decoration:underline}
+#sev-list .sl-card-main a:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* meta line */
+#sev-list .sl-meta{display:flex;align-items:center;gap:8px;flex-wrap:wrap;font-size:12.5px;color:#64748b}
+#sev-list .sl-meta .sep{color:#cbd5e1}
+#sev-list .sl-meta .price{font-weight:500;color:#1c2c44}
+#sev-list .sl-cap{font-size:11.5px;color:#475569;border:1px solid #e9edf3;border-radius:16px;padding:1px 8px}
+#sev-list .sl-signup{font-size:11.5px;font-weight:600;border-radius:16px;padding:1px 9px}
+#sev-list .sl-signup.open{color:#166534;background:#dcfce7}
+#sev-list .sl-signup.opens{color:#1e40af;background:#dbeafe}
+#sev-list .sl-signup.closed{color:#64748b;background:#f1f5f9}
+
+/* card aside */
+#sev-list .sl-card-aside{display:flex;flex-direction:column;align-items:flex-end;gap:8px;flex-shrink:0;padding:10px 0}
+#sev-list .sl-actions{display:flex;gap:6px}
+#sev-list .sl-edit,#sev-list .sl-delete{height:30px;padding:0 10px;font-size:12.5px;font-weight:600;border-radius:8px;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;transition:background .12s}
+#sev-list .sl-edit{background:#f1f5f9;color:#1c2c44;border:1px solid #e2e8f0}
+#sev-list .sl-edit:hover{background:#e2e8f0}
+#sev-list .sl-delete{background:#fff;color:#c53030;border:1px solid #f3c9c9}
+#sev-list .sl-delete:hover{background:#fde8e8}
+#sev-list .sl-edit:focus-visible,#sev-list .sl-delete:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* past section */
+#sev-list .sl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#f1f4f8;border:1px solid #e1e6ee;border-radius:11px;padding:12px 15px;color:#475569;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;font-family:inherit;margin-top:24px}
+#sev-list .sl-past-toggle:hover{background:#e8ecf1}
+#sev-list .sl-past-toggle .chev{transition:transform .15s;color:#94a3b8}
+#sev-list .sl-past-toggle[aria-expanded="true"] .chev{transform:rotate(90deg)}
+#sev-list .sl-past-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#sev-list .sl-past-list{margin-top:8px;padding:0 0 0 6px;border-left:2px solid #eef1f5}
+#sev-list .sl-past-list .sl-card{background:#fbfcfd;border-color:#eef1f5}
+#sev-list .sl-past-list .sl-card:hover{border-color:#dce2ea}
+#sev-list .sl-past-list .sl-card-main a{color:#64748b}
+#sev-list .sl-past-list .sl-db .dn{color:#94a3b8}
+#sev-list .sl-past-list .sl-actions{opacity:.8}
+#sev-list .sl-loadmore{display:block;margin:8px auto 0;background:#fff;border:1.5px solid #e5e7eb;border-radius:9px;padding:7px 16px;font-size:13px;font-weight:600;color:#475569;cursor:pointer;font-family:inherit}
+#sev-list .sl-loadmore:hover{background:#f8fafc}
+#sev-list .sl-loadmore:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* empty/loading */
+#sev-list .sl-empty{padding:32px 8px;text-align:center;color:#94a3b8;font-size:14px}
+#sev-list .sl-empty a{color:#1c2c44;text-decoration:underline}
+
+/* mobile */
+@media (max-width:767px){
+  #sev-list .sl-toolbar{gap:6px}
+  #sev-list .sl-card-aside{flex-direction:column;align-items:flex-end;gap:6px}
+  #sev-list .sl-db{width:44px}
+  #sev-list .sl-edit,#sev-list .sl-delete{height:36px;padding:0 12px}
+}
+@media (max-width:480px){
+  #sev-list .sl-head{flex-direction:column;align-items:flex-start}
+  #sev-list .sl-head a{width:100%;justify-content:center}
+}
+@media (prefers-reduced-motion:reduce){
+  #sev-list .sl-card{transition:none}
+}
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="bg-white rounded-tcsc p-5">
-    <div class="admin-header">
-        <h1>Social Events</h1>
-        <a href="{{ url_for('admin.new_social_event') }}" class="admin-btn admin-btn-lg admin-btn-primary">+ Create New Event</a>
-    </div>
+<div id="sev-list">
+  <div class="sl-head">
+    <h1>Social Events</h1>
+    <a href="{{ url_for('admin.new_social_event') }}">+ Create New Event</a>
+  </div>
 
-    <div class="admin-toolbar">
-        <input type="text" id="events-search" class="admin-search" placeholder="Search events...">
-        <div class="admin-pill-group">
-            <button class="admin-pill active" data-status="all">All</button>
-            <button class="admin-pill" data-status="active">Active</button>
-            <button class="admin-pill" data-status="draft">Draft</button>
-            <button class="admin-pill" data-status="closed">Closed</button>
-        </div>
-        <div class="admin-toolbar-spacer"></div>
-        <span class="admin-count" id="event-count">0</span>
+  <div class="sl-toolbar" role="group" aria-label="Filter social events">
+    <input type="search" id="events-search" class="sl-search"
+           placeholder="Search events..." aria-label="Search events" aria-controls="sev-rows">
+    <div class="sl-pills" role="group" aria-label="Filter by status">
+      <button type="button" class="sl-pill" data-status="all" aria-pressed="true">All</button>
+      <button type="button" class="sl-pill" data-status="active" aria-pressed="false">Active</button>
+      <button type="button" class="sl-pill" data-status="draft" aria-pressed="false">Draft</button>
+      <button type="button" class="sl-pill" data-status="closed" aria-pressed="false">Closed</button>
     </div>
+    <span class="sl-spacer"></span>
+    <span class="sl-count" id="sev-count">0 events</span>
+  </div>
 
-    <div id="events-table" class="admin-table tabulator-config"></div>
+  <div id="sev-rows" aria-live="polite">
+    <p class="sl-empty">Loading...</p>
+  </div>
 </div>
 {% endblock %}
 
 {% block extra_js %}
-<script src="{{ url_for('static', filename='admin_social_events.js') }}?v={{ range(1000000) | random }}"></script>
+<script src="{{ url_for('static', filename='admin_social_events.js') }}"></script>
 {% endblock %}

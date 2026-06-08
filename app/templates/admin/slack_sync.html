@@ -1,184 +1,330 @@
 {% extends 'admin/admin_base.html' %}
+{% block title %}Slack User Sync{% endblock %}
+
 {% block extra_css %}
 <style>
-/* Loading state for buttons */
-.loading {
-    pointer-events: none;
+/* ===== Slack Sync -- scoped styles (prefix: #slack-sync / .ss-*) ===== */
+#slack-sync,#slack-sync *{box-sizing:border-box;margin:0;padding:0}
+#slack-sync{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5}
+
+/* header bar */
+#slack-sync .ss-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+#slack-sync .ss-head h1{font-size:20px;font-weight:700;letter-spacing:-.01em;color:#1c2c44}
+#slack-sync .ss-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+
+/* header buttons -- 38px / radius 10px matching sibling geometry */
+#slack-sync .ss-btn{height:38px;display:inline-flex;align-items:center;gap:6px;border-radius:10px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border:none;text-decoration:none;white-space:nowrap}
+#slack-sync .ss-btn-primary{background:#1c2c44;color:#fff}
+#slack-sync .ss-btn-primary:hover{opacity:.9}
+#slack-sync .ss-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-btn-secondary{background:#fff;border:1.5px solid #e5e7eb;color:#475569}
+#slack-sync .ss-btn-secondary:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-btn-secondary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-btn-icon{}
+#slack-sync .ss-btn-text{}
+#slack-sync .ss-btn-progress{display:none}
+#slack-sync .ss-loading{pointer-events:none;opacity:.7}
+#slack-sync .ss-loading .ss-btn-icon{display:none}
+#slack-sync .ss-loading .ss-btn-text{display:none}
+#slack-sync .ss-loading .ss-btn-progress{display:inline}
+
+/* toolbar -- single filter band replacing stats ribbon + segmented tabs */
+#slack-sync .ss-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+#slack-sync .ss-toolbar-spacer{flex:1}
+#slack-sync .ss-count{font-size:13px;color:#64748b;white-space:nowrap;font-weight:500}
+
+/* view pills -- radius 9999px matching .mr-pill / .admin-ui-pill */
+#slack-sync .ss-pills{display:flex;gap:4px}
+#slack-sync .ss-pill{display:inline-flex;align-items:center;padding:6px 13px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
+#slack-sync .ss-pill:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-pill.is-active{border-color:#1c2c44;background:rgba(28,44,68,.08);color:#1c2c44;font-weight:600}
+#slack-sync .ss-pill:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* search -- matching .mr-search dimensions */
+#slack-sync .ss-search{flex:1;min-width:180px;height:38px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit}
+#slack-sync .ss-search:focus{outline:none;border-color:#1c2c44}
+
+/* statline -- quiet inline sync-status numbers */
+#slack-sync .ss-statline{font-size:12.5px;color:#64748b;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+#slack-sync .ss-statline-dot{color:#94a3b8}
+#slack-sync .ss-statline-spacer{flex:1}
+#slack-sync .ss-status-chip{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:600;color:#475569;text-decoration:none;padding:2px 8px;border:1px solid #e5e7eb;border-radius:9999px;background:#fff;transition:border-color .12s}
+#slack-sync .ss-status-chip:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-skel-stat{display:inline-block;width:120px;height:14px;border-radius:6px;background:#e9edf3;animation:ss-pulse 1.5s ease-in-out infinite}
+
+/* reconciliation list */
+#slack-sync .ss-list{display:flex;flex-direction:column;gap:7px}
+
+/* skeleton rows */
+#slack-sync .ss-skel{border-radius:11px;min-height:64px;background:#f1f4f8;animation:ss-pulse 1.5s ease-in-out infinite}
+@keyframes ss-pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@media (prefers-reduced-motion:reduce){ #slack-sync .ss-skel,#slack-sync .ss-skel-stat{animation:none}}
+
+/* empty / error states */
+#slack-sync .ss-empty{text-align:center;color:#94a3b8;font-size:14px;padding:32px 8px;display:flex;flex-direction:column;align-items:center;gap:8px}
+#slack-sync .ss-empty-icon{font-size:32px;color:#166534}
+#slack-sync .ss-empty-title{font-size:16px;font-weight:600;color:#1c2c44}
+#slack-sync .ss-empty-sub{font-size:13px;color:#64748b}
+#slack-sync .ss-error{text-align:center;color:#c53030;font-size:14px;padding:32px 8px}
+
+/* ===== SINGLE ROW GEOMETRY (all three views) =====
+   Cloned from .pw-row-item / .mr-row: radius 11px, border #e9edf3, padding 12px 15px,
+   min-height 64px, gap 12px, hover border+shadow, is-active inset navy rail. */
+#slack-sync .ss-row{display:flex;align-items:center;gap:12px;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:12px 15px;min-height:64px;cursor:pointer;font-family:inherit;color:inherit;text-align:left;width:100%;transition:border-color .12s,box-shadow .12s}
+#slack-sync .ss-row:hover{border-color:#cdd5e0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
+#slack-sync .ss-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
+#slack-sync .ss-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* initials chip -- 40px for all views */
+#slack-sync .ss-row-chip{width:40px;height:40px;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:14px;font-weight:700;color:#fff;user-select:none}
+
+/* primary column */
+#slack-sync .ss-row-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+#slack-sync .ss-row-name{font-size:15px;font-weight:600;color:#1c2c44;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#slack-sync .ss-row-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:12.5px;color:#64748b}
+#slack-sync .ss-row-uid{font-size:11px;color:#94a3b8;font-family:monospace}
+
+/* trailing actions column -- max two buttons at 32px, single row */
+#slack-sync .ss-row-actions{flex-shrink:0;display:flex;align-items:center;gap:6px;flex-wrap:wrap;pointer-events:auto}
+
+/* action buttons -- uniform 32px height */
+#slack-sync .ss-act-primary{height:32px;border-radius:8px;background:#1c2c44;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap}
+#slack-sync .ss-act-primary:hover{opacity:.9}
+#slack-sync .ss-act-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-act-ghost{height:32px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 10px;border:1.5px solid #e5e7eb;cursor:pointer;font-family:inherit;white-space:nowrap}
+#slack-sync .ss-act-ghost:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-act-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-act-danger{height:32px;border-radius:8px;background:#fff;color:#c53030;font-size:12px;font-weight:500;padding:0 10px;border:none;cursor:pointer;font-family:inherit}
+#slack-sync .ss-act-danger:hover{text-decoration:underline}
+#slack-sync .ss-act-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
+#slack-sync .ss-act-confirm{height:32px;border-radius:8px;background:#c53030;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit}
+#slack-sync .ss-act-confirm:hover{opacity:.9}
+#slack-sync .ss-act-confirm:focus-visible{outline:2px solid #c53030;outline-offset:2px}
+#slack-sync .ss-act-cancel{height:32px;border-radius:8px;background:#fff;color:#475569;font-size:13px;font-weight:500;padding:0 10px;border:1.5px solid #e5e7eb;cursor:pointer;font-family:inherit}
+#slack-sync .ss-act-cancel:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* overflow button (round) */
+#slack-sync .ss-overflow-btn{width:28px;height:28px;border-radius:50%;border:1px solid #e5e7eb;background:#fff;color:#64748b;font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+#slack-sync .ss-overflow-btn:hover{border-color:#1c2c44;color:#1c2c44}
+#slack-sync .ss-overflow-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
+/* overflow popover */
+#slack-sync .ss-popover{position:absolute;top:32px;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);z-index:20;min-width:160px;overflow:hidden}
+#slack-sync .ss-popover-item{display:block;width:100%;text-align:left;background:none;border:none;padding:8px 14px;font-size:13px;font-weight:500;color:#1c2c44;cursor:pointer;font-family:inherit}
+#slack-sync .ss-popover-item:hover{background:#f8fafb}
+#slack-sync .ss-popover-item:focus-visible{outline:2px solid #1c2c44;outline-offset:-2px}
+#slack-sync .ss-popover-item-danger{color:#c53030}
+#slack-sync .ss-overflow-wrap{position:relative}
+
+/* inline import confirm */
+#slack-sync .ss-inline-confirm{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:10px 12px;font-size:13px;color:#92400e;display:flex;flex-direction:column;gap:8px}
+#slack-sync .ss-inline-confirm-msg{font-weight:500}
+#slack-sync .ss-inline-confirm-actions{display:flex;gap:6px}
+
+/* bulk import button */
+#slack-sync .ss-bulk-import-btn{height:34px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#1c2c44;font-size:13px;font-weight:600;padding:0 14px;cursor:pointer;font-family:inherit}
+#slack-sync .ss-bulk-import-btn:hover{border-color:#1c2c44}
+#slack-sync .ss-bulk-import-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-bulk-import-note{font-size:12px;color:#64748b;margin-top:4px}
+#slack-sync .ss-bulk-confirm{background:#fffbeb;border:1px solid #fcd34d;border-radius:8px;padding:12px;margin-bottom:12px;font-size:13px;color:#92400e}
+#slack-sync .ss-bulk-confirm-actions{display:flex;gap:8px;margin-top:8px}
+
+/* inline link picker */
+#slack-sync .ss-picker{position:relative;width:100%}
+#slack-sync .ss-picker-input{height:32px;border:1.5px solid #e5e7eb;border-radius:8px;width:100%;font-size:13px;padding:0 10px;font-family:inherit;color:#1c2c44;background:#fff}
+#slack-sync .ss-picker-input:focus{outline:none;border-color:#1c2c44}
+#slack-sync .ss-picker-dropdown{position:absolute;top:calc(100% + 4px);left:0;right:0;background:#fff;border:1px solid #e5e7eb;border-radius:8px;box-shadow:0 4px 12px rgba(0,0,0,.1);max-height:200px;overflow-y:auto;z-index:50;display:none}
+#slack-sync .ss-picker-dropdown.is-open{display:block}
+#slack-sync .ss-picker-option{padding:8px 12px;font-size:13px;cursor:pointer;display:flex;flex-direction:column;gap:2px}
+#slack-sync .ss-picker-option:hover,[role=option].ss-picker-option[aria-selected=true]{background:#f8fafb}
+#slack-sync .ss-picker-option:focus-visible{outline:2px solid #1c2c44;outline-offset:-2px}
+#slack-sync .ss-picker-option-name{font-weight:600;color:#1c2c44}
+#slack-sync .ss-picker-option-email{font-size:11.5px;color:#64748b}
+#slack-sync .ss-picker-suggestion-badge{display:inline-block;font-size:10px;font-weight:700;background:#dbeafe;color:#1e40af;border-radius:4px;padding:1px 5px;margin-left:5px}
+#slack-sync .ss-picker-empty{padding:10px 12px;font-size:13px;color:#94a3b8}
+#slack-sync .ss-picker-confirm{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+#slack-sync .ss-picker-confirm-row{display:flex;align-items:center;gap:6px}
+#slack-sync .ss-picker-confirm-btn{height:32px;border-radius:8px;background:#1c2c44;color:#fff;font-size:13px;font-weight:600;padding:0 12px;border:none;cursor:pointer;font-family:inherit;white-space:nowrap}
+#slack-sync .ss-picker-confirm-btn:hover{opacity:.9}
+#slack-sync .ss-picker-confirm-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#slack-sync .ss-picker-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:2px 6px}
+
+/* drawer confirm zone + email warn -- un-scoped so body-mounted panel can reach them */
+.ss-dw-confirm-zone{background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;padding:12px;font-size:13px;color:#c53030}
+.ss-dw-confirm-msg{font-weight:500;margin-bottom:8px}
+.ss-dw-confirm-actions{display:flex;gap:8px}
+.ss-dw-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:4px 8px;margin-top:4px}
+
+/* Send Message modal -- aligned to .mr-modal dimensions */
+#ssync-message-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000}
+#ssync-message-modal .ss-modal-inner{position:relative;background:#fff;border-radius:14px;width:100%;max-width:600px;margin:0 16px;box-shadow:0 20px 60px rgba(0,0,0,.2);max-height:90vh;display:flex;flex-direction:column}
+#ssync-message-modal .ss-modal-header{display:flex;align-items:center;justify-content:space-between;padding:18px 20px;border-bottom:1px solid #e4e7ec;flex-shrink:0}
+#ssync-message-modal .ss-modal-title{font-size:17px;font-weight:600;color:#1c2c44;margin:0}
+#ssync-message-modal .ss-modal-close{width:40px;height:40px;display:flex;align-items:center;justify-content:center;font-size:22px;color:#9ca3af;cursor:pointer;border:none;background:none;border-radius:8px}
+#ssync-message-modal .ss-modal-close:hover{color:#374151}
+#ssync-message-modal .ss-modal-close:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#ssync-message-modal .ss-modal-body{padding:20px;overflow-y:auto;flex:1}
+#ssync-message-modal .ss-modal-footer{padding:16px 20px;border-top:1px solid #e4e7ec;display:flex;justify-content:flex-end;gap:10px;flex-shrink:0}
+#ssync-message-modal .ss-field-label{display:block;font-size:14px;font-weight:500;color:#374151;margin-bottom:6px}
+#ssync-message-modal .ss-user-checkboxes{max-height:280px;overflow-y:auto;border:1px solid #e5e7eb;border-radius:10px;padding:12px;background:#f9fafb}
+#ssync-message-modal .ss-recipient-item{display:flex;align-items:center;gap:8px;padding:4px 0;cursor:pointer;font-size:14px}
+#ssync-message-modal .ss-recipient-item input[type=checkbox]{width:16px;height:16px;accent-color:#1c2c44;cursor:pointer;flex-shrink:0}
+#ssync-message-modal .ss-recipient-name{font-weight:500;color:#1c2c44;flex:1}
+#ssync-message-modal .ss-recipient-email{font-size:12px;color:#64748b}
+#ssync-message-modal .ss-count{font-size:13px;color:#64748b;margin-top:8px}
+#ssync-message-modal .ss-mode-hint{font-size:12px;color:#64748b;margin-top:6px}
+#ssync-message-modal .ss-radio-group{display:flex;gap:24px;margin-top:8px}
+#ssync-message-modal .ss-radio-label{display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:500;color:#1c2c44;font-size:14px}
+#ssync-message-modal .ss-user-search{flex:1;height:32px;padding:0 10px;border:1px solid #e5e7eb;border-radius:8px;font-size:13px}
+#ssync-message-modal .ss-msg-textarea{width:100%;padding:10px 12px;border:1px solid #e5e7eb;border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;color:#1c2c44}
+#ssync-message-modal .ss-msg-textarea:focus{outline:none;border-color:#1c2c44}
+
+/* sr-only utility */
+.ss-sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ===== Mobile 767px ===== */
+@media (max-width:767px){
+  #slack-sync .ss-head{flex-direction:column;align-items:flex-start}
+  #slack-sync .ss-head-actions{width:100%}
+  #slack-sync .ss-toolbar{flex-direction:column;align-items:stretch}
+  #slack-sync .ss-pills{flex-wrap:wrap}
+  #slack-sync .ss-pill{flex:1;justify-content:center}
+  #slack-sync .ss-search{width:100%;height:44px;min-width:unset}
+  #slack-sync .ss-statline{flex-direction:column;align-items:flex-start;gap:4px}
+  #slack-sync .ss-row{flex-wrap:wrap}
+  #slack-sync .ss-row-actions{margin-left:52px;width:calc(100% - 52px)}
+  #slack-sync .ss-act-primary,#slack-sync .ss-act-ghost,#slack-sync .ss-act-confirm{justify-content:center}
+  #slack-sync .ss-picker-dropdown{position:fixed;bottom:0;left:0;right:0;top:auto;max-height:50vh;border-radius:12px 12px 0 0;z-index:60}
+  #slack-sync .ss-popover{position:fixed;bottom:0;left:0;right:0;top:auto;border-radius:12px 12px 0 0}
+  #ssync-message-modal .ss-modal-inner{max-width:100%;margin:0;border-radius:12px 12px 0 0;position:fixed;bottom:0}
+  #ssync-message-modal .ss-user-checkboxes{max-height:200px}
 }
 
-.loading .btn-icon {
-    display: none;
+/* AdminUI drawer mobile */
+@media (max-width:767px){
+  .admin-ui-drawer{width:100%;border-left:none;border-radius:12px 12px 0 0;bottom:0;top:auto;max-height:90vh}
 }
 
-.loading .btn-text::after {
-    content: '...';
-    animation: dots 1.2s steps(4, end) infinite;
+/* Desktop picker width */
+@media (min-width:768px){
+  #slack-sync .ss-row-actions .ss-picker{width:220px}
 }
 
-@keyframes dots {
-    0%, 20% { content: ''; }
-    40% { content: '.'; }
-    60% { content: '..'; }
-    80%, 100% { content: '...'; }
-}
-
-/* Stat card link styles */
-.stat-card-link {
-    border: 1px solid #e4e7ec;
-}
-
-.stat-card-link:hover {
-    border-color: #1c2c44;
+/* Touch target sizes */
+@media (pointer:coarse){
+  #slack-sync .ss-overflow-btn{width:44px;height:44px}
+  #slack-sync .ss-act-primary,#slack-sync .ss-act-ghost{min-height:44px}
 }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="bg-white rounded-tcsc p-5">
-    <!-- Header with title and sync button -->
-    <div class="admin-toolbar mb-5">
-        <h1 class="text-xl font-semibold text-tcsc-navy m-0">Slack User Sync</h1>
-        <div class="admin-toolbar-spacer"></div>
-        <div class="flex items-center gap-2">
-            <button class="admin-btn admin-btn-md admin-btn-secondary" id="message-btn" onclick="openMessageModal()">
-                <span class="btn-icon">✉</span>
-                <span class="btn-text">Send Message</span>
-            </button>
-            <button class="admin-btn admin-btn-md admin-btn-primary" id="sync-btn" onclick="runSync()">
-                <span class="btn-icon">↓</span>
-                <span class="btn-text">Sync from Slack</span>
-            </button>
-            <button class="admin-btn admin-btn-md admin-btn-primary" id="profile-sync-btn" onclick="runProfileSync()">
-                <span class="btn-icon">↑</span>
-                <span class="btn-text">Sync to Slack</span>
-            </button>
-        </div>
-    </div>
+<div id="slack-sync" class="bg-white rounded-tcsc p-5">
 
-    <!-- Stats -->
-    <div class="grid grid-cols-[repeat(auto-fit,minmax(140px,1fr))] gap-4 mb-6">
-        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
-            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-slack-users">-</div>
-            <div class="text-sm text-gray-500 mt-1">Slack Users</div>
-        </div>
-        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
-            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-db-users">-</div>
-            <div class="text-sm text-gray-500 mt-1">Database Users</div>
-        </div>
-        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
-            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-matched">-</div>
-            <div class="text-sm text-gray-500 mt-1">Matched</div>
-        </div>
-        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
-            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-unmatched-slack">-</div>
-            <div class="text-sm text-gray-500 mt-1">Slack Only</div>
-        </div>
-        <div class="bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center">
-            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-unmatched-db">-</div>
-            <div class="text-sm text-gray-500 mt-1">DB Only</div>
-        </div>
-        <a href="{{ url_for('admin.channel_sync_dashboard') }}" class="stat-card-link bg-white border border-tcsc-gray-100 rounded-tcsc p-4 text-center no-underline cursor-pointer hover:border-tcsc-navy hover:-translate-y-0.5 hover:shadow-lg transition-all" id="channel-sync-card">
-            <div class="text-[28px] font-semibold text-tcsc-navy" id="stat-channel-sync">-</div>
-            <div class="text-sm text-tcsc-navy font-medium mt-1">Channel Sync →</div>
-        </a>
+  <!-- Header band -->
+  <div class="ss-head">
+    <h1>Slack User Sync</h1>
+    <div class="ss-head-actions">
+      <button class="ss-btn ss-btn-primary" id="ssync-pull-btn" type="button" onclick="ssyncRunPull()">
+        <span class="ss-btn-icon" aria-hidden="true">&#8595;</span>
+        <span class="ss-btn-text">Sync from Slack</span>
+        <span class="ss-btn-progress" aria-live="polite">Loading...</span>
+      </button>
+      <button class="ss-btn ss-btn-primary" id="ssync-push-btn" type="button" onclick="ssyncRunProfilePush()">
+        <span class="ss-btn-icon" aria-hidden="true">&#8593;</span>
+        <span class="ss-btn-text">Sync to Slack</span>
+        <span class="ss-btn-progress" aria-live="polite">Syncing...</span>
+      </button>
+      <button class="ss-btn ss-btn-secondary" id="ssync-msg-btn" type="button" onclick="ssyncMessageOpen()">
+        <span class="ss-btn-icon" aria-hidden="true">&#9993;</span>
+        <span class="ss-btn-text">Send Message</span>
+      </button>
     </div>
+  </div>
 
-    <!-- Database Users with filter -->
-    <div class="mb-8">
-        <div class="flex justify-between items-center my-6 mb-3">
-            <h3 class="text-base font-semibold text-tcsc-navy">Database Users</h3>
-            <div class="admin-pill-group">
-                <button class="admin-pill active" data-filter="all" onclick="setUserFilter('all', this)">All</button>
-                <button class="admin-pill" data-filter="matched" onclick="setUserFilter('matched', this)">Matched</button>
-                <button class="admin-pill" data-filter="unmatched" onclick="setUserFilter('unmatched', this)">Unmatched</button>
-            </div>
-        </div>
-        <div id="users-table" class="tabulator-data"></div>
+  <!-- Single toolbar band: pills + spacer + count + search -->
+  <div class="ss-toolbar" id="ssync-tablist" role="tablist" aria-label="Workspace view">
+    <div class="ss-pills">
+      <button class="ss-pill is-active" role="tab" id="ssync-tab-attention" aria-selected="true" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('attention', this)">
+        Needs attention <span id="ssync-tab-attention-count"></span>
+      </button>
+      <button class="ss-pill" role="tab" id="ssync-tab-all_db" aria-selected="false" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('all_db', this)">
+        All DB users <span id="ssync-tab-all_db-count"></span>
+      </button>
+      <button class="ss-pill" role="tab" id="ssync-tab-unclaimed_slack" aria-selected="false" aria-controls="ssync-list" type="button" onclick="ssyncSetSegment('unclaimed_slack', this)">
+        Unclaimed Slack <span id="ssync-tab-unclaimed_slack-count"></span>
+      </button>
     </div>
+    <div class="ss-toolbar-spacer"></div>
+    <span class="ss-count" id="ssync-visible-count"></span>
+    <input type="text" id="ssync-search" class="ss-search"
+           placeholder="Search name or email..."
+           aria-label="Search users by name or email"
+           oninput="ssyncOnSearch(this.value)">
+  </div>
 
-    <!-- Slack Only Users -->
-    <div class="mb-8">
-        <div class="flex justify-between items-center my-6 mb-3">
-            <h3 class="text-base font-semibold text-tcsc-navy">Slack Users Without Database Match</h3>
-        </div>
-        <div id="slack-only-table" class="tabulator-data"></div>
-    </div>
-</div>
+  <!-- Quiet statline: sync numbers + channel-sync chip (informational only) -->
+  <div class="ss-statline" id="ssync-statline" aria-label="Sync status">
+    <span class="ss-skel-stat"></span>
+    <span class="ss-skel-stat"></span>
+  </div>
 
-<!-- Link Modal -->
-<div id="link-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
-    <div class="absolute inset-0" onclick="closeLinkModal()"></div>
-    <div class="relative bg-white rounded-tcsc w-full max-w-md mx-4 shadow-xl">
-        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
-            <h2 id="link-modal-title" class="text-lg font-semibold text-tcsc-navy">Link User</h2>
-            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeLinkModal()">&times;</button>
-        </div>
-        <div class="p-5">
-            <p id="link-modal-description" class="mb-4 text-gray-600"></p>
-            <div class="form-group">
-                <label for="link-select" class="block text-sm font-medium text-gray-700 mb-1">Select Match:</label>
-                <select id="link-select" class="w-full h-10 px-3 border border-gray-300 rounded-md"></select>
-            </div>
-        </div>
-        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button class="admin-btn admin-btn-md admin-btn-secondary" onclick="closeLinkModal()">Cancel</button>
-            <button class="admin-btn admin-btn-md admin-btn-primary" onclick="confirmLink()">Link</button>
-        </div>
-    </div>
+  <!-- sr-only live count -->
+  <div class="ss-sr-only" id="ssync-count-announce" aria-live="polite"></div>
+
+  <!-- Reconciliation list (single geometry for all three views) -->
+  <div id="ssync-list" class="ss-list" role="tabpanel" aria-labelledby="ssync-tab-attention" aria-live="polite">
+    <div class="ss-skel"></div>
+    <div class="ss-skel"></div>
+    <div class="ss-skel"></div>
+  </div>
 </div>
 
 <!-- Send Message Modal -->
-<div id="message-modal" class="fixed inset-0 bg-black/50 flex items-center justify-center z-50" style="display: none;">
-    <div class="absolute inset-0" onclick="closeMessageModal()"></div>
-    <div class="relative bg-white rounded-tcsc w-full max-w-[600px] mx-4 shadow-xl">
-        <div class="flex items-center justify-between p-5 border-b border-tcsc-gray-100">
-            <h2 class="text-lg font-semibold text-tcsc-navy">Send Slack Message</h2>
-            <button class="text-2xl text-gray-400 hover:text-gray-600 leading-none" onclick="closeMessageModal()">&times;</button>
-        </div>
-        <div class="p-5">
-            <!-- User Selection -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Select Recipients:</label>
-                <div class="flex gap-2 mb-3 items-center">
-                    <button type="button" class="admin-btn admin-btn-sm admin-btn-secondary" onclick="selectAllUsers()">Select All</button>
-                    <button type="button" class="admin-btn admin-btn-sm admin-btn-secondary" onclick="deselectAllUsers()">Deselect All</button>
-                    <input type="text" id="user-search" class="flex-1 h-8 px-2.5 border border-gray-300 rounded-md text-sm placeholder:text-gray-400" placeholder="Filter users...">
-                </div>
-                <div id="user-checkboxes" class="max-h-[280px] overflow-y-auto border border-tcsc-gray-100 rounded-tcsc p-3 bg-gray-50"></div>
-                <div class="mt-2.5 text-sm text-gray-500">
-                    <span id="selected-count">0</span> user(s) selected
-                </div>
-            </div>
-
-            <!-- Message Mode -->
-            <div class="mb-4">
-                <label class="block text-sm font-medium text-gray-700 mb-2">Message Mode:</label>
-                <div class="flex gap-6 mt-2">
-                    <label class="flex items-center gap-2 cursor-pointer font-medium text-tcsc-navy">
-                        <input type="radio" name="message-mode" value="individual" checked class="w-4 h-4 accent-tcsc-navy">
-                        <span>Individual DMs</span>
-                    </label>
-                    <label class="flex items-center gap-2 cursor-pointer font-medium text-tcsc-navy">
-                        <input type="radio" name="message-mode" value="mpdm" class="w-4 h-4 accent-tcsc-navy">
-                        <span>Group DM (MPDM)</span>
-                    </label>
-                </div>
-                <div class="text-xs text-gray-500 mt-2">
-                    Individual: Each user gets a separate DM. Group: All users in one conversation.
-                </div>
-            </div>
-
-            <!-- Message Content -->
-            <div class="mb-4">
-                <label for="message-text" class="block text-sm font-medium text-gray-700 mb-1">Message:</label>
-                <textarea id="message-text" rows="6" class="w-full px-3 py-2 border border-gray-300 rounded-md text-sm" placeholder="Enter your message..."></textarea>
-            </div>
-        </div>
-        <div class="flex justify-end gap-3 p-5 border-t border-tcsc-gray-100">
-            <button class="admin-btn admin-btn-md admin-btn-secondary" onclick="closeMessageModal()">Cancel</button>
-            <button class="admin-btn admin-btn-md admin-btn-primary" id="send-message-btn" onclick="sendMessage()">Send Message</button>
-        </div>
+<div id="ssync-message-modal" role="dialog" aria-modal="true" aria-labelledby="ssync-modal-title">
+  <div class="ss-modal-inner">
+    <div class="ss-modal-header">
+      <h2 class="ss-modal-title" id="ssync-modal-title">Send Slack Message</h2>
+      <button class="ss-modal-close" type="button" aria-label="Close" onclick="ssyncMessageClose()">&#215;</button>
     </div>
+    <div class="ss-modal-body">
+      <!-- Recipients -->
+      <div style="margin-bottom:16px">
+        <label class="ss-field-label">Select Recipients:</label>
+        <div style="display:flex;gap:8px;margin-bottom:10px;align-items:center;flex-wrap:wrap">
+          <button type="button" class="ss-act-ghost" onclick="ssyncMessageSelectAll()">Select All</button>
+          <button type="button" class="ss-act-ghost" onclick="ssyncMessageDeselectAll()">Deselect All</button>
+          <input type="text" id="ssync-user-search" class="ss-user-search" placeholder="Filter users...">
+        </div>
+        <div id="ssync-user-checkboxes" class="ss-user-checkboxes"></div>
+        <div class="ss-count"><span id="ssync-selected-count">0</span> user(s) selected</div>
+      </div>
+      <!-- Mode -->
+      <div style="margin-bottom:16px">
+        <label class="ss-field-label">Message Mode:</label>
+        <div class="ss-radio-group">
+          <label class="ss-radio-label">
+            <input type="radio" name="ssync-message-mode" value="individual" checked style="width:16px;height:16px;accent-color:#1c2c44;cursor:pointer">
+            <span>Individual DMs</span>
+          </label>
+          <label class="ss-radio-label">
+            <input type="radio" name="ssync-message-mode" value="mpdm" style="width:16px;height:16px;accent-color:#1c2c44;cursor:pointer">
+            <span>Group DM (MPDM)</span>
+          </label>
+        </div>
+        <div class="ss-mode-hint">Individual: Each user gets a separate DM. Group: All users in one conversation.</div>
+      </div>
+      <!-- Message -->
+      <div>
+        <label class="ss-field-label" for="ssync-message-text">Message:</label>
+        <textarea id="ssync-message-text" rows="6" class="ss-msg-textarea" placeholder="Enter your message..."></textarea>
+      </div>
+    </div>
+    <div class="ss-modal-footer">
+      <button class="ss-act-ghost" type="button" onclick="ssyncMessageClose()">Cancel</button>
+      <button class="ss-act-primary" type="button" id="ssync-send-btn" onclick="ssyncMessageSend()">Send Message</button>
+    </div>
+  </div>
 </div>
 {% endblock %}
 
