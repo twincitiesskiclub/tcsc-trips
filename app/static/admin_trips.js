@@ -1,4 +1,4 @@
-// admin_trips.js — Trips bespoke event-ledger UI
+// admin_trips.js - Trips bespoke event-ledger UI
 // Replaces Tabulator grid with a date-forward card list grouped into Upcoming/Past.
 // Reads GET /admin/trips/data; mutations POST /admin/trips/{id}/delete.
 (function () {
@@ -128,7 +128,7 @@
     if (trip.price_low === trip.price_high) {
       priceText = formatPrice(trip.price_low);
     } else {
-      priceText = formatPrice(trip.price_low) + ' – ' + formatPrice(trip.price_high);
+      priceText = formatPrice(trip.price_low) + ' - ' + formatPrice(trip.price_high);
     }
 
     // Meta line children
@@ -278,7 +278,7 @@
       }, [
         AdminUI.el('span', { class: 'chev', 'aria-hidden': 'true' }, ['▸']),
         ' Past trips ',
-        AdminUI.el('span', { class: 'tl-past-dim' }, ['— ' + past.length])
+        AdminUI.el('span', { class: 'tl-past-dim' }, ['· ' + past.length])
       ]);
       root.appendChild(toggleBtn);
 
@@ -333,7 +333,7 @@
     var esc = AdminUI.escapeHtml;
 
     // Build drawer body content
-    var subLine = AdminUI.el('p', { class: 'tl-dw-sub' }, [
+    var subLine = AdminUI.el('p', { class: 'admin-ui-dw-sub' }, [
       (trip.destination || '') + (trip.date_range ? ' · ' + trip.date_range : '')
     ]);
 
@@ -363,7 +363,7 @@
     if (trip.price_low === trip.price_high) {
       priceText = formatPrice(trip.price_low);
     } else {
-      priceText = formatPrice(trip.price_low) + ' – ' + formatPrice(trip.price_high);
+      priceText = formatPrice(trip.price_low) + ' - ' + formatPrice(trip.price_high);
     }
     kvRows.push({ k: 'Price', v: priceText });
 
@@ -373,21 +373,21 @@
     kvRows.push({ k: 'Std seats', v: String(stdV) });
     kvRows.push({ k: 'Extra seats', v: String(extV) });
 
-    var contentDiv = AdminUI.el('div', null, []);
+    var contentDiv = AdminUI.el('div', { class: 'admin-ui-dw' }, []);
     contentDiv.appendChild(subLine);
     kvRows.forEach(function (row) {
       contentDiv.appendChild(
-        AdminUI.el('div', { class: 'tl-kv' }, [
-          AdminUI.el('span', { class: 'k' }, [row.k]),
-          AdminUI.el('span', { class: 'v' }, [row.v])
+        AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('span', { class: 'admin-ui-dw-key' }, [row.k]),
+          AdminUI.el('span', { class: 'admin-ui-dw-val' }, [row.v])
         ])
       );
     });
 
     // Status badge row
-    var badgeRow = AdminUI.el('div', { class: 'tl-kv' }, [
-      AdminUI.el('span', { class: 'k' }, ['Status']),
-      AdminUI.el('span', { class: 'v' }, [
+    var badgeRow = AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+      AdminUI.el('span', { class: 'admin-ui-dw-key' }, ['Status']),
+      AdminUI.el('span', { class: 'admin-ui-dw-val' }, [
         AdminUI.statusBadge(
           trip.status ? (trip.status.charAt(0).toUpperCase() + trip.status.slice(1)) : '',
           tripsStatusVariant(trip.status)
@@ -396,21 +396,21 @@
     ]);
     contentDiv.appendChild(badgeRow);
 
-    var drawer = AdminUI.drawer({ title: trip.name || 'Trip', content: contentDiv });
-    tripsCurrentDrawer = { close: drawer.close, id: trip.id };
-
-    // Footer actions (appended to drawer.body, sticky)
+    // Footer actions (last child of contentDiv, before drawer() call so sticky works)
     var editA = AdminUI.el('a', {
-      class: 'tl-dw-edit',
+      class: 'admin-ui-dw-btn-primary',
       href: '/admin/trips/' + trip.id + '/edit'
     }, ['Edit']);
     var deleteB = AdminUI.el('button', {
       type: 'button',
-      class: 'tl-dw-delete',
+      class: 'admin-ui-dw-btn-danger',
       onclick: function () { tripsDelete(trip.id, trip.name); }
     }, ['Delete']);
-    var footer = AdminUI.el('div', { class: 'tl-dwfooter' }, [editA, deleteB]);
-    drawer.body.appendChild(footer);
+    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, deleteB]);
+    contentDiv.appendChild(footer);
+
+    var drawer = AdminUI.drawer({ title: trip.name || 'Trip', content: contentDiv });
+    tripsCurrentDrawer = { close: drawer.close, id: trip.id };
 
     // On drawer close: restore inert + active state + focus
     var origClose = drawer.close;
