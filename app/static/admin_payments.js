@@ -1,7 +1,7 @@
-// admin_payments.js — Finance Worktable
+// admin_payments.js - Finance Worktable
 // Single IIFE; all helpers prefixed pay_.
 // Depends on: AdminUI foundation (_core, status_badge, focus_trap, drawer, filter_bar, data),
-//             showToast (toast.js) — all loaded before this file.
+//             showToast (toast.js) - all loaded before this file.
 (function () {
   'use strict';
 
