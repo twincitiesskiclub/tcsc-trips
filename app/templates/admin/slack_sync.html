@@ -149,28 +149,11 @@
 #slack-sync .ss-picker-confirm-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #slack-sync .ss-picker-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:2px 6px}
 
-/* drawer sections -- 8px/0 KV rows, 11px/700 uppercase section titles */
-#slack-sync .ss-dw-section{margin-bottom:16px}
-#slack-sync .ss-dw-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #f1f5f9}
-#slack-sync .ss-dw-kv{display:flex;gap:8px;padding:8px 0;border-bottom:1px solid #f8fafb;font-size:13px}
-#slack-sync .ss-dw-kv:last-child{border-bottom:none}
-#slack-sync .ss-dw-key{width:80px;flex-shrink:0;color:#64748b;font-weight:500}
-#slack-sync .ss-dw-val{flex:1;color:#1c2c44;font-weight:500;word-break:break-all}
-#slack-sync .ss-dw-actions{display:flex;flex-direction:column;gap:8px;padding-top:12px;border-top:1px solid #eef1f5;margin-top:16px}
-#slack-sync .ss-dw-confirm-zone{background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;padding:12px;font-size:13px;color:#c53030}
-#slack-sync .ss-dw-confirm-msg{font-weight:500;margin-bottom:8px}
-#slack-sync .ss-dw-confirm-actions{display:flex;gap:8px}
-/* drawer footer buttons -- 40px matching .mr-act-primary */
-#slack-sync .ss-dw-btn-primary{height:40px;border-radius:9px;background:#1c2c44;color:#fff;font-size:14px;font-weight:600;padding:0 16px;border:none;cursor:pointer;font-family:inherit}
-#slack-sync .ss-dw-btn-primary:hover{background:#253c5e}
-#slack-sync .ss-dw-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-#slack-sync .ss-dw-btn-danger{height:40px;border-radius:9px;background:#c53030;color:#fff;font-size:14px;font-weight:600;padding:0 16px;border:none;cursor:pointer;font-family:inherit}
-#slack-sync .ss-dw-btn-danger:hover{opacity:.9}
-#slack-sync .ss-dw-btn-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
-#slack-sync .ss-dw-btn-ghost{height:40px;border-radius:9px;background:#fff;color:#475569;font-size:14px;font-weight:600;padding:0 16px;border:1.5px solid #e5e7eb;cursor:pointer;font-family:inherit}
-#slack-sync .ss-dw-btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
-#slack-sync .ss-dw-btn-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-#slack-sync .ss-dw-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:4px 8px;margin-top:4px}
+/* drawer confirm zone + email warn -- un-scoped so body-mounted panel can reach them */
+.ss-dw-confirm-zone{background:#fff5f5;border:1px solid #fed7d7;border-radius:8px;padding:12px;font-size:13px;color:#c53030}
+.ss-dw-confirm-msg{font-weight:500;margin-bottom:8px}
+.ss-dw-confirm-actions{display:flex;gap:8px}
+.ss-dw-email-warn{font-size:11px;color:#92660b;background:#fffbeb;border-radius:4px;padding:4px 8px;margin-top:4px}
 
 /* Send Message modal -- aligned to .mr-modal dimensions */
 #ssync-message-modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);align-items:center;justify-content:center;z-index:1000}
@@ -215,7 +198,6 @@
   #slack-sync .ss-popover{position:fixed;bottom:0;left:0;right:0;top:auto;border-radius:12px 12px 0 0}
   #ssync-message-modal .ss-modal-inner{max-width:100%;margin:0;border-radius:12px 12px 0 0;position:fixed;bottom:0}
   #ssync-message-modal .ss-user-checkboxes{max-height:200px}
-  #slack-sync .ss-dw-actions{padding-bottom:calc(12px + env(safe-area-inset-bottom))}
 }
 
 /* AdminUI drawer mobile */

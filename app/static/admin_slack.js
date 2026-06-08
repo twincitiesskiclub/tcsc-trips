@@ -1140,32 +1140,32 @@
     ssyncSetActiveRow(originRow);
 
     var title = record.full_name || record.display_name || record.email || '?';
-    var content = AdminUI.el('div', {}, []);
+    var content = AdminUI.el('div', { class: 'admin-ui-dw' }, []);
 
     // DB section
     if (type === 'db') {
-      var dbSection = AdminUI.el('div', { class: 'ss-dw-section' }, [
-        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['DB record'])
+      var dbSection = AdminUI.el('div', { class: 'admin-ui-dw-section' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-section-title' }, ['DB record'])
       ]);
       [
         ['ID', String(record.id || '')],
         ['Email', record.email || ''],
         ['Status', record.status || '']
       ].forEach(function (kv) {
-        dbSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, [kv[0]]),
-          AdminUI.el('div', { class: 'ss-dw-val' }, [kv[1]])
+        dbSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, [kv[0]]),
+          AdminUI.el('div', { class: kv[1] ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [kv[1] || 'none'])
         ]));
       });
       // Slack info if linked
       if (record.slack_matched) {
-        dbSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, ['Slack UID']),
-          AdminUI.el('div', { class: 'ss-dw-val' }, [record.slack_uid || ''])
+        dbSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Slack UID']),
+          AdminUI.el('div', { class: record.slack_uid ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [record.slack_uid || 'none'])
         ]));
-        dbSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, ['Slack name']),
-          AdminUI.el('div', { class: 'ss-dw-val' }, [record.slack_display_name || ''])
+        dbSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Slack name']),
+          AdminUI.el('div', { class: record.slack_display_name ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [record.slack_display_name || 'none'])
         ]));
       }
       content.appendChild(dbSection);
@@ -1173,8 +1173,8 @@
 
     // Slack section
     if (type === 'slack') {
-      var slackSection = AdminUI.el('div', { class: 'ss-dw-section' }, [
-        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['Slack record'])
+      var slackSection = AdminUI.el('div', { class: 'admin-ui-dw-section' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-section-title' }, ['Slack record'])
       ]);
       [
         ['Slack UID', record.slack_uid || ''],
@@ -1182,9 +1182,9 @@
         ['Display name', record.display_name || ''],
         ['Full name', record.full_name || '']
       ].forEach(function (kv) {
-        slackSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, [kv[0]]),
-          AdminUI.el('div', { class: 'ss-dw-val' }, [kv[1]])
+        slackSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, [kv[0]]),
+          AdminUI.el('div', { class: kv[1] ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [kv[1] || 'none'])
         ]));
       });
       content.appendChild(slackSection);
@@ -1192,28 +1192,28 @@
 
     // Match analysis (for unlinked DB users)
     if (type === 'db' && !record.slack_matched && match) {
-      var matchSection = AdminUI.el('div', { class: 'ss-dw-section' }, [
-        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['Match analysis'])
+      var matchSection = AdminUI.el('div', { class: 'admin-ui-dw-section' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-section-title' }, ['Match analysis'])
       ]);
       var confVariants = { confident: 'success', strong: 'info', weak: 'warning', none: 'neutral' };
-      matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-        AdminUI.el('div', { class: 'ss-dw-key' }, ['Confidence']),
+      matchSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Confidence']),
         AdminUI.statusBadge(match.confidence, confVariants[match.confidence] || 'neutral')
       ]));
-      matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-        AdminUI.el('div', { class: 'ss-dw-key' }, ['Reason']),
-        AdminUI.el('div', { class: 'ss-dw-val' }, [match.reason || ''])
+      matchSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Reason']),
+        AdminUI.el('div', { class: 'admin-ui-dw-val' }, [match.reason || ''])
       ]));
       if (match.candidate) {
         var cname = match.candidate.display_name || match.candidate.full_name || match.candidate.slack_uid || '';
-        matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, ['Candidate']),
-          AdminUI.el('div', { class: 'ss-dw-val' }, [cname + ' (' + (match.candidate.email || '') + ')'])
+        matchSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Candidate']),
+          AdminUI.el('div', { class: 'admin-ui-dw-val' }, [cname + ' (' + (match.candidate.email || '') + ')'])
         ]));
       } else {
-        matchSection.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, ['Candidate']),
-          AdminUI.el('div', { class: 'ss-dw-val' }, ['No candidate found'])
+        matchSection.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Candidate']),
+          AdminUI.el('div', { class: 'admin-ui-dw-val admin-ui-dw-val--empty' }, ['No candidate found'])
         ]));
       }
       content.appendChild(matchSection);
@@ -1222,36 +1222,36 @@
     // Also suggest match for Slack-type drawer
     if (type === 'slack') {
       var slackMatch = ssyncSuggestMatchSlack(record, ssyncState.unmatchedDb);
-      var matchSection2 = AdminUI.el('div', { class: 'ss-dw-section' }, [
-        AdminUI.el('div', { class: 'ss-dw-section-title' }, ['Match analysis'])
+      var matchSection2 = AdminUI.el('div', { class: 'admin-ui-dw-section' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-section-title' }, ['Match analysis'])
       ]);
       var confVariants2 = { confident: 'success', strong: 'info', weak: 'warning', none: 'neutral' };
-      matchSection2.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-        AdminUI.el('div', { class: 'ss-dw-key' }, ['Confidence']),
+      matchSection2.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Confidence']),
         AdminUI.statusBadge(slackMatch.confidence, confVariants2[slackMatch.confidence] || 'neutral')
       ]));
-      matchSection2.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-        AdminUI.el('div', { class: 'ss-dw-key' }, ['Reason']),
-        AdminUI.el('div', { class: 'ss-dw-val' }, [slackMatch.reason || ''])
+      matchSection2.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+        AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Reason']),
+        AdminUI.el('div', { class: 'admin-ui-dw-val' }, [slackMatch.reason || ''])
       ]));
       if (slackMatch.candidate) {
-        matchSection2.appendChild(AdminUI.el('div', { class: 'ss-dw-kv' }, [
-          AdminUI.el('div', { class: 'ss-dw-key' }, ['Candidate']),
-          AdminUI.el('div', { class: 'ss-dw-val' }, [slackMatch.candidate.full_name + ' (' + (slackMatch.candidate.email || '') + ')'])
+        matchSection2.appendChild(AdminUI.el('div', { class: 'admin-ui-dw-kv' }, [
+          AdminUI.el('div', { class: 'admin-ui-dw-key' }, ['Candidate']),
+          AdminUI.el('div', { class: 'admin-ui-dw-val' }, [slackMatch.candidate.full_name + ' (' + (slackMatch.candidate.email || '') + ')'])
         ]));
       }
       content.appendChild(matchSection2);
     }
 
-    // Actions zone
-    var actionsZone = AdminUI.el('div', { class: 'ss-dw-actions' }, []);
+    // Actions zone (footer -- mounted inside content before AdminUI.drawer so position:sticky works)
+    var actionsZone = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, []);
 
     function renderActionsZone() {
       actionsZone.innerHTML = '';
 
       if (type === 'db' && record.slack_matched) {
         // Unlink button
-        var unlinkBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Unlink from Slack']);
+        var unlinkBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-ghost' }, ['Unlink from Slack']);
         unlinkBtn.addEventListener('click', function () { showUnlinkConfirm(); });
         actionsZone.appendChild(unlinkBtn);
 
@@ -1276,15 +1276,14 @@
 
         var deleteBtn = AdminUI.el('button', {
           type: 'button',
-          class: 'ss-dw-btn-ghost',
-          style: 'color:#c53030;border-color:#fed7d7'
+          class: 'admin-ui-dw-btn-danger'
         }, ['Delete user']);
         deleteBtn.addEventListener('click', function () { showDeleteConfirm(); });
         actionsZone.appendChild(deleteBtn);
 
       } else if (type === 'slack') {
         // Import button
-        var importBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-primary' }, ['Import as member']);
+        var importBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-primary' }, ['Import as member']);
         importBtn.addEventListener('click', function () { showImportConfirmDw(); });
         actionsZone.appendChild(importBtn);
 
@@ -1306,9 +1305,9 @@
         ])
       ]);
       var confirmActions = AdminUI.el('div', { class: 'ss-dw-confirm-actions' }, []);
-      var yesBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-danger' }, ['Confirm unlink']);
+      var yesBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-danger' }, ['Confirm unlink']);
       yesBtn.addEventListener('click', function () { ssyncUnlinkById(record.id); });
-      var noBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Cancel']);
+      var noBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-ghost' }, ['Cancel']);
       noBtn.addEventListener('click', function () { renderActionsZone(); noBtn.focus(); });
       confirmActions.appendChild(yesBtn);
       confirmActions.appendChild(noBtn);
@@ -1326,9 +1325,9 @@
         ])
       ]);
       var confirmActions = AdminUI.el('div', { class: 'ss-dw-confirm-actions' }, []);
-      var yesBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-danger' }, ['Confirm delete']);
+      var yesBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-danger' }, ['Confirm delete']);
       yesBtn.addEventListener('click', function () { ssyncDeleteById(record.id); });
-      var noBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Cancel']);
+      var noBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-ghost' }, ['Cancel']);
       noBtn.addEventListener('click', function () { renderActionsZone(); noBtn.focus(); });
       confirmActions.appendChild(yesBtn);
       confirmActions.appendChild(noBtn);
@@ -1346,9 +1345,9 @@
         ])
       ]);
       var confirmActions = AdminUI.el('div', { class: 'ss-dw-confirm-actions' }, []);
-      var yesBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-primary' }, ['Confirm import']);
+      var yesBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-primary' }, ['Confirm import']);
       yesBtn.addEventListener('click', function () { ssyncImport(record.id); });
-      var noBtn = AdminUI.el('button', { type: 'button', class: 'ss-dw-btn-ghost' }, ['Cancel']);
+      var noBtn = AdminUI.el('button', { type: 'button', class: 'admin-ui-dw-btn-ghost' }, ['Cancel']);
       noBtn.addEventListener('click', function () { renderActionsZone(); noBtn.focus(); });
       confirmActions.appendChild(yesBtn);
       confirmActions.appendChild(noBtn);
