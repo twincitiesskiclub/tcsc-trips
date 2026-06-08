@@ -191,8 +191,6 @@
 .mr-tag-cb-item input[type="checkbox"]{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#1c2c44}
 .mr-tag-cb-item:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
-/* CSV export button area */
-.mr-footer-row{display:flex;justify-content:flex-end;margin-top:16px;padding-top:16px;border-top:1px solid #e5e7eb}
 
 /* ===== Mobile breakpoints ===== */
 @media (max-width:767px){
@@ -313,9 +311,7 @@
   <p id="mr-empty-state" aria-live="polite">No members match the current filters.</p>
 
   <!-- Export footer -->
-  <div class="mr-footer-row">
-    <button id="mr-export-csv" class="admin-btn admin-btn-md admin-btn-secondary">Export CSV</button>
-  </div>
+  <div class="admin-ui-export-bar"><button id="mr-export-csv" class="admin-ui-export-btn"><svg width="13" height="13" viewBox="0 0 16 16" fill="none" aria-hidden="true" style="flex-shrink:0"><path d="M8 11L3 6h3V1h4v5h3L8 11Z" fill="currentColor"/><rect x="2" y="13" width="12" height="2" rx="1" fill="currentColor"/></svg>Export CSV</button></div>
 </div>
 
 <!-- Quick-edit modal -->
