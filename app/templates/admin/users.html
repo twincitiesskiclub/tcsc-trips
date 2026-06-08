@@ -106,8 +106,9 @@
 .mr-role-emoji:hover::after{opacity:1;visibility:visible}
 .mr-no-roles{font-size:13px;color:#d0d5dd}
 
-/* Badges zone */
-.mr-badges{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+/* Status cell (member badge + season sub-line) */
+.mr-status-cell{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.mr-status-sub{font-size:12px;color:#64748b;font-weight:500;text-align:right;white-space:nowrap}
 
 /* Actions zone */
 .mr-actions{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0}
@@ -203,7 +204,7 @@
   .mr-count,.mr-select-toggle{align-self:center}
 
   .mr-row{grid-template-columns:40px 1fr;grid-template-rows:auto auto}
-  .mr-badges,.mr-actions{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .mr-status-cell,.mr-actions{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
   .mr-edit-btn{height:36px;margin-left:auto}
 
   .mr-k{width:80px}

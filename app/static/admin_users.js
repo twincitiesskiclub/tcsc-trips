@@ -13,6 +13,7 @@
   var currentSeason = null;
   var currentView = 'all';
   var selectedSeasonId = null;
+  var mr_effectiveSeasonName = null;
 
   // Filter state flags for saved-chip tracking
   var activeChip = null;   // 'active-members' | 'unlinked-slack' | 'no-roles' | null
@@ -94,6 +95,11 @@
     return map[ss] || 'Not Registered';
   }
 
+  function mr_seasonTextShort(ss) {
+    var map = { ACTIVE: 'Active', PENDING_LOTTERY: 'Lottery', DROPPED_LOTTERY: 'Dropped', DROPPED_VOLUNTARY: 'Dropped', DROPPED_CAUSE: 'Dropped' };
+    return map[ss] || '';
+  }
+
   function mr_formatCurrency(val) {
     // total_paid is already DOLLARS from the backend (already divided by 100)
     return '$' + Number(val || 0).toFixed(2);
@@ -146,6 +152,8 @@
     // Recompute season_status for each user from the seasons map.
     // user.seasons uses STRING keys after JSON.parse (Python dict -> JSON).
     var effId = seasonIdToUse !== null ? seasonIdToUse : (currentSeason ? currentSeason.id : null);
+    var _es = (effId !== null) ? allSeasons.find(function(s){return s.id === effId;}) : null;
+    mr_effectiveSeasonName = _es ? _es.name : null;
     usersData.forEach(function (user) {
       if (effId !== null && user.seasons) {
         user.season_status = user.seasons[String(effId)] || '';
@@ -273,13 +281,23 @@
     // Primary zone
     var primaryEl = el('div', { class: 'mr-primary' }, [nameRow, rolesEl]);
 
-    // Season-status badge
-    var ssBadge = AdminUI.statusBadge(mr_seasonText(user.season_status), mr_seasonVariant(user.season_status));
-    ssBadge.setAttribute('aria-label', 'Season status: ' + mr_seasonText(user.season_status));
-    var badgesEl = el('div', { class: 'mr-badges' }, [ssBadge]);
-
-    // Status badge + select checkbox + edit button (actions zone)
+    // Grouped status cell: member-status badge + season sub-line
     var statusBadge = AdminUI.statusBadge(mr_statusText(user.status), mr_statusVariant(user.status));
+    statusBadge.setAttribute('aria-label', 'Member status: ' + mr_statusText(user.status));
+
+    var subText = user.season_status
+      ? ((mr_effectiveSeasonName ? mr_effectiveSeasonName + ' · ' : '') + mr_seasonTextShort(user.season_status))
+      : 'Not registered';
+    var seasonSubEl = el('span', {
+      class: 'mr-status-sub',
+      'aria-label': user.season_status
+        ? ('Season: ' + (mr_effectiveSeasonName ? mr_effectiveSeasonName + ', ' : '') + mr_seasonTextShort(user.season_status))
+        : 'Not registered in current season'
+    }, [subText]);
+
+    var statusCellEl = el('div', { class: 'mr-status-cell' }, [statusBadge, seasonSubEl]);
+
+    // Select checkbox + edit button (actions zone)
     var selectCb = el('input', {
       type: 'checkbox',
       class: 'mr-select-cb',
@@ -302,7 +320,7 @@
       }
     }, ['Edit']);
 
-    var actionsEl = el('div', { class: 'mr-actions' }, [statusBadge, selectCb, editBtn]);
+    var actionsEl = el('div', { class: 'mr-actions' }, [selectCb, editBtn]);
 
     // Row element
     var row = el('div', {
@@ -325,7 +343,7 @@
           if (!mr_selectMode) mr_openDrawer(user, row);
         }
       }
-    }, [avatarEl, primaryEl, badgesEl, actionsEl]);
+    }, [avatarEl, primaryEl, statusCellEl, actionsEl]);
 
     return row;
   }
