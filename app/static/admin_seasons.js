@@ -497,87 +497,87 @@
 
     var metaChildren = [];
     if (season.is_current) metaChildren.push(AdminUI.statusBadge('Current', 'success'));
-    metaChildren.push(el('span', { class: 'stl-pill' }, [stlCapitalize(season.season_type || '')]));
-    if (season.year) metaChildren.push(el('span', { class: 'stl-year' }, [String(season.year)]));
-    var meta = el('div', { class: 'stl-dw-meta' }, metaChildren);
+    metaChildren.push(el('span', { class: 'admin-ui-dw-pill' }, [stlCapitalize(season.season_type || '')]));
+    if (season.year) metaChildren.push(el('span', { class: 'admin-ui-dw-val' }, [String(season.year)]));
+    var meta = el('div', { class: 'admin-ui-dw-kv' }, metaChildren);
 
     // Block 1: Identity
-    var block1 = el('div', { class: 'stl-blk' }, [
-      el('div', { class: 'stl-blk-h' }, ['Identity']),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Name']),
-        el('span', { class: 'v' }, [season.name || '-'])
+    var block1 = el('div', { class: 'admin-ui-dw-section' }, [
+      el('div', { class: 'admin-ui-dw-section-title' }, ['Identity']),
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Name']),
+        el('span', { class: season.name ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [season.name || '-'])
       ]),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Type']),
-        el('span', { class: 'v' }, [stlCapitalize(season.season_type || '-')])
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Type']),
+        el('span', { class: season.season_type ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [stlCapitalize(season.season_type || '-')])
       ]),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Year']),
-        el('span', { class: 'v' }, [season.year ? String(season.year) : '-'])
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Year']),
+        el('span', { class: season.year ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [season.year ? String(season.year) : '-'])
       ])
     ]);
 
     // Block 2: Season Dates
-    var block2 = el('div', { class: 'stl-blk' }, [
-      el('div', { class: 'stl-blk-h' }, ['Season Dates']),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Start']),
-        el('span', { class: 'v' }, [season.start_date || '-'])
+    var block2 = el('div', { class: 'admin-ui-dw-section' }, [
+      el('div', { class: 'admin-ui-dw-section-title' }, ['Season Dates']),
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Start']),
+        el('span', { class: season.start_date ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [season.start_date || '-'])
       ]),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['End']),
-        el('span', { class: 'v' }, [season.end_date || '-'])
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['End']),
+        el('span', { class: season.end_date ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [season.end_date || '-'])
       ])
     ]);
 
     // Block 3: Returning Members Window
-    var retChildren = [el('div', { class: 'stl-blk-h' }, ['Returning Members Window'])];
+    var retChildren = [el('div', { class: 'admin-ui-dw-section-title' }, ['Returning Members Window'])];
     if (!season.returning_start && !season.returning_end) {
-      retChildren.push(el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Window']),
-        el('span', { class: 'v' }, ['Not set'])
+      retChildren.push(el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Window']),
+        el('span', { class: 'admin-ui-dw-val admin-ui-dw-val--empty' }, ['Not set'])
       ]));
     } else {
       var retKv = [
-        el('span', { class: 'k' }, ['Window']),
-        el('span', { class: 'v' }, [stlFormatWindowRange(season.returning_start, season.returning_end)])
+        el('span', { class: 'admin-ui-dw-key' }, ['Window']),
+        el('span', { class: 'admin-ui-dw-val' }, [stlFormatWindowRange(season.returning_start, season.returning_end)])
       ];
       var retBadge = stlWindowBadge(retState);
       if (retBadge) retKv.push(retBadge);
-      retChildren.push(el('div', { class: 'stl-kv' }, retKv));
+      retChildren.push(el('div', { class: 'admin-ui-dw-kv' }, retKv));
     }
-    var block3 = el('div', { class: 'stl-blk' }, retChildren);
+    var block3 = el('div', { class: 'admin-ui-dw-section' }, retChildren);
 
     // Block 4: New Members Window
-    var newChildren = [el('div', { class: 'stl-blk-h' }, ['New Members Window'])];
+    var newChildren = [el('div', { class: 'admin-ui-dw-section-title' }, ['New Members Window'])];
     if (!season.new_start && !season.new_end) {
-      newChildren.push(el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Window']),
-        el('span', { class: 'v' }, ['Not set'])
+      newChildren.push(el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Window']),
+        el('span', { class: 'admin-ui-dw-val admin-ui-dw-val--empty' }, ['Not set'])
       ]));
     } else {
       var newKv = [
-        el('span', { class: 'k' }, ['Window']),
-        el('span', { class: 'v' }, [stlFormatWindowRange(season.new_start, season.new_end)])
+        el('span', { class: 'admin-ui-dw-key' }, ['Window']),
+        el('span', { class: 'admin-ui-dw-val' }, [stlFormatWindowRange(season.new_start, season.new_end)])
       ];
       var newBadge = stlWindowBadge(newState);
       if (newBadge) newKv.push(newBadge);
-      newChildren.push(el('div', { class: 'stl-kv' }, newKv));
+      newChildren.push(el('div', { class: 'admin-ui-dw-kv' }, newKv));
     }
-    var block4 = el('div', { class: 'stl-blk' }, newChildren);
+    var block4 = el('div', { class: 'admin-ui-dw-section' }, newChildren);
 
     // Block 5: Registration
     // TODO: member_count slot - pending /admin/seasons/data serializer addition (UserSeason count join)
-    var block5 = el('div', { class: 'stl-blk' }, [
-      el('div', { class: 'stl-blk-h' }, ['Registration']),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Price']),
-        el('span', { class: 'v' }, [stlFormatPrice(season.price_cents)])
+    var block5 = el('div', { class: 'admin-ui-dw-section' }, [
+      el('div', { class: 'admin-ui-dw-section-title' }, ['Registration']),
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Price']),
+        el('span', { class: stlFormatPrice(season.price_cents) !== '-' ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [stlFormatPrice(season.price_cents)])
       ]),
-      el('div', { class: 'stl-kv' }, [
-        el('span', { class: 'k' }, ['Limit']),
-        el('span', { class: 'v' }, [season.registration_limit ? String(season.registration_limit) : 'No limit'])
+      el('div', { class: 'admin-ui-dw-kv' }, [
+        el('span', { class: 'admin-ui-dw-key' }, ['Limit']),
+        el('span', { class: season.registration_limit ? 'admin-ui-dw-val' : 'admin-ui-dw-val admin-ui-dw-val--empty' }, [season.registration_limit ? String(season.registration_limit) : 'No limit'])
       ])
     ]);
 
@@ -585,58 +585,56 @@
 
     // Block 6: Description (only if non-empty)
     if (season.description && season.description.trim()) {
-      blocks.push(el('div', { class: 'stl-blk' }, [
-        el('div', { class: 'stl-blk-h' }, ['Description']),
-        el('div', { class: 'stl-desc-box' }, [season.description])
+      blocks.push(el('div', { class: 'admin-ui-dw-section' }, [
+        el('div', { class: 'admin-ui-dw-section-title' }, ['Description']),
+        el('div', { class: 'admin-ui-dw-desc' }, [season.description])
       ]));
     }
 
-    return el('div', {}, blocks);
+    return el('div', { class: 'admin-ui-dw' }, blocks);
   }
 
   function stlOpenPreview(season, cardEl) {
     stlMarkActiveCard(cardEl);
 
     var content = stlBuildDrawerContent(season);
-    var drawer = AdminUI.drawer({ title: season.name, content: content });
-    _activeDrawer = drawer;
 
-    // Build footer actions and append to panel (outside scrollable body)
+    // Build footer actions and append to content before creating the drawer
     var activateBtn = el('button', {
       type: 'button',
-      class: 'stl-act stl-act-success',
+      class: 'admin-ui-dw-btn-success',
       style: season.is_current ? 'display:none' : '',
       onclick: function () { stlActivate(season); }
     }, ['Activate']);
 
     var deleteBtn = el('button', {
       type: 'button',
-      class: 'stl-act stl-act-danger',
+      class: 'admin-ui-dw-btn-danger',
       onclick: function () { stlDelete(season, cardEl); }
     }, ['Delete']);
 
-    var footer = el('div', { class: 'stl-dw-footer' }, [
+    var footer = el('div', { class: 'admin-ui-dw-footer' }, [
       el('a', {
         href: '/admin/seasons/' + season.id + '/edit',
-        class: 'stl-act stl-act-primary'
+        class: 'admin-ui-dw-btn-primary'
       }, ['Edit']),
       el('a', {
         href: '/admin/seasons/' + season.id + '/export',
-        class: 'stl-act stl-act-ghost',
+        class: 'admin-ui-dw-btn-ghost',
         download: 'download'
       }, ['Export CSV']),
       el('button', {
         type: 'button',
-        class: 'stl-act stl-act-ghost',
+        class: 'admin-ui-dw-btn-ghost',
         onclick: function () { stlLateLinkModal(season); }
       }, ['Late Link']),
       activateBtn,
       deleteBtn
     ]);
 
-    // Append footer to panel (sibling of body, not inside body)
-    var panel = drawer.body.parentElement;
-    if (panel) panel.appendChild(footer);
+    content.appendChild(footer);
+    var drawer = AdminUI.drawer({ title: season.name, content: content });
+    _activeDrawer = drawer;
 
     // Programmatic close override: for stlActivate / stlDelete paths.
     var origClose = drawer.close;
@@ -652,6 +650,7 @@
     // not fire on user-initiated close. Use a MutationObserver on document.body
     // to detect panel removal and clean up the active-card highlight on ALL
     // close paths without touching any frozen foundation file.
+    var panel = drawer.body.closest('.admin-ui-drawer');
     if (panel && typeof MutationObserver !== 'undefined') {
       var _panelObserver = new MutationObserver(function (mutations) {
         for (var i = 0; i < mutations.length; i++) {
