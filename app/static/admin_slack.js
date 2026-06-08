@@ -18,6 +18,8 @@
 
   // Track currently open popover element for singleton management
   var ssyncOpenPopover = null;
+  // Track the currently open inline picker wrap for singleton management
+  var ssyncOpenPicker = null;
   // Track the row whose drawer is currently open (for is-active rail)
   var ssyncActiveRow = null;
 
@@ -515,6 +517,7 @@
       ariaLabel = name + ', ' + (record.email || '') + ', ' + record.status + ', ' + linkedState;
     }
 
+    // NOTE: row is a <button> with interactive descendants (invalid nesting, pre-existing). Follow-up: convert to <div role="button" tabindex="0"> so actions/picker are valid siblings.
     var row = AdminUI.el('button', {
       type: 'button',
       class: 'ss-row',
@@ -537,10 +540,76 @@
     return row;
   }
 
+  // Helper: open a picker inside pickerWrap, replacing the trigger element.
+  // Closes any other open picker or popover first.
+  // Returns the picker element so callers can focus its input.
+  function ssyncActivatePickerInWrap(pickerWrap, trigger, direction, record, match, pool, onLink, onRestore) {
+    // Close any other open picker first
+    if (ssyncOpenPicker && ssyncOpenPicker !== pickerWrap) {
+      ssyncCollapsePicker(ssyncOpenPicker);
+    }
+    // Close any open popover
+    if (ssyncOpenPopover) {
+      var oldPop = ssyncOpenPopover.querySelector('.ss-popover');
+      if (oldPop) ssyncOpenPopover.removeChild(oldPop);
+      ssyncOpenPopover = null;
+    }
+    var picker = ssyncLinkPicker(direction, record, match, pool, onLink);
+    // Store restore callback so collapse can put trigger back (or rebuild actions)
+    picker._trigger = trigger;
+    picker._onRestore = onRestore || null;
+    picker._pickerWrap = pickerWrap;
+    if (trigger && trigger.parentNode === pickerWrap) pickerWrap.removeChild(trigger);
+    pickerWrap.appendChild(picker);
+    ssyncOpenPicker = pickerWrap;
+
+    // Esc collapses picker and returns focus to trigger
+    function onPickerEsc(e) {
+      if (e.key === 'Escape') {
+        ssyncCollapsePicker(pickerWrap);
+        document.removeEventListener('keydown', onPickerEsc);
+      }
+    }
+    // Outside-click collapses picker
+    function onPickerOutside(e) {
+      if (!pickerWrap.contains(e.target)) {
+        ssyncCollapsePicker(pickerWrap);
+        document.removeEventListener('click', onPickerOutside);
+        document.removeEventListener('keydown', onPickerEsc);
+      }
+    }
+    picker._onEsc = onPickerEsc;
+    picker._onOutside = onPickerOutside;
+    document.addEventListener('keydown', onPickerEsc);
+    setTimeout(function () { document.addEventListener('click', onPickerOutside); }, 0);
+
+    return picker;
+  }
+
+  // Collapse the open picker inside pickerWrap and restore its trigger.
+  // If no trigger but an onRestore callback was provided, invoke it instead
+  // so the row's actions column is rebuilt rather than left bare.
+  function ssyncCollapsePicker(pickerWrap) {
+    var picker = pickerWrap.querySelector('.ss-picker');
+    if (!picker) return;
+    var trigger = picker._trigger;
+    var onRestore = picker._onRestore;
+    if (picker._onEsc) document.removeEventListener('keydown', picker._onEsc);
+    if (picker._onOutside) document.removeEventListener('click', picker._onOutside);
+    pickerWrap.removeChild(picker);
+    if (trigger) {
+      pickerWrap.appendChild(trigger);
+      trigger.focus();
+    } else if (onRestore) {
+      onRestore();
+    }
+    if (ssyncOpenPicker === pickerWrap) ssyncOpenPicker = null;
+  }
+
   // Build the actions column content based on kind
   function ssyncBuildRowActions(actionsEl, record, kind, match, name) {
     if (kind === 'all-db-linked') {
-      // Linked: offer Unlink
+      // Linked: one ghost Unlink button, no overflow
       var unlinkBtn = AdminUI.el('button', {
         type: 'button',
         class: 'ss-act-ghost',
@@ -553,52 +622,54 @@
       actionsEl.appendChild(unlinkBtn);
 
     } else if (kind === 'all-db-unlinked') {
-      // Unlinked DB: Link picker trigger + Delete
+      // Unlinked DB: primary Link trigger (opens picker on demand) + overflow with Delete
+      var pickerWrap = AdminUI.el('div', { style: 'position:relative' }, []);
       var linkTrigger = AdminUI.el('button', {
         type: 'button',
-        class: 'ss-act-ghost',
+        class: 'ss-act-primary',
         'aria-label': 'Link ' + name + ' to Slack'
       }, ['Link']);
-
-      var pickerWrap = AdminUI.el('div', { style: 'position:relative' }, []);
       linkTrigger.addEventListener('click', function (e) {
         e.stopPropagation();
         var existing = pickerWrap.querySelector('.ss-picker');
-        if (existing) { pickerWrap.removeChild(existing); pickerWrap.appendChild(linkTrigger); return; }
+        if (existing) { ssyncCollapsePicker(pickerWrap); return; }
         var m = ssyncSuggestMatch(record, ssyncState.unmatchedSlack);
-        var picker = ssyncLinkPicker('db', record, m, ssyncState.unmatchedSlack, function (slackId) {
+        var picker = ssyncActivatePickerInWrap(pickerWrap, linkTrigger, 'db', record, m, ssyncState.unmatchedSlack, function (slackId) {
           ssyncLink(record.id, slackId);
         });
-        pickerWrap.removeChild(linkTrigger);
-        pickerWrap.appendChild(picker);
-        picker.querySelector('.ss-picker-input').focus();
+        var inp = picker.querySelector('.ss-picker-input');
+        if (inp) inp.focus();
       });
       pickerWrap.appendChild(linkTrigger);
       actionsEl.appendChild(pickerWrap);
 
-      var deleteBtn = AdminUI.el('button', {
+      var overflowWrapU = AdminUI.el('div', { class: 'ss-overflow-wrap' }, []);
+      var overflowBtnU = AdminUI.el('button', {
         type: 'button',
-        class: 'ss-act-danger',
-        'aria-label': 'Delete ' + name
-      }, ['Delete']);
-      deleteBtn.addEventListener('click', function (e) {
+        class: 'ss-overflow-btn',
+        'aria-label': 'More actions for ' + name
+      }, ['…']);
+      overflowBtnU.addEventListener('click', function (e) {
         e.stopPropagation();
-        ssyncDelete(record.id);
+        ssyncTogglePopover(overflowWrapU, [
+          { label: 'Delete user', danger: true, action: function () { ssyncDelete(record.id); } }
+        ]);
       });
-      actionsEl.appendChild(deleteBtn);
+      overflowWrapU.appendChild(overflowBtnU);
+      actionsEl.appendChild(overflowWrapU);
 
     } else if (kind === 'attention-db') {
-      // Attention DB: confident = one-click + overflow; else picker + delete
+      // Attention DB: confident = one-click fast path + overflow; weak/none = Link opens picker + overflow
       if (match && match.confidence === 'confident' && match.candidate) {
         var slackDisplayName = match.candidate.display_name || match.candidate.full_name || match.candidate.slack_uid || 'Slack user';
         var slackEmail = match.candidate.email || '';
-        var warnTitle = 'DB email will be updated to ' + slackEmail;
+        var warnTitle = 'Links to @' + slackDisplayName + ' via email match' + (slackEmail ? ' (' + slackEmail + ')' : '');
         var linkBtn = AdminUI.el('button', {
           type: 'button',
           class: 'ss-act-primary',
           title: warnTitle,
           'aria-describedby': 'ssync-link-warn-' + record.id
-        }, ['Link to @' + slackDisplayName + ' (email match)']);
+        }, ['Link']);
         linkBtn.addEventListener('click', function (e) {
           e.stopPropagation();
           ssyncLink(record.id, match.candidate.id);
@@ -607,66 +678,89 @@
         var warnSpan = AdminUI.el('span', {
           id: 'ssync-link-warn-' + record.id,
           class: 'ss-sr-only'
-        }, ['Note: DB email will be updated to ' + slackEmail]);
+        }, ['Links to @' + slackDisplayName + ' via email match. Note: DB email will be updated to ' + slackEmail]);
         actionsEl.appendChild(linkBtn);
         actionsEl.appendChild(warnSpan);
 
-        // Overflow for manual pick / delete
-        var overflowWrap = AdminUI.el('div', { class: 'ss-overflow-wrap' }, []);
-        var overflowBtn = AdminUI.el('button', {
+        // Overflow: link via picker, open details, delete
+        var overflowWrapC = AdminUI.el('div', { class: 'ss-overflow-wrap' }, []);
+        var overflowBtnC = AdminUI.el('button', {
           type: 'button',
           class: 'ss-overflow-btn',
           'aria-label': 'More actions for ' + name
         }, ['…']);
-        overflowBtn.addEventListener('click', function (e) {
+        overflowBtnC.addEventListener('click', function (e) {
           e.stopPropagation();
-          ssyncTogglePopover(overflowWrap, record, match, function () {
-            // Switch to inline picker
-            actionsEl.innerHTML = '';
-            actionsEl.addEventListener('click', function (e2) { e2.stopPropagation(); });
-            var inlinePicker = ssyncLinkPicker('db', record, match, ssyncState.unmatchedSlack, function (slackId) {
-              ssyncLink(record.id, slackId);
-            });
-            actionsEl.appendChild(inlinePicker);
-            var inlineDelete = AdminUI.el('button', {
-              type: 'button',
-              class: 'ss-act-danger',
-              'aria-label': 'Delete ' + name
-            }, ['Delete']);
-            inlineDelete.addEventListener('click', function (e2) {
-              e2.stopPropagation();
-              ssyncDelete(record.id);
-            });
-            actionsEl.appendChild(inlineDelete);
-            var pickerInput = inlinePicker.querySelector('.ss-picker-input');
-            if (pickerInput) { pickerInput.focus(); }
-          });
+          ssyncTogglePopover(overflowWrapC, [
+            {
+              label: 'Link via picker', danger: false, action: function () {
+                // Replace actions content with an on-demand picker (no Delete inline)
+                actionsEl.innerHTML = '';
+                var pickerWrap2 = AdminUI.el('div', { style: 'position:relative' }, []);
+                actionsEl.appendChild(pickerWrap2);
+                var picker2 = ssyncActivatePickerInWrap(pickerWrap2, null, 'db', record, match, ssyncState.unmatchedSlack, function (slackId) {
+                  ssyncLink(record.id, slackId);
+                }, function () {
+                  // Restore: rebuild the row's normal actions
+                  actionsEl.innerHTML = '';
+                  ssyncBuildRowActions(actionsEl, record, 'attention-db', match, name);
+                });
+                var inp2 = picker2.querySelector('.ss-picker-input');
+                if (inp2) inp2.focus();
+              }
+            },
+            {
+              label: 'Open details', danger: false, action: function () {
+                ssyncOpenDrawer({ type: 'db', user: record, match: match }, null);
+              }
+            },
+            { label: 'Delete user', danger: true, action: function () { ssyncDelete(record.id); } }
+          ]);
         });
-        overflowWrap.appendChild(overflowBtn);
-        actionsEl.appendChild(overflowWrap);
+        overflowWrapC.appendChild(overflowBtnC);
+        actionsEl.appendChild(overflowWrapC);
 
       } else {
-        // No confident match: inline picker + delete
+        // No confident match: primary Link trigger opens picker on demand + overflow with Delete
         var m2 = match || { candidate: null, confidence: 'none', reason: '' };
-        var pickerEl = ssyncLinkPicker('db', record, m2, ssyncState.unmatchedSlack, function (slackId) {
-          ssyncLink(record.id, slackId);
-        });
-        actionsEl.appendChild(pickerEl);
-
-        var dbDeleteBtn = AdminUI.el('button', {
+        var pickerWrapW = AdminUI.el('div', { style: 'position:relative' }, []);
+        var linkTriggerW = AdminUI.el('button', {
           type: 'button',
-          class: 'ss-act-danger',
-          'aria-label': 'Delete ' + name
-        }, ['Delete']);
-        dbDeleteBtn.addEventListener('click', function (e) {
+          class: 'ss-act-primary',
+          'aria-label': 'Link ' + name + ' to Slack'
+        }, ['Link']);
+        linkTriggerW.addEventListener('click', function (e) {
           e.stopPropagation();
-          ssyncDelete(record.id);
+          var existing = pickerWrapW.querySelector('.ss-picker');
+          if (existing) { ssyncCollapsePicker(pickerWrapW); return; }
+          var picker = ssyncActivatePickerInWrap(pickerWrapW, linkTriggerW, 'db', record, m2, ssyncState.unmatchedSlack, function (slackId) {
+            ssyncLink(record.id, slackId);
+          });
+          var inp = picker.querySelector('.ss-picker-input');
+          if (inp) inp.focus();
         });
-        actionsEl.appendChild(dbDeleteBtn);
+        pickerWrapW.appendChild(linkTriggerW);
+        actionsEl.appendChild(pickerWrapW);
+
+        var overflowWrapW = AdminUI.el('div', { class: 'ss-overflow-wrap' }, []);
+        var overflowBtnW = AdminUI.el('button', {
+          type: 'button',
+          class: 'ss-overflow-btn',
+          'aria-label': 'More actions for ' + name
+        }, ['…']);
+        overflowBtnW.addEventListener('click', function (e) {
+          e.stopPropagation();
+          ssyncTogglePopover(overflowWrapW, [
+            { label: 'Delete user', danger: true, action: function () { ssyncDelete(record.id); } }
+          ]);
+        });
+        overflowWrapW.appendChild(overflowBtnW);
+        actionsEl.appendChild(overflowWrapW);
       }
 
     } else if (kind === 'slack') {
-      // Unclaimed Slack: Import (with confirm) + Link picker to DB
+      // Unclaimed Slack: primary Import + overflow with "Link to DB user" (picker on demand)
+      // No Delete -- no delete-slack-user endpoint exists
       var importZone = AdminUI.el('div', {}, []);
       var importBtn = AdminUI.el('button', {
         type: 'button',
@@ -680,11 +774,37 @@
       importZone.appendChild(importBtn);
       actionsEl.appendChild(importZone);
 
-      var slackMatch = ssyncSuggestMatchSlack(record, ssyncState.unmatchedDb);
-      var slackPicker = ssyncLinkPicker('slack', record, slackMatch, ssyncState.unmatchedDb, function (dbId) {
-        ssyncLink(dbId, record.id);
+      var overflowWrapS = AdminUI.el('div', { class: 'ss-overflow-wrap' }, []);
+      var overflowBtnS = AdminUI.el('button', {
+        type: 'button',
+        class: 'ss-overflow-btn',
+        'aria-label': 'More actions for ' + name
+      }, ['…']);
+      overflowBtnS.addEventListener('click', function (e) {
+        e.stopPropagation();
+        ssyncTogglePopover(overflowWrapS, [
+          {
+            label: 'Link to DB user', danger: false, action: function () {
+              // Inject picker below the importZone (inside actionsEl, not the button)
+              var existingPicker = actionsEl.querySelector('.ss-picker-wrap-s');
+              if (existingPicker) { existingPicker.parentNode.removeChild(existingPicker); return; }
+              var pickerWrapS = AdminUI.el('div', { class: 'ss-picker-wrap-s', style: 'position:relative' }, []);
+              actionsEl.appendChild(pickerWrapS);
+              var slackMatch = ssyncSuggestMatchSlack(record, ssyncState.unmatchedDb);
+              var pickerS = ssyncActivatePickerInWrap(pickerWrapS, null, 'slack', record, slackMatch, ssyncState.unmatchedDb, function (dbId) {
+                ssyncLink(dbId, record.id);
+              }, function () {
+                // Restore: drop the stray wrapper (Import + overflow remain)
+                if (pickerWrapS.parentNode) pickerWrapS.parentNode.removeChild(pickerWrapS);
+              });
+              var inpS = pickerS.querySelector('.ss-picker-input');
+              if (inpS) inpS.focus();
+            }
+          }
+        ]);
       });
-      actionsEl.appendChild(slackPicker);
+      overflowWrapS.appendChild(overflowBtnS);
+      actionsEl.appendChild(overflowWrapS);
     }
   }
 
@@ -823,6 +943,7 @@
         }
 
         var optEl = AdminUI.el('div', {
+          id: listId + '-opt-' + idx,
           class: 'ss-picker-option',
           role: 'option',
           'aria-selected': 'false',
@@ -950,7 +1071,9 @@
   }
 
   // ─── Overflow popover ─────────────────────────────────────────────────────────
-  function ssyncTogglePopover(wrapEl, user, match, onLinkViaPicker) {
+  // items: Array of {label:string, danger:boolean, action:function}
+  function ssyncTogglePopover(wrapEl, items) {
+    // Close any other open popover
     if (ssyncOpenPopover && ssyncOpenPopover !== wrapEl) {
       var old = ssyncOpenPopover.querySelector('.ss-popover');
       if (old) ssyncOpenPopover.removeChild(old);
@@ -964,35 +1087,28 @@
       return;
     }
 
+    // Close any open picker when opening a popover
+    if (ssyncOpenPicker) {
+      ssyncCollapsePicker(ssyncOpenPicker);
+    }
+
     var popover = AdminUI.el('div', { class: 'ss-popover', role: 'menu' }, []);
 
-    var pickerItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item', role: 'menuitem' }, ['Link via picker']);
-    pickerItem.addEventListener('click', function () {
-      wrapEl.removeChild(popover);
-      ssyncOpenPopover = null;
-      if (onLinkViaPicker) { onLinkViaPicker(); }
+    items.forEach(function (item, idx) {
+      var cls = 'ss-popover-item' + (item.danger ? ' ss-popover-item-danger' : '');
+      var menuItem = AdminUI.el('button', { type: 'button', class: cls, role: 'menuitem' }, [item.label]);
+      menuItem.addEventListener('click', function () {
+        if (wrapEl.contains(popover)) wrapEl.removeChild(popover);
+        ssyncOpenPopover = null;
+        if (item.action) item.action();
+      });
+      popover.appendChild(menuItem);
     });
 
-    var detailsItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item', role: 'menuitem' }, ['Open details']);
-    detailsItem.addEventListener('click', function () {
-      wrapEl.removeChild(popover);
-      ssyncOpenPopover = null;
-      ssyncOpenDrawer({ type: 'db', user: user, match: match }, null);
-    });
-
-    var deleteItem = AdminUI.el('button', { type: 'button', class: 'ss-popover-item ss-popover-item-danger', role: 'menuitem' }, ['Delete user']);
-    deleteItem.addEventListener('click', function () {
-      wrapEl.removeChild(popover);
-      ssyncOpenPopover = null;
-      ssyncDelete(user.id);
-    });
-
-    popover.appendChild(pickerItem);
-    popover.appendChild(detailsItem);
-    popover.appendChild(deleteItem);
     wrapEl.appendChild(popover);
     ssyncOpenPopover = wrapEl;
-    pickerItem.focus();
+    var firstItem = popover.querySelector('.ss-popover-item');
+    if (firstItem) firstItem.focus();
 
     // Close on Esc or outside click
     function onKey(e) {
