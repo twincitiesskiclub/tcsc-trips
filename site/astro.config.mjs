@@ -2,6 +2,7 @@ import { defineConfig } from 'astro/config';
 import tailwind from '@astrojs/tailwind';
 import react from '@astrojs/react';
 import keystatic from '@keystatic/astro';
+import markdoc from '@astrojs/markdoc';
 
 // Keystatic injects server routes (prerender: false), which Astro 5 only
 // allows when a server adapter is installed. We use local-mode Keystatic as
@@ -15,6 +16,9 @@ export default defineConfig({
   output: 'static',
   integrations: [
     tailwind({ applyBaseStyles: false }),
+    // markdoc() is required in ALL builds: content collections read the
+    // .mdoc files Keystatic writes, and render() needs the integration.
+    markdoc(),
     ...(isProductionBuild ? [] : [react(), keystatic()]),
   ],
   image: {

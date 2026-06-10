@@ -3,7 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "dev": "astro dev --port 4321",
     "build": "astro build",
@@ -11,6 +13,7 @@
     "check": "astro check"
   },
   "dependencies": {
+    "@astrojs/markdoc": "^0.15.11",
     "@keystatic/astro": "^5.1.0",
     "@keystatic/core": "^0.5.50",
     "astro": "^5.0.0"
