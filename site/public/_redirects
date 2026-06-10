@@ -1,0 +1,8 @@
+/register             https://tcsc.ski/register             302
+/copy-of-register     https://tcsc.ski/register             302
+/sisu-signup          https://tcsc.ski/trips/sisu-ski-fest  302
+/trip-sign-up         https://tcsc.ski/trips                302
+/sisu-information     /trips/sisu-ski-fest                  301
+/trip-information     /trips                                302
+/trip-confirmation    /                                     302
+/confirmation         /                                     302
