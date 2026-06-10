@@ -107,6 +107,17 @@ None blocking PR-1. Follow-ups, roughly in order of value:
 4. **Flask `/api/conditions` must ship CORS headers** (`Access-Control-Allow-Origin` for the marketing origin) or LiveConditions will stay "Conditions unavailable" forever — the origins differ even after DNS cutover.
 5. (Informational) Chrome under-selects srcset candidates at exactly 2x via its geometric-mean heuristic; no action.
 
+## Addendum (2026-06-10): follow-ups 1-4 resolved
+
+All four open items landed same-day in `fix(site): favicon, coaches LCP, compact conditions contrast, staging CORS origin` (49146d9):
+
+1. **Favicon** — set generated from the Nav ski-tracks mark (mint #9ef9be on navy #10213e rounded square): `site/public/favicon.svg` + 32px `favicon.ico` + 180px `apple-touch-icon.png`, linked in BaseLayout. All three 200 on local preview.
+2. **/coaches LCP** — `CoachEntry` gained a `loading` prop (default lazy, `fetchpriority` follows); coaches.astro passes `eager` for the first coach only. Built page verified: exactly one `loading="eager"` + `fetchpriority="high"` (coach-kj, the LCP element), the rest lazy.
+3. **Compact LiveConditions contrast** — strip changed from `bg-navy/40` (translucent over paper) to solid `bg-navy-deep`, border treatment kept. Computed WCAG ratios on the new surface: wax label `text-paper/70` **9.06:1** (was 1.91:1; AA needs 4.5:1), temp `text-paper` 18.06:1, location name `text-mint` 15.06:1.
+4. **Staging CORS** — `https://tcsc-marketing.onrender.com` added to `_ALLOWED_ORIGINS` in `app/routes/conditions.py` with a staging comment; new test `test_get_conditions_sets_cors_for_staging_origin`. Correction to open item 4 above: the production origins (twincitiesskiclub.org + www) were *already* allowlisted — the route's CORS behavior was correct, and only the staging origin was missing. The strip stays "Conditions unavailable" on staging until the Flask side deploys, then populates.
+
+Verification: `astro check` 0 errors/0 warnings, production build green (10 pages), `pytest tests/conditions -v` 25 passed, migration verifier still exit 0. Expected Lighthouse effect after the next staging deploy: Best Practices 100 (favicon 404 gone; the conditions console error also clears once Flask deploys), inner-page a11y 100, /coaches perf ~95+ via the `lcp-lazy-loaded` fix. Item 5 (Chrome geometric-mean srcset selection) remains informational, no action.
+
 ## Reproduction
 
 QA scripts (not committed; throwaway, in /tmp/qa during the audit): route walk + console/network capture, srcset-candidate image audit, interaction/reduced-motion checks via Playwright sync API; Lighthouse via `CHROME_PATH=<playwright chromium> npx lighthouse@12 <url> --chrome-flags="--headless=new"`.
