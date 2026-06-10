@@ -8,12 +8,12 @@ class Location:
     name: str
     lat: float
     lon: float
-    skinnyski_slug: str  # for trail_conditions lookup
+    skinnyski_name: str  # canonical venue name for trail_conditions fuzzy lookup
 
 
 LOCATIONS: list[Location] = [
-    Location('wirth', 'Theodore Wirth', 44.9956, -93.3252, 'theodore-wirth'),
-    Location('hyland', 'Hyland Park', 44.8451, -93.3950, 'hyland-park'),
-    Location('french', 'French Park', 44.9787, -93.4854, 'french-park'),
-    Location('battlecreek', 'Battle Creek', 44.9351, -93.0290, 'battle-creek'),
+    Location('wirth', 'Theodore Wirth', 44.9956, -93.3252, 'Theodore Wirth Park'),
+    Location('hyland', 'Hyland Park', 44.8451, -93.3950, 'Hyland Lake Park Reserve'),
+    Location('french', 'French Park', 44.9787, -93.4854, 'French Regional Park'),
+    Location('battlecreek', 'Battle Creek', 44.9351, -93.0290, 'Battle Creek Regional Park'),
 ]

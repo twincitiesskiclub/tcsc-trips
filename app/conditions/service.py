@@ -14,6 +14,7 @@ from app.conditions.locations import LOCATIONS, Location
 from app.conditions.wax import recommend_wax
 from app.integrations import trail_conditions as _trail_integration
 from app.integrations import weather as _weather_integration
+from app.practices.interfaces import WeatherConditions
 from app.utils import now_central_naive
 
 logger = logging.getLogger(__name__)
@@ -21,58 +22,46 @@ logger = logging.getLogger(__name__)
 CENTRAL_TZ = ZoneInfo('America/Chicago')
 
 
-def get_current_temp_f(lat: float, lon: float) -> float | None:
-    """Current temperature in Fahrenheit via the NWS hourly forecast.
+def get_weather(lat: float, lon: float) -> WeatherConditions | None:
+    """Current weather via the NWS hourly forecast, one upstream call.
 
     The integration exposes get_weather_forecast(lat, lon, target_datetime)
     returning a WeatherConditions dataclass; the period closest to now is
-    treated as current. Returns None on any failure.
+    treated as current. Each call also fetches the uncached /alerts endpoint,
+    so callers should read both temperature_f and feels_like_f from this
+    single result rather than calling twice. Returns None on any failure.
     """
     try:
-        weather = _weather_integration.get_weather_forecast(lat, lon, now_central_naive())
-        return weather.temperature_f
+        return _weather_integration.get_weather_forecast(lat, lon, now_central_naive())
     except Exception as e:
         logger.warning(f"Weather lookup failed for ({lat},{lon}): {e}")
         return None
 
 
-def get_wind_chill_f(lat: float, lon: float) -> float | None:
-    """Feels-like temperature (wind chill or heat index) in Fahrenheit.
+def get_trail_conditions(name: str) -> str | None:
+    """Snow/ski quality string for a venue via the SkinnySkI scraper.
 
-    Uses WeatherConditions.feels_like_f; the underlying forecast call is
-    cached by the integration, so this does not duplicate the API hit.
-    Returns None on any failure.
+    The integration fuzzy-matches the given name against scraped reports, so
+    callers pass the canonical venue name (e.g. 'Hyland Lake Park Reserve',
+    which avoids mismatching St. Paul's 'Highland Park'). Returns the
+    ski_quality string (e.g. 'good', 'fair') or None on any failure.
     """
     try:
-        weather = _weather_integration.get_weather_forecast(lat, lon, now_central_naive())
-        return weather.feels_like_f
-    except Exception as e:
-        logger.warning(f"Wind chill lookup failed for ({lat},{lon}): {e}")
-        return None
-
-
-def get_trail_conditions(slug: str) -> str | None:
-    """Snow/ski quality string for a location slug via the SkinnySkI scraper.
-
-    The integration takes a location name and fuzzy-matches against scraped
-    reports, so the slug is de-slugged before lookup. Returns the ski_quality
-    string (e.g. 'good', 'fair') or None on any failure.
-    """
-    try:
-        condition = _trail_integration.get_trail_conditions(slug.replace('-', ' '))
+        condition = _trail_integration.get_trail_conditions(name)
         if condition is None:
             return None
         return condition.ski_quality
     except Exception as e:
-        logger.warning(f"Trail conditions lookup failed for '{slug}': {e}")
+        logger.warning(f"Trail conditions lookup failed for '{name}': {e}")
         return None
 
 
 def _build_location_entry(loc: Location) -> dict:
     """Build the per-location dict for the API response."""
-    temp_f = get_current_temp_f(loc.lat, loc.lon)
-    wind_chill_f = get_wind_chill_f(loc.lat, loc.lon)
-    snow_conditions = get_trail_conditions(loc.skinnyski_slug)
+    weather = get_weather(loc.lat, loc.lon)
+    temp_f = weather.temperature_f if weather is not None else None
+    wind_chill_f = weather.feels_like_f if weather is not None else None
+    snow_conditions = get_trail_conditions(loc.skinnyski_name)
 
     wax_band = recommend_wax(temp_f) if temp_f is not None else None
 

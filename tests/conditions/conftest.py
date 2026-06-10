@@ -1,7 +1,8 @@
 """Keep route tests off the live NWS/SkinnySkI integrations.
 
 The /api/conditions route caches build_conditions_response() at module level,
-so each test stubs the builder and resets the cache for isolation.
+so each test stubs the builder and resets the cache/rebuild state for
+isolation.
 """
 import pytest
 
@@ -33,6 +34,8 @@ def _stub_route_conditions(monkeypatch):
         conditions_route, 'build_conditions_response', _stub_conditions_response
     )
     monkeypatch.setattr(
-        conditions_route, '_cache', {'expires_at': 0, 'body': None}
+        conditions_route, '_cache', {'body': None, 'expires_at': 0}
     )
+    monkeypatch.setattr(conditions_route, '_rebuilding', False)
+    monkeypatch.setattr(conditions_route, '_rebuild_thread', None)
     yield
