@@ -31,7 +31,16 @@ const races = racing.data.races;
             {/* date/name/location always render (possibly empty) so the
                 three grid columns never shift when a field is omitted. */}
             <div class="text-mint-deep text-sm tracking-wider uppercase pt-0.5">{r.date}</div>
-            <div class="font-semibold text-navy">{r.name}</div>
+            <div class="font-semibold text-navy">
+              {r.href ? (
+                <a
+                  href={r.href}
+                  class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+                >{r.name}</a>
+              ) : (
+                r.name
+              )}
+            </div>
             <div class="text-slate">{r.location}</div>
             {r.notes && <div class="sm:col-span-full text-sm text-ink/80">{r.notes}</div>}
           </div>

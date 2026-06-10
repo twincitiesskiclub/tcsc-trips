@@ -106,6 +106,20 @@ export default config({
         team_bonding_activities: fields.array(fields.text({ label: 'Activity' }), {
           label: 'Team bonding activities',
         }),
+        takeaways: fields.array(
+          fields.object({
+            group: fields.text({ label: 'Group heading', validation: { isRequired: true } }),
+            items: fields.array(
+              fields.object({
+                line: fields.text({ label: 'Line', validation: { isRequired: true } }),
+                detail: fields.text({ label: 'Detail', multiline: true }),
+                href: fields.text({ label: 'Link target (optional)' }),
+              }),
+              { label: 'Items', itemLabel: (p) => p.fields.line.value || 'Item' },
+            ),
+          }),
+          { label: "What we've done (takeaways)", itemLabel: (p) => p.fields.group.value || 'Group' },
+        ),
       },
     }),
 
@@ -122,6 +136,7 @@ export default config({
             location: fields.text({ label: 'Location' }),
             date: fields.text({ label: 'Date or window' }),
             notes: fields.text({ label: 'Notes', multiline: true }),
+            href: fields.text({ label: 'Link target (club-hosted events only)' }),
           }),
           { label: 'Races' },
         ),
@@ -135,6 +150,68 @@ export default config({
       schema: {
         headline: fields.text({ label: 'Headline' }),
         intro: fields.text({ label: 'Intro', multiline: true }),
+      },
+    }),
+
+    // Photos on the two pages below use kind 'photos' on purpose: page
+    // images must come from the consent-cleared pool, so a Keystatic
+    // replacement lands next to the rest of the pool.
+    extra_training: singleton({
+      label: 'Extra training fun page',
+      path: 'src/content/pages/extra_training',
+      format: { contentField: 'body' },
+      schema: {
+        headline: fields.text({ label: 'Headline' }),
+        intro: fields.text({ label: 'Intro', multiline: true }),
+        body: fields.markdoc({ label: 'Body' }),
+        fixtures: fields.array(
+          fields.object({
+            name: fields.text({ label: 'Name', validation: { isRequired: true } }),
+            when: fields.text({ label: 'When' }),
+            what: fields.text({ label: 'What', multiline: true }),
+          }),
+          { label: 'Standing invitations', itemLabel: (p) => p.fields.name.value || 'Fixture' },
+        ),
+        annuals: fields.array(
+          fields.object({
+            name: fields.text({ label: 'Name', validation: { isRequired: true } }),
+            detail: fields.text({ label: 'Detail', multiline: true }),
+          }),
+          { label: 'The annuals', itemLabel: (p) => p.fields.name.value || 'Annual' },
+        ),
+        photo_1: optionalContentImage('Photo 1', 'photos'),
+        photo_1_alt: fields.text({ label: 'Photo 1 alt text' }),
+        photo_1_caption: fields.text({ label: 'Photo 1 caption' }),
+        photo_2: optionalContentImage('Photo 2', 'photos'),
+        photo_2_alt: fields.text({ label: 'Photo 2 alt text' }),
+        photo_2_caption: fields.text({ label: 'Photo 2 caption' }),
+      },
+    }),
+
+    dry_tri: singleton({
+      label: 'Dry Tri page',
+      path: 'src/content/pages/dry_tri',
+      format: { contentField: 'body' },
+      schema: {
+        headline: fields.text({ label: 'Headline' }),
+        intro: fields.text({ label: 'Intro', multiline: true }),
+        body: fields.markdoc({ label: 'Body' }),
+        courses: fields.array(
+          fields.object({
+            name: fields.text({ label: 'Course name', validation: { isRequired: true } }),
+            legs: fields.text({ label: 'Legs' }),
+            start: fields.text({ label: 'Start time' }),
+          }),
+          { label: 'Courses (2025 format)', itemLabel: (p) => p.fields.name.value || 'Course' },
+        ),
+        roll_photo: optionalContentImage('Roll photo', 'photos'),
+        roll_photo_alt: fields.text({ label: 'Roll photo alt text' }),
+        ride_photo: optionalContentImage('Ride photo', 'photos'),
+        ride_photo_alt: fields.text({ label: 'Ride photo alt text' }),
+        run_photo: optionalContentImage('Run photo', 'photos'),
+        run_photo_alt: fields.text({ label: 'Run photo alt text' }),
+        register_url: fields.url({ label: 'Registration URL' }),
+        results_url: fields.url({ label: 'Latest results URL' }),
       },
     }),
 

@@ -26,7 +26,7 @@ it from every mosaic) or be deleted outright.
 To trace any photo back to its source, see the `source_migration_file` and
 `consent_basis` columns in `migration/port-manifest.csv`.
 
-## Covered photos (23 mosaic + hero + 1 coach)
+## Covered photos (23 mosaic + hero + 1 coach + 1 page photo)
 
 | Content entry | Image file | Slack source file |
 |---|---|---|
@@ -55,3 +55,15 @@ To trace any photo back to its source, see the `source_migration_file` and
 | borah-epic | site/src/assets/images/photos/borah-epic.jpg | 2026-06-06_1780772360-139449_0.jpg |
 | northshore-inline | site/src/assets/images/photos/northshore-inline.jpg | 2025-09-14_1757886642-466169_0.jpg |
 | dry-tri-runner | site/src/assets/images/photos/dry-tri-runner.jpg | 2025-10-25_1761420816-201549_5.jpg |
+| (dry-tri page, roll leg) | site/src/assets/images/photos/dry-tri-roller.jpg | 2025-10-25_1761420816-201549_7.jpg |
+
+## Dry Tri photo caveat (for the board re-confirmation)
+
+The three Dry Tri photos (dry-tri-roller, dry-tri-rider, dry-tri-runner;
+all from the member photographer's 2025-10-25 set in #photos-videos) were
+shot at a PUBLIC race the club hosted. Registration was open beyond the
+club, so the people pictured may include non-member participants. The
+roller and rider wear TCSC race tops; the runner's affiliation is not
+established. The board re-confirmation should treat these three explicitly
+as public-event photography, a different consent posture than the
+member-hangout photos above.

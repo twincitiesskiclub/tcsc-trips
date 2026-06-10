@@ -224,6 +224,29 @@ const community = defineCollection({
       headline: z.string().optional(),
       intro: z.string().optional(),
       team_bonding_activities: z.array(z.string()).default([]),
+      // "What we've done": grouped factual takeaways (volunteering /
+      // members who coach / socials), mined from club Slack 2026-06.
+      // Facts only; no member names (board-gated).
+      takeaways: z
+        .array(
+          z
+            .object({
+              group: z.string(),
+              items: z
+                .array(
+                  z
+                    .object({
+                      line: z.string(),
+                      detail: z.string().optional(),
+                      href: z.string().optional(),
+                    })
+                    .strict(),
+                )
+                .default([]),
+            })
+            .strict(),
+        )
+        .default([]),
     })
     .strict(),
 });
@@ -242,6 +265,9 @@ const racing = defineCollection({
               location: z.string().optional(),
               date: z.string().optional(),
               notes: z.string().optional(),
+              // Internal link target; set on club-hosted events that have
+              // their own page (the Dry Tri). The row's name renders as a link.
+              href: z.string().optional(),
             })
             .strict(),
         )
@@ -258,6 +284,84 @@ const sponsors_page = defineCollection({
       intro: z.string().optional(),
     })
     .strict(),
+});
+
+// /extra-training-fun: the member-organized, uncoached training culture,
+// named after the club Slack channel it lives in (#extra-training-fun).
+// `fixtures` = current standing invitations; `annuals` = once-a-year
+// traditions. POLICY: photos come from the consent-cleared pool
+// (src/assets/images/photos/), same rule as trips.hero_photo.
+const extra_training = defineCollection({
+  loader: singletonLoader('extra_training.mdoc'),
+  schema: ({ image }) =>
+    z
+      .object({
+        headline: z.string().optional(),
+        intro: z.string().optional(),
+        fixtures: z
+          .array(
+            z
+              .object({
+                name: z.string(),
+                when: z.string().optional(),
+                what: z.string().optional(),
+              })
+              .strict(),
+          )
+          .default([]),
+        annuals: z
+          .array(
+            z
+              .object({
+                name: z.string(),
+                detail: z.string().optional(),
+              })
+              .strict(),
+          )
+          .default([]),
+        photo_1: image().optional(),
+        photo_1_alt: z.string().optional(),
+        photo_1_caption: z.string().optional(),
+        photo_2: image().optional(),
+        photo_2_alt: z.string().optional(),
+        photo_2_caption: z.string().optional(),
+      })
+      .strict(),
+});
+
+// /dry-tri: the club's own public race (rollerski / mountain bike / trail
+// run at Carver Park Reserve, first held 2025-10-25). `courses` is the 2025
+// format; the roll/ride/run photo trio mounts as a triptych. POLICY: photos
+// come from the consent-cleared pool; the three Dry Tri shots carry a
+// public-event caveat in migration/CONSENT.md.
+const dry_tri = defineCollection({
+  loader: singletonLoader('dry_tri.mdoc'),
+  schema: ({ image }) =>
+    z
+      .object({
+        headline: z.string().optional(),
+        intro: z.string().optional(),
+        courses: z
+          .array(
+            z
+              .object({
+                name: z.string(),
+                legs: z.string().optional(),
+                start: z.string().optional(),
+              })
+              .strict(),
+          )
+          .default([]),
+        roll_photo: image().optional(),
+        roll_photo_alt: z.string().optional(),
+        ride_photo: image().optional(),
+        ride_photo_alt: z.string().optional(),
+        run_photo: image().optional(),
+        run_photo_alt: z.string().optional(),
+        register_url: z.string().url().optional(),
+        results_url: z.string().url().optional(),
+      })
+      .strict(),
 });
 
 const contact = defineCollection({
@@ -307,6 +411,8 @@ export const collections = {
   community,
   racing,
   sponsors_page,
+  extra_training,
+  dry_tri,
   contact,
   nav,
   site_meta,
