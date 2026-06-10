@@ -5,6 +5,9 @@ import { FULL_BLEED } from '@/components/imageWidths';
 
 interface Props {
   headline: string;
+  /** One factual line under the headline (kept out of the content schema:
+      it changes with design passes, not with editing sessions). */
+  subline?: string;
   /** astro:assets metadata from the home singleton (undefined → typography fallback). */
   image?: ImageMetadata;
   imageAlt: string;
@@ -38,7 +41,10 @@ const props = Astro.props;
         the photograph actually shows. */}
     <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
     <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-14 md:pb-20 text-paper">
-      <h1 class="hero-headline font-display font-bold text-3xl sm:text-4xl md:text-6xl leading-[1.05] md:leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
+      <h1 class="hero-headline font-display font-bold text-4xl sm:text-5xl md:text-7xl leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
+      {props.subline && (
+        <p class="hero-headline mt-4 text-base md:text-lg text-paper/85 max-w-prose-narrow">{props.subline}</p>
+      )}
       <div class="mt-8">
         <CtaForState
           state={props.state}

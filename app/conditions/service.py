@@ -81,12 +81,12 @@ def build_conditions_response() -> dict:
     """Assemble the full /api/conditions payload."""
     locations = [_build_location_entry(loc) for loc in LOCATIONS]
 
-    # Birkie likelihood reuses the Double OO entry's trail report (one
-    # scraper call serves both the cell and the status).
-    oo = next((entry for entry in locations if entry['id'] == 'oo'), None)
+    # Birkie fever reuses the Telemark entry's trail report (one scraper
+    # call serves both the cell and the status).
+    telemark = next((entry for entry in locations if entry['id'] == 'telemark'), None)
     birkie = build_birkie_status(
         datetime.now(CENTRAL_TZ).date(),
-        oo['snow_conditions'] if oo else None,
+        telemark['snow_conditions'] if telemark else None,
     )
 
     response = {

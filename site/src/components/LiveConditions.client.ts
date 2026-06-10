@@ -84,22 +84,21 @@ function renderFailure(root: HTMLElement) {
   // outage.
   const offSeason = new Date().getMonth() + 1 >= 4 && new Date().getMonth() + 1 <= 10;
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
-    setText(el, '[data-wax]', offSeason ? 'Rollerski season' : 'No report');
+    setText(el, '[data-wax]', offSeason ? 'Dryland season' : 'No report');
     setText(el, '[data-feels]', '');
     const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
     if (chip) chip.hidden = true;
   });
-  // Voice matches app/conditions/birkie.py: the word and detail read as
-  // one sentence ("Praying / for snow. ...").
+  // Fever scale matches app/conditions/birkie.py: 98.6 means summer.
   const birkie = root.querySelector('[data-birkie]') as HTMLElement | null;
   if (birkie) {
-    setText(birkie, '[data-birkie-word]', offSeason ? 'Praying' : '·');
-    setText(birkie, '[data-birkie-detail]', offSeason ? 'for snow. Birkie talk starts in November.' : 'No report');
+    setText(birkie, '[data-birkie-word]', offSeason ? '98.6°' : '·');
+    setText(birkie, '[data-birkie-detail]', offSeason ? 'No fever yet. Birkie talk starts in November.' : 'No report');
   }
   delete root.dataset.updatedAt;
   const stamp = root.querySelector('[data-updated]') as HTMLElement | null;
   const stampText = offSeason
-    ? '● Trail reports come back with the snow, usually around Thanksgiving'
+    ? '● Trail reports come back with the snow'
     : '● Conditions unavailable';
   if (stamp && stamp.textContent !== stampText) {
     stamp.textContent = stampText;

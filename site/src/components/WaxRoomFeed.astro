@@ -32,9 +32,7 @@ const entries = (await getCollection('wax_entries'))
         <a href="/wax-room" class="shrink-0 text-mint-deep text-sm hover:text-navy">All entries</a>
       </div>
       {entries.length === 0 ? (
-        <p class="py-5 border-y border-ink/10 text-slate">
-          No entries yet. Come back after the first snow.
-        </p>
+        <p class="py-5 border-y border-ink/10 text-slate">No entries yet.</p>
       ) : (
         <ul class="border-y border-ink/10 divide-y divide-ink/10">
           {entries.map((e) => (

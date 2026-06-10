@@ -63,6 +63,7 @@ const ctaStripSubhead =
   <main id="main">
   <HeroHome
     headline={h.hero_headline}
+    subline="Year-round cross-country ski training for adults 21-35."
     image={h.hero_image}
     imageAlt={h.hero_image_alt}
     state={h.registration_state}
@@ -82,12 +83,8 @@ const ctaStripSubhead =
     more_label="More from the community"
   />
   <WaxRoomFeed />
-  {/* Bookend: the hero opens the club's own sentence ("We put skiers on
-      snow, and even on podiums, surrounded by their friends"); this closer
-      finishes it. Both halves are verbatim from the original site's about
-      copy. If the hero headline changes, change this heading with it. */}
   <CTAStrip
-    heading="And without breaking the bank."
+    heading="Come ski with us."
     subhead={ctaStripSubhead}
     cta_label={ctaStripLabel}
     cta_url={ctaStripUrl}

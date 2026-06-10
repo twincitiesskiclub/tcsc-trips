@@ -12,10 +12,10 @@ const apiUrl = import.meta.env.PUBLIC_CONDITIONS_API_URL ?? 'https://tcsc.ski/ap
 // the API's names on every successful fetch. The fifth cell is the Birkie
 // likelihood status (payload.birkie), not a venue.
 const locations = [
-  { id: 'wirth', name: 'Theo Wirth' },
-  { id: 'elm', name: 'Elm Creek' },
-  { id: 'hyland', name: 'Hyland Nordic' },
-  { id: 'oo', name: 'Double OO' },
+  { id: 'wirth', name: 'Theo' },
+  { id: 'elm', name: 'Elm' },
+  { id: 'hyland', name: 'Hyland' },
+  { id: 'telemark', name: 'Telemark' },
 ];
 ---
 <section
@@ -56,21 +56,22 @@ const locations = [
             </div>
           </div>
         ))}
-        {/* Fifth cell: Birkie likelihood. Same cell anatomy as the venues
-            (label / big word / detail) so the strip keeps one rhythm; full
-            row on mobile where the 2-col grid would orphan it. The cell is
-            also a button: clicking plays the club's Birkie Fever song
-            (lazy Audio, nothing fetched until the click). */}
+        {/* Fifth cell: Birkie fever. The big number reads like the venue
+            temperature cells beside it, except it's your fever (the
+            likelihood, on a thermometer: 98.6 in June, 104 when the trail
+            skis good in the race window). The cell is also a button:
+            clicking plays the club's Birkie Fever song (lazy Audio,
+            nothing fetched until the click). */}
         <button
           type="button"
           data-birkie
           data-birkie-audio="/audio/birkie-fever.mp3"
           aria-pressed="false"
-          aria-label="Birkie likelihood. Press to play Birkie Fever."
+          aria-label="Birkie fever. Press to play the song."
           class="group py-1 text-left col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
         >
           <div class="text-[10px] tracking-widest uppercase text-paper/55">
-            Birkie likelihood
+            Birkie fever
             <span class="ml-1 text-mint/50 transition-colors duration-150 group-hover:text-mint" data-fever-note aria-hidden="true">♪</span>
           </div>
           <div class="mt-1">

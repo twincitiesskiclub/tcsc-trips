@@ -8,7 +8,7 @@ from app.conditions.service import build_conditions_response
 def test_offseason_is_early_and_names_next_race_year():
     s = build_birkie_status(date(2026, 6, 10), None)
     assert s['status'] == 'early'
-    assert s['word'] == 'Praying'
+    assert s['word'] == '98.6°'
     assert 'Birkie 2027' in s['detail']
 
 
@@ -26,7 +26,7 @@ def test_january_fair_report_is_watch():
 def test_january_no_report_is_watch():
     s = build_birkie_status(date(2026, 1, 15), None)
     assert s['status'] == 'watch'
-    assert s['word'] == 'No word'
+    assert s['word'] == '100.4°'
 
 
 def test_november_no_report_is_waiting():
@@ -48,4 +48,4 @@ def test_response_includes_birkie_block():
         resp = build_conditions_response()
     assert set(resp['birkie'].keys()) == {'status', 'word', 'detail'}
     ids = [loc['id'] for loc in resp['locations']]
-    assert ids == ['wirth', 'elm', 'hyland', 'oo']
+    assert ids == ['wirth', 'elm', 'hyland', 'telemark']
