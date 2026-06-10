@@ -6,6 +6,7 @@ interface Props {
 }
 const { variant = 'prominent' } = Astro.props;
 const apiUrl = import.meta.env.PUBLIC_CONDITIONS_API_URL ?? 'https://tcsc.ski/api/conditions';
+// Coupled to LOCATIONS in app/conditions/locations.py (Flask repo).
 const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
 ---
 <section
@@ -14,9 +15,9 @@ const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
     : 'bg-navy/40 text-paper text-xs border-t border-mint/10'}
   data-live-conditions
   data-api-url={apiUrl}
-  aria-live="polite"
   aria-label="Current ski conditions"
 >
+  <span class="sr-only" aria-live="polite" data-announcer></span>
   {variant === 'prominent' ? (
     <div class="mx-auto max-w-7xl px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-px bg-mint/10">
       {locationIds.map((id) => (
