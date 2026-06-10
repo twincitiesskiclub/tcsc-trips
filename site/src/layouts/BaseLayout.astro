@@ -1,0 +1,39 @@
+---
+import '@/styles/global.css';
+import FontPreload from '@/components/FontPreload.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+  variant?: 'home' | 'inner';
+}
+
+const {
+  title,
+  description = 'Twin Cities Ski Club — a nonprofit cross-country ski community for young adults in Minneapolis / St. Paul.',
+  ogImage = '/og-default.jpg',
+  variant = 'inner',
+} = Astro.props;
+
+const isHome = variant === 'home';
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Twin Cities Ski Club" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href={Astro.url.href} />
+    <FontPreload />
+  </head>
+  <body class={isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}>
+    <slot />
+  </body>
+</html>
