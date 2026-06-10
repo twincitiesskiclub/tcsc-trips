@@ -1,0 +1,37 @@
+---
+// /coaches: every coach as a full-bleed editorial CoachEntry, sorted by
+// order. CoachEntry's sizes="100vw" mounting contract requires it to sit
+// UNCONSTRAINED in the layout's main slot (no width-capped wrapper).
+// name comes from c.data.slug, the Keystatic DISPLAY NAME (entry.id is the
+// url slug; see content.config.ts header).
+import { getCollection, render } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import CoachEntry from '@/components/CoachEntry.astro';
+
+const coaches = (await getCollection('coaches')).sort(
+  (a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id),
+);
+const rendered = await Promise.all(
+  coaches.map(async (c) => ({ c, Content: (await render(c)).Content })),
+);
+// Singular headline when exactly one coach exists (spec empty-state rule).
+const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
+---
+<InnerPageLayout
+  title="Coaches · TCSC"
+  description="An exceptional team bringing joy, excitement, and knowledge to every practice."
+  headline={headline}
+  subhead="An exceptional team bringing joy, excitement, and knowledge to every practice."
+>
+  {rendered.map(({ c, Content }) => (
+    <CoachEntry
+      name={c.data.slug}
+      role={c.data.role}
+      photo={c.data.photo}
+      photoAlt={c.data.photo_alt}
+      credentials={c.data.credentials}
+    >
+      <Content />
+    </CoachEntry>
+  ))}
+</InnerPageLayout>

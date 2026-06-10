@@ -1,0 +1,40 @@
+---
+// /trips/{slug}: one trip. The route param is entry.id (the filename slug);
+// entry.data.slug is the DISPLAY NAME (see content.config.ts header).
+// No HeroInner: TripEntry owns the page h1 and its sizes="100vw" mounting
+// contract requires sitting UNCONSTRAINED in the layout's main slot.
+import { getCollection, render } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import TripEntry from '@/components/TripEntry.astro';
+
+export async function getStaticPaths() {
+  const trips = await getCollection('trips');
+  return trips.map((t) => ({ params: { slug: t.id }, props: { trip: t } }));
+}
+
+interface Props {
+  trip: CollectionEntry<'trips'>;
+}
+
+const { trip } = Astro.props;
+const t = trip.data;
+const { Content } = await render(trip);
+const description =
+  t.cost_summary ?? `${t.slug}: a Twin Cities Ski Club trip to ${t.location}, ${t.dates}.`;
+---
+<InnerPageLayout title={t.slug + ' · TCSC'} description={description}>
+  <TripEntry
+    name={t.slug}
+    location={t.location}
+    dates={t.dates}
+    cost_summary={t.cost_summary}
+    signup_deadline={t.signup_deadline}
+    capacity={t.capacity}
+    signup_url={t.signup_url}
+    hero_photo={t.hero_photo}
+    hero_photo_alt={t.hero_photo_alt}
+  >
+    <Content />
+  </TripEntry>
+</InnerPageLayout>

@@ -1,0 +1,27 @@
+---
+// /about: the founding story + who joins, from the `about` singleton, then
+// the practice seasons band (paper variant on the paper page).
+import { getEntry, render } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import SectionBand from '@/components/SectionBand.astro';
+import SeasonsGrid from '@/components/SeasonsGrid.astro';
+
+const about = await getEntry('about', 'about');
+if (!about) throw new Error('about singleton missing (src/content/pages/about.mdoc)');
+const { Content } = await render(about);
+---
+<InnerPageLayout
+  title="About · TCSC"
+  description={about.data.intro}
+  headline={about.data.headline ?? 'About Twin Cities Ski Club'}
+  subhead={about.data.intro}
+>
+  <div class="mx-auto max-w-3xl px-6 py-12">
+    <div class="prose prose-lg max-w-prose text-ink">
+      <Content />
+    </div>
+  </div>
+  <SectionBand variant="paper" heading="Two seasons.">
+    <SeasonsGrid variant="paper" />
+  </SectionBand>
+</InnerPageLayout>

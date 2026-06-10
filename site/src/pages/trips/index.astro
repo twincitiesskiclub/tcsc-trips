@@ -1,0 +1,15 @@
+---
+// /trips: index of upcoming trips. TripsTable handles its own empty state.
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import TripsTable from '@/components/TripsTable.astro';
+---
+<InnerPageLayout
+  title="Trips · TCSC"
+  description="Race weekends, ski festivals, and team adventures organized by TCSC."
+  headline="Trips"
+  subhead="Race weekends, ski festivals, and team adventures organized by TCSC."
+>
+  <div class="mx-auto max-w-3xl px-6 py-12">
+    <TripsTable />
+  </div>
+</InnerPageLayout>

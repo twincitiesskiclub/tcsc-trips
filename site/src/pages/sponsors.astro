@@ -1,0 +1,20 @@
+---
+// /sponsors: intro from the `sponsors_page` singleton + the tiered logo
+// wall (SponsorWall renders nothing for empty tiers).
+import { getEntry } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import SponsorWall from '@/components/SponsorWall.astro';
+
+const page = await getEntry('sponsors_page', 'sponsors_page');
+if (!page) throw new Error('sponsors_page singleton missing (src/content/pages/sponsors_page.yaml)');
+---
+<InnerPageLayout
+  title="Sponsors · TCSC"
+  description={page.data.intro}
+  headline={page.data.headline ?? 'Meet our sponsors'}
+  subhead={page.data.intro}
+>
+  <div class="mx-auto max-w-5xl px-6 py-12">
+    <SponsorWall />
+  </div>
+</InnerPageLayout>
