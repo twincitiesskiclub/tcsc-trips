@@ -9,3 +9,5 @@
 export const FULL_BLEED = [768, 1280, 1920, 2560]; // 100vw heroes
 export const CARD = [400, 800, 1200]; // grid cards / split panels
 export const THUMB = [200, 400, 600]; // avatars / small thumbnails
+export const MOSAIC = [400, 800, 1200, 1600]; // PhotoMosaic tiles (2-col spans reach ~700px CSS, so 1600 covers 2x DPR)
+export const LIGHTBOX = [1024, 1600, 2048]; // fullscreen lightbox viewer (object-contain, up to ~100vw)

@@ -1,0 +1,128 @@
+---
+// PhotoMosaic: asymmetric photo grid over the consent-cleared photo pool.
+// Renders nothing at all when no photos qualify (spec: 0 photos, no section).
+//
+// RESOLUTION CONTRACT (a prior implementation shipped ~305px-wide variants
+// stretched into large tiles and a fullscreen lightbox; do not regress):
+// - Tile <img> uses the MOSAIC widths preset. Astro's image service clamps
+//   every requested width to the source's intrinsic width and appends the
+//   intrinsic width itself, so small sources never upscale (see
+//   imageWidths.ts for why the preset is never pre-filtered).
+// - The lightbox NEVER reads the tile's rendered src/currentSrc (that is the
+//   small grid-optimized variant, exactly the prior bug). Each tile button
+//   instead carries data-full / data-full-srcset computed here via
+//   getImage() with the LIGHTBOX widths preset: data-full is the LARGEST
+//   generated candidate (2048w when the source allows, exactly intrinsic
+//   when smaller), used as the <img src> fallback; data-full-srcset is the
+//   full candidate list so browsers on small/low-DPR screens can still pick
+//   a lighter variant.
+import { getCollection } from 'astro:content';
+import { Image, getImage } from 'astro:assets';
+import { MOSAIC, LIGHTBOX } from '@/components/imageWidths';
+
+interface Props {
+  limit?: number;
+  homeOnly?: boolean;
+}
+const { limit, homeOnly = false } = Astro.props;
+
+const all = await getCollection(
+  'photos',
+  (e) => e.data.photo_consent_recorded === true && (!homeOnly || e.data.show_on_home),
+);
+all.sort((a, b) => a.data.order - b.data.order);
+const photos = typeof limit === 'number' ? all.slice(0, limit) : all;
+
+// Under 12 photos the asymmetric spans leave ragged holes, so fall back to a
+// uniform grid with no span classes.
+const sparse = photos.length < 12;
+
+// Cycle through size classes for asymmetric tiling on desktop.
+//
+// Row sizing (measured in-browser, not theoretical): the dense grid uses
+// auto-rows-fr, so every implicit row equalizes to the largest
+// content-sized row, i.e. the 1x1 aspect-square tiles (one column width).
+// Without it, span tiles distort row heights: an aspect-square col-span-2
+// tile forces a double-height row (gaps under 1x1 neighbors), and a 2x2's
+// extra space distributes across BOTH spanned tracks (299/448/150px rows).
+// Single-row col-span-2 tiles also get md:aspect-auto so they stretch to
+// their 2:1 grid area instead of demanding a 2-column-wide square; the 2x2
+// keeps aspect-square (two uniform rows + gap = square already).
+const sizeClasses = [
+  '',
+  'md:col-span-2 md:aspect-auto',
+  '',
+  'md:row-span-2 md:col-span-2',
+  '',
+  '',
+  'md:col-span-2 md:aspect-auto',
+  '',
+];
+
+const tiles = await Promise.all(
+  photos.map(async (photo, i) => {
+    const span = sparse ? '' : sizeClasses[i % sizeClasses.length];
+    // Per-tile sizes. The grid is capped at max-w-7xl so vw slightly
+    // overestimates on very wide screens; that errs toward the sharper
+    // srcset candidate, which is the safe direction.
+    const sizesAttr = sparse
+      ? '(min-width: 768px) 33vw, 50vw'
+      : span.includes('md:col-span-2')
+        ? '50vw'
+        : '(min-width: 768px) 25vw, 50vw';
+    const full = await getImage({ src: photo.data.image, widths: LIGHTBOX, format: 'webp' });
+    const largest = full.srcSet.values.reduce((a, b) =>
+      parseInt(b.descriptor ?? '0', 10) > parseInt(a.descriptor ?? '0', 10) ? b : a,
+    );
+    return {
+      photo,
+      span,
+      sizesAttr,
+      fullSrc: largest?.url ?? full.src,
+      fullSrcset: full.srcSet.attribute,
+    };
+  }),
+);
+
+const gridClass = sparse
+  ? 'grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3'
+  : 'grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-2 md:gap-3';
+---
+{photos.length > 0 && (
+  <section class="bg-navy py-20" data-photo-mosaic>
+    <div class="max-w-7xl mx-auto px-6">
+      <div class={gridClass}>
+        {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
+          <button
+            type="button"
+            class:list={['group relative aspect-square overflow-hidden bg-paper-card', span]}
+            data-index={i}
+            data-caption={photo.data.caption ?? ''}
+            data-alt={photo.data.alt_text}
+            data-tag={photo.data.event_tag}
+            data-full={fullSrc}
+            data-full-srcset={fullSrcset}
+          >
+            <Image
+              src={photo.data.image}
+              alt={photo.data.alt_text}
+              widths={MOSAIC}
+              sizes={sizesAttr}
+              class="absolute inset-0 w-full h-full object-cover"
+              loading="lazy"
+              decoding="async"
+            />
+            {photo.data.caption && (
+              <span
+                class="hidden md:flex absolute inset-0 items-end bg-navy/70 p-4 text-left text-sm text-paper opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150"
+                aria-hidden="true"
+              >
+                {photo.data.caption}
+              </span>
+            )}
+          </button>
+        ))}
+      </div>
+    </div>
+  </section>
+)}
