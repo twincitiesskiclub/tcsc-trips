@@ -1,6 +1,7 @@
 ---
 import '@/styles/global.css';
 import FontPreload from '@/components/FontPreload.astro';
+import Lightbox from '@/components/Lightbox.astro';
 
 interface Props {
   title: string;
@@ -35,5 +36,6 @@ const isHome = variant === 'home';
   </head>
   <body class={isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}>
     <slot />
+    <Lightbox />
   </body>
 </html>

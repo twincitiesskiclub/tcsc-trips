@@ -126,3 +126,10 @@ const gridClass = sparse
     </div>
   </section>
 )}
+
+<script>
+  // Bundled once per page regardless of the conditional section above;
+  // init() no-ops when no mosaic/lightbox is in the DOM.
+  import { init } from '@/components/PhotoMosaic.client';
+  init();
+</script>
