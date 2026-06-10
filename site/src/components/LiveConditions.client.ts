@@ -124,12 +124,45 @@ function setText(el: HTMLElement, sel: string, val: string) {
   if (t && t.textContent !== val) t.textContent = val;
 }
 
+function initBirkieFever(root: HTMLElement) {
+  // Easter egg with a quiet ♪ invitation: the Birkie cell plays the club's
+  // Birkie Fever song. Audio is created on first click only (6MB mp3, the
+  // universally decodable codec; never part of page load); the note turns
+  // coral while playing.
+  const btn = root.querySelector<HTMLButtonElement>('button[data-birkie]');
+  const src = btn?.dataset.birkieAudio;
+  if (!btn || !src) return;
+  const note = btn.querySelector<HTMLElement>('[data-fever-note]');
+  let audio: HTMLAudioElement | null = null;
+  const setPlaying = (playing: boolean) => {
+    btn.setAttribute('aria-pressed', String(playing));
+    if (note) {
+      note.classList.toggle('text-coral', playing);
+      note.classList.toggle('text-mint/50', !playing);
+    }
+  };
+  btn.addEventListener('click', () => {
+    if (!audio) {
+      audio = new Audio(src);
+      audio.addEventListener('ended', () => setPlaying(false));
+      audio.addEventListener('error', () => setPlaying(false));
+    }
+    if (audio.paused) {
+      void audio.play().then(() => setPlaying(true)).catch(() => setPlaying(false));
+    } else {
+      audio.pause();
+      setPlaying(false);
+    }
+  });
+}
+
 export function init() {
   document.querySelectorAll<HTMLElement>('[data-live-conditions]').forEach((root) => {
     // Idempotence guard: double-inclusion must not double-poll.
     if (root.dataset.lcInitialized === 'true') return;
     root.dataset.lcInitialized = 'true';
     roots.push(root);
+    initBirkieFever(root);
 
     fetchAndRender(root);
     // Entrance backstop: a slow first fetch must not hold the strip

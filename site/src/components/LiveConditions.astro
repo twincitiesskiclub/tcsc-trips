@@ -58,17 +58,26 @@ const locations = [
         ))}
         {/* Fifth cell: Birkie likelihood. Same cell anatomy as the venues
             (label / big word / detail) so the strip keeps one rhythm; full
-            row on mobile where the 2-col grid would orphan it. */}
-        <div
+            row on mobile where the 2-col grid would orphan it. The cell is
+            also a button: clicking plays the club's Birkie Fever song
+            (lazy Audio, nothing fetched until the click). */}
+        <button
+          type="button"
           data-birkie
-          class="py-1 col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
+          data-birkie-audio="/audio/birkie-fever.mp3"
+          aria-pressed="false"
+          aria-label="Birkie likelihood. Press to play Birkie Fever."
+          class="group py-1 text-left col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
         >
-          <div class="text-[10px] tracking-widest uppercase text-paper/55">Birkie likelihood</div>
+          <div class="text-[10px] tracking-widest uppercase text-paper/55">
+            Birkie likelihood
+            <span class="ml-1 text-mint/50 transition-colors duration-150 group-hover:text-mint" data-fever-note aria-hidden="true">♪</span>
+          </div>
           <div class="mt-1">
             <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
           </div>
           <div class="text-xs text-paper/70 mt-1 min-h-8" data-birkie-detail>·</div>
-        </div>
+        </button>
       </div>
     </>
   ) : (
