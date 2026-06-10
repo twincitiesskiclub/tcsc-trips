@@ -54,7 +54,23 @@ export function init() {
     if (item.fullSrcset) img!.setAttribute('srcset', item.fullSrcset);
     img!.setAttribute('sizes', '100vw');
     img!.src = item.full;
-    captionEl!.textContent = item.caption;
+    // Caption line doubles as the aria-live announcement; the position
+    // suffix means caption-less photos still announce navigation.
+    const position = `Photo ${index + 1} of ${items.length}`;
+    captionEl!.textContent = item.caption ? `${item.caption} · ${position}` : position;
+    preloadNeighbors();
+  }
+
+  // Warm the browser cache for the adjacent photos so prev/next swaps do
+  // not hard-cut to a blank frame on slow connections.
+  function preloadNeighbors() {
+    for (const offset of [-1, 1]) {
+      const neighbor = items[(index + offset + items.length) % items.length];
+      const pre = new Image();
+      pre.sizes = '100vw';
+      if (neighbor.fullSrcset) pre.srcset = neighbor.fullSrcset;
+      pre.src = neighbor.full;
+    }
   }
 
   function open(i: number, from: HTMLElement) {
@@ -85,8 +101,13 @@ export function init() {
   document.addEventListener('keydown', (e) => {
     if (!isOpen()) return;
     if (e.key === 'Escape') close();
-    else if (e.key === 'ArrowLeft') render(index - 1);
-    else if (e.key === 'ArrowRight') render(index + 1);
+    else if (e.key === 'ArrowLeft') {
+      e.preventDefault(); // keep arrows from scrolling/moving focus
+      render(index - 1);
+    } else if (e.key === 'ArrowRight') {
+      e.preventDefault();
+      render(index + 1);
+    }
   });
 
   // Wrap Tab focus inside the open lightbox (MobileNavPanel pattern).

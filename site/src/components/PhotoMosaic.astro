@@ -48,6 +48,10 @@ const sparse = photos.length < 12;
 // Single-row col-span-2 tiles also get md:aspect-auto so they stretch to
 // their 2:1 grid area instead of demanding a 2-column-wide square; the 2x2
 // keeps aspect-square (two uniform rows + gap = square already).
+//
+// Tail note: photo counts of 4 mod 8 (12, 20, 28...) end on the 2x2 tile
+// with empty cells beside it; counts like 15 or 23 finish the last row
+// cleanly, so prefer those when passing `limit`.
 const sizeClasses = [
   '',
   'md:col-span-2 md:aspect-auto',
@@ -62,18 +66,33 @@ const sizeClasses = [
 const tiles = await Promise.all(
   photos.map(async (photo, i) => {
     const span = sparse ? '' : sizeClasses[i % sizeClasses.length];
-    // Per-tile sizes. The grid is capped at max-w-7xl so vw slightly
-    // overestimates on very wide screens; that errs toward the sharper
-    // srcset candidate, which is the safe direction.
+    // Per-tile sizes. Above the viewport's 1280px mark the container is
+    // fixed: max-w-7xl (1280px) minus px-6 (48px) = 1232px of content, so a
+    // 1x1 cell is at most 1232/4 = 308px (true rendered size is 299px once
+    // gap-3 gutters are subtracted; rounding up errs toward the sharper
+    // srcset candidate). Spans are two cells = 616px; sparse 3-col cells
+    // are 1232/3 = 410px. Below the cap, vw fractions apply.
     const sizesAttr = sparse
-      ? '(min-width: 768px) 33vw, 50vw'
+      ? '(min-width: 1280px) 410px, (min-width: 768px) 33vw, 50vw'
       : span.includes('md:col-span-2')
-        ? '50vw'
-        : '(min-width: 768px) 25vw, 50vw';
-    const full = await getImage({ src: photo.data.image, widths: LIGHTBOX, format: 'webp' });
-    const largest = full.srcSet.values.reduce((a, b) =>
-      parseInt(b.descriptor ?? '0', 10) > parseInt(a.descriptor ?? '0', 10) ? b : a,
-    );
+        ? '(min-width: 1280px) 616px, 50vw'
+        : '(min-width: 1280px) 308px, (min-width: 768px) 25vw, 50vw';
+    // Explicit width clamps the FALLBACK rendition: without it, Astro also
+    // generates the plain `src` at full source resolution (a 4000px+ webp
+    // nobody downloads, roughly half the image payload at scale).
+    const full = await getImage({
+      src: photo.data.image,
+      width: Math.min(2048, photo.data.image.width),
+      widths: LIGHTBOX,
+      format: 'webp',
+    });
+    // Defensive loop (a plain reduce throws on an empty candidate list
+    // before the ?? fallback could apply).
+    let largest: (typeof full.srcSet.values)[number] | undefined;
+    for (const candidate of full.srcSet.values) {
+      const w = parseInt(candidate.descriptor ?? '0', 10);
+      if (!largest || w > parseInt(largest.descriptor ?? '0', 10)) largest = candidate;
+    }
     return {
       photo,
       span,
@@ -92,6 +111,7 @@ const gridClass = sparse
   <section class="bg-navy py-20" data-photo-mosaic>
     <div class="max-w-7xl mx-auto px-6">
       <div class={gridClass}>
+        {/* data-tag exists for the /community event_tag filtering planned in the spec */}
         {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
           <button
             type="button"
@@ -106,6 +126,7 @@ const gridClass = sparse
             <Image
               src={photo.data.image}
               alt={photo.data.alt_text}
+              width={Math.min(1600, photo.data.image.width)}
               widths={MOSAIC}
               sizes={sizesAttr}
               class="absolute inset-0 w-full h-full object-cover"
