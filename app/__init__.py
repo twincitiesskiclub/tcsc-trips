@@ -20,6 +20,7 @@ from .routes.admin_practices import admin_practices_bp
 from .routes.admin_scheduled_tasks import admin_scheduled_tasks
 from .routes.admin_skipper import admin_skipper_bp
 from .routes.auth import auth
+from .routes.conditions import bp as conditions_bp
 from .routes.main import main
 from .routes.payments import payments
 from .routes.registration import registration
@@ -53,6 +54,7 @@ def create_app(environment=None):
     app.register_blueprint(admin_scheduled_tasks)
     app.register_blueprint(admin_skipper_bp)
     app.register_blueprint(auth)
+    app.register_blueprint(conditions_bp)
     app.register_blueprint(registration)
     app.register_blueprint(slack_bp)
 
