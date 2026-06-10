@@ -19,6 +19,8 @@ The media failure from the first attempt is closed: scrape fetches true Wix orig
 
 ## 1 · Polish pass backlog
 
+**Update (2026-06-10, /impeccable polish pass, later session):** the holistic pass landed. Done since this doc was written: Inter replaced with self-hosted Archivo Variable (width axis = display cut; Inter was the project's own anti-reference); copy ported to original-site voice via `migration/copy-voice-audit.md` (home hero/CTA strip now bookend the club's own "skiers on snow / without breaking the bank" sentence); all public Slack links removed (CTAs are state-aware and point at tcsc.ski/register, "Member area" label gone); nav lockup + location detail; conditions strip reworked (header row with live stamp, server-rendered venue names, wind chill when material, wax-band color chips, quieter failure state); mission card became a full-bleed paper band with org-facts column; coaches went from full-bleed 21:9 to alternating 4:5 editorial splits (masks the soft sources); new hero photo + 6 mosaic photos sourced from Slack #photos-videos (puller: `scripts/slack_photo_pull.py`, 1886 images + reaction-ranked manifest in gitignored `migration/slack_photos/`; contact sheets: `scripts/photo_contact_sheet.py`). **Consent attention:** the 7 Slack-sourced images were never on the public web; they're listed separately in `migration/CONSENT.md` and must be called out in the board re-confirmation (runbook step 4). Pro race-gallery photos in the channel were excluded on rights grounds. KJ's fresh-portrait content ask still stands.
+
 Everything below is non-blocking. Reviewed and consciously deferred, ordered roughly by value.
 
 ### Visual / UX
