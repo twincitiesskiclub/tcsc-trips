@@ -1,14 +1,38 @@
 ---
+import { getEntry } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Nav from '@/components/Nav.astro';
 import MobileNavPanel from '@/components/MobileNavPanel.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
+import HeroHome from '@/components/HeroHome.astro';
+import MissionPanel from '@/components/MissionPanel.astro';
+
+// Partial composition: hero + mission render from the ported home singleton
+// so the content port is verifiable end-to-end (srcset, CTA state, mission
+// copy). The full home composition (seasons, mosaic, wax feed, CTA strip)
+// lands in Phase K, Task 30.
+const home = await getEntry('home', 'home');
+if (!home) throw new Error('home singleton missing (src/content/pages/home.yaml)');
+const h = home.data;
+const meta = await getEntry('site_meta', 'site_meta');
 ---
-<BaseLayout title="TCSC — Twin Cities Ski Club" variant="home">
+<BaseLayout
+  title={meta?.data.title ?? 'Twin Cities Ski Club'}
+  variant="home"
+  description={meta?.data.description}
+  ogImage={meta?.data.og_image}
+>
   <Nav />
   <MobileNavPanel />
   <LiveConditions variant="prominent" />
-  <main class="min-h-screen p-12 bg-navy text-paper">
-    <h1 class="font-display text-6xl text-mint">Twin Cities Ski Club</h1>
-  </main>
+  <HeroHome
+    headline={h.hero_headline}
+    image={h.hero_image}
+    imageAlt={h.hero_image_alt}
+    state={h.registration_state}
+    cta_open_label={h.cta_open_label} cta_open_url={h.cta_open_url}
+    cta_coming_soon_label={h.cta_coming_soon_label} cta_coming_soon_url={h.cta_coming_soon_url}
+    cta_closed_label={h.cta_closed_label} cta_closed_url={h.cta_closed_url}
+  />
+  {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
 </BaseLayout>

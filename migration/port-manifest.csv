@@ -1,0 +1,3 @@
+asset_path,source_migration_file,source_url,original_w,original_h,committed_w,committed_h,slot,min_required_w
+site/src/assets/images/uploads/home-hero.jpg,migration/images/community-00-95e817ec.jpg,https://static.wixstatic.com/media/276df0_0b740b01899349089fd462361b4363e9~mv2.jpg,4032,3024,2560,1920,home_hero,1920
+site/public/og/og-default.jpg,migration/images/community-00-95e817ec.jpg,https://static.wixstatic.com/media/276df0_0b740b01899349089fd462361b4363e9~mv2.jpg,4032,3024,1200,630,og_default,1200

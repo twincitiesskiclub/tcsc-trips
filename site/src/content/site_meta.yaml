@@ -1,0 +1,8 @@
+# description: verbatim from the live Wix site's meta description
+# (migration/pages/home.json), including its original spelling.
+title: Twin Cities Ski Club
+description: >-
+  Twin Cities Ski Club is a nonprofit dedicated to fostering a supportive
+  community for young adults (21 - 35) by promoting a healthy lifestyle through
+  cross-country ski training sessions and educational programing.
+og_image: /og/og-default.jpg

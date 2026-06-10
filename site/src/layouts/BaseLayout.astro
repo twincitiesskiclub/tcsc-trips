@@ -13,7 +13,8 @@ interface Props {
 const {
   title,
   description = 'Twin Cities Ski Club — a nonprofit cross-country ski community for young adults in Minneapolis / St. Paul.',
-  ogImage = '/og-default.jpg',
+  // Default OG image lives in public/og/ (see site_meta.og_image convention).
+  ogImage = '/og/og-default.jpg',
   variant = 'inner',
 } = Astro.props;
 
