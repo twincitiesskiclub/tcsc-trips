@@ -50,3 +50,7 @@ validate_posted_ts.json
 
 # Claude Code dynamic-workflow worktrees (never commit)
 .claude/worktrees/
+
+# Wix scrape image dump (~160MB of full-resolution originals; audit trail
+# lives in migration/images.csv — images stay on disk for the content port)
+migration/images/
