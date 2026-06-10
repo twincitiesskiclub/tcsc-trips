@@ -37,10 +37,12 @@ const locations = [
         <span class="text-[11px] text-coral" data-updated>Loading conditions…</span>
       </div>
       <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
+        {/* Venue cells are desktop-only: on a phone the full grid is
+            overwhelming, so mobile gets just the Birkie fever cell. */}
         {locations.map(({ id, name }) => (
           <div
             data-location={id}
-            class="py-1 border-l border-mint/15 pl-4 odd:border-l-0 odd:pl-0 md:odd:border-l md:odd:pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5"
+            class="max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5"
           >
             <div class="text-[10px] tracking-widest uppercase text-paper/55" data-name>{name}</div>
             <div class="mt-1 flex items-baseline gap-2">
@@ -83,8 +85,10 @@ const locations = [
     </>
   ) : (
     <div class="mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
+      {/* Venue lines are desktop-only here too; mobile keeps one line of
+          Birkie fever. */}
       {locations.map(({ id, name }) => (
-        <div data-location={id} class="flex items-baseline gap-1.5">
+        <div data-location={id} class="max-md:hidden flex items-baseline gap-1.5">
           <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
           <span class="font-display text-paper" data-temp>·</span>
           <span data-wax>·</span>
