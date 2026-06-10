@@ -1,4 +1,4 @@
-// Shared top-level nav links — used by Nav, MobileNavPanel, and Footer.
+// Shared top-level nav links, used by Nav, MobileNavPanel, and Footer.
 export interface NavLink {
   label: string;
   href: string;
