@@ -20,14 +20,18 @@ const dollar = (cents: number) =>
     minimumFractionDigits: 0,
   });
 
-const surface =
-  variant === 'navy' ? 'bg-navy text-paper border-mint/20' : 'bg-paper text-ink border-ink/15';
+// Hairline divider: the wrapper carries the tinted divider color as its
+// background and the opaque season cells sit on top, so the 1px grid gap
+// reads as a single hairline between cells (no doubled per-cell borders,
+// no extra perimeter).
+const hairline = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
+const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
 const accent = variant === 'navy' ? 'text-mint' : 'text-mint-deep';
 ---
 {seasons.length > 0 && (
-  <div class:list={['grid md:grid-cols-2 gap-px border', surface]}>
+  <div class:list={['grid md:grid-cols-2 gap-px', hairline]}>
     {seasons.map((s) => (
-      <div class="p-8 md:p-10 border border-inherit">
+      <div class:list={['p-8 md:p-10', surface]}>
         <p class:list={['text-sm uppercase tracking-widest', accent]}>{s.data.date_range}</p>
         <h3 class="mt-3 font-display text-2xl md:text-3xl">{s.data.slug}</h3>
         <p class:list={['mt-2 text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
