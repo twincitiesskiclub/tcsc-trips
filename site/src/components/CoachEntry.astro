@@ -1,8 +1,21 @@
 ---
 // CoachEntry: editorial full-bleed coach entry (NOT a card, per the design
 // system). Bio body comes through the slot (render(entry) Content at the
-// call site). Explicit clamped `width` alongside `widths` keeps Astro from
-// emitting a full-intrinsic fallback rendition (see imageWidths.ts).
+// call site).
+//
+// MOUNTING CONTRACT: sizes="100vw" assumes the article mounts unconstrained
+// (true full-bleed); a width-capped wrapper would over-fetch.
+//
+// CROP STRATEGY: coach sources are typically square-ish, but the hero slot
+// is 21:9 on md+. A CSS-only object-cover center crop decapitates faces AND
+// ships the full square (1920x1920) when the slot shows 1920x823. So the
+// crop happens server-side: passing width AND a 21:9-derived height makes
+// sharp emit true 21:9 renditions (43% of the square's pixels), and
+// position="attention" uses sharp's saliency crop, which chases the busiest
+// region (faces) instead of the geometric center. `object_position` remains
+// as a CSS fallback for the residual in-browser crop (the mobile 16/9 mount
+// trims the 21:9 sides; rounding slack), biased ~30% from top where heads
+// live.
 import { Image } from 'astro:assets';
 import { FULL_BLEED } from '@/components/imageWidths';
 
@@ -12,8 +25,20 @@ interface Props {
   photo: ImageMetadata;
   photoAlt: string;
   credentials?: string[];
+  /** CSS object-position fallback for the residual in-browser crop. */
+  object_position?: string;
 }
-const { name, role, photo, photoAlt, credentials = [] } = Astro.props;
+const {
+  name,
+  role,
+  photo,
+  photoAlt,
+  credentials = [],
+  object_position = 'center 30%',
+} = Astro.props;
+
+const width = Math.min(1920, photo.width);
+const height = Math.round((width * 9) / 21);
 ---
 <article class="border-b border-ink/10 last:border-b-0">
   <div class="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden">
@@ -21,9 +46,13 @@ const { name, role, photo, photoAlt, credentials = [] } = Astro.props;
       src={photo}
       alt={photoAlt}
       widths={FULL_BLEED}
-      width={Math.min(1920, photo.width)}
+      width={width}
+      height={height}
+      fit="cover"
+      position="attention"
       sizes="100vw"
       class="absolute inset-0 w-full h-full object-cover"
+      style={`object-position: ${object_position}`}
       loading="lazy"
       decoding="async"
     />
@@ -36,7 +65,9 @@ const { name, role, photo, photoAlt, credentials = [] } = Astro.props;
     </div>
     {credentials.length > 0 && (
       <ul class="mt-6 text-sm text-slate space-y-1">
-        {credentials.map((c) => <li>· {c}</li>)}
+        {credentials.map((c) => (
+          <li class="before:content-['·'] before:mr-2">{c}</li>
+        ))}
       </ul>
     )}
   </div>

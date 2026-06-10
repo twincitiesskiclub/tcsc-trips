@@ -1,8 +1,15 @@
 ---
 // TripEntry: full trip detail body on paper. `what_to_expect` markdoc body
-// comes through the slot (render(entry) Content at the call site).
-// heroPhotoAlt maps from the trips collection's `hero_photo_alt` field;
-// optional in content, so it defaults to '' here (decorative fallback).
+// comes through the slot (render(entry) Content at the call site). Props are
+// snake_case to mirror the trips collection fields 1:1.
+//
+// MOUNTING CONTRACT: sizes="100vw" assumes the article mounts unconstrained
+// (true full-bleed); a width-capped wrapper would over-fetch. TripEntry owns
+// the page <h1>: mount exactly one per page, with no other h1 on it.
+//
+// The hero is the LCP element on a trip detail page, hence eager +
+// fetchpriority=high by default (override `loading` for any secondary
+// mount).
 import { Image } from 'astro:assets';
 import { FULL_BLEED } from '@/components/imageWidths';
 
@@ -15,7 +22,9 @@ interface Props {
   capacity?: string;
   signup_url?: string;
   hero_photo?: ImageMetadata;
-  heroPhotoAlt?: string;
+  /** Maps from the optional `hero_photo_alt` content field. */
+  hero_photo_alt?: string;
+  loading?: 'eager' | 'lazy';
 }
 const {
   name,
@@ -26,7 +35,8 @@ const {
   capacity,
   signup_url,
   hero_photo,
-  heroPhotoAlt = '',
+  hero_photo_alt = '',
+  loading = 'eager',
 } = Astro.props;
 ---
 <article class="bg-paper text-ink">
@@ -34,12 +44,13 @@ const {
     <div class="relative aspect-[21/9] overflow-hidden">
       <Image
         src={hero_photo}
-        alt={heroPhotoAlt}
+        alt={hero_photo_alt}
         widths={FULL_BLEED}
         width={Math.min(1920, hero_photo.width)}
         sizes="100vw"
         class="absolute inset-0 w-full h-full object-cover"
-        loading="lazy"
+        loading={loading}
+        fetchpriority={loading === 'eager' ? 'high' : 'auto'}
         decoding="async"
       />
     </div>
