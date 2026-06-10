@@ -1,9 +1,7 @@
 ---
-// /coaches: every coach as a full-bleed editorial CoachEntry, sorted by
-// order. CoachEntry's sizes="100vw" mounting contract requires it to sit
-// UNCONSTRAINED in the layout's main slot (no width-capped wrapper).
-// name comes from c.data.slug, the Keystatic DISPLAY NAME (entry.id is the
-// url slug; see content.config.ts header).
+// /coaches: every coach as an alternating editorial split CoachEntry,
+// sorted by order. name comes from c.data.slug, the Keystatic DISPLAY NAME
+// (entry.id is the url slug; see content.config.ts header).
 import { getCollection, render } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import CoachEntry from '@/components/CoachEntry.astro';
@@ -19,9 +17,9 @@ const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
 ---
 <InnerPageLayout
   title="Coaches · Twin Cities Ski Club"
-  description="An exceptional team bringing joy, excitement, and knowledge to every practice."
+  description="KJ, Greg, and Rebecca bring joy, excitement, and knowledge to every practice."
   headline={headline}
-  subhead="An exceptional team bringing joy, excitement, and knowledge to every practice."
+  subhead="KJ, Greg, and Rebecca bring joy, excitement, and knowledge to every practice."
 >
   {rendered.map(({ c, Content }, i) => (
     <CoachEntry
@@ -30,6 +28,7 @@ const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
       photo={c.data.photo}
       photoAlt={c.data.photo_alt}
       credentials={c.data.credentials}
+      flip={i % 2 === 1}
       loading={i === 0 ? 'eager' : 'lazy'}
     >
       <Content />

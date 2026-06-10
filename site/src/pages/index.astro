@@ -29,16 +29,21 @@ const description = meta?.data.description
   ? metaDescription(meta.data.description)
   : undefined;
 
-// CTA strip target, by registration state: the open url, then the
-// coming-soon url (falling back to closed), then the closed/member url.
-// Never '#': with no url at all, point at the club Slack so the button
-// always goes somewhere real.
+// CTA strip label + target follow registration state together. Never '#':
+// with no url at all, point at registration on tcsc.ski so the button
+// always goes somewhere real. The public site never links the club Slack.
 const ctaStripUrl =
   (cta.state === 'open'
     ? cta.url_open
     : cta.state === 'coming_soon'
       ? (cta.url_coming_soon ?? cta.url_closed)
-      : cta.url_closed) ?? 'https://twincitiesskiclub.slack.com';
+      : cta.url_closed) ?? 'https://tcsc.ski/register';
+const ctaStripLabel =
+  cta.state === 'open'
+    ? cta.label_open
+    : cta.state === 'coming_soon'
+      ? cta.label_coming_soon
+      : `${cta.label_closed} →`;
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -60,15 +65,25 @@ const ctaStripUrl =
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
-  <SectionBand variant="navy" number="01 · Practices" heading="Two seasons. Year-round group ski.">
+  <SectionBand variant="navy" number="01 · Practices" heading="Year-round cross-country ski training.">
     <SeasonsGrid variant="navy" />
   </SectionBand>
-  <PhotoMosaic homeOnly={true} />
+  <PhotoMosaic
+    homeOnly={true}
+    number="02 · Community"
+    heading="A welcoming community"
+    more_href="/community"
+    more_label="More from the community"
+  />
   <WaxRoomFeed />
+  {/* Bookend: the hero opens the club's own sentence ("We put skiers on
+      snow, and even on podiums, surrounded by their friends"); this closer
+      finishes it. Both halves are verbatim from the original site's about
+      copy. If the hero headline changes, change this heading with it. */}
   <CTAStrip
-    heading="Ready to find your winter people?"
-    subhead="Adults 21-35 · intermediate ability · all paces welcome."
-    cta_label="Become a member →"
+    heading="And without breaking the bank."
+    subhead="Ages 21-35 in the Twin Cities. Intermediate ability and up. No racing required."
+    cta_label={ctaStripLabel}
     cta_url={ctaStripUrl}
   />
   </main>
