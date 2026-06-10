@@ -89,10 +89,12 @@ function renderFailure(root: HTMLElement) {
     const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
     if (chip) chip.hidden = true;
   });
+  // Voice matches app/conditions/birkie.py: the word and detail read as
+  // one sentence ("Praying / for snow. ...").
   const birkie = root.querySelector('[data-birkie]') as HTMLElement | null;
   if (birkie) {
-    setText(birkie, '[data-birkie-word]', offSeason ? 'Early' : '·');
-    setText(birkie, '[data-birkie-detail]', offSeason ? 'Snow talk starts in November' : 'No report');
+    setText(birkie, '[data-birkie-word]', offSeason ? 'Praying' : '·');
+    setText(birkie, '[data-birkie-detail]', offSeason ? 'for snow. Birkie talk starts in November.' : 'No report');
   }
   delete root.dataset.updatedAt;
   const stamp = root.querySelector('[data-updated]') as HTMLElement | null;

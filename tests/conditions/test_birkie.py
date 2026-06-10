@@ -8,7 +8,7 @@ from app.conditions.service import build_conditions_response
 def test_offseason_is_early_and_names_next_race_year():
     s = build_birkie_status(date(2026, 6, 10), None)
     assert s['status'] == 'early'
-    assert s['word'] == 'Early'
+    assert s['word'] == 'Praying'
     assert 'Birkie 2027' in s['detail']
 
 
@@ -26,7 +26,7 @@ def test_january_fair_report_is_watch():
 def test_january_no_report_is_watch():
     s = build_birkie_status(date(2026, 1, 15), None)
     assert s['status'] == 'watch'
-    assert 'No recent trail report' in s['detail']
+    assert s['word'] == 'No word'
 
 
 def test_november_no_report_is_waiting():

@@ -6,6 +6,11 @@ fetched for the Double OO conditions cell) grades it. Date precision is
 avoided on purpose: the race's February weekend varies year to year, so the
 copy says "late February" rather than encoding a rule that breaks.
 
+Voice: the big status word and the detail line read as ONE sentence when
+the strip renders them stacked ("Praying / for snow. ..."), in club
+register. Keep that grammar when editing copy. Status slugs are the stable
+machine names; only word/detail are voice.
+
 Natural extension if the club wants editorial control (La Nina winters,
 early-season judgment calls): an AppConfig override read at request time in
 the route, NOT here; this module must stay context-free because the
@@ -29,7 +34,7 @@ def build_birkie_status(today: date, trail_quality: str | None) -> dict:
     """Status dict for the marketing-site strip's fifth cell.
 
     Returns {status, word, detail}: `status` is the machine slug, `word` the
-    short display headline, `detail` one quiet line of context.
+    short display headline, `detail` the rest of the sentence.
     """
     month = today.month
     race_year = today.year + 1 if month > 2 else today.year
@@ -39,8 +44,8 @@ def build_birkie_status(today: date, trail_quality: str | None) -> dict:
     if 3 <= month <= 9:
         return {
             'status': 'early',
-            'word': 'Early',
-            'detail': f'Birkie {race_year} is too early to call · snow talk starts in November',
+            'word': 'Praying',
+            'detail': f'for snow. Birkie {race_year} talk starts in November.',
         }
 
     # October through December: shaping up, graded by any early grooming.
@@ -48,42 +53,36 @@ def build_birkie_status(today: date, trail_quality: str | None) -> dict:
         if rank >= 3:
             return {
                 'status': 'likely',
-                'word': 'Likely',
-                'detail': f'Birkie Trail already skiing {trail_quality} at OO',
+                'word': "It's on",
+                'detail': f'already. Birkie Trail skiing {trail_quality} at OO.',
             }
         if rank == 2:
             return {
                 'status': 'watch',
-                'word': 'Watch',
-                'detail': 'Early grooming reports say fair · late February race',
+                'word': 'Hopeful',
+                'detail': 'Early grooming says fair. Late February race.',
             }
         return {
             'status': 'waiting',
             'word': 'Waiting',
-            'detail': 'Waiting on snow · first grooming reports land in December',
+            'detail': 'on snow. First grooming reports land in December.',
         }
 
     # January and February: race window.
     if rank >= 3:
         return {
             'status': 'likely',
-            'word': 'Likely',
-            'detail': f'Birkie Trail skiing {trail_quality} at OO · late February race',
+            'word': "It's on",
+            'detail': f'Birkie Trail skiing {trail_quality} at OO.',
         }
-    if rank == 2:
+    if rank >= 1:
         return {
             'status': 'watch',
-            'word': 'Watch',
-            'detail': 'Trail report fair at OO · late February race',
-        }
-    if rank == 1:
-        return {
-            'status': 'watch',
-            'word': 'Watch',
-            'detail': 'Trail report poor at OO · grooming can turn it around',
+            'word': 'Iffy',
+            'detail': f'Trail report {trail_quality} at OO. Grooming can turn it around.',
         }
     return {
         'status': 'watch',
-        'word': 'Watch',
-        'detail': 'No recent trail report from OO · late February race',
+        'word': 'No word',
+        'detail': 'from OO yet. Late February race.',
     }
