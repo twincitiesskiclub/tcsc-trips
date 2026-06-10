@@ -34,6 +34,22 @@ const isHome = variant === 'home';
     <meta name="twitter:card" content="summary_large_image" />
     <link rel="canonical" href={Astro.url.href} />
     <FontPreload />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'SportsOrganization',
+      name: 'Twin Cities Ski Club',
+      alternateName: 'TCSC',
+      url: 'https://twincitiesskiclub.org',
+      email: 'contact@twincitiesskiclub.org',
+      sport: 'Cross-country skiing',
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Minneapolis',
+        addressRegion: 'MN',
+        addressCountry: 'US',
+      },
+      sameAs: ['https://www.instagram.com/twincitiesskiclub'],
+    })} />
   </head>
   <body class={isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}>
     {/* Skip link: every page gives its <main> id="main" (the home page and
