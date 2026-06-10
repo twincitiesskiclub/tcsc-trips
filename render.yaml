@@ -1,0 +1,42 @@
+services:
+  - type: web
+    name: tcsc-marketing
+    runtime: static
+    branch: feat/marketing-site-v2   # switch to main after PR-1 merges
+    buildCommand: cd site && npm install && npm run build
+    staticPublishPath: ./site/dist
+    envVars:
+      - key: PUBLIC_CONDITIONS_API_URL
+        value: https://tcsc.ski/api/conditions
+    headers:
+      # STAGING SAFETY: prevents the onrender.com URL from being indexed.
+      # MUST BE REMOVED in the DNS-cutover PR (Task 39) before twincitiesskiclub.org goes live.
+      - path: /*
+        name: X-Robots-Tag
+        value: noindex
+    routes:
+      # Ported from site/public/_redirects: Render Static does NOT read _redirects files.
+      - type: redirect
+        source: /register
+        destination: https://tcsc.ski/register
+      - type: redirect
+        source: /copy-of-register
+        destination: https://tcsc.ski/register
+      - type: redirect
+        source: /sisu-signup
+        destination: https://tcsc.ski/trips/sisu-ski-fest
+      - type: redirect
+        source: /trip-sign-up
+        destination: https://tcsc.ski/trips
+      - type: redirect
+        source: /sisu-information
+        destination: /trips/sisu-ski-fest
+      - type: redirect
+        source: /trip-information
+        destination: /trips
+      - type: redirect
+        source: /trip-confirmation
+        destination: /
+      - type: redirect
+        source: /confirmation
+        destination: /
