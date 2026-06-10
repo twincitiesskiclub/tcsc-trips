@@ -23,15 +23,36 @@
 // - Markdoc collections  -> `src/content/<name>/<slug>.mdoc`
 // - `fields.slug` stores the *display name* under the field key (`slug:`)
 //   in frontmatter; the generated slug becomes the file name.
+//
+// Images: all content-rendered images live under `src/assets/images/<kind>/`
+// and are stored in frontmatter as RELATIVE paths (e.g.
+// `../../assets/images/coaches/anna/photo.jpg`) so Astro's content-layer
+// `image()` schema helper routes them through the astro:assets/sharp pipeline
+// (responsive srcset, intrinsic dimensions). Every content file sits at depth
+// `src/content/<dir>/<file>`, so the relative prefix is always `../../`.
+// Keystatic's `directory` is relative to this config file (the `site/` root);
+// `publicPath` is the literal prefix written into frontmatter.
+// VERIFIED upload shapes (via the UI, 2026-06-09):
+// - collection entry: file lands at `<directory>/<entry-slug>/<field>.<ext>`,
+//   frontmatter gets `<publicPath><entry-slug>/<field>.<ext>`
+// - singleton: file lands at `<directory>/<field>.<ext>`,
+//   frontmatter gets `<publicPath><field>.<ext>`
+// - replacing an image DELETES the previously referenced asset file.
+// EXCEPTION: site_meta.og_image stays in `public/og/` — og:image needs a
+// stable absolute URL and no transformation.
 import { config, fields, collection, singleton } from '@keystatic/core';
 
-const requiredImage = (label: string) =>
-  fields.image({
-    label,
-    directory: 'public/images/uploads',
-    publicPath: '/images/uploads/',
-    validation: { isRequired: true },
-  });
+// Content images routed through astro:assets (see image note above).
+const imagePaths = (kind: string) => ({
+  directory: `src/assets/images/${kind}`,
+  publicPath: `../../assets/images/${kind}/`,
+});
+
+const contentImage = (label: string, kind: string) =>
+  fields.image({ label, ...imagePaths(kind), validation: { isRequired: true } });
+
+const optionalContentImage = (label: string, kind: string) =>
+  fields.image({ label, ...imagePaths(kind) });
 
 export default config({
   storage: { kind: 'local' },
@@ -42,7 +63,7 @@ export default config({
       path: 'src/content/pages/home',
       schema: {
         hero_headline: fields.text({ label: 'Hero headline', validation: { isRequired: true } }),
-        hero_image: requiredImage('Hero photograph'),
+        hero_image: contentImage('Hero photograph', 'uploads'),
         hero_image_alt: fields.text({ label: 'Hero image alt text', validation: { isRequired: true } }),
         registration_state: fields.select({
           label: 'Registration state',
@@ -134,8 +155,8 @@ export default config({
       schema: {
         top_links: fields.array(
           fields.object({
-            label: fields.text({ label: 'Label' }),
-            href: fields.text({ label: 'href' }),
+            label: fields.text({ label: 'Label', validation: { isRequired: true } }),
+            href: fields.text({ label: 'href', validation: { isRequired: true } }),
           }),
           { label: 'Top nav links' },
         ),
@@ -161,8 +182,8 @@ export default config({
       format: { contentField: 'bio' },
       schema: {
         slug: fields.slug({ name: { label: 'Name (display)' } }),
-        role: fields.text({ label: 'Role line' }),
-        photo: requiredImage('Coach photo'),
+        role: fields.text({ label: 'Role line', validation: { isRequired: true } }),
+        photo: contentImage('Coach photo', 'coaches'),
         photo_alt: fields.text({ label: 'Photo alt text', validation: { isRequired: true } }),
         bio: fields.markdoc({ label: 'Bio' }),
         credentials: fields.array(fields.text({ label: 'Credential' }), { label: 'Credentials' }),
@@ -176,9 +197,9 @@ export default config({
       slugField: 'slug',
       schema: {
         slug: fields.slug({ name: { label: 'Season name' } }),
-        date_range: fields.text({ label: 'Date range (display)' }),
-        fee_cents: fields.integer({ label: 'Fee (cents)' }),
-        summary: fields.text({ label: 'Summary', multiline: true }),
+        date_range: fields.text({ label: 'Date range (display)', validation: { isRequired: true } }),
+        fee_cents: fields.integer({ label: 'Fee (cents)', validation: { isRequired: true } }),
+        summary: fields.text({ label: 'Summary', multiline: true, validation: { isRequired: true } }),
         what_included: fields.array(fields.text({ label: 'Item' }), { label: 'What is included' }),
       },
     }),
@@ -190,15 +211,18 @@ export default config({
       format: { contentField: 'what_to_expect' },
       schema: {
         slug: fields.slug({ name: { label: 'Trip name' } }),
-        location: fields.text({ label: 'Location' }),
-        dates: fields.text({ label: 'Dates' }),
-        cost_summary: fields.text({ label: 'Cost summary', multiline: true }),
+        location: fields.text({ label: 'Location', validation: { isRequired: true } }),
+        dates: fields.text({ label: 'Dates', validation: { isRequired: true } }),
+        cost_summary: fields.text({ label: 'Cost summary', multiline: true, validation: { isRequired: true } }),
         signup_deadline: fields.text({ label: 'Sign-up deadline' }),
         capacity: fields.text({ label: 'Capacity' }),
         what_to_expect: fields.markdoc({ label: 'What to expect' }),
         refund_policy: fields.text({ label: 'Refund policy', multiline: true }),
         signup_url: fields.url({ label: 'Sign-up URL (external; Flask app)' }),
-        hero_photo: fields.image({ label: 'Hero photo', directory: 'public/photos', publicPath: '/photos/' }),
+        // POLICY: hero photos must come from the consent-cleared pool (the
+        // photos collection consent flag only covers that collection).
+        hero_photo: optionalContentImage('Hero photo', 'trips'),
+        hero_photo_alt: fields.text({ label: 'Hero photo alt text' }),
       },
     }),
 
@@ -208,7 +232,7 @@ export default config({
       slugField: 'slug',
       schema: {
         slug: fields.slug({ name: { label: 'Photo identifier' } }),
-        image: requiredImage('Image'),
+        image: contentImage('Image', 'photos'),
         alt_text: fields.text({ label: 'Alt text', validation: { isRequired: true } }),
         caption: fields.text({ label: 'Caption', multiline: true }),
         event_tag: fields.select({
@@ -239,7 +263,7 @@ export default config({
       slugField: 'slug',
       schema: {
         slug: fields.slug({ name: { label: 'Sponsor name' } }),
-        logo: requiredImage('Logo'),
+        logo: contentImage('Logo', 'sponsors'),
         tier: fields.select({
           label: 'Tier',
           options: [
@@ -273,7 +297,10 @@ export default config({
         }),
         lede: fields.text({ label: 'Lede paragraph', multiline: true }),
         body: fields.markdoc({ label: 'Body' }),
-        photo: fields.image({ label: 'Photo (optional)', directory: 'public/photos', publicPath: '/photos/' }),
+        // POLICY: photos must come from the consent-cleared pool (the photos
+        // collection consent flag only covers that collection).
+        photo: optionalContentImage('Photo (optional)', 'wax'),
+        photo_alt: fields.text({ label: 'Photo alt text' }),
         conditions_snapshot: fields.object(
           {
             location: fields.text({ label: 'Location' }),
