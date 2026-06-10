@@ -1,4 +1,9 @@
 ---
+// Home: full composition from primitives (Phase K, Task 30).
+// Hero + mission come from the `home` singleton; CTA labels/urls resolve
+// through getRegistrationCta (single source for every CTA consumer).
+// LiveConditions mounts ONCE, prominent; the inner pages get the compact
+// variant via InnerPageLayout (the announcer assumes one mount per page).
 import { getEntry } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Nav from '@/components/Nav.astro';
@@ -6,16 +11,26 @@ import MobileNavPanel from '@/components/MobileNavPanel.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
 import HeroHome from '@/components/HeroHome.astro';
 import MissionPanel from '@/components/MissionPanel.astro';
+import SectionBand from '@/components/SectionBand.astro';
+import SeasonsGrid from '@/components/SeasonsGrid.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
+import WaxRoomFeed from '@/components/WaxRoomFeed.astro';
+import CTAStrip from '@/components/CTAStrip.astro';
+import Footer from '@/components/Footer.astro';
+import { getRegistrationCta } from '@/components/registrationCta';
 
-// Partial composition: hero + mission render from the ported home singleton
-// so the content port is verifiable end-to-end (srcset, CTA state, mission
-// copy). The full home composition (seasons, mosaic, wax feed, CTA strip)
-// lands in Phase K, Task 30.
 const home = await getEntry('home', 'home');
 if (!home) throw new Error('home singleton missing (src/content/pages/home.yaml)');
 const h = home.data;
 const meta = await getEntry('site_meta', 'site_meta');
+const cta = await getRegistrationCta();
+
+// CTA strip target: the registration url while registration is open,
+// otherwise the closed/member url. Never '#': with no url at all, point at
+// the club Slack so the button always goes somewhere real.
+const ctaStripUrl =
+  (cta.state === 'open' ? cta.url_open : cta.url_closed) ??
+  'https://twincitiesskiclub.slack.com';
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -31,10 +46,21 @@ const meta = await getEntry('site_meta', 'site_meta');
     image={h.hero_image}
     imageAlt={h.hero_image_alt}
     state={h.registration_state}
-    cta_open_label={h.cta_open_label} cta_open_url={h.cta_open_url}
-    cta_coming_soon_label={h.cta_coming_soon_label} cta_coming_soon_url={h.cta_coming_soon_url}
-    cta_closed_label={h.cta_closed_label} cta_closed_url={h.cta_closed_url}
+    cta_open_label={cta.label_open} cta_open_url={cta.url_open}
+    cta_coming_soon_label={cta.label_coming_soon} cta_coming_soon_url={cta.url_coming_soon}
+    cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
+  <SectionBand variant="navy" number="01 · Practices" heading="Two seasons. Year-round group ski.">
+    <SeasonsGrid variant="navy" />
+  </SectionBand>
   <PhotoMosaic homeOnly={true} />
+  <WaxRoomFeed />
+  <CTAStrip
+    heading="Ready to find your winter people?"
+    subhead="Adults 21-35 · intermediate ability · all paces welcome."
+    cta_label="Become a member →"
+    cta_url={ctaStripUrl}
+  />
+  <Footer />
 </BaseLayout>
