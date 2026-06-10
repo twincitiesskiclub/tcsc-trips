@@ -24,7 +24,7 @@ const photos = [
   description={d.intro && metaDescription(d.intro)}
   headline={d.headline ?? 'Extra training fun'}
   subhead={d.intro}
-  facts={['Member-organized', 'Year-round', 'Brunch after']}
+  facts={['Member-organized', 'Year-round', 'Since 2022']}
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
     <div class="prose prose-lg max-w-prose text-ink">
@@ -32,7 +32,7 @@ const photos = [
     </div>
   </div>
   {d.fixtures.length > 0 && (
-    <SectionBand variant="navy" seam="Standing invitations" heading="The current fixtures.">
+    <SectionBand variant="navy" seam="Standing invitations">
       <div class="divide-y divide-mint/15 border-t border-mint/15">
         {d.fixtures.map((f) => (
           <div class="py-6 grid gap-x-8 gap-y-1 md:grid-cols-[16rem_1fr]">
@@ -73,7 +73,7 @@ const photos = [
     </section>
   )}
   {d.annuals.length > 0 && (
-    <SectionBand variant="paper" seam="The annuals" heading="Once a year, every year.">
+    <SectionBand variant="paper" seam="The annuals">
       <div class="divide-y divide-ink/10 border-t border-ink/10">
         {d.annuals.map((a) => (
           <div class="py-6 grid gap-x-8 gap-y-1 md:grid-cols-[16rem_1fr]">
@@ -83,7 +83,7 @@ const photos = [
         ))}
       </div>
       <p class="mt-10 text-ink/80">
-        Once a year the extra training also gets a start line:{' '}
+        The club also puts on its own fall race:{' '}
         <a
           href="/dry-tri"
           class="font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
