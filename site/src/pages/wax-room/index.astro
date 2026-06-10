@@ -8,21 +8,11 @@ import MobileNavPanel from '@/components/MobileNavPanel.astro';
 import HeroInner from '@/components/HeroInner.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
 import Footer from '@/components/Footer.astro';
+import { longDate } from '@/lib/formatDate';
 
 const entries = (await getCollection('wax_entries')).sort(
-  (a, b) => +b.data.date - +a.data.date,
+  (a, b) => +b.data.date - +a.data.date || a.id.localeCompare(b.id),
 );
-
-// Content dates are UTC-midnight JS Dates (unquoted YAML); format in UTC so
-// the build machine's local zone (US Central) cannot shift them back a day.
-const longDate = (d: Date) =>
-  d.toLocaleDateString('en-US', {
-    weekday: 'long',
-    month: 'long',
-    day: 'numeric',
-    year: 'numeric',
-    timeZone: 'UTC',
-  });
 ---
 <BaseLayout
   title="The Wax Room · TCSC"

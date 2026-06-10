@@ -8,9 +8,10 @@
 // CONTRAST: the "All entries" link uses text-mint/80 on bg-navy; mint-deep
 // on navy fails AA (same finding as the SectionBand review).
 import { getCollection } from 'astro:content';
+import { shortDate } from '@/lib/formatDate';
 
 const entries = (await getCollection('wax_entries'))
-  .sort((a, b) => +b.data.date - +a.data.date)
+  .sort((a, b) => +b.data.date - +a.data.date || a.id.localeCompare(b.id))
   .slice(0, 3);
 ---
 {entries.length > 0 && (
@@ -24,7 +25,7 @@ const entries = (await getCollection('wax_entries'))
         {entries.map((e) => (
           <a href={'/wax-room/' + e.id} class="bg-navy p-6 hover:bg-navy-deep transition-colors">
             <div class="text-xs text-coral tracking-wider uppercase">
-              {e.data.date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' })}
+              {shortDate(e.data.date)}
             </div>
             <h3 class="font-display text-xl text-mint mt-2 leading-tight">{e.data.slug}</h3>
             {e.data.lede && <p class="mt-3 text-sm text-paper/80 line-clamp-3">{e.data.lede}</p>}

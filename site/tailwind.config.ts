@@ -9,7 +9,9 @@ const palette = {
   navy: 'oklch(0.25 0.06 260)',
   'navy-deep': 'oklch(0.18 0.05 260)',
   mint: 'oklch(0.91 0.12 155)',
-  'mint-deep': 'oklch(0.55 0.13 155)',
+  // L=0.52: measured 4.95:1 on paper and 4.74:1 on paper-card (AA for body
+  // text). The original L=0.55 measured 4.37:1 / 4.18:1 and failed AA.
+  'mint-deep': 'oklch(0.52 0.13 155)',
   coral: 'oklch(0.74 0.16 15)',
   paper: 'oklch(0.985 0.003 90)',
   'paper-card': 'oklch(0.97 0.004 90)',

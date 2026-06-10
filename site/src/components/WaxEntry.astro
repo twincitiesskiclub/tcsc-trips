@@ -10,11 +10,13 @@
 // (`conditions_snapshot: {}`), so the aside only renders when at least one
 // inner field is present. author_name / lede / photo are optional too.
 //
-// DATES: content dates are unquoted YAML (`date: 2026-12-12`) which parse as
-// UTC-midnight JS Dates; formatting in the build machine's local zone
-// (US Central) would shift them back a day, so timeZone: 'UTC' is required.
+// CROP STRATEGY (per CoachEntry): the photo slot is 16:9 but wax photos can
+// be any shape; passing width AND a 16:9-derived height makes sharp emit
+// true 16:9 renditions server-side instead of shipping the full source
+// behind a CSS object-cover crop.
 import { Image } from 'astro:assets';
 import { CARD } from '@/components/imageWidths';
+import { longDate } from '@/lib/formatDate';
 
 interface Props {
   date: Date;
@@ -37,13 +39,10 @@ const {
   conditions_snapshot,
 } = Astro.props;
 
-const formatted = date.toLocaleDateString('en-US', {
-  weekday: 'long',
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric',
-  timeZone: 'UTC',
-});
+const formatted = longDate(date);
+
+const photoWidth = photo ? Math.min(1200, photo.width) : 0;
+const photoHeight = Math.round((photoWidth * 9) / 16);
 
 const hasConditions =
   conditions_snapshot &&
@@ -87,7 +86,9 @@ const hasConditions =
         src={photo}
         alt={photo_alt}
         widths={CARD}
-        width={Math.min(1200, photo.width)}
+        width={photoWidth}
+        height={photoHeight}
+        fit="cover"
         sizes="(min-width: 768px) 720px, 100vw"
         class="w-full h-full object-cover"
         loading="lazy"
