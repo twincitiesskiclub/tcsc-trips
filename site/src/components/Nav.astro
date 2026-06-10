@@ -8,9 +8,9 @@ const cta = await getRegistrationCta();
 const pathname = Astro.url.pathname;
 ---
 <header class="bg-navy text-paper border-b border-mint/10">
-  <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between gap-6">
-    <a href="/" class="flex items-center gap-3" aria-label="TCSC home">
-      <svg width="56" height="18" viewBox="0 0 100 30" aria-hidden="true">
+  <div class="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-6">
+    <a href="/" class="flex items-center gap-3.5" aria-label="Twin Cities Ski Club home">
+      <svg width="62" height="20" viewBox="0 0 100 30" aria-hidden="true">
         <g class="fill-mint">
           <rect x="0" y="6" width="22" height="4" rx="2" />
           <rect x="0" y="18" width="22" height="4" rx="2" />
@@ -22,7 +22,9 @@ const pathname = Astro.url.pathname;
           <rect x="68" y="18" width="14" height="4" rx="2" />
         </g>
       </svg>
-      <span class="text-xs tracking-widest font-bold">TCSC</span>
+      <span class="font-display font-bold uppercase text-[13px] leading-[1.2] tracking-[0.08em]">
+        Twin Cities<br />Ski Club
+      </span>
     </a>
 
     <nav aria-label="Primary" class="hidden md:flex items-center gap-7 text-sm text-paper/85">
@@ -32,13 +34,19 @@ const pathname = Astro.url.pathname;
           <a
             href={l.href}
             aria-current={active ? 'page' : undefined}
-            class:list={['hover:text-mint', active && 'text-mint']}
+            class:list={[
+              'transition-colors duration-150 hover:text-mint',
+              active && 'text-mint underline underline-offset-[10px] decoration-mint/50',
+            ]}
           >{l.label}</a>
         );
       })}
     </nav>
 
-    <div class="hidden md:block">
+    <div class="hidden md:flex items-center gap-5">
+      <span class="hidden lg:block text-[11px] leading-snug text-right text-paper/45">
+        Minneapolis · St. Paul<br />est. 2020
+      </span>
       <CtaForState {...cta} />
     </div>
 

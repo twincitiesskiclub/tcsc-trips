@@ -6,8 +6,16 @@ interface Props {
 }
 const { variant = 'prominent' } = Astro.props;
 const apiUrl = import.meta.env.PUBLIC_CONDITIONS_API_URL ?? 'https://tcsc.ski/api/conditions';
-// Coupled to LOCATIONS in app/conditions/locations.py (Flask repo).
-const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
+// Coupled to LOCATIONS in app/conditions/locations.py (Flask repo). Names
+// are server-rendered so the strip reads as four named venues even before
+// hydration or when the API is unreachable; the client overwrites them with
+// the API's names on every successful fetch.
+const locations = [
+  { id: 'wirth', name: 'Theodore Wirth' },
+  { id: 'hyland', name: 'Hyland Park' },
+  { id: 'french', name: 'French Park' },
+  { id: 'battlecreek', name: 'Battle Creek' },
+];
 ---
 <section
   class={variant === 'prominent'
@@ -22,35 +30,56 @@ const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
 >
   <span class="sr-only" aria-live="polite" data-announcer></span>
   {variant === 'prominent' ? (
-    <div class="mx-auto max-w-7xl px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-px bg-mint/10">
-      {locationIds.map((id) => (
-        <div data-location={id} class="bg-navy-deep p-4">
-          <div class="text-[10px] tracking-widest uppercase text-mint" data-name>·</div>
-          <div class="font-display text-2xl md:text-3xl text-mint mt-1" data-temp>·</div>
-          {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
-              the post-hydration wax label can wrap without pushing the hero
-              down (CLS guard). */}
-          <div class="text-xs text-paper/70 mt-1 min-h-8" data-wax>·</div>
-        </div>
-      ))}
-    </div>
+    <>
+      <div class="mx-auto max-w-7xl px-6 pt-3 pb-2 flex items-baseline justify-between gap-4">
+        <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">Trail report</span>
+        <span class="text-[11px] text-coral" data-updated>Loading conditions…</span>
+      </div>
+      <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-4 gap-y-4">
+        {locations.map(({ id, name }) => (
+          <div
+            data-location={id}
+            class="py-1 border-l border-mint/15 pl-4 odd:border-l-0 odd:pl-0 md:odd:border-l md:odd:pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5"
+          >
+            <div class="text-[10px] tracking-widest uppercase text-paper/55" data-name>{name}</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-temp>·</span>
+              <span class="text-[11px] text-paper/45" data-feels></span>
+            </div>
+            {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
+                the post-hydration wax label can wrap without pushing the hero
+                down (CLS guard). */}
+            <div class="text-xs text-paper/70 mt-1 min-h-8 flex items-start gap-1.5">
+              <span class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0" data-wax-chip hidden></span>
+              <span data-wax>·</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </>
   ) : (
     <div class="mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
-      {locationIds.map((id) => (
+      {locations.map(({ id, name }) => (
         <div data-location={id} class="flex items-baseline gap-1.5">
-          <span class="tracking-widest uppercase text-mint" data-name>·</span>
+          <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
           <span class="font-display text-paper" data-temp>·</span>
           <span data-wax>·</span>
         </div>
       ))}
     </div>
   )}
-  {variant === 'prominent' && (
-    <div class="mx-auto max-w-7xl px-6 pb-3 text-[11px] text-coral">
-      <span data-updated>Loading conditions…</span>
-    </div>
-  )}
 </section>
+
+<style>
+  /* Wax chips: the dot's color IS the recommendation (the literal color of
+     the glide wax for the band), set per-render via data-band. Deliberate
+     non-token colors: this is data encoding, not palette decoration, muted
+     to sit quietly on navy-deep. */
+  .wax-chip[data-band='green'] { background: oklch(0.62 0.13 150); }
+  .wax-chip[data-band='blue'] { background: oklch(0.62 0.12 245); }
+  .wax-chip[data-band='purple'] { background: oklch(0.62 0.12 300); }
+  .wax-chip[data-band='red'] { background: oklch(0.62 0.15 25); }
+</style>
 
 <script>
   import { init } from '@/components/LiveConditions.client';

@@ -23,8 +23,14 @@ import { MOSAIC, LIGHTBOX } from '@/components/imageWidths';
 interface Props {
   limit?: number;
   homeOnly?: boolean;
+  /** Optional section header (e.g. on home). Rendered only when the mosaic
+      itself renders, so an empty photo pool can't orphan a heading. */
+  number?: string;
+  heading?: string;
+  more_href?: string;
+  more_label?: string;
 }
-const { limit, homeOnly = false } = Astro.props;
+const { limit, homeOnly = false, number, heading, more_href, more_label } = Astro.props;
 
 const all = await getCollection(
   'photos',
@@ -110,6 +116,19 @@ const gridClass = sparse
 {photos.length > 0 && (
   <section class="bg-navy py-20" data-photo-mosaic>
     <div class="max-w-7xl mx-auto px-6">
+      {/* Header md:px-4 lines up with SectionBand's md:px-10 content inset
+          (this container already carries px-6). */}
+      {heading && (
+        <div class="mb-8 md:px-4 flex items-end justify-between gap-6">
+          <div>
+            {number && <div class="text-sm font-semibold tracking-wider mb-3 text-mint">{number}</div>}
+            <h2 class="font-display text-3xl md:text-5xl text-paper leading-[1.05]">{heading}</h2>
+          </div>
+          {more_href && more_label && (
+            <a href={more_href} class="shrink-0 text-mint/80 text-sm hover:text-mint">{more_label}</a>
+          )}
+        </div>
+      )}
       <div class={gridClass}>
         {/* data-tag exists for the /community event_tag filtering planned in the spec */}
         {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (

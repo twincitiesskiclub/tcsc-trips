@@ -1,23 +1,23 @@
 ---
-// CoachEntry: editorial full-bleed coach entry (NOT a card, per the design
-// system). Bio body comes through the slot (render(entry) Content at the
-// call site).
+// CoachEntry: asymmetric editorial split (NOT a card, per the design
+// system). Photo holds a constrained 5-column 4:5 portrait; name + bio take
+// the wide column; entries alternate sides via `flip`. Bio body comes
+// through the slot (render(entry) Content at the call site).
 //
-// MOUNTING CONTRACT: sizes="100vw" assumes the article mounts unconstrained
-// (true full-bleed); a width-capped wrapper would over-fetch.
+// WHY CONSTRAINED, NOT FULL-BLEED: coach source photos are modest quality
+// (KJ's is visibly soft at full size). A 21:9 full-bleed mount magnified
+// that softness across 1440+ px; at ~460px CSS (920 device px at 2x) the
+// same sources read sharp. If crisp 3000px+ portraits ever arrive, the
+// full-bleed treatment can come back.
 //
-// CROP STRATEGY: coach sources are typically square-ish, but the hero slot
-// is 21:9 on md+. A CSS-only object-cover center crop decapitates faces AND
-// ships the full square (1920x1920) when the slot shows 1920x823. So the
-// crop happens server-side: passing width AND a 21:9-derived height makes
-// sharp emit true 21:9 renditions (43% of the square's pixels), and
-// position="attention" uses sharp's saliency crop, which chases the busiest
-// region (faces) instead of the geometric center. `object_position` remains
-// as a CSS fallback for the residual in-browser crop (the mobile 16/9 mount
-// trims the 21:9 sides; rounding slack), biased ~30% from top where heads
+// CROP STRATEGY: sources are square-ish, the slot is 4:5. The crop happens
+// server-side (width + 4:5-derived height makes sharp emit true 4:5
+// renditions) and position="attention" uses sharp's saliency crop, which
+// chases faces instead of the geometric center. `object_position` remains
+// as a CSS fallback for rounding slack, biased ~30% from top where heads
 // live.
 import { Image } from 'astro:assets';
-import { FULL_BLEED } from '@/components/imageWidths';
+import { CARD } from '@/components/imageWidths';
 
 interface Props {
   name: string;
@@ -25,6 +25,8 @@ interface Props {
   photo: ImageMetadata;
   photoAlt: string;
   credentials?: string[];
+  /** Mirror the split (photo right, text left). Alternate per entry. */
+  flip?: boolean;
   /** CSS object-position fallback for the residual in-browser crop. */
   object_position?: string;
   /**
@@ -40,43 +42,48 @@ const {
   photo,
   photoAlt,
   credentials = [],
+  flip = false,
   object_position = 'center 30%',
   loading = 'lazy',
 } = Astro.props;
 
-const width = Math.min(1920, photo.width);
-const height = Math.round((width * 9) / 21);
+const width = Math.min(1200, photo.width);
+const height = Math.round((width * 5) / 4);
 ---
 <article class="border-b border-ink/10 last:border-b-0">
-  <div class="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden">
-    <Image
-      src={photo}
-      alt={photoAlt}
-      widths={FULL_BLEED}
-      width={width}
-      height={height}
-      fit="cover"
-      position="attention"
-      sizes="100vw"
-      class="absolute inset-0 w-full h-full object-cover"
-      style={`object-position: ${object_position}`}
-      loading={loading}
-      fetchpriority={loading === 'eager' ? 'high' : 'auto'}
-      decoding="async"
-    />
-  </div>
-  <div class="mx-auto max-w-4xl px-6 py-10">
-    <h2 class="font-display text-4xl md:text-6xl text-navy leading-[1.0]">{name}</h2>
-    <p class="mt-3 text-mint-deep text-sm tracking-wider uppercase font-semibold">{role}</p>
-    <div class="mt-6 prose prose-lg max-w-prose text-ink">
-      <slot />
+  <div class="mx-auto max-w-6xl px-6 py-12 md:py-16 grid gap-8 md:gap-14 md:grid-cols-12 items-start">
+    <div class:list={['md:col-span-5', flip && 'md:order-2']}>
+      <div class="relative aspect-[4/5] overflow-hidden">
+        <Image
+          src={photo}
+          alt={photoAlt}
+          widths={CARD}
+          width={width}
+          height={height}
+          fit="cover"
+          position="attention"
+          sizes="(min-width: 768px) 40vw, 100vw"
+          class="absolute inset-0 w-full h-full object-cover"
+          style={`object-position: ${object_position}`}
+          loading={loading}
+          fetchpriority={loading === 'eager' ? 'high' : 'auto'}
+          decoding="async"
+        />
+      </div>
     </div>
-    {credentials.length > 0 && (
-      <ul class="mt-6 text-sm text-slate space-y-1">
-        {credentials.map((c) => (
-          <li class="before:content-['·'] before:mr-2">{c}</li>
-        ))}
-      </ul>
-    )}
+    <div class:list={['md:col-span-7', flip && 'md:order-1']}>
+      <p class="text-mint-deep text-sm tracking-wider uppercase font-semibold">{role}</p>
+      <h2 class="mt-2 font-display text-4xl md:text-6xl text-navy leading-[1.0]">{name}</h2>
+      <div class="mt-6 prose prose-lg max-w-prose text-ink">
+        <slot />
+      </div>
+      {credentials.length > 0 && (
+        <ul class="mt-6 text-sm text-slate space-y-1">
+          {credentials.map((c) => (
+            <li class="before:content-['·'] before:mr-2">{c}</li>
+          ))}
+        </ul>
+      )}
+    </div>
   </div>
 </article>

@@ -17,9 +17,12 @@ const entries = (await getCollection('wax_entries'))
 {entries.length > 0 && (
   <section class="bg-navy py-20">
     <div class="mx-auto max-w-7xl px-6">
-      <div class="flex items-baseline justify-between mb-8">
-        <h2 class="font-display text-3xl md:text-4xl text-mint">From the Wax Room</h2>
-        <a href="/wax-room" class="text-mint/80 text-sm hover:text-mint">All entries →</a>
+      <div class="flex items-end justify-between mb-8">
+        <div>
+          <div class="text-sm font-semibold tracking-wider mb-3 text-mint">03 · Wax Room</div>
+          <h2 class="font-display text-3xl md:text-4xl text-paper leading-[1.05]">From the Wax Room</h2>
+        </div>
+        <a href="/wax-room" class="shrink-0 text-mint/80 text-sm hover:text-mint">All entries</a>
       </div>
       <div class="grid md:grid-cols-3 gap-px bg-mint/10">
         {entries.map((e) => (

@@ -41,7 +41,20 @@ function renderInto(root: HTMLElement, data: Resp) {
     if (!el) return;
     setText(el, '[data-name]', loc.name ?? '·');
     setText(el, '[data-temp]', loc.temp_f == null ? '·' : `${loc.temp_f}°F`);
-    setText(el, '[data-wax]', loc.wax_label ?? 'Conditions unavailable');
+    // Wind chill earns its spot only when it materially differs from air temp.
+    const showFeels =
+      loc.temp_f != null && loc.wind_chill_f != null && loc.temp_f - loc.wind_chill_f >= 3;
+    setText(el, '[data-feels]', showFeels ? `feels ${Math.round(loc.wind_chill_f!)}°` : '');
+    setText(el, '[data-wax]', loc.wax_label ?? 'No report');
+    const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
+    if (chip) {
+      if (loc.wax_band) {
+        chip.dataset.band = loc.wax_band;
+        chip.hidden = false;
+      } else {
+        chip.hidden = true;
+      }
+    }
     // Announce only material wax transitions: a previously rendered,
     // non-placeholder band changing to a different band.
     const prevBand = el.dataset.waxBand;
@@ -59,9 +72,13 @@ function renderInto(root: HTMLElement, data: Resp) {
 }
 
 function renderFailure(root: HTMLElement) {
-  // Total failure: make each cell read clearly, not four orphan middots.
+  // Total failure: say it once in the stamp; cells go quiet ("No report")
+  // instead of repeating the error four times.
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
-    setText(el, '[data-wax]', 'Conditions unavailable');
+    setText(el, '[data-wax]', 'No report');
+    setText(el, '[data-feels]', '');
+    const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
+    if (chip) chip.hidden = true;
   });
   delete root.dataset.updatedAt;
   const stamp = root.querySelector('[data-updated]') as HTMLElement | null;

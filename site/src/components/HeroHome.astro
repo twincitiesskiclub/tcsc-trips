@@ -20,7 +20,7 @@ const props = Astro.props;
 // width itself as a candidate, so it never upscales (see imageWidths.ts).
 ---
 <section class="relative bg-navy overflow-hidden">
-  <div class="relative h-[68vh] min-h-[520px]">
+  <div class="relative h-[74vh] min-h-[540px]">
     {props.image && (
       <Picture
         src={props.image}
@@ -34,9 +34,11 @@ const props = Astro.props;
         decoding="async"
       />
     )}
-    <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/70 via-35% to-transparent"></div>
-    <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-16 md:pb-24 text-paper">
-      <h1 class="font-display text-5xl md:text-7xl leading-[0.95] text-mint max-w-4xl">{props.headline}</h1>
+    {/* Functional scrim: heavy only at the text zone, light by 45% up so
+        the photograph actually shows. */}
+    <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
+    <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-14 md:pb-20 text-paper">
+      <h1 class="font-display font-bold text-4xl md:text-6xl leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
       <div class="mt-8">
         <CtaForState
           state={props.state}
