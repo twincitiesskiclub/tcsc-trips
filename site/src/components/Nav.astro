@@ -1,10 +1,11 @@
 ---
 import CtaForState from '@/components/CtaForState.astro';
-import { getNavLinks } from '@/components/navLinks';
+import { getNavLinks, isActiveLink } from '@/components/navLinks';
 import { getRegistrationCta } from '@/components/registrationCta';
 
 const links = await getNavLinks();
 const cta = await getRegistrationCta();
+const pathname = Astro.url.pathname;
 ---
 <header class="bg-navy text-paper border-b border-mint/10">
   <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between gap-6">
@@ -25,7 +26,16 @@ const cta = await getRegistrationCta();
     </a>
 
     <nav class="hidden md:flex items-center gap-7 text-sm text-paper/85">
-      {links.map((l) => <a href={l.href} class="hover:text-mint">{l.label}</a>)}
+      {links.map((l) => {
+        const active = isActiveLink(l.href, pathname);
+        return (
+          <a
+            href={l.href}
+            aria-current={active ? 'page' : undefined}
+            class:list={['hover:text-mint', active && 'text-mint']}
+          >{l.label}</a>
+        );
+      })}
     </nav>
 
     <div class="hidden md:block">

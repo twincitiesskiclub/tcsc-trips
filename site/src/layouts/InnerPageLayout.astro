@@ -1,0 +1,44 @@
+---
+// InnerPageLayout: shared shell for every non-home page. Composes
+// BaseLayout (variant inner, title/description/ogImage passthrough) +
+// Nav + MobileNavPanel + optional HeroInner + <main class="bg-paper">
+// slot + compact LiveConditions + Footer.
+//
+// Pass `headline` (plus optional `subhead`) to get the standard HeroInner;
+// omit it on pages whose main content owns the <h1> (TripEntry, WaxEntry
+// detail pages mount exactly one h1 themselves).
+//
+// The default slot mounts UNCONSTRAINED inside <main>: full-bleed
+// components whose comments declare a sizes="100vw" mounting contract
+// (CoachEntry, TripEntry) and full-bleed bands (PhotoMosaic, SectionBand)
+// go straight in; text content brings its own max-w-* wrapper.
+//
+// LiveConditions: exactly one mount per page (the client announcer assumes
+// this), always the compact variant here; the prominent variant is the
+// home page's alone.
+import BaseLayout from '@/layouts/BaseLayout.astro';
+import Nav from '@/components/Nav.astro';
+import MobileNavPanel from '@/components/MobileNavPanel.astro';
+import HeroInner from '@/components/HeroInner.astro';
+import LiveConditions from '@/components/LiveConditions.astro';
+import Footer from '@/components/Footer.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+  headline?: string;
+  subhead?: string;
+}
+const { title, description, ogImage, headline, subhead } = Astro.props;
+---
+<BaseLayout title={title} variant="inner" description={description} ogImage={ogImage}>
+  <Nav />
+  <MobileNavPanel />
+  {headline && <HeroInner headline={headline} subhead={subhead} />}
+  <main class="bg-paper">
+    <slot />
+  </main>
+  <LiveConditions variant="compact" />
+  <Footer />
+</BaseLayout>

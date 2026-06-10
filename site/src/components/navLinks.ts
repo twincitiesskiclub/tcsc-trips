@@ -17,6 +17,19 @@ export const navLinks: NavLink[] = [
 ];
 
 /**
+ * Active-state test for nav links: true when `pathname` is the link target
+ * or any deeper path within its section (/wax-room/xyz highlights Wax Room).
+ * Trailing slashes are normalized because static hosting serves /about and
+ * /about/ identically. Shared by Nav and MobileNavPanel.
+ */
+export function isActiveLink(href: string, pathname: string): boolean {
+  const norm = (p: string) => (p !== '/' && p.endsWith('/') ? p.slice(0, -1) : p);
+  const target = norm(href);
+  const current = norm(pathname);
+  return current === target || current.startsWith(target + '/');
+}
+
+/**
  * Top-level nav links from the `nav` singleton, falling back to the constant
  * when the singleton is missing or empty. Used by Nav, MobileNavPanel, Footer.
  */

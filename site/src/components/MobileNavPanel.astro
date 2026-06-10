@@ -1,7 +1,8 @@
 ---
-import { getNavLinks } from '@/components/navLinks';
+import { getNavLinks, isActiveLink } from '@/components/navLinks';
 
 const links = await getNavLinks();
+const pathname = Astro.url.pathname;
 ---
 <div
   id="mobile-nav-panel"
@@ -19,7 +20,16 @@ const links = await getNavLinks();
   </button>
 
   <nav class="flex-1 flex flex-col justify-center gap-6 text-2xl">
-    {links.map((l) => <a href={l.href} class="hover:text-mint">{l.label}</a>)}
+    {links.map((l) => {
+      const active = isActiveLink(l.href, pathname);
+      return (
+        <a
+          href={l.href}
+          aria-current={active ? 'page' : undefined}
+          class:list={['hover:text-mint', active && 'text-mint']}
+        >{l.label}</a>
+      );
+    })}
   </nav>
 
   <div class="mt-auto">

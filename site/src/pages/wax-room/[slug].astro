@@ -1,14 +1,11 @@
 ---
 // /wax-room/{slug}: one Wax Room entry. The route param is entry.id (the
-// filename slug); entry.data.slug is the display title.
+// filename slug); entry.data.slug is the display title. No HeroInner:
+// WaxEntry owns the page h1, so it mounts straight into the layout's main.
 import { getCollection, render } from 'astro:content';
 import type { CollectionEntry } from 'astro:content';
-import BaseLayout from '@/layouts/BaseLayout.astro';
-import Nav from '@/components/Nav.astro';
-import MobileNavPanel from '@/components/MobileNavPanel.astro';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import WaxEntry from '@/components/WaxEntry.astro';
-import LiveConditions from '@/components/LiveConditions.astro';
-import Footer from '@/components/Footer.astro';
 
 export async function getStaticPaths() {
   const entries = await getCollection('wax_entries');
@@ -22,27 +19,20 @@ interface Props {
 const { entry } = Astro.props;
 const { Content } = await render(entry);
 ---
-<BaseLayout
+<InnerPageLayout
   title={entry.data.slug + ' · The Wax Room · TCSC'}
-  variant="inner"
   description={entry.data.lede ?? 'A Wax Room field report from Twin Cities Ski Club.'}
 >
-  <Nav />
-  <MobileNavPanel />
-  <main class="bg-paper">
-    <WaxEntry
-      date={entry.data.date}
-      author_name={entry.data.author_name}
-      author_role={entry.data.author_role}
-      title={entry.data.slug}
-      lede={entry.data.lede}
-      photo={entry.data.photo}
-      photo_alt={entry.data.photo_alt}
-      conditions_snapshot={entry.data.conditions_snapshot}
-    >
-      <Content />
-    </WaxEntry>
-  </main>
-  <LiveConditions variant="compact" />
-  <Footer />
-</BaseLayout>
+  <WaxEntry
+    date={entry.data.date}
+    author_name={entry.data.author_name}
+    author_role={entry.data.author_role}
+    title={entry.data.slug}
+    lede={entry.data.lede}
+    photo={entry.data.photo}
+    photo_alt={entry.data.photo_alt}
+    conditions_snapshot={entry.data.conditions_snapshot}
+  >
+    <Content />
+  </WaxEntry>
+</InnerPageLayout>
