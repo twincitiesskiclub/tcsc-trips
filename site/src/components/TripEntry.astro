@@ -20,6 +20,7 @@ interface Props {
   cost_summary: string;
   signup_deadline?: string;
   capacity?: string;
+  refund_policy?: string;
   signup_url?: string;
   hero_photo?: ImageMetadata;
   /** Maps from the optional `hero_photo_alt` content field. */
@@ -33,6 +34,7 @@ const {
   cost_summary,
   signup_deadline,
   capacity,
+  refund_policy,
   signup_url,
   hero_photo,
   hero_photo_alt = '',
@@ -78,6 +80,12 @@ const {
         <div>
           <dt class="text-slate uppercase tracking-wider">Capacity</dt>
           <dd class="mt-1 font-semibold text-ink">{capacity}</dd>
+        </div>
+      )}
+      {refund_policy && (
+        <div class="sm:col-span-3">
+          <dt class="text-slate uppercase tracking-wider">Refund policy</dt>
+          <dd class="mt-1 text-ink leading-relaxed">{refund_policy}</dd>
         </div>
       )}
     </dl>

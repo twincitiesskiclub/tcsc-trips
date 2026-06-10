@@ -4,9 +4,18 @@
 // wrapper, never a dead `<a href="#">` (dynamic Wrapper tag below). Logo alt
 // text is the sponsor's display name (entry.data.slug, see content.config.ts
 // header).
+//
+// headingLevel keeps the document outline contiguous: the sponsors page
+// mounts the wall directly under its h1, so it passes 'h2'; the default
+// 'h3' suits mounts beneath an existing h2.
 import { getCollection } from 'astro:content';
 import { Image } from 'astro:assets';
 import { THUMB } from '@/components/imageWidths';
+
+interface Props {
+  headingLevel?: 'h2' | 'h3';
+}
+const { headingLevel: Heading = 'h3' } = Astro.props;
 
 const sponsors = await getCollection('sponsors');
 
@@ -27,7 +36,7 @@ const tierGroups = tiers
 ---
 {tierGroups.map(({ label, items }) => (
   <section class="mt-12 first:mt-0">
-    <h3 class="font-display text-2xl text-navy">{label}</h3>
+    <Heading class="font-display text-2xl text-navy">{label}</Heading>
     <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-8 items-center">
       {items.map((s) => {
         const Wrapper = s.data.url ? 'a' : 'div';

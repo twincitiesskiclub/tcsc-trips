@@ -5,8 +5,10 @@
 // contract requires sitting UNCONSTRAINED in the layout's main slot.
 import { getCollection, render } from 'astro:content';
 import type { CollectionEntry } from 'astro:content';
+import { getImage } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import TripEntry from '@/components/TripEntry.astro';
+import { metaDescription } from '@/lib/metaDescription';
 
 export async function getStaticPaths() {
   const trips = await getCollection('trips');
@@ -20,10 +22,20 @@ interface Props {
 const { trip } = Astro.props;
 const t = trip.data;
 const { Content } = await render(trip);
-const description =
-  t.cost_summary ?? `${t.slug}: a Twin Cities Ski Club trip to ${t.location}, ${t.dates}.`;
+const description = metaDescription(
+  `${t.slug}: a Twin Cities Ski Club trip to ${t.location}, ${t.dates}.`,
+);
+// Per-page og:image from the trip hero (jpeg for crawler compatibility);
+// BaseLayout absolutizes the path against Astro.site.
+const ogImage = t.hero_photo
+  ? (await getImage({ src: t.hero_photo, width: 1200, format: 'jpeg' })).src
+  : undefined;
 ---
-<InnerPageLayout title={t.slug + ' · TCSC'} description={description}>
+<InnerPageLayout
+  title={t.slug + ' · Twin Cities Ski Club'}
+  description={description}
+  ogImage={ogImage}
+>
   <TripEntry
     name={t.slug}
     location={t.location}
@@ -31,6 +43,7 @@ const description =
     cost_summary={t.cost_summary}
     signup_deadline={t.signup_deadline}
     capacity={t.capacity}
+    refund_policy={t.refund_policy}
     signup_url={t.signup_url}
     hero_photo={t.hero_photo}
     hero_photo_alt={t.hero_photo_alt}

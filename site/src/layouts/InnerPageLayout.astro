@@ -36,7 +36,7 @@ const { title, description, ogImage, headline, subhead } = Astro.props;
   <Nav />
   <MobileNavPanel />
   {headline && <HeroInner headline={headline} subhead={subhead} />}
-  <main class="bg-paper">
+  <main id="main" class="bg-paper">
     <slot />
   </main>
   <LiveConditions variant="compact" />

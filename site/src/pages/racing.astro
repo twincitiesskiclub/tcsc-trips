@@ -3,6 +3,7 @@
 // races list (date / name / location rows, optional full-width notes).
 import { getEntry, render } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import { metaDescription } from '@/lib/metaDescription';
 
 const racing = await getEntry('racing', 'racing');
 if (!racing) throw new Error('racing singleton missing (src/content/pages/racing.mdoc)');
@@ -10,8 +11,8 @@ const { Content } = await render(racing);
 const races = racing.data.races;
 ---
 <InnerPageLayout
-  title="Racing · TCSC"
-  description={racing.data.intro}
+  title="Racing · Twin Cities Ski Club"
+  description={racing.data.intro && metaDescription(racing.data.intro)}
   headline={racing.data.headline ?? 'Twin Cities Ski Club racers'}
   subhead={racing.data.intro}
 >

@@ -18,29 +18,38 @@ import WaxRoomFeed from '@/components/WaxRoomFeed.astro';
 import CTAStrip from '@/components/CTAStrip.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
+import { metaDescription } from '@/lib/metaDescription';
 
 const home = await getEntry('home', 'home');
 if (!home) throw new Error('home singleton missing (src/content/pages/home.yaml)');
 const h = home.data;
 const meta = await getEntry('site_meta', 'site_meta');
 const cta = await getRegistrationCta();
+const description = meta?.data.description
+  ? metaDescription(meta.data.description)
+  : undefined;
 
-// CTA strip target: the registration url while registration is open,
-// otherwise the closed/member url. Never '#': with no url at all, point at
-// the club Slack so the button always goes somewhere real.
+// CTA strip target, by registration state: the open url, then the
+// coming-soon url (falling back to closed), then the closed/member url.
+// Never '#': with no url at all, point at the club Slack so the button
+// always goes somewhere real.
 const ctaStripUrl =
-  (cta.state === 'open' ? cta.url_open : cta.url_closed) ??
-  'https://twincitiesskiclub.slack.com';
+  (cta.state === 'open'
+    ? cta.url_open
+    : cta.state === 'coming_soon'
+      ? (cta.url_coming_soon ?? cta.url_closed)
+      : cta.url_closed) ?? 'https://twincitiesskiclub.slack.com';
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
   variant="home"
-  description={meta?.data.description}
+  description={description}
   ogImage={meta?.data.og_image}
 >
   <Nav />
   <MobileNavPanel />
   <LiveConditions variant="prominent" />
+  <main id="main">
   <HeroHome
     headline={h.hero_headline}
     image={h.hero_image}
@@ -62,5 +71,6 @@ const ctaStripUrl =
     cta_label="Become a member →"
     cta_url={ctaStripUrl}
   />
+  </main>
   <Footer />
 </BaseLayout>

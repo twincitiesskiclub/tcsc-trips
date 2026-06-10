@@ -5,6 +5,7 @@
 import { getEntry, render } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
+import { metaDescription } from '@/lib/metaDescription';
 
 const community = await getEntry('community', 'community');
 if (!community) throw new Error('community singleton missing (src/content/pages/community.mdoc)');
@@ -12,8 +13,8 @@ const { Content } = await render(community);
 const activities = community.data.team_bonding_activities;
 ---
 <InnerPageLayout
-  title="Community · TCSC"
-  description={community.data.intro}
+  title="Community · Twin Cities Ski Club"
+  description={community.data.intro && metaDescription(community.data.intro)}
   headline={community.data.headline ?? 'A welcoming community'}
   subhead={community.data.intro}
 >

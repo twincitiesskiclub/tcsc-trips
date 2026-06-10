@@ -4,17 +4,19 @@
 import { getEntry } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import SponsorWall from '@/components/SponsorWall.astro';
+import { metaDescription } from '@/lib/metaDescription';
 
 const page = await getEntry('sponsors_page', 'sponsors_page');
 if (!page) throw new Error('sponsors_page singleton missing (src/content/pages/sponsors_page.yaml)');
 ---
 <InnerPageLayout
-  title="Sponsors · TCSC"
-  description={page.data.intro}
+  title="Sponsors · Twin Cities Ski Club"
+  description={page.data.intro && metaDescription(page.data.intro)}
   headline={page.data.headline ?? 'Meet our sponsors'}
   subhead={page.data.intro}
 >
   <div class="mx-auto max-w-5xl px-6 py-12">
-    <SponsorWall />
+    {/* h2: the tier headings sit directly under the page h1. */}
+    <SponsorWall headingLevel="h2" />
   </div>
 </InnerPageLayout>

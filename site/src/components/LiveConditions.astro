@@ -24,7 +24,10 @@ const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
         <div data-location={id} class="bg-navy-deep p-4">
           <div class="text-[10px] tracking-widest uppercase text-mint" data-name>·</div>
           <div class="font-display text-2xl md:text-3xl text-mint mt-1" data-temp>·</div>
-          <div class="text-xs text-paper/70 mt-1" data-wax>·</div>
+          {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
+              the post-hydration wax label can wrap without pushing the hero
+              down (CLS guard). */}
+          <div class="text-xs text-paper/70 mt-1 min-h-8" data-wax>·</div>
         </div>
       ))}
     </div>

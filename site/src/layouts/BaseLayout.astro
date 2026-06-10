@@ -36,6 +36,12 @@ const isHome = variant === 'home';
     <FontPreload />
   </head>
   <body class={isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}>
+    {/* Skip link: every page gives its <main> id="main" (the home page and
+        InnerPageLayout both do). Visually hidden until keyboard-focused. */}
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-md focus:bg-mint focus:px-4 focus:py-2 focus:font-semibold focus:text-navy"
+    >Skip to content</a>
     <slot />
     <Lightbox />
   </body>

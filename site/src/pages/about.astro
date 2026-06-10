@@ -5,14 +5,15 @@ import { getEntry, render } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import SeasonsGrid from '@/components/SeasonsGrid.astro';
+import { metaDescription } from '@/lib/metaDescription';
 
 const about = await getEntry('about', 'about');
 if (!about) throw new Error('about singleton missing (src/content/pages/about.mdoc)');
 const { Content } = await render(about);
 ---
 <InnerPageLayout
-  title="About · TCSC"
-  description={about.data.intro}
+  title="About · Twin Cities Ski Club"
+  description={about.data.intro && metaDescription(about.data.intro)}
   headline={about.data.headline ?? 'About Twin Cities Ski Club'}
   subhead={about.data.intro}
 >

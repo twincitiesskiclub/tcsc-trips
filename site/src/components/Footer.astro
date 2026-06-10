@@ -17,7 +17,7 @@ const links = await getNavLinks();
         Twin Cities Ski Club, a 501(c)(3) nonprofit Nordic ski community in Minneapolis / St. Paul.
       </p>
     </div>
-    <nav class="text-sm space-y-2">
+    <nav aria-label="Footer" class="text-sm space-y-2">
       {links.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
     </nav>
     <div class="text-sm space-y-2">
