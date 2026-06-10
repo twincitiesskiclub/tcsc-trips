@@ -4,24 +4,30 @@
 
 :root { color-scheme: light; }
 
-/* PolySans swap point: replace these @font-face blocks (with tailwind.config.ts fontFamily) when PolySans is licensed. */
+/* Archivo Variable carries the whole site: one family, two voices via the
+   width axis (body at normal width, display moments at 125% expanded; the
+   Söhne / Söhne Breit model from DESIGN.md). Swap point if a commercial
+   face is ever licensed: these @font-face blocks + tailwind.config.ts
+   fontFamily + the .font-display width rule below + FontPreload.astro. */
 @font-face {
-  font-family: 'InterVariable';
-  src: url('/fonts/inter/InterVariable.woff2') format('woff2');
+  font-family: 'ArchivoVariable';
+  src: url('/fonts/archivo/ArchivoVariable.woff2') format('woff2');
   font-weight: 100 900;
+  font-stretch: 62% 125%;
   font-style: normal;
   font-display: swap;
 }
 @font-face {
-  font-family: 'InterVariable';
-  src: url('/fonts/inter/InterVariable-Italic.woff2') format('woff2');
+  font-family: 'ArchivoVariable';
+  src: url('/fonts/archivo/ArchivoVariable-Italic.woff2') format('woff2');
   font-weight: 100 900;
+  font-stretch: 62% 125%;
   font-style: italic;
   font-display: swap;
 }
 
 html {
-  font-family: 'InterVariable', system-ui, sans-serif;
+  font-family: 'ArchivoVariable', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: oklch(0.985 0.003 90);
@@ -45,6 +51,17 @@ html {
   :focus-visible {
     outline: 2px solid var(--focus-ring-color);
     outline-offset: 2px;
+  }
+}
+
+/* The display voice: Tailwind's font-display utility supplies the family;
+   this companion rule widens it to the expanded cut and tightens tracking
+   at headline scale. Both rules target the same class, so every existing
+   font-display call site picks the cut up for free. */
+@layer utilities {
+  .font-display {
+    font-stretch: 125%;
+    letter-spacing: -0.01em;
   }
 }
 

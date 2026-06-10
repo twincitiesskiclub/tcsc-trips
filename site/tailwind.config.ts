@@ -62,10 +62,11 @@ export default {
           },
         },
       },
-      // PolySans swap point: sans/display intentionally identical until PolySans is licensed.
+      // One family, two voices: Archivo Variable's width axis separates the
+      // display cut from body (global.css widens .font-display to 125%).
       fontFamily: {
-        sans: ['InterVariable', 'system-ui', 'sans-serif'],
-        display: ['InterVariable', 'system-ui', 'sans-serif'],
+        sans: ['ArchivoVariable', 'system-ui', 'sans-serif'],
+        display: ['ArchivoVariable', 'system-ui', 'sans-serif'],
       },
       maxWidth: { prose: '62ch', 'prose-narrow': '56ch' },
     },
