@@ -88,6 +88,9 @@ const photos = defineCollection({
         member_names: z.array(z.string()).default([]),
         order: z.number().int().default(0),
         show_on_home: z.boolean().default(false),
+        // Consent provenance for ported photos: republished from the public
+        // Wix site; see migration/CONSENT.md (board re-confirmation required
+        // before DNS cutover).
         photo_consent_recorded: z.boolean().default(false),
       })
       .strict(),

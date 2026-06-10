@@ -254,6 +254,8 @@ export default config({
         show_on_home: fields.checkbox({ label: 'Show on home mosaic', defaultValue: false }),
         photo_consent_recorded: fields.checkbox({
           label: 'Photo consent recorded (required to render)',
+          description:
+            'Provenance for ported photos: republished from the public Wix site, documented in migration/CONSENT.md (board re-confirmation required before DNS cutover).',
           defaultValue: false,
         }),
       },
