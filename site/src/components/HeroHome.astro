@@ -1,0 +1,52 @@
+---
+import { Image } from 'astro:assets';
+import CtaForState from '@/components/CtaForState.astro';
+
+interface Props {
+  headline: string;
+  /** astro:assets metadata from the home singleton (undefined → typography fallback). */
+  image?: ImageMetadata;
+  imageAlt: string;
+  state: 'open' | 'coming_soon' | 'closed';
+  cta_open_label: string; cta_open_url?: string;
+  cta_coming_soon_label: string; cta_coming_soon_url?: string;
+  cta_closed_label: string; cta_closed_url?: string;
+}
+const props = Astro.props;
+
+// Full-bleed slot: serve up to ~2560px wide, but NEVER upscale past the
+// source image's intrinsic width (astro:assets would warn/upscale otherwise).
+const image = props.image;
+const candidateWidths = [768, 1280, 1920, 2560].filter(
+  (w) => !image || w <= image.width,
+);
+const widths = candidateWidths.length > 0 ? candidateWidths : image ? [image.width] : [];
+---
+<section class="relative bg-navy overflow-hidden">
+  <div class="relative h-[68vh] min-h-[520px]">
+    {image && (
+      <Image
+        src={image}
+        alt={props.imageAlt}
+        widths={widths}
+        sizes="100vw"
+        class="absolute inset-0 w-full h-full object-cover"
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+      />
+    )}
+    <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/30 to-transparent"></div>
+    <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-16 md:pb-24 text-paper">
+      <h1 class="font-display text-5xl md:text-7xl leading-[0.95] text-mint max-w-4xl">{props.headline}</h1>
+      <div class="mt-8">
+        <CtaForState
+          state={props.state}
+          label_open={props.cta_open_label} url_open={props.cta_open_url}
+          label_coming_soon={props.cta_coming_soon_label} url_coming_soon={props.cta_coming_soon_url}
+          label_closed={props.cta_closed_label} url_closed={props.cta_closed_url}
+        />
+      </div>
+    </div>
+  </div>
+</section>

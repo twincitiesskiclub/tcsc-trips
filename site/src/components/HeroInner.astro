@@ -1,0 +1,10 @@
+---
+interface Props { headline: string; subhead?: string; }
+const { headline, subhead } = Astro.props;
+---
+<section class="bg-paper text-ink border-b border-ink/10">
+  <div class="mx-auto max-w-5xl px-6 py-16 md:py-24">
+    <h1 class="font-display text-4xl md:text-6xl leading-[1.05] text-navy">{headline}</h1>
+    {subhead && <p class="mt-5 text-lg md:text-xl text-slate max-w-prose">{subhead}</p>}
+  </div>
+</section>
