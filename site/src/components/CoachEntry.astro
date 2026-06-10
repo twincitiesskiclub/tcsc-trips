@@ -1,0 +1,43 @@
+---
+// CoachEntry: editorial full-bleed coach entry (NOT a card, per the design
+// system). Bio body comes through the slot (render(entry) Content at the
+// call site). Explicit clamped `width` alongside `widths` keeps Astro from
+// emitting a full-intrinsic fallback rendition (see imageWidths.ts).
+import { Image } from 'astro:assets';
+import { FULL_BLEED } from '@/components/imageWidths';
+
+interface Props {
+  name: string;
+  role: string;
+  photo: ImageMetadata;
+  photoAlt: string;
+  credentials?: string[];
+}
+const { name, role, photo, photoAlt, credentials = [] } = Astro.props;
+---
+<article class="border-b border-ink/10 last:border-b-0">
+  <div class="relative aspect-[16/9] md:aspect-[21/9] overflow-hidden">
+    <Image
+      src={photo}
+      alt={photoAlt}
+      widths={FULL_BLEED}
+      width={Math.min(1920, photo.width)}
+      sizes="100vw"
+      class="absolute inset-0 w-full h-full object-cover"
+      loading="lazy"
+      decoding="async"
+    />
+  </div>
+  <div class="mx-auto max-w-4xl px-6 py-10">
+    <h2 class="font-display text-4xl md:text-6xl text-navy leading-[1.0]">{name}</h2>
+    <p class="mt-3 text-mint-deep text-sm tracking-wider uppercase font-semibold">{role}</p>
+    <div class="mt-6 prose prose-lg max-w-prose text-ink">
+      <slot />
+    </div>
+    {credentials.length > 0 && (
+      <ul class="mt-6 text-sm text-slate space-y-1">
+        {credentials.map((c) => <li>· {c}</li>)}
+      </ul>
+    )}
+  </div>
+</article>

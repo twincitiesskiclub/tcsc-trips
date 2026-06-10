@@ -1,0 +1,42 @@
+---
+// TripsTable: typeset index of upcoming trips. entry.id is the file-name
+// slug (URL identity, /trips/<id>); entry.data.slug is the DISPLAY NAME
+// (see content.config.ts header). With no trips it renders a friendly
+// empty state instead of a blank table.
+import { getCollection } from 'astro:content';
+
+const trips = await getCollection('trips');
+trips.sort((a, b) => a.data.dates.localeCompare(b.data.dates));
+---
+{trips.length === 0 ? (
+  <p class="text-slate">
+    No trips currently scheduled.{' '}
+    <a href="https://twincitiesskiclub.slack.com" class="text-mint-deep underline">
+      Join the Slack
+    </a>{' '}
+    to hear about new trips first.
+  </p>
+) : (
+  <table class="w-full text-left text-sm">
+    <thead>
+      <tr class="text-slate uppercase tracking-wider">
+        <th scope="col" class="py-3 pr-4 font-semibold">Dates</th>
+        <th scope="col" class="py-3 pr-4 font-semibold">Name</th>
+        <th scope="col" class="py-3 pr-4 font-semibold">Location</th>
+        <th scope="col" class="py-3"><span class="sr-only">View trip</span></th>
+      </tr>
+    </thead>
+    <tbody>
+      {trips.map((t) => (
+        <tr class="border-t border-ink/10">
+          <td class="py-3 pr-4">{t.data.dates}</td>
+          <td class="py-3 pr-4 font-semibold text-navy">{t.data.slug}</td>
+          <td class="py-3 pr-4">{t.data.location}</td>
+          <td class="py-3 text-right">
+            <a href={'/trips/' + t.id} class="text-mint-deep underline">View &rarr;</a>
+          </td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+)}
