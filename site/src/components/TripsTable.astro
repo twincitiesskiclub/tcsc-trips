@@ -6,7 +6,7 @@
 import { getCollection } from 'astro:content';
 
 const trips = await getCollection('trips');
-trips.sort((a, b) => a.data.dates.localeCompare(b.data.dates));
+trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b.data.dates));
 ---
 {trips.length === 0 ? (
   <p class="text-slate">

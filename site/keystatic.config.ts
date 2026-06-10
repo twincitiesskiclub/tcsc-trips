@@ -201,6 +201,7 @@ export default config({
         fee_cents: fields.integer({ label: 'Fee (cents)', validation: { isRequired: true } }),
         summary: fields.text({ label: 'Summary', multiline: true, validation: { isRequired: true } }),
         what_included: fields.array(fields.text({ label: 'Item' }), { label: 'What is included' }),
+        order: fields.integer({ label: 'Sort order', defaultValue: 0 }),
       },
     }),
 
@@ -223,6 +224,7 @@ export default config({
         // photos collection consent flag only covers that collection).
         hero_photo: optionalContentImage('Hero photo', 'trips'),
         hero_photo_alt: fields.text({ label: 'Hero photo alt text' }),
+        order: fields.integer({ label: 'Sort order', defaultValue: 0 }),
       },
     }),
 
@@ -274,6 +276,7 @@ export default config({
           defaultValue: 'supporter',
         }),
         url: fields.url({ label: 'URL' }),
+        order: fields.integer({ label: 'Sort order', defaultValue: 0 }),
       },
     }),
 

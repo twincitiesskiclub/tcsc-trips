@@ -19,7 +19,9 @@ const tiers: Array<{ tier: 'trailblazer' | 'supporter' | 'friend'; label: string
 const tierGroups = tiers
   .map(({ tier, label }) => ({
     label,
-    items: sponsors.filter((s) => s.data.tier === tier).sort((a, b) => a.id.localeCompare(b.id)),
+    items: sponsors
+      .filter((s) => s.data.tier === tier)
+      .sort((a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id)),
   }))
   .filter((g) => g.items.length > 0);
 ---

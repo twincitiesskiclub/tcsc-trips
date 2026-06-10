@@ -11,7 +11,7 @@ interface Props {
 const { variant = 'navy' } = Astro.props;
 
 const seasons = await getCollection('practice_seasons');
-seasons.sort((a, b) => a.id.localeCompare(b.id));
+seasons.sort((a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id));
 
 const dollar = (cents: number) => {
   // Whole-dollar fees stay clean ($205); fractional ones keep cents ($205.50).

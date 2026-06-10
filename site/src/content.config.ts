@@ -117,6 +117,7 @@ const practice_seasons = defineCollection({
       fee_cents: z.number().int(),
       summary: z.string(),
       what_included: z.array(z.string()).default([]),
+      order: z.number().int().default(0),
     })
     .strict(),
 });
@@ -137,6 +138,7 @@ const trips = defineCollection({
         // POLICY: must come from the consent-cleared pool.
         hero_photo: image().optional(),
         hero_photo_alt: z.string().optional(),
+        order: z.number().int().default(0),
       })
       .strict(),
 });
@@ -175,6 +177,7 @@ const sponsors = defineCollection({
         logo: image(),
         tier: z.enum(['trailblazer', 'supporter', 'friend']).default('supporter'),
         url: z.string().url().optional(),
+        order: z.number().int().default(0),
       })
       .strict(),
 });
