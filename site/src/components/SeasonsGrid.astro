@@ -46,6 +46,11 @@ const accent = variant === 'navy' ? 'text-mint' : 'text-mint-deep';
         <p class:list={['text-sm uppercase tracking-widest', accent]}>{s.data.date_range}</p>
         <h3 class="mt-3 font-display text-2xl md:text-3xl">{s.data.slug}</h3>
         <p class:list={['mt-2 text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
+        {/* Dues transparency, verbatim from the club's register page: the fee
+            is membership in something, not a price tag. */}
+        <p class:list={['mt-1 text-sm', variant === 'navy' ? 'text-paper/60' : 'text-slate']}>
+          Covers coaching, workout space reservations, and the season's odds and ends.
+        </p>
         <p class="mt-4 max-w-prose">{s.data.summary}</p>
         {s.data.what_included.length > 0 && (
           <ul class="mt-6 space-y-1 text-sm">

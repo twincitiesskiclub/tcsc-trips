@@ -37,13 +37,19 @@ const ctaStripUrl =
     ? cta.url_open
     : cta.state === 'coming_soon'
       ? (cta.url_coming_soon ?? cta.url_closed)
-      : cta.url_closed) ?? 'https://tcsc.ski/register';
+      : cta.url_closed) ?? 'https://tcsc.ski';
 const ctaStripLabel =
   cta.state === 'open'
     ? cta.label_open
     : cta.state === 'coming_soon'
       ? cta.label_coming_soon
       : `${cta.label_closed} →`;
+// Honest about the registration window when closed (the original site's
+// register page says the next period "will open this Fall").
+const ctaStripSubhead =
+  cta.state === 'open'
+    ? 'Ages 21-35 in the Twin Cities. Intermediate ability and up. No racing required.'
+    : 'Registration reopens in the fall. Ages 21-35 in the Twin Cities, intermediate ability and up.';
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -82,7 +88,7 @@ const ctaStripLabel =
       copy. If the hero headline changes, change this heading with it. */}
   <CTAStrip
     heading="And without breaking the bank."
-    subhead="Ages 21-35 in the Twin Cities. Intermediate ability and up. No racing required."
+    subhead={ctaStripSubhead}
     cta_label={ctaStripLabel}
     cta_url={ctaStripUrl}
   />

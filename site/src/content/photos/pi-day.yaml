@@ -1,0 +1,13 @@
+# Consent basis: posted by a member in the club Slack #photos-videos;
+# flag for board re-confirmation before DNS cutover (see migration/CONSENT.md).
+slug: Pi Day
+image: ../../assets/images/photos/pi-day.jpg
+alt_text: >-
+  Two dozen members in the gym after strength practice, each holding up a plate of pie
+caption: >-
+  Pie at strength practice, Pi Day.
+event_tag: social
+member_names: []
+order: 130
+show_on_home: true
+photo_consent_recorded: true

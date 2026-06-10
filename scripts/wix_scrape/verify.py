@@ -112,6 +112,7 @@ CATEGORY_REASONS = {
     'wix-logo': 'TCSC wordmark raster from Wix; new site ships its own brand assets',
     'gallery-not-selected': 'photo not selected for the curated mosaic/gallery port',
     'low-res': 'below the 800px floor for content slots (see migration/inventory.md)',
+    'superseded-2026-06': 'ported in the original migration, then retired by the\n        2026-06-10 all-recent Slack photo refresh (see migration/CONSENT.md history note)',
 }
 
 # local_filename (from images.csv) -> category, for every row that has no
@@ -139,6 +140,34 @@ UNPORTED_CLASSIFICATION = {
     'racing-16-078437a5.jpg': 'gallery-not-selected',
     'racing-17-ec9f512b.jpg': 'low-res',              # 480x640
     'racing-19-10d2592f.jpg': 'gallery-not-selected',
+    # Retired by the 2026-06-10 photo refresh:
+    'about-00-9b18c6b0.jpeg': 'superseded-2026-06',
+    'about-01-13cc2c1e.jpg': 'superseded-2026-06',
+    'community-01-0b59625f.jpg': 'superseded-2026-06',
+    'community-02-e74539f9.jpg': 'superseded-2026-06',
+    'community-03-f3eca681.jpg': 'superseded-2026-06',
+    'community-05-bdd4b74e.jpeg': 'superseded-2026-06',
+    'community-07-b3104c54.jpeg': 'superseded-2026-06',
+    'community-08-7a07db4f.jpeg': 'superseded-2026-06',
+    'community-09-84d03ac4.jpeg': 'superseded-2026-06',
+    'community-10-5d95e803.jpeg': 'superseded-2026-06',
+    'community-11-28eea8ee.jpg': 'superseded-2026-06',
+    'community-13-7f84b833.jpeg': 'superseded-2026-06',
+    'community-16-29bf58b1.jpg': 'superseded-2026-06',
+    'community-17-e032346b.jpg': 'superseded-2026-06',
+    'community-18-dc813e70.jpeg': 'superseded-2026-06',
+    'contact-00-ebf9eb49.png': 'superseded-2026-06',
+    'home-00-edd9185d.jpg': 'superseded-2026-06',
+    'racing-00-05115e4e.jpeg': 'superseded-2026-06',
+    'racing-02-98c117f2.jpg': 'superseded-2026-06',
+    'racing-04-e61dbe32.jpg': 'superseded-2026-06',
+    'racing-06-83b8e6eb.jpg': 'superseded-2026-06',
+    'racing-07-9e92d6c6.jpg': 'superseded-2026-06',
+    'racing-08-b1299a84.jpg': 'superseded-2026-06',
+    'racing-09-325fb3fb.jpg': 'superseded-2026-06',
+    'racing-12-4d034c8a.jpg': 'superseded-2026-06',
+    'racing-14-5689411e.jpg': 'superseded-2026-06',
+    'racing-18-8cd86d86.jpg': 'superseded-2026-06',
 }
 
 # Image directories that must be fully covered by the manifest (reverse check).

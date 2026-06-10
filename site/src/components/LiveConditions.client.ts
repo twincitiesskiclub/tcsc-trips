@@ -7,7 +7,8 @@ type LocResp = {
   wax_band: string | null;
   wax_label: string | null;
 };
-type Resp = { updated_at: string; locations: LocResp[]; error?: string };
+type BirkieResp = { status: string; word: string; detail: string };
+type Resp = { updated_at: string; locations: LocResp[]; birkie?: BirkieResp; error?: string };
 
 const REFRESH_MS = 5 * 60 * 1000;
 const STAMP_TICK_MS = 60 * 1000;
@@ -67,23 +68,39 @@ function renderInto(root: HTMLElement, data: Resp) {
     const announcer = root.querySelector('[data-announcer]') as HTMLElement | null;
     if (announcer) announcer.textContent = announcements.join('; ');
   }
+  const birkie = root.querySelector('[data-birkie]') as HTMLElement | null;
+  if (birkie) {
+    setText(birkie, '[data-birkie-word]', data.birkie?.word ?? '·');
+    setText(birkie, '[data-birkie-detail]', data.birkie?.detail ?? 'No report');
+  }
   root.dataset.updatedAt = data.updated_at;
   updateStamp(root);
 }
 
 function renderFailure(root: HTMLElement) {
   // Total failure: say it once in the stamp; cells go quiet ("No report")
-  // instead of repeating the error four times.
+  // instead of repeating the error four times. Off-season (April-October),
+  // the strip talks like a member instead of erroring: no snow is not an
+  // outage.
+  const offSeason = new Date().getMonth() + 1 >= 4 && new Date().getMonth() + 1 <= 10;
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
-    setText(el, '[data-wax]', 'No report');
+    setText(el, '[data-wax]', offSeason ? 'Rollerski season' : 'No report');
     setText(el, '[data-feels]', '');
     const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
     if (chip) chip.hidden = true;
   });
+  const birkie = root.querySelector('[data-birkie]') as HTMLElement | null;
+  if (birkie) {
+    setText(birkie, '[data-birkie-word]', offSeason ? 'Early' : '·');
+    setText(birkie, '[data-birkie-detail]', offSeason ? 'Snow talk starts in November' : 'No report');
+  }
   delete root.dataset.updatedAt;
   const stamp = root.querySelector('[data-updated]') as HTMLElement | null;
-  if (stamp && stamp.textContent !== '● Conditions unavailable') {
-    stamp.textContent = '● Conditions unavailable';
+  const stampText = offSeason
+    ? '● Trail reports come back with the snow, usually around Thanksgiving'
+    : '● Conditions unavailable';
+  if (stamp && stamp.textContent !== stampText) {
+    stamp.textContent = stampText;
   }
 }
 

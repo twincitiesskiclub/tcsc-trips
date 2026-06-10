@@ -9,12 +9,13 @@ const apiUrl = import.meta.env.PUBLIC_CONDITIONS_API_URL ?? 'https://tcsc.ski/ap
 // Coupled to LOCATIONS in app/conditions/locations.py (Flask repo). Names
 // are server-rendered so the strip reads as four named venues even before
 // hydration or when the API is unreachable; the client overwrites them with
-// the API's names on every successful fetch.
+// the API's names on every successful fetch. The fifth cell is the Birkie
+// likelihood status (payload.birkie), not a venue.
 const locations = [
-  { id: 'wirth', name: 'Theodore Wirth' },
-  { id: 'hyland', name: 'Hyland Park' },
-  { id: 'french', name: 'French Park' },
-  { id: 'battlecreek', name: 'Battle Creek' },
+  { id: 'wirth', name: 'Theo Wirth' },
+  { id: 'elm', name: 'Elm Creek' },
+  { id: 'hyland', name: 'Hyland Nordic' },
+  { id: 'oo', name: 'Double OO' },
 ];
 ---
 <section
@@ -35,7 +36,7 @@ const locations = [
         <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">Trail report</span>
         <span class="text-[11px] text-coral" data-updated>Loading conditions…</span>
       </div>
-      <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-4 gap-y-4">
+      <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
         {locations.map(({ id, name }) => (
           <div
             data-location={id}
@@ -55,6 +56,19 @@ const locations = [
             </div>
           </div>
         ))}
+        {/* Fifth cell: Birkie likelihood. Same cell anatomy as the venues
+            (label / big word / detail) so the strip keeps one rhythm; full
+            row on mobile where the 2-col grid would orphan it. */}
+        <div
+          data-birkie
+          class="py-1 col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
+        >
+          <div class="text-[10px] tracking-widest uppercase text-paper/55">Birkie likelihood</div>
+          <div class="mt-1">
+            <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
+          </div>
+          <div class="text-xs text-paper/70 mt-1 min-h-8" data-birkie-detail>·</div>
+        </div>
       </div>
     </>
   ) : (
@@ -66,6 +80,10 @@ const locations = [
           <span data-wax>·</span>
         </div>
       ))}
+      <div data-birkie class="flex items-baseline gap-1.5">
+        <span class="tracking-widest uppercase text-mint">Birkie</span>
+        <span class="font-display text-paper" data-birkie-word>·</span>
+      </div>
     </div>
   )}
 </section>

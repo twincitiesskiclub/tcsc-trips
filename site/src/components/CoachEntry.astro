@@ -72,8 +72,10 @@ const height = Math.round((width * 5) / 4);
       </div>
     </div>
     <div class:list={['md:col-span-7', flip && 'md:order-1']}>
-      <p class="text-mint-deep text-sm tracking-wider uppercase font-semibold">{role}</p>
-      <h2 class="mt-2 font-display text-4xl md:text-6xl text-navy leading-[1.0]">{name}</h2>
+      {/* Plain sentence-case role: uppercase tracked labels repeated four
+          times down the page read as scaffolding, not information. */}
+      <h2 class="font-display text-4xl md:text-6xl text-navy leading-[1.0]">{name}</h2>
+      <p class="mt-2 text-mint-deep font-semibold">{role}</p>
       <div class="mt-6 prose prose-lg max-w-prose text-ink">
         <slot />
       </div>

@@ -1,8 +1,10 @@
 ---
-// TripsTable: typeset index of upcoming trips. entry.id is the file-name
+// TripsTable: typeset list of upcoming trips, not a data grid: a header
+// row over the typical trip count (1-4 rows) read anemic, so each trip is
+// a full-row link (dates / name / location). entry.id is the file-name
 // slug (URL identity, /trips/<id>); entry.data.slug is the DISPLAY NAME
 // (see content.config.ts header). With no trips it renders a friendly
-// empty state instead of a blank table.
+// empty state instead of a blank list.
 import { getCollection } from 'astro:content';
 
 const trips = await getCollection('trips');
@@ -15,26 +17,20 @@ trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b
     if you have questions in the meantime.
   </p>
 ) : (
-  <table class="w-full text-left text-sm">
-    <thead>
-      <tr class="text-slate uppercase tracking-wider">
-        <th scope="col" class="py-3 pr-4 font-semibold">Dates</th>
-        <th scope="col" class="py-3 pr-4 font-semibold">Name</th>
-        <th scope="col" class="py-3 pr-4 font-semibold">Location</th>
-        <th scope="col" class="py-3"><span class="sr-only">View trip</span></th>
-      </tr>
-    </thead>
-    <tbody>
-      {trips.map((t) => (
-        <tr class="border-t border-ink/10">
-          <td class="py-3 pr-4">{t.data.dates}</td>
-          <td class="py-3 pr-4 font-semibold text-navy">{t.data.slug}</td>
-          <td class="py-3 pr-4">{t.data.location}</td>
-          <td class="py-3 text-right">
-            <a href={'/trips/' + t.id} class="text-mint-deep underline">View &rarr;</a>
-          </td>
-        </tr>
-      ))}
-    </tbody>
-  </table>
+  <ul class="border-y border-ink/10 divide-y divide-ink/10">
+    {trips.map((t) => (
+      <li>
+        <a
+          href={'/trips/' + t.id}
+          class="group grid items-baseline gap-x-6 gap-y-1 py-5 md:grid-cols-[7rem_1fr_auto]"
+        >
+          <span class="text-sm text-slate tabular-nums">{t.data.dates}</span>
+          <span class="font-display text-lg md:text-xl font-semibold text-navy transition-colors duration-150 group-hover:text-mint-deep">
+            {t.data.slug}
+          </span>
+          <span class="text-sm text-slate">{t.data.location}</span>
+        </a>
+      </li>
+    ))}
+  </ul>
 )}

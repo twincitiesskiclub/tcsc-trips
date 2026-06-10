@@ -22,10 +22,10 @@ export async function getRegistrationCta(): Promise<RegistrationCta> {
   return {
     state: d?.registration_state ?? 'closed',
     label_open: d?.cta_open_label ?? 'Register for the season →',
-    url_open: d?.cta_open_url ?? 'https://tcsc.ski/register',
+    url_open: d?.cta_open_url ?? 'https://tcsc.ski',
     label_coming_soon: d?.cta_coming_soon_label ?? 'Get on the list',
     url_coming_soon: d?.cta_coming_soon_url,
-    label_closed: d?.cta_closed_label ?? 'Become a member',
-    url_closed: d?.cta_closed_url ?? 'https://tcsc.ski/register',
+    label_closed: d?.cta_closed_label ?? 'Register',
+    url_closed: d?.cta_closed_url ?? 'https://tcsc.ski',
   };
 }

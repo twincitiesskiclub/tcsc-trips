@@ -1,0 +1,13 @@
+# Consent basis: posted by a member in the club Slack #photos-videos;
+# flag for board re-confirmation before DNS cutover (see migration/CONSENT.md).
+slug: Pride Ski
+image: ../../assets/images/photos/pride-ski.jpg
+alt_text: >-
+  Members celebrating Pride together in June
+caption: >-
+  Happy Pride, June.
+event_tag: social
+member_names: []
+order: 200
+show_on_home: true
+photo_consent_recorded: true

@@ -10,6 +10,7 @@ import logging
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
+from app.conditions.birkie import build_birkie_status
 from app.conditions.locations import LOCATIONS, Location
 from app.conditions.wax import recommend_wax
 from app.integrations import trail_conditions as _trail_integration
@@ -80,9 +81,18 @@ def build_conditions_response() -> dict:
     """Assemble the full /api/conditions payload."""
     locations = [_build_location_entry(loc) for loc in LOCATIONS]
 
+    # Birkie likelihood reuses the Double OO entry's trail report (one
+    # scraper call serves both the cell and the status).
+    oo = next((entry for entry in locations if entry['id'] == 'oo'), None)
+    birkie = build_birkie_status(
+        datetime.now(CENTRAL_TZ).date(),
+        oo['snow_conditions'] if oo else None,
+    )
+
     response = {
         'updated_at': datetime.now(CENTRAL_TZ).isoformat(),
         'locations': locations,
+        'birkie': birkie,
     }
 
     if all(loc['temp_f'] is None for loc in locations):
