@@ -67,9 +67,13 @@ def extract_visible_text(html: str) -> str:
 
 
 def _largest_srcset_candidate(srcset: str) -> str | None:
-    """Pick the URL with the largest width (Nw) or density (Nx) descriptor."""
+    """Pick the URL with the largest width (Nw) or density (Nx) descriptor.
+
+    Candidates are split on ',' followed by whitespace — NOT on bare ',' —
+    because Wix transform paths contain commas (e.g. ``w_305,h_229,al_c``).
+    """
     best_url, best_score = None, -1.0
-    for candidate in srcset.split(','):
+    for candidate in re.split(r',\s+', srcset.strip()):
         parts = candidate.strip().split()
         if not parts:
             continue

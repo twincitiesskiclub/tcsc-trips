@@ -58,6 +58,36 @@ def test_extract_image_urls_picks_largest_srcset_width_candidate():
     assert 'https://x.com/l.jpg' in urls
 
 
+# Verbatim srcset from migration/pages/about.html: Wix transform paths carry
+# commas, so candidate splitting must NOT split on bare ','.
+_REAL_WIX_SRCSET = (
+    'https://static.wixstatic.com/media/276df0_fcecc2a01b7c4e9383d0f0603271afcc~mv2.png'
+    '/v1/crop/x_0,y_533,w_2500,h_788/fill/w_235,h_74,al_c,q_85,usm_0.66_1.00_0.01,'
+    'enc_avif,quality_auto/Untitled%20drawing.png 1x, '
+    'https://static.wixstatic.com/media/276df0_fcecc2a01b7c4e9383d0f0603271afcc~mv2.png'
+    '/v1/crop/x_0,y_533,w_2500,h_788/fill/w_470,h_148,al_c,q_85,usm_0.66_1.00_0.01,'
+    'enc_avif,quality_auto/Untitled%20drawing.png 2x'
+)
+
+
+def test_extract_image_urls_parses_real_wix_srcset_with_commas_in_path():
+    html = f'<img srcset="{_REAL_WIX_SRCSET}" alt="TCSC logo">'
+    urls = extract_image_urls(html)
+    expected_largest = (
+        'https://static.wixstatic.com/media/276df0_fcecc2a01b7c4e9383d0f0603271afcc~mv2.png'
+        '/v1/crop/x_0,y_533,w_2500,h_788/fill/w_470,h_148,al_c,q_85,usm_0.66_1.00_0.01,'
+        'enc_avif,quality_auto/Untitled%20drawing.png'
+    )
+    assert urls == [expected_largest]
+
+
+def test_extract_image_alts_covers_real_wix_srcset():
+    html = f'<img srcset="{_REAL_WIX_SRCSET}" alt="TCSC logo">'
+    alts = extract_image_alts(html)
+    assert list(alts.values()) == ['TCSC logo']
+    assert 'w_470,h_148' in next(iter(alts))
+
+
 def test_extract_image_urls_ignores_data_uris():
     html = '<img src="data:image/gif;base64,R0lGOD"><img src="https://x.com/real.jpg">'
     assert extract_image_urls(html) == ['https://x.com/real.jpg']

@@ -1,5 +1,7 @@
 # Wix Site Content Inventory
 
+Images are deduplicated globally: each image is listed under the first page seen; shared assets appear once.
+
 ## Low-resolution warnings
 
 4 downloaded raster image(s) are narrower than 800px. Do NOT use these in large UI slots.
@@ -15,7 +17,7 @@
 - Title: REGISTER | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 1736 chars
-- Images: 4
+- Images: 7
 - Headings:
   - h2: Summer Registration
   - h2: Click here to register
@@ -26,7 +28,7 @@
 - Title: ABOUT US | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 2291 chars
-- Images: 7
+- Images: 11
 - Headings:
   - h1: ABOUT TWIN CITIES SKI CLUB
   - h2: WHO JOINS TCSC
@@ -39,7 +41,7 @@
 - Title: COACHES | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 1499 chars
-- Images: 9
+- Images: 15
 - Headings:
   - h1: OUR COACHES
   - h2: Coach KJ
@@ -52,7 +54,7 @@
 - Title: TRIP INFORMATION | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 1382 chars
-- Images: 4
+- Images: 7
 - Headings:
   - h2: Hayward Training Trip Information
   - h2: Information
@@ -64,7 +66,7 @@
 - Title: CONFIRMATION | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 736 chars
-- Images: 5
+- Images: 8
 - Headings:
   - h2: REGISTRATION CONFIRMED
 
@@ -74,7 +76,7 @@
 - Title: Sisu Trip Sign Up | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 457 chars
-- Images: 6
+- Images: 9
 - Headings:
   - h2: SISU TRIP REGISTRATION
 
@@ -84,7 +86,7 @@
 - Title: TRIP CONFIRMATION | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 399 chars
-- Images: 5
+- Images: 8
 - Headings:
   - h2: REGISTRATION CONFIRMED
 
@@ -94,7 +96,7 @@
 - Title: CONTACT | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 234 chars
-- Images: 7
+- Images: 13
 - Headings:
   - h1: CONTACT TWIN CITIES SKI CLUB
 
@@ -104,7 +106,7 @@
 - Title: TRIP SIGN UP | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 342 chars
-- Images: 5
+- Images: 8
 - Headings:
   - h2: TRIP REGISTRATION
 
@@ -114,7 +116,7 @@
 - Title: SISU TRIP INFO | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 1167 chars
-- Images: 5
+- Images: 8
 - Headings:
   - h2: Sisu Ski Fest Trip Information
   - h2: Information
@@ -126,7 +128,7 @@
 - Title: COMMUNITY | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 1933 chars
-- Images: 23
+- Images: 44
 - Headings:
   - h2: A WELCOMING COMMUNITY
   - h2: TEAM-BONDING ACTIVITES
@@ -137,7 +139,7 @@
 - Title: TCSC | Twin Cities Ski Club
 - Meta description: Twin Cities Ski Club is a nonprofit dedicated to fostering a supportive community for young adults (21 - 35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programing.
 - Visible text: 977 chars
-- Images: 6
+- Images: 10
 - Headings:
   - h1: TWIN CITIES SKI CLUB
   - h2: INTRODUCING TWIN CITIES SKI CLUB
@@ -152,7 +154,7 @@
 - Title: RACING | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 1862 chars
-- Images: 25
+- Images: 49
 - Headings:
   - h1: TWIN CITIES SKI CLUB RACERS
   - h2: RACES
@@ -174,7 +176,7 @@
 - Title: SPONSORS | Twin Cities Ski Club
 - Meta description: (none)
 - Visible text: 356 chars
-- Images: 7
+- Images: 12
 - Headings:
   - h2: MEET OUR SPONSORS
   - h2: TRAILBLAZER LEVEL SPONSORS

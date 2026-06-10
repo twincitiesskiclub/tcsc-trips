@@ -13,7 +13,7 @@ from __future__ import annotations
 import hashlib
 import os
 import re
-from urllib.parse import urlparse, urlsplit, urlunsplit
+from urllib.parse import unquote, urlparse, urlsplit, urlunsplit
 
 import requests
 from PIL import Image
@@ -39,11 +39,14 @@ def original_wix_url(url: str) -> str:
     """Return the bare full-resolution media URL for a Wix CDN URL.
 
     Strips the entire transform suffix (everything from the first ``/v1/``
-    onward) plus any query string. Non-Wix URLs are returned unchanged.
+    onward) plus any query string. The path is percent-decoded first so
+    ``%7Emv2`` and ``~mv2`` spellings normalize (and dedupe) identically.
+    Non-Wix URLs are returned unchanged.
     """
     if urlparse(url).netloc != 'static.wixstatic.com':
         return url
     scheme, netloc, path, _query, _frag = urlsplit(url)
+    path = unquote(path)
     path = re.split(r'/v1/', path, maxsplit=1)[0]
     return urlunsplit((scheme, netloc, path, '', ''))
 
@@ -58,7 +61,12 @@ def _fit_variant(url: str) -> str | None:
 
 
 def download_image(url: str, dest_path: str) -> bool:
-    """Stream the image to dest_path. Returns False on any request/HTTP error."""
+    """Stream the image to dest_path.
+
+    Returns False on any request/HTTP error, or when the server answers
+    200 OK with a non-image body (e.g. an HTML error page) — that must not
+    masquerade as a successful download.
+    """
     os.makedirs(os.path.dirname(dest_path), exist_ok=True)
     if os.path.exists(dest_path) and os.path.getsize(dest_path) > 0:
         return True
@@ -66,6 +74,9 @@ def download_image(url: str, dest_path: str) -> bool:
         with requests.get(url, stream=True, timeout=60,
                           headers={'User-Agent': _USER_AGENT}) as resp:
             resp.raise_for_status()
+            content_type = resp.headers.get('Content-Type', '').lower()
+            if not content_type.startswith('image/'):
+                return False
             with open(dest_path, 'wb') as fh:
                 for chunk in resp.iter_content(chunk_size=65536):
                     fh.write(chunk)

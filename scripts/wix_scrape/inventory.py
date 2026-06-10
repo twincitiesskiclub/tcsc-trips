@@ -34,7 +34,13 @@ def write_inventory_md(path: str, pages: list[dict], image_rows: list[dict]) -> 
     image_count, headings (list[str]).
     ``image_rows``: the same dicts passed to write_images_csv.
     """
-    lines = ['# Wix Site Content Inventory', '']
+    lines = [
+        '# Wix Site Content Inventory',
+        '',
+        'Images are deduplicated globally: each image is listed under the '
+        'first page seen; shared assets appear once.',
+        '',
+    ]
 
     low_res = [
         r for r in image_rows
