@@ -3,9 +3,10 @@ interface Props {
   variant?: 'navy' | 'paper' | 'paper-on-navy';
   /** @deprecated numbered eyebrow markers; use `seam` instead. */
   number?: string;
-  /** Catalog-divider seam: a full-bleed hairline at the section's top edge,
-      interrupted at the left gutter by the section name sitting ON the line.
-      Physical chapter breaks instead of padding gaps wearing badges. */
+  /** Section seam: the section name in the Trail Report label voice (small
+      tracked caps) with a hairline running from it to the right edge, on one
+      baseline. One device family across the site; physical chapter breaks
+      instead of padding gaps wearing badges. */
   seam?: string;
   heading?: string;
   subhead?: string;
@@ -20,16 +21,17 @@ const surface = variant === 'navy' ? 'bg-navy text-paper' : isCard ? 'bg-navy py
 const innerMax = contentMax === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
 const padding = isCard
   ? 'rounded-xl px-8 py-12 md:px-16 md:py-20'
-  : 'px-6 md:px-10 pb-20 md:pb-28 ' + (seam ? 'pt-10 md:pt-14' : 'pt-20 md:pt-28');
-// The seam label's swatch must match the section surface exactly so it reads
-// as cutting the line, not floating over it.
-const seamRule = variant === 'navy' ? 'border-mint/20' : 'border-ink/15';
-const seamSwatch = variant === 'navy' ? 'bg-navy text-mint' : 'bg-paper text-mint-deep';
+  : 'px-6 md:px-10 pb-20 md:pb-28 ' + (seam ? 'pt-8 md:pt-10' : 'pt-20 md:pt-28');
+const seamText = variant === 'navy' ? 'text-mint/90' : 'text-mint-deep';
+const seamRule = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
 ---
-<section class:list={[surface, seam && !isCard && 'border-t ' + seamRule]}>
+<section class={surface}>
   {seam && !isCard && (
-    <div class={'mx-auto ' + innerMax + ' px-6 md:px-10'}>
-      <span class={'inline-block -translate-y-1/2 pr-4 text-sm tracking-wide ' + seamSwatch}>{seam}</span>
+    <div class={'mx-auto ' + innerMax + ' px-6 md:px-10 pt-12 md:pt-16'}>
+      <div class="flex items-center gap-4">
+        <span class={'text-[11px] tracking-[0.18em] uppercase font-semibold ' + seamText}>{seam}</span>
+        <span class={'h-px flex-1 ' + seamRule} aria-hidden="true"></span>
+      </div>
     </div>
   )}
   <div class={isCard ? 'px-6' : undefined}>
