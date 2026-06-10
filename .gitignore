@@ -56,3 +56,6 @@ validate_posted_ts.json
 migration/images/
 migration/slack_photos/
 migration/survey/
+# Slack channel extracts + mined fact sheets (contain member names; the
+# 2026-06-10 community/extra-training/dry-tri content cites them)
+migration/slack_facts/

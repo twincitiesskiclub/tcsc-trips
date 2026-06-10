@@ -5,6 +5,53 @@ section of `2026-06-10-marketing-site-handoff.md`; that doc's **§2 cutover
 runbook, §3 decision log, and §4 cross-session gotchas remain authoritative**
 and are not repeated here.
 
+## Session 3 addendum (2026-06-10, content pass: community / extra-training / dry-tri)
+
+Landed in `8b5892e` (12 pages now, was 10). Three surfaces, all mined from
+club Slack and fact-checked against channel logs:
+
+1. **/community "What we've done" ledger** (`takeaways` field on the
+   community singleton, grouped rows: Volunteering / Members who coach /
+   Socials). Renders between the body prose and the mosaic via SectionBand
+   seam "Club record". Cross-links /dry-tri and /extra-training-fun.
+2. **/extra-training-fun** (new `extra_training` singleton): the
+   member-organized uncoached culture from #extra-training-fun. Navy band =
+   current standing fixtures; paper band = the annuals; two photos reused
+   from the consented pool (track-club-storm, rollerski-treats).
+3. **/dry-tri** (new `dry_tri` singleton): Roll/Ride/Run triptych, 2025
+   course ledger, year-one recap, 2026 planning status. ONE new image
+   (`dry-tri-roller.jpg`, manifest row + CONSENT.md line added). Linked from
+   the racing ledger (races rows gained optional `href`; name renders as a
+   link).
+
+Operational notes for the next session:
+
+- **Evidence base** (member names inside, gitignored, NOT committed):
+  `migration/slack_facts/` holds the raw channel extracts
+  (extra-training-fun, volunteer-and-job-opportunities, dry-tri-volunteers,
+  races-information, announcements-general) plus five audited fact-sheet
+  JSONs. Every site claim traces to a sheet fact; the sheets' `cautions`
+  arrays list what must NOT be claimed (no rain on race day, no sold-out
+  language, no attendance from reaction counts, no member discount codes,
+  Track Club is not club-official). Re-extraction script pattern:
+  `scripts/extract_channel_history.py` in the main repo.
+- **announcements-general migration artifact:** lines stamped
+  [2026-05-11 17:4x] with [bot:NAME] authors are re-posted history (a
+  migration script ran that day); real dates are embedded in message text.
+  The 2026-05-11 "Dry Tri registration is open" hit is the MIGRATED 2025
+  announcement; the 2026 race has no public date yet.
+- **Consent surface grew:** the three Dry Tri photos were shot at a public
+  race (participants may be non-members); CONSENT.md now carries an
+  explicit public-event caveat the board re-confirmation must cover.
+- **Nav decision deliberately NOT made:** both new pages are cross-linked
+  (community ledger, racing row, mutual links) but not in the 6-link top
+  nav; 8 links overflow at md. Rob to decide if either earns a slot
+  (joins the existing Trips/Contact discoverability question).
+- **Future-dated copy to refresh next season:** "Wooden Hill in 2026"
+  (community socials row), "Third annual in 2025" (TCSC Classic), Dry Tri
+  "2026 edition" paragraph + register/results URLs on the dry_tri
+  singleton (tcsc.ski/tri is still the 2025 page as of today).
+
 ## Where things stand
 
 | Item | Value |
