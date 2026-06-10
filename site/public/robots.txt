@@ -1,4 +1,6 @@
+# STAGING CONFIGURATION. The DNS-cutover PR (plan Task 39) MUST restore:
+#   User-agent: *
+#   Allow: /
+#   Sitemap: https://twincitiesskiclub.org/sitemap-index.xml
 User-agent: *
-Allow: /
-
-Sitemap: https://twincitiesskiclub.org/sitemap-index.xml
+Disallow: /

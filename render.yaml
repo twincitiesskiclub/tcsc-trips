@@ -40,3 +40,12 @@ services:
       - type: redirect
         source: /confirmation
         destination: /
+
+## Cutover dashboard checklist (plan Task 39)
+# The tcsc-marketing service was created via API, not the Blueprint flow, so the
+# headers/routes above are NOT auto-applied. Pending actions:
+# 1. Redirects: add the 8 redirect rules above via Dashboard -> tcsc-marketing ->
+#    Redirects/Rewrites (or recreate the service via Blueprint) BEFORE cutover.
+# 2. X-Robots-Tag noindex: dashboard-managed if added there; REMOVE at cutover.
+# 3. robots.txt: restore Allow: / + Sitemap line (see site/public/robots.txt
+#    header comment) in the cutover PR.
