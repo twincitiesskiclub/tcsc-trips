@@ -21,7 +21,7 @@ const padding = isCard
   <div class={isCard ? 'px-6' : undefined}>
     <div class={'mx-auto ' + innerMax + ' ' + (isCard ? 'bg-paper text-ink ' : '') + padding}>
       {number && (
-        <div class="text-sm font-semibold tracking-wider mb-3 text-mint-deep">{number}</div>
+        <div class={'text-sm font-semibold tracking-wider mb-3 ' + (variant === 'navy' ? 'text-mint' : 'text-mint-deep')}>{number}</div>
       )}
       {heading && (
         <h2 class="font-display text-4xl md:text-5xl leading-[1.05] mb-4">{heading}</h2>

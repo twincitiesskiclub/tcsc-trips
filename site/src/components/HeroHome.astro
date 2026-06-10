@@ -1,6 +1,7 @@
 ---
-import { Image } from 'astro:assets';
+import { Picture } from 'astro:assets';
 import CtaForState from '@/components/CtaForState.astro';
+import { FULL_BLEED } from '@/components/imageWidths';
 
 interface Props {
   headline: string;
@@ -14,21 +15,18 @@ interface Props {
 }
 const props = Astro.props;
 
-// Full-bleed slot: serve up to ~2560px wide, but NEVER upscale past the
-// source image's intrinsic width (astro:assets would warn/upscale otherwise).
-const image = props.image;
-const candidateWidths = [768, 1280, 1920, 2560].filter(
-  (w) => !image || w <= image.width,
-);
-const widths = candidateWidths.length > 0 ? candidateWidths : image ? [image.width] : [];
+// Widths are passed straight through: Astro's image service clamps each
+// requested width to the source's intrinsic width and appends the intrinsic
+// width itself as a candidate, so it never upscales (see imageWidths.ts).
 ---
 <section class="relative bg-navy overflow-hidden">
   <div class="relative h-[68vh] min-h-[520px]">
-    {image && (
-      <Image
-        src={image}
+    {props.image && (
+      <Picture
+        src={props.image}
+        formats={['avif', 'webp']}
         alt={props.imageAlt}
-        widths={widths}
+        widths={FULL_BLEED}
         sizes="100vw"
         class="absolute inset-0 w-full h-full object-cover"
         loading="eager"
@@ -36,7 +34,7 @@ const widths = candidateWidths.length > 0 ? candidateWidths : image ? [image.wid
         decoding="async"
       />
     )}
-    <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/30 to-transparent"></div>
+    <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/70 via-35% to-transparent"></div>
     <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-16 md:pb-24 text-paper">
       <h1 class="font-display text-5xl md:text-7xl leading-[0.95] text-mint max-w-4xl">{props.headline}</h1>
       <div class="mt-8">

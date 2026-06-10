@@ -28,6 +28,26 @@ html {
   color: oklch(0.18 0.04 260);
 }
 
+/* Focus-visible baseline (DESIGN.md): always-visible 2px ring, mint on navy
+   surfaces, navy on paper. The surface utilities set an inherited custom
+   property, so the NEAREST surface ancestor wins regardless of nesting depth
+   (e.g. paper card inside a navy band gets the navy ring). */
+@layer base {
+  :root {
+    --focus-ring-color: theme(colors.navy);
+  }
+  .bg-navy, .bg-navy-deep {
+    --focus-ring-color: theme(colors.mint);
+  }
+  .bg-paper, .bg-paper-card {
+    --focus-ring-color: theme(colors.navy);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
     animation-duration: 0.01ms !important;

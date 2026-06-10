@@ -9,7 +9,7 @@ interface Props {
 const { state, label_open, url_open, label_coming_soon, url_coming_soon, label_closed, url_closed, variant = 'on-navy' } = Astro.props;
 const label = state === 'open' ? label_open : state === 'coming_soon' ? label_coming_soon : label_closed;
 const url = state === 'open' ? url_open : state === 'coming_soon' ? url_coming_soon : url_closed;
-const disabled = state !== 'open' && !url;
+const disabled = !url;
 const cls = variant === 'on-navy'
   ? 'inline-flex items-center px-5 py-3 rounded-md bg-mint text-navy font-medium text-sm'
   : 'inline-flex items-center px-5 py-3 rounded-md bg-navy text-mint font-medium text-sm';

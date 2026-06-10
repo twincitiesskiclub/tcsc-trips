@@ -1,12 +1,13 @@
 ---
 import { getEntry } from 'astro:content';
-import { navLinks } from '@/components/navLinks';
+import { getNavLinks } from '@/components/navLinks';
 
 // The `contact` singleton may not exist yet (content arrives in a later
 // phase); getEntry returns undefined for a missing entry.
 const contact = await getEntry('contact', 'contact');
 const email = contact?.data.email ?? 'contact@twincitiesskiclub.org';
 const ig = contact?.data.instagram_url;
+const links = await getNavLinks();
 ---
 <footer class="bg-navy text-paper border-t border-mint/10">
   <div class="mx-auto max-w-7xl px-6 py-14 grid gap-10 md:grid-cols-3">
@@ -17,7 +18,7 @@ const ig = contact?.data.instagram_url;
       </p>
     </div>
     <nav class="text-sm space-y-2">
-      {navLinks.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
+      {links.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
     </nav>
     <div class="text-sm space-y-2">
       <a class="block hover:text-mint" href={'mailto:' + email}>{email}</a>

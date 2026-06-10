@@ -1,26 +1,16 @@
 ---
-import { getEntry } from 'astro:content';
 import CtaForState from '@/components/CtaForState.astro';
-import { navLinks } from '@/components/navLinks';
+import { getNavLinks } from '@/components/navLinks';
+import { getRegistrationCta } from '@/components/registrationCta';
 
-// The `home` singleton may not exist yet (content arrives in a later phase);
-// getEntry returns undefined for a missing entry, so fall back per-field.
-const home = await getEntry('home', 'home');
-const data = home?.data;
-
-const state = data?.registration_state ?? 'closed';
-const ctaOpenLabel = data?.cta_open_label ?? 'Register for the season →';
-const ctaOpenUrl = data?.cta_open_url ?? 'https://tcsc.ski/register';
-const ctaComingSoonLabel = data?.cta_coming_soon_label ?? 'Get on the list';
-const ctaComingSoonUrl = data?.cta_coming_soon_url;
-const ctaClosedLabel = data?.cta_closed_label ?? 'Member area';
-const ctaClosedUrl = data?.cta_closed_url;
+const links = await getNavLinks();
+const cta = await getRegistrationCta();
 ---
 <header class="bg-navy text-paper border-b border-mint/10">
   <div class="mx-auto max-w-7xl px-6 py-5 flex items-center justify-between gap-6">
     <a href="/" class="flex items-center gap-3" aria-label="TCSC home">
       <svg width="56" height="18" viewBox="0 0 100 30" aria-hidden="true">
-        <g fill="oklch(0.91 0.12 155)">
+        <g class="fill-mint">
           <rect x="0" y="6" width="22" height="4" rx="2" />
           <rect x="0" y="18" width="22" height="4" rx="2" />
           <rect x="28" y="6" width="14" height="4" rx="2" />
@@ -35,21 +25,18 @@ const ctaClosedUrl = data?.cta_closed_url;
     </a>
 
     <nav class="hidden md:flex items-center gap-7 text-sm text-paper/85">
-      {navLinks.map((l) => <a href={l.href} class="hover:text-mint">{l.label}</a>)}
+      {links.map((l) => <a href={l.href} class="hover:text-mint">{l.label}</a>)}
     </nav>
 
     <div class="hidden md:block">
-      <CtaForState
-        state={state}
-        label_open={ctaOpenLabel} url_open={ctaOpenUrl}
-        label_coming_soon={ctaComingSoonLabel} url_coming_soon={ctaComingSoonUrl}
-        label_closed={ctaClosedLabel} url_closed={ctaClosedUrl}
-      />
+      <CtaForState {...cta} />
     </div>
 
     <button
-      class="md:hidden p-2 -m-2 text-paper"
+      class="md:hidden p-2.5 -m-2.5 text-paper"
       aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobile-nav-panel"
       data-mobile-toggle
     >
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">

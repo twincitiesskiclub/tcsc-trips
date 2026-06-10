@@ -1,19 +1,25 @@
 ---
-import { navLinks } from '@/components/navLinks';
+import { getNavLinks } from '@/components/navLinks';
+
+const links = await getNavLinks();
 ---
 <div
+  id="mobile-nav-panel"
   data-mobile-panel
+  role="dialog"
+  aria-modal="true"
+  aria-label="Menu"
   class="fixed inset-0 z-50 bg-navy text-paper p-8 hidden flex-col"
   aria-hidden="true"
 >
-  <button class="self-end p-2 -m-2" aria-label="Close menu" data-mobile-close>
+  <button class="self-end p-2.5 -m-2.5" aria-label="Close menu" data-mobile-close>
     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
       <path d="M6 6l12 12M6 18L18 6" />
     </svg>
   </button>
 
   <nav class="flex-1 flex flex-col justify-center gap-6 text-2xl">
-    {navLinks.map((l) => <a href={l.href} class="hover:text-mint">{l.label}</a>)}
+    {links.map((l) => <a href={l.href} class="hover:text-mint">{l.label}</a>)}
   </nav>
 
   <div class="mt-auto">
@@ -22,22 +28,47 @@ import { navLinks } from '@/components/navLinks';
 </div>
 
 <script>
-  const toggle = document.querySelector('[data-mobile-toggle]');
-  const panel = document.querySelector('[data-mobile-panel]') as HTMLElement | null;
-  const close = document.querySelector('[data-mobile-close]');
-  if (toggle && panel && close) {
-    toggle.addEventListener('click', () => {
+  // Lifecycle assumptions: (1) no ClientRouter / view transitions, so this
+  // runs once per full page load; (2) exactly one panel + toggle per page.
+  const toggle = document.querySelector<HTMLButtonElement>('[data-mobile-toggle]');
+  const panel = document.querySelector<HTMLElement>('[data-mobile-panel]');
+  const closeBtn = document.querySelector<HTMLButtonElement>('[data-mobile-close]');
+  if (toggle && panel && closeBtn) {
+    const open = () => {
       panel.classList.remove('hidden');
       panel.classList.add('flex');
       panel.setAttribute('aria-hidden', 'false');
-    });
-    close.addEventListener('click', () => {
+      toggle.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+      closeBtn.focus();
+    };
+    const close = () => {
       panel.classList.add('hidden');
       panel.classList.remove('flex');
       panel.setAttribute('aria-hidden', 'true');
-    });
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+      toggle.focus();
+    };
+    toggle.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
     document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') close.dispatchEvent(new Event('click'));
+      if (e.key === 'Escape' && !panel.classList.contains('hidden')) close();
+    });
+    // Wrap Tab focus inside the open panel.
+    panel.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const focusables = panel.querySelectorAll<HTMLElement>('a[href], button');
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     });
   }
 </script>
