@@ -1,6 +1,12 @@
 ---
 import BaseLayout from '@/layouts/BaseLayout.astro';
+import Nav from '@/components/Nav.astro';
+import MobileNavPanel from '@/components/MobileNavPanel.astro';
 ---
 <BaseLayout title="TCSC — Twin Cities Ski Club" variant="home">
-  <h1 class="font-display text-6xl p-8">Twin Cities Ski Club</h1>
+  <Nav />
+  <MobileNavPanel />
+  <main class="min-h-screen p-12 bg-navy text-paper">
+    <h1 class="font-display text-6xl text-mint">Twin Cities Ski Club</h1>
+  </main>
 </BaseLayout>
