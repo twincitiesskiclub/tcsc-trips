@@ -1,0 +1,102 @@
+---
+// WaxEntry: editorial per-entry layout for a Wax Room field report. Body
+// comes through the slot (render(entry) Content at the call site).
+//
+// MOUNTING CONTRACT: the article self-constrains to max-w-3xl (~720px of
+// content inside px-6), so the photo uses CARD widths with a 720px sizes
+// cap on md+ rather than full-bleed presets.
+//
+// GUARDS: Keystatic serializes an untouched optional object as an EMPTY MAP
+// (`conditions_snapshot: {}`), so the aside only renders when at least one
+// inner field is present. author_name / lede / photo are optional too.
+//
+// DATES: content dates are unquoted YAML (`date: 2026-12-12`) which parse as
+// UTC-midnight JS Dates; formatting in the build machine's local zone
+// (US Central) would shift them back a day, so timeZone: 'UTC' is required.
+import { Image } from 'astro:assets';
+import { CARD } from '@/components/imageWidths';
+
+interface Props {
+  date: Date;
+  author_name?: string;
+  author_role: 'coach' | 'member' | 'board';
+  title: string;
+  lede?: string;
+  photo?: ImageMetadata;
+  photo_alt?: string;
+  conditions_snapshot?: { location?: string; temp_f?: number | null; wax_used?: string };
+}
+const {
+  date,
+  author_name,
+  author_role,
+  title,
+  lede,
+  photo,
+  photo_alt = '',
+  conditions_snapshot,
+} = Astro.props;
+
+const formatted = date.toLocaleDateString('en-US', {
+  weekday: 'long',
+  month: 'long',
+  day: 'numeric',
+  year: 'numeric',
+  timeZone: 'UTC',
+});
+
+const hasConditions =
+  conditions_snapshot &&
+  (conditions_snapshot.location ||
+    conditions_snapshot.temp_f != null ||
+    conditions_snapshot.wax_used);
+---
+<article class="mx-auto max-w-3xl px-6 py-12 md:py-16">
+  <div class="text-sm text-mint-deep tracking-wider uppercase">{formatted}</div>
+  <h1 class="font-display text-3xl md:text-5xl text-navy mt-3 leading-tight">{title}</h1>
+  {author_name && (
+    <div class="mt-3 text-slate text-sm">
+      By {author_name} · <span class="capitalize">{author_role}</span>
+    </div>
+  )}
+  {hasConditions && (
+    <aside class="mt-6 bg-paper-card p-4 rounded-md text-sm flex gap-6 flex-wrap">
+      {conditions_snapshot.location && (
+        <div>
+          <div class="text-xs text-slate uppercase tracking-wide">Location</div>
+          <div>{conditions_snapshot.location}</div>
+        </div>
+      )}
+      {conditions_snapshot.temp_f != null && (
+        <div>
+          <div class="text-xs text-slate uppercase tracking-wide">Temp</div>
+          <div>{conditions_snapshot.temp_f}°F</div>
+        </div>
+      )}
+      {conditions_snapshot.wax_used && (
+        <div>
+          <div class="text-xs text-slate uppercase tracking-wide">Wax used</div>
+          <div>{conditions_snapshot.wax_used}</div>
+        </div>
+      )}
+    </aside>
+  )}
+  {photo && (
+    <div class="my-8 aspect-video overflow-hidden">
+      <Image
+        src={photo}
+        alt={photo_alt}
+        widths={CARD}
+        width={Math.min(1200, photo.width)}
+        sizes="(min-width: 768px) 720px, 100vw"
+        class="w-full h-full object-cover"
+        loading="lazy"
+        decoding="async"
+      />
+    </div>
+  )}
+  {lede && <p class="mt-6 text-lg leading-relaxed text-ink/90">{lede}</p>}
+  <div class="mt-6 prose prose-lg max-w-prose">
+    <slot />
+  </div>
+</article>
