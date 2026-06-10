@@ -6,6 +6,7 @@ import MobileNavPanel from '@/components/MobileNavPanel.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
 import HeroHome from '@/components/HeroHome.astro';
 import MissionPanel from '@/components/MissionPanel.astro';
+import PhotoMosaic from '@/components/PhotoMosaic.astro';
 
 // Partial composition: hero + mission render from the ported home singleton
 // so the content port is verifiable end-to-end (srcset, CTA state, mission
@@ -35,4 +36,5 @@ const meta = await getEntry('site_meta', 'site_meta');
     cta_closed_label={h.cta_closed_label} cta_closed_url={h.cta_closed_url}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
+  <PhotoMosaic homeOnly={true} />
 </BaseLayout>
