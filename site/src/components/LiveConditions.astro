@@ -1,0 +1,51 @@
+---
+// Live conditions strip: current temp + wax recommendation at four Twin Cities
+// ski areas, fetched client-side from the Flask /api/conditions endpoint.
+interface Props {
+  variant?: 'prominent' | 'compact';
+}
+const { variant = 'prominent' } = Astro.props;
+const apiUrl = import.meta.env.PUBLIC_CONDITIONS_API_URL ?? 'https://tcsc.ski/api/conditions';
+const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
+---
+<section
+  class={variant === 'prominent'
+    ? 'bg-navy-deep text-paper border-y border-mint/10'
+    : 'bg-navy/40 text-paper text-xs border-t border-mint/10'}
+  data-live-conditions
+  data-api-url={apiUrl}
+  aria-live="polite"
+  aria-label="Current ski conditions"
+>
+  {variant === 'prominent' ? (
+    <div class="mx-auto max-w-7xl px-6 py-5 grid grid-cols-2 md:grid-cols-4 gap-px bg-mint/10">
+      {locationIds.map((id) => (
+        <div data-location={id} class="bg-navy-deep p-4">
+          <div class="text-[10px] tracking-widest uppercase text-mint" data-name>·</div>
+          <div class="font-display text-2xl md:text-3xl text-mint mt-1" data-temp>·</div>
+          <div class="text-xs text-paper/70 mt-1" data-wax>·</div>
+        </div>
+      ))}
+    </div>
+  ) : (
+    <div class="mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
+      {locationIds.map((id) => (
+        <div data-location={id} class="flex items-baseline gap-1.5">
+          <span class="tracking-widest uppercase text-mint" data-name>·</span>
+          <span class="font-display text-paper" data-temp>·</span>
+          <span data-wax>·</span>
+        </div>
+      ))}
+    </div>
+  )}
+  {variant === 'prominent' && (
+    <div class="mx-auto max-w-7xl px-6 pb-3 text-[11px] text-coral">
+      <span data-updated>Loading conditions…</span>
+    </div>
+  )}
+</section>
+
+<script>
+  import { init } from '@/components/LiveConditions.client';
+  init();
+</script>
