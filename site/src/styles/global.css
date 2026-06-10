@@ -4,8 +4,23 @@
 
 :root { color-scheme: light; }
 
+@font-face {
+  font-family: 'InterVariable';
+  src: url('/fonts/inter/InterVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'InterVariable';
+  src: url('/fonts/inter/InterVariable-Italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-style: italic;
+  font-display: swap;
+}
+
 html {
-  font-family: 'PolySans', system-ui, sans-serif;
+  font-family: 'InterVariable', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   background: oklch(0.985 0.003 90);

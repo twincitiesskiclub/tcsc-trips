@@ -18,8 +18,8 @@ export default {
         slate: 'oklch(0.50 0.02 260)',
       },
       fontFamily: {
-        sans: ['PolySans', 'system-ui', 'sans-serif'],
-        display: ['PolySans Wide', 'PolySans', 'system-ui', 'sans-serif'],
+        sans: ['InterVariable', 'system-ui', 'sans-serif'],
+        display: ['InterVariable', 'system-ui', 'sans-serif'],
       },
       maxWidth: { prose: '62ch', 'prose-narrow': '56ch' },
     },
