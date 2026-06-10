@@ -200,7 +200,7 @@ const home = defineCollection({
         cta_open_url: z.string().url().optional(),
         cta_coming_soon_label: z.string().default('Get on the list'),
         cta_coming_soon_url: z.string().url().optional(),
-        cta_closed_label: z.string().default('Member area'),
+        cta_closed_label: z.string().default('Become a member'),
         cta_closed_url: z.string().url().optional(),
         mission_paragraph: z.string().optional(),
       })

@@ -10,11 +10,9 @@ trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b
 ---
 {trips.length === 0 ? (
   <p class="text-slate">
-    No trips currently scheduled.{' '}
-    <a href="https://twincitiesskiclub.slack.com" class="text-mint-deep underline">
-      Join the Slack
-    </a>{' '}
-    to hear about new trips first.
+    No trips currently scheduled. New trips are announced here each fall;{' '}
+    <a href="/contact" class="text-mint-deep underline">get in touch</a>{' '}
+    if you have questions in the meantime.
   </p>
 ) : (
   <table class="w-full text-left text-sm">

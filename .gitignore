@@ -54,3 +54,5 @@ validate_posted_ts.json
 # Wix scrape image dump (~160MB of full-resolution originals; audit trail
 # lives in migration/images.csv — images stay on disk for the content port)
 migration/images/
+migration/slack_photos/
+migration/survey/

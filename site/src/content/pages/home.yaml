@@ -1,4 +1,4 @@
-hero_headline: Cross-country skiing, built around community.
+hero_headline: We put skiers on snow, and even on podiums, surrounded by their friends.
 hero_image: ../../assets/images/uploads/home-hero.jpg
 hero_image_alt: >-
   TCSC skiers clowning for the camera on snow at an evening practice, with a
@@ -6,10 +6,10 @@ hero_image_alt: >-
 registration_state: closed
 cta_open_label: Register for the season →
 cta_open_url: https://tcsc.ski/register
-cta_coming_soon_label: Get on the list
-cta_coming_soon_url: https://twincitiesskiclub.slack.com
-cta_closed_label: Member area
-cta_closed_url: https://twincitiesskiclub.slack.com
+cta_coming_soon_label: Registration opens soon
+cta_coming_soon_url: https://tcsc.ski/register
+cta_closed_label: Become a member
+cta_closed_url: https://tcsc.ski/register
 mission_paragraph: >-
   Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a
   supportive community for young adults (ages 21 - 35) by promoting a healthy
