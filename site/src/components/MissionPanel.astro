@@ -1,0 +1,11 @@
+---
+interface Props { body: string; }
+const { body } = Astro.props;
+---
+<section class="bg-navy py-20">
+  <div class="mx-auto max-w-4xl px-6">
+    <div class="bg-paper text-ink rounded-xl px-8 py-12 md:px-16 md:py-16">
+      <p class="font-display text-2xl md:text-3xl leading-[1.25] text-navy">{body}</p>
+    </div>
+  </div>
+</section>
