@@ -4,6 +4,7 @@
 
 :root { color-scheme: light; }
 
+/* PolySans swap point: replace these @font-face blocks (with tailwind.config.ts fontFamily) when PolySans is licensed. */
 @font-face {
   font-family: 'InterVariable';
   src: url('/fonts/inter/InterVariable.woff2') format('woff2');

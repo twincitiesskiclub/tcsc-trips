@@ -17,6 +17,7 @@ export default {
         ink: 'oklch(0.18 0.04 260)',
         slate: 'oklch(0.50 0.02 260)',
       },
+      // PolySans swap point: sans/display intentionally identical until PolySans is licensed.
       fontFamily: {
         sans: ['InterVariable', 'system-ui', 'sans-serif'],
         display: ['InterVariable', 'system-ui', 'sans-serif'],
