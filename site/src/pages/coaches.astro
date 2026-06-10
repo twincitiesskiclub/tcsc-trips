@@ -23,13 +23,14 @@ const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
   headline={headline}
   subhead="An exceptional team bringing joy, excitement, and knowledge to every practice."
 >
-  {rendered.map(({ c, Content }) => (
+  {rendered.map(({ c, Content }, i) => (
     <CoachEntry
       name={c.data.slug}
       role={c.data.role}
       photo={c.data.photo}
       photoAlt={c.data.photo_alt}
       credentials={c.data.credentials}
+      loading={i === 0 ? 'eager' : 'lazy'}
     >
       <Content />
     </CoachEntry>

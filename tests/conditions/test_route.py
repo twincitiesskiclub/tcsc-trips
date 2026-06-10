@@ -39,6 +39,14 @@ def test_get_conditions_sets_cors_for_www_subdomain():
     assert resp.headers.get('Access-Control-Allow-Origin') == 'https://www.twincitiesskiclub.org'
 
 
+def test_get_conditions_sets_cors_for_staging_origin():
+    client = _client()
+    resp = client.get('/api/conditions',
+                      headers={'Origin': 'https://tcsc-marketing.onrender.com'})
+    assert (resp.headers.get('Access-Control-Allow-Origin')
+            == 'https://tcsc-marketing.onrender.com')
+
+
 def test_get_conditions_rejects_other_origins():
     client = _client()
     resp = client.get('/api/conditions', headers={'Origin': 'https://evil.com'})

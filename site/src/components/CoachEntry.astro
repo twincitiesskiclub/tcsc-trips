@@ -27,6 +27,12 @@ interface Props {
   credentials?: string[];
   /** CSS object-position fallback for the residual in-browser crop. */
   object_position?: string;
+  /**
+   * 'eager' for the first (above-the-fold) entry only: its photo is the
+   * page's LCP element, and lazy-loading it failed Lighthouse's
+   * lcp-lazy-loaded audit. Entries below the fold stay lazy.
+   */
+  loading?: 'eager' | 'lazy';
 }
 const {
   name,
@@ -35,6 +41,7 @@ const {
   photoAlt,
   credentials = [],
   object_position = 'center 30%',
+  loading = 'lazy',
 } = Astro.props;
 
 const width = Math.min(1920, photo.width);
@@ -53,7 +60,8 @@ const height = Math.round((width * 9) / 21);
       sizes="100vw"
       class="absolute inset-0 w-full h-full object-cover"
       style={`object-position: ${object_position}`}
-      loading="lazy"
+      loading={loading}
+      fetchpriority={loading === 'eager' ? 'high' : 'auto'}
       decoding="async"
     />
   </div>

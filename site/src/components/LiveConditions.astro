@@ -12,7 +12,10 @@ const locationIds = ['wirth', 'hyland', 'french', 'battlecreek'];
 <section
   class={variant === 'prominent'
     ? 'bg-navy-deep text-paper border-y border-mint/10'
-    : 'bg-navy/40 text-paper text-xs border-t border-mint/10'}
+    // Compact strip: solid navy-deep (like prominent), NOT bg-navy/40: the
+    // translucent navy over the paper page background landed text-paper/70
+    // at 1.91:1 (axe fail); on solid navy-deep it measures 9.1:1 (AA pass).
+    : 'bg-navy-deep text-paper text-xs border-t border-mint/10'}
   data-live-conditions
   data-api-url={apiUrl}
   aria-label="Current ski conditions"

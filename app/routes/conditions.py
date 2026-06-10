@@ -19,6 +19,10 @@ _RETRY_TTL_SECONDS = 60
 _ALLOWED_ORIGINS = {
     'https://twincitiesskiclub.org',
     'https://www.twincitiesskiclub.org',
+    # Staging origin (Render Static service for the marketing site). The
+    # conditions strip shows "Conditions unavailable" on staging until this
+    # Flask side deploys; with this origin allowlisted it then works there too.
+    'https://tcsc-marketing.onrender.com',
 }
 
 # Cached payload plus rebuild bookkeeping. Requests never block on a refresh:
