@@ -39,6 +39,26 @@ const pathname = Astro.url.pathname;
   </div>
 </div>
 
+<style>
+  /* Opening transition only (closing stays instant): panel fades, the link
+     list rises 8px. Transform/opacity only; the global reduced-motion rule
+     collapses both. */
+  [data-mobile-panel] {
+    opacity: 0;
+    transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-mobile-panel] nav {
+    transform: translateY(8px);
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-mobile-panel][data-open='true'] {
+    opacity: 1;
+  }
+  [data-mobile-panel][data-open='true'] nav {
+    transform: translateY(0);
+  }
+</style>
+
 <script>
   // Lifecycle assumptions: (1) no ClientRouter / view transitions, so this
   // runs once per full page load; (2) exactly one panel + toggle per page.
@@ -52,9 +72,14 @@ const pathname = Astro.url.pathname;
       panel.setAttribute('aria-hidden', 'false');
       toggle.setAttribute('aria-expanded', 'true');
       document.body.style.overflow = 'hidden';
+      // Two frames so the display change commits before the transition
+      // starts (one rAF can coalesce with the style flush).
+      requestAnimationFrame(() => requestAnimationFrame(() => { panel.dataset.open = 'true'; }));
       closeBtn.focus();
     };
     const close = () => {
+      // Closing is instant by design; only opening eases in.
+      delete panel.dataset.open;
       panel.classList.add('hidden');
       panel.classList.remove('flex');
       panel.setAttribute('aria-hidden', 'true');

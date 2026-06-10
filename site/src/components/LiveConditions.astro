@@ -89,6 +89,25 @@ const locations = [
 </section>
 
 <style>
+  /* First-fill entrance (group fade, no stagger): cells sit at opacity 0
+     only between client init and the first render, keyed on data attributes
+     the client sets, so no-JS visitors always see the server-rendered names
+     and every 5-minute refresh after first paint is inert by construction.
+     The client also arms a timeout backstop so a slow API can't hold the
+     strip invisible. Transform/opacity only; the global reduced-motion rule
+     collapses the transition. */
+  [data-live-conditions] [data-location],
+  [data-live-conditions] [data-birkie] {
+    transition:
+      opacity 250ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-live-conditions][data-lc-initialized='true']:not([data-filled='true']) [data-location],
+  [data-live-conditions][data-lc-initialized='true']:not([data-filled='true']) [data-birkie] {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
   /* Wax chips: the dot's color IS the recommendation (the literal color of
      the glide wax for the band), set per-render via data-band. Deliberate
      non-token colors: this is data encoding, not palette decoration, muted

@@ -38,7 +38,7 @@ const props = Astro.props;
         the photograph actually shows. */}
     <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
     <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-14 md:pb-20 text-paper">
-      <h1 class="font-display font-bold text-3xl sm:text-4xl md:text-6xl leading-[1.05] md:leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
+      <h1 class="hero-headline font-display font-bold text-3xl sm:text-4xl md:text-6xl leading-[1.05] md:leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
       <div class="mt-8">
         <CtaForState
           state={props.state}
@@ -50,3 +50,22 @@ const props = Astro.props;
     </div>
   </div>
 </section>
+
+<style>
+  /* The single orchestrated page-load: photo fades in, headline rises 8px
+     just behind it. One entrance per load, then total stillness (no scroll
+     animation anywhere on the site). Transform/opacity only; the global
+     reduced-motion rule collapses the animations. */
+  @keyframes hero-photo-in {
+    from { opacity: 0; }
+  }
+  @keyframes hero-headline-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  section :global(picture) {
+    animation: hero-photo-in 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .hero-headline {
+    animation: hero-headline-in 250ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+  }
+</style>

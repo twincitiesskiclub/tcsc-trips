@@ -1,8 +1,8 @@
 ---
 // InnerPageLayout: shared shell for every non-home page. Composes
 // BaseLayout (variant inner, title/description/ogImage passthrough) +
-// Nav + MobileNavPanel + optional HeroInner + <main class="bg-paper">
-// slot + compact LiveConditions + Footer.
+// Nav + MobileNavPanel + compact LiveConditions (under the nav) +
+// optional HeroInner + <main class="bg-paper"> slot + Footer.
 //
 // Pass `headline` (plus optional `subhead`) to get the standard HeroInner;
 // omit it on pages whose main content owns the <h1> (TripEntry, WaxEntry
@@ -29,16 +29,20 @@ interface Props {
   ogImage?: string;
   headline?: string;
   subhead?: string;
+  /** Static org facts for the masthead's narrow column (HeroInner). */
+  facts?: string[];
 }
-const { title, description, ogImage, headline, subhead } = Astro.props;
+const { title, description, ogImage, headline, subhead, facts } = Astro.props;
 ---
 <BaseLayout title={title} variant="inner" description={description} ogImage={ogImage}>
   <Nav />
   <MobileNavPanel />
-  {headline && <HeroInner headline={headline} subhead={subhead} />}
+  {/* The club's pulse sits under the nav on every page, not above the
+      footer: a snow club leads with the snow. */}
+  <LiveConditions variant="compact" />
+  {headline && <HeroInner headline={headline} subhead={subhead} facts={facts} />}
   <main id="main" class="bg-paper">
     <slot />
   </main>
-  <LiveConditions variant="compact" />
   <Footer />
 </BaseLayout>

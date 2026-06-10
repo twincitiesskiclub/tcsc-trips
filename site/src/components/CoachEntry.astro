@@ -25,8 +25,8 @@ interface Props {
   photo: ImageMetadata;
   photoAlt: string;
   credentials?: string[];
-  /** Mirror the split (photo right, text left). Alternate per entry. */
-  flip?: boolean;
+  /** Anchor id for the roster index (scroll-margin handled here). */
+  anchor?: string;
   /** CSS object-position fallback for the residual in-browser crop. */
   object_position?: string;
   /**
@@ -42,7 +42,7 @@ const {
   photo,
   photoAlt,
   credentials = [],
-  flip = false,
+  anchor,
   object_position = 'center 30%',
   loading = 'lazy',
 } = Astro.props;
@@ -50,9 +50,11 @@ const {
 const width = Math.min(1200, photo.width);
 const height = Math.round((width * 5) / 4);
 ---
-<article class="border-b border-ink/10 last:border-b-0">
+<article id={anchor} class="border-b border-ink/10 last:border-b-0 scroll-mt-24">
+  {/* All photos sit left: a steady column instead of an alternator
+      performing fake variety; the roster index above supplies the scan. */}
   <div class="mx-auto max-w-6xl px-6 py-12 md:py-16 grid gap-8 md:gap-14 md:grid-cols-12 items-start">
-    <div class:list={['md:col-span-5', flip && 'md:order-2']}>
+    <div class="md:col-span-5">
       <div class="relative aspect-[4/5] overflow-hidden">
         <Image
           src={photo}
@@ -71,7 +73,7 @@ const height = Math.round((width * 5) / 4);
         />
       </div>
     </div>
-    <div class:list={['md:col-span-7', flip && 'md:order-1']}>
+    <div class="md:col-span-7">
       {/* Plain sentence-case role: uppercase tracked labels repeated four
           times down the page read as scaffolding, not information. */}
       <h2 class="font-display text-4xl md:text-6xl text-navy leading-[1.0]">{name}</h2>

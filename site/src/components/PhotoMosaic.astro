@@ -24,7 +24,8 @@ interface Props {
   limit?: number;
   homeOnly?: boolean;
   /** Optional section header (e.g. on home). Rendered only when the mosaic
-      itself renders, so an empty photo pool can't orphan a heading. */
+      itself renders, so an empty photo pool can't orphan a heading. `number`
+      is the seam label text (defaults to 'Community'). */
   number?: string;
   heading?: string;
   more_href?: string;
@@ -72,17 +73,17 @@ const sizeClasses = [
 const tiles = await Promise.all(
   photos.map(async (photo, i) => {
     const span = sparse ? '' : sizeClasses[i % sizeClasses.length];
-    // Per-tile sizes. Above the viewport's 1280px mark the container is
-    // fixed: max-w-7xl (1280px) minus px-6 (48px) = 1232px of content, so a
-    // 1x1 cell is at most 1232/4 = 308px (true rendered size is 299px once
-    // gap-3 gutters are subtracted; rounding up errs toward the sharper
-    // srcset candidate). Spans are two cells = 616px; sparse 3-col cells
-    // are 1232/3 = 410px. Below the cap, vw fractions apply.
+    // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
+    // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
+    // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
+    // stacked side tiles and remainder cells ~33vw on md+.
     const sizesAttr = sparse
-      ? '(min-width: 1280px) 410px, (min-width: 768px) 33vw, 50vw'
+      ? i === 0
+        ? '(min-width: 768px) 66vw, 100vw'
+        : '(min-width: 768px) 34vw, 50vw'
       : span.includes('md:col-span-2')
-        ? '(min-width: 1280px) 616px, 50vw'
-        : '(min-width: 1280px) 308px, (min-width: 768px) 25vw, 50vw';
+        ? '50vw'
+        : '(min-width: 768px) 25vw, 50vw';
     // Explicit width clamps the FALLBACK rendition: without it, Astro also
     // generates the plain `src` at full source resolution (a 4000px+ webp
     // nobody downloads, roughly half the image payload at scale).
@@ -109,60 +110,75 @@ const tiles = await Promise.all(
   }),
 );
 
-const gridClass = sparse
-  ? 'grid grid-cols-2 md:grid-cols-3 gap-2 md:gap-3'
-  : 'grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-2 md:gap-3';
+// Composed sparse fallback: under 12 photos, the first three form one
+// deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
+// stacked side tiles) and the rest run as a uniform grid, so the degraded
+// state reads as composed, not abandoned. Keyed only on photo count (never
+// on homeOnly), so every consumer inherits it.
+const composed = sparse && photos.length >= 3;
 ---
 {photos.length > 0 && (
-  <section class="bg-navy py-20" data-photo-mosaic>
-    <div class="max-w-7xl mx-auto px-6">
-      {/* Header md:px-4 lines up with SectionBand's md:px-10 content inset
-          (this container already carries px-6). */}
-      {heading && (
-        <div class="mb-8 md:px-4 flex items-end justify-between gap-6">
-          <div>
-            {number && <div class="text-sm font-semibold tracking-wider mb-3 text-mint">{number}</div>}
-            <h2 class="font-display text-3xl md:text-5xl text-paper leading-[1.05]">{heading}</h2>
-          </div>
+  <section class="bg-navy py-20 border-t border-mint/20" data-photo-mosaic>
+    {heading && (
+      <div class="max-w-7xl mx-auto px-6 md:px-10">
+        <span class="inline-block -translate-y-1/2 pr-4 text-sm tracking-wide bg-navy text-mint">{number ?? 'Community'}</span>
+        <div class="mb-8 mt-2 flex items-end justify-between gap-6">
+          <h2 class="font-display text-3xl md:text-5xl text-paper leading-[1.05]">{heading}</h2>
           {more_href && more_label && (
             <a href={more_href} class="shrink-0 text-mint/80 text-sm hover:text-mint">{more_label}</a>
           )}
         </div>
-      )}
-      <div class={gridClass}>
-        {/* data-tag exists for the /community event_tag filtering planned in the spec */}
-        {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
-          <button
-            type="button"
-            class:list={['group relative aspect-square overflow-hidden bg-paper-card', span]}
-            data-index={i}
-            data-caption={photo.data.caption ?? ''}
-            data-alt={photo.data.alt_text}
-            data-tag={photo.data.event_tag}
-            data-full={fullSrc}
-            data-full-srcset={fullSrcset}
-          >
-            <Image
-              src={photo.data.image}
-              alt={photo.data.alt_text}
-              width={Math.min(1600, photo.data.image.width)}
-              widths={MOSAIC}
-              sizes={sizesAttr}
-              class="absolute inset-0 w-full h-full object-cover"
-              loading="lazy"
-              decoding="async"
-            />
-            {photo.data.caption && (
-              <span
-                class="hidden md:flex absolute inset-0 items-end bg-navy/70 p-4 text-left text-sm text-paper opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150"
-                aria-hidden="true"
-              >
-                {photo.data.caption}
-              </span>
-            )}
-          </button>
-        ))}
       </div>
+    )}
+    {/* The grid runs edge to edge with hairline gaps: the one section that
+        breaks the page column. data-tag exists for the /community event_tag
+        filtering planned in the spec. */}
+    <div
+      class={composed
+        ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
+        : sparse
+          ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
+          : 'grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
+    >
+      {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
+        <button
+          type="button"
+          class:list={[
+            'group relative overflow-hidden bg-paper-card',
+            composed && i === 0
+              ? 'col-span-2 md:row-span-2 aspect-video'
+              : composed && i < 3
+                ? 'aspect-auto max-md:aspect-square'
+                : 'aspect-square',
+            !composed && span,
+          ]}
+          data-index={i}
+          data-caption={photo.data.caption ?? ''}
+          data-alt={photo.data.alt_text}
+          data-tag={photo.data.event_tag}
+          data-full={fullSrc}
+          data-full-srcset={fullSrcset}
+        >
+          <Image
+            src={photo.data.image}
+            alt={photo.data.alt_text}
+            width={Math.min(1600, photo.data.image.width)}
+            widths={MOSAIC}
+            sizes={sizesAttr}
+            class="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
+          {photo.data.caption && (
+            <span
+              class="hidden md:flex absolute inset-0 items-end bg-navy/70 p-4 text-left text-sm text-paper opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150"
+              aria-hidden="true"
+            >
+              {photo.data.caption}
+            </span>
+          )}
+        </button>
+      ))}
     </div>
   </section>
 )}

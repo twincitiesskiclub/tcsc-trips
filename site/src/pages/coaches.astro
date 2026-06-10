@@ -20,7 +20,27 @@ const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
   description="KJ, Greg, Rebecca, and Michael bring joy, excitement, and knowledge to every practice."
   headline={headline}
   subhead="KJ, Greg, Rebecca, and Michael bring joy, excitement, and knowledge to every practice."
+  facts={[`${coaches.length} coaches`, 'Two seasons a year', 'Practices Tuesday + Thursday']}
 >
+  {coaches.length > 1 && (
+    <nav aria-label="Coach index" class="mx-auto max-w-6xl px-6 pt-10">
+      <ul class="border-y border-ink/10 divide-y divide-ink/10">
+        {coaches.map((c) => (
+          <li>
+            <a
+              href={'#' + c.id}
+              class="group grid items-baseline gap-x-6 py-3 md:grid-cols-[10rem_1fr]"
+            >
+              <span class="font-display font-semibold text-navy transition-colors duration-150 group-hover:text-mint-deep">
+                {c.data.slug}
+              </span>
+              <span class="text-sm text-slate">{c.data.role}</span>
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )}
   {rendered.map(({ c, Content }, i) => (
     <CoachEntry
       name={c.data.slug}
@@ -28,7 +48,7 @@ const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
       photo={c.data.photo}
       photoAlt={c.data.photo_alt}
       credentials={c.data.credentials}
-      flip={i % 2 === 1}
+      anchor={c.id}
       loading={i === 0 ? 'eager' : 'lazy'}
     >
       <Content />

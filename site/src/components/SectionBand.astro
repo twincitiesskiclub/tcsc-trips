@@ -1,12 +1,17 @@
 ---
 interface Props {
   variant?: 'navy' | 'paper' | 'paper-on-navy';
+  /** @deprecated numbered eyebrow markers; use `seam` instead. */
   number?: string;
+  /** Catalog-divider seam: a full-bleed hairline at the section's top edge,
+      interrupted at the left gutter by the section name sitting ON the line.
+      Physical chapter breaks instead of padding gaps wearing badges. */
+  seam?: string;
   heading?: string;
   subhead?: string;
   contentMax?: 'wide' | 'narrow';
 }
-const { variant = 'paper', number, heading, subhead, contentMax = 'wide' } = Astro.props;
+const { variant = 'paper', number, seam, heading, subhead, contentMax = 'wide' } = Astro.props;
 
 // paper-on-navy: navy band with a rounded paper card inside; the px-6 gutter
 // keeps the card off the viewport edges below the max width.
@@ -15,9 +20,18 @@ const surface = variant === 'navy' ? 'bg-navy text-paper' : isCard ? 'bg-navy py
 const innerMax = contentMax === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
 const padding = isCard
   ? 'rounded-xl px-8 py-12 md:px-16 md:py-20'
-  : 'px-6 md:px-10 py-20 md:py-28';
+  : 'px-6 md:px-10 pb-20 md:pb-28 ' + (seam ? 'pt-10 md:pt-14' : 'pt-20 md:pt-28');
+// The seam label's swatch must match the section surface exactly so it reads
+// as cutting the line, not floating over it.
+const seamRule = variant === 'navy' ? 'border-mint/20' : 'border-ink/15';
+const seamSwatch = variant === 'navy' ? 'bg-navy text-mint' : 'bg-paper text-mint-deep';
 ---
-<section class={surface}>
+<section class:list={[surface, seam && !isCard && 'border-t ' + seamRule]}>
+  {seam && !isCard && (
+    <div class={'mx-auto ' + innerMax + ' px-6 md:px-10'}>
+      <span class={'inline-block -translate-y-1/2 pr-4 text-sm tracking-wide ' + seamSwatch}>{seam}</span>
+    </div>
+  )}
   <div class={isCard ? 'px-6' : undefined}>
     <div class={'mx-auto ' + innerMax + ' ' + (isCard ? 'bg-paper text-ink ' : '') + padding}>
       {number && (

@@ -11,7 +11,6 @@ type BirkieResp = { status: string; word: string; detail: string };
 type Resp = { updated_at: string; locations: LocResp[]; birkie?: BirkieResp; error?: string };
 
 const REFRESH_MS = 5 * 60 * 1000;
-const STAMP_TICK_MS = 60 * 1000;
 
 const roots: HTMLElement[] = [];
 let staleWhileHidden = false;
@@ -74,6 +73,7 @@ function renderInto(root: HTMLElement, data: Resp) {
     setText(birkie, '[data-birkie-detail]', data.birkie?.detail ?? 'No report');
   }
   root.dataset.updatedAt = data.updated_at;
+  root.dataset.filled = 'true';
   updateStamp(root);
 }
 
@@ -102,14 +102,18 @@ function renderFailure(root: HTMLElement) {
   if (stamp && stamp.textContent !== stampText) {
     stamp.textContent = stampText;
   }
+  root.dataset.filled = 'true';
 }
 
 function updateStamp(root: HTMLElement) {
+  // Dateline form ("updated 7:02 AM"): an absolute time reads like a trail
+  // report and never goes stale-looking between the 5-minute refreshes, so
+  // no ticker is needed.
   const stamp = root.querySelector('[data-updated]') as HTMLElement | null;
   const iso = root.dataset.updatedAt;
   if (!stamp || !iso) return;
-  const mins = Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 60000));
-  const text = `● Live · updated ${mins} min ago`;
+  const time = new Date(iso).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const text = `● Live · updated ${time}`;
   if (stamp.textContent !== text) stamp.textContent = text;
 }
 
@@ -126,6 +130,11 @@ export function init() {
     roots.push(root);
 
     fetchAndRender(root);
+    // Entrance backstop: a slow first fetch must not hold the strip
+    // invisible (the first-fill CSS keys on data-filled).
+    setTimeout(() => {
+      root.dataset.filled = 'true';
+    }, 1200);
     setInterval(() => {
       // Skip refreshes while the tab is hidden to save NWS quota.
       if (document.hidden) {
@@ -144,8 +153,5 @@ export function init() {
         roots.forEach((root) => fetchAndRender(root));
       }
     });
-    // Honest stamp: recompute "updated N min ago" between data refreshes.
-    // Kept out of any live region so the ticker is never announced.
-    setInterval(() => roots.forEach((root) => updateStamp(root)), STAMP_TICK_MS);
   }
 }
