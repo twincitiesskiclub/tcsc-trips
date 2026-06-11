@@ -1,11 +1,23 @@
 ---
 // /about: the founding story + who joins, from the `about` singleton, then
-// the practice seasons band (paper variant on the paper page).
+// the practice seasons band (paper variant on the paper page). Team photo
+// rides the masthead band; the rollerski group closes the prose column.
+// The first body paragraph (the founding story) renders as an emphasized
+// lede via the [&>p:first-child] overrides on the prose wrapper. Lede uses
+// font-semibold, NOT font-display: the trial display cut lacks the hyphen
+// glyph and the paragraph contains "cross-country" (see global.css font
+// warning). Swap to font-display when the full license lands. NOTE: the
+// lede targets whatever <p> is the first child - it depends on about.mdoc
+// starting with the founding paragraph; reordering the source moves it.
 import { getEntry, render } from 'astro:content';
+import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import SeasonsGrid from '@/components/SeasonsGrid.astro';
 import { metaDescription } from '@/lib/metaDescription';
+import { CARD } from '@/components/imageWidths';
+import teamBanner from '@/assets/images/photos/team-banner.jpg';
+import rollerskiGoldenHour from '@/assets/images/photos/rollerski-golden-hour.jpg';
 
 const about = await getEntry('about', 'about');
 if (!about) throw new Error('about singleton missing (src/content/pages/about.mdoc)');
@@ -20,11 +32,22 @@ const { Content } = await render(about);
     { value: '501(c)(3) nonprofit', label: 'Status' },
     { value: 'Minneapolis · St. Paul', label: 'Based in' },
   ]}
+  photo={teamBanner}
+  photoAlt="Around fifty TCSC members posing together behind the club banner"
+  photoPosition="center 40%"
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
-    <div class="prose prose-lg max-w-prose text-ink [&_h2]:font-semibold [&_h2]:tracking-tight">
+    <div class="prose prose-lg max-w-prose text-ink [&_h2]:font-semibold [&_h2]:tracking-tight [&>p:first-child]:font-semibold [&>p:first-child]:text-xl md:[&>p:first-child]:text-2xl [&>p:first-child]:leading-snug [&>p:first-child]:text-navy">
       <Content />
     </div>
+    <Image
+      src={rollerskiGoldenHour}
+      alt="A line of members rollerskiing together at golden hour, poles mid-swing"
+      widths={CARD}
+      sizes="(min-width: 768px) 720px, 100vw"
+      class="mt-10 w-full h-64 md:h-80 object-cover"
+      loading="lazy"
+    />
   </div>
   <SectionBand variant="paper" heading="Seasons">
     <SeasonsGrid variant="paper" />
