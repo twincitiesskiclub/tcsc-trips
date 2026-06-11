@@ -36,7 +36,7 @@ const tierGroups = tiers
 ---
 {tierGroups.map(({ label, items }) => (
   <section class="mt-12 first:mt-0">
-    <Heading class="font-display text-2xl text-navy">{label}</Heading>
+    <Heading class="font-display font-semibold text-2xl text-navy">{label}</Heading>
     <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-8 items-center">
       {items.map((s) => {
         const Wrapper = s.data.url ? 'a' : 'div';

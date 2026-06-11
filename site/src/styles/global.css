@@ -4,11 +4,14 @@
 
 :root { color-scheme: light; }
 
-/* Archivo Variable carries the whole site: one family, two voices via the
-   width axis (body at normal width, display moments at 125% expanded; the
-   Söhne / Söhne Breit model from DESIGN.md). Swap point if a commercial
+/* Archivo Variable carries the whole site: one family, two voices via
+   WEIGHT (body at 400, display moments at semibold 600 set per call site).
+   The width-axis treatment (display at 125% expanded, the Söhne Breit
+   imitation) was retired 2026-06-10: stretched Archivo plus negative
+   tracking read as "squished and too big at the same time". Do not
+   reintroduce font-stretch on .font-display. Swap point if a commercial
    face is ever licensed: these @font-face blocks + tailwind.config.ts
-   fontFamily + the .font-display width rule below + FontPreload.astro. */
+   fontFamily + the .font-display rule below + FontPreload.astro. */
 @font-face {
   font-family: 'ArchivoVariable';
   src: url('/fonts/archivo/ArchivoVariable.woff2') format('woff2');
@@ -55,13 +58,13 @@ html {
 }
 
 /* The display voice: Tailwind's font-display utility supplies the family;
-   this companion rule widens it to the expanded cut and tightens tracking
-   at headline scale. Both rules target the same class, so every existing
-   font-display call site picks the cut up for free. */
+   this companion rule pins normal width and tightens tracking at headline
+   scale. Weight comes from font-semibold at the heading call sites, so
+   explicit weight and tracking utilities keep working. */
 @layer utilities {
   .font-display {
-    font-stretch: 125%;
-    letter-spacing: -0.01em;
+    font-stretch: 100%;
+    letter-spacing: -0.02em;
   }
 }
 

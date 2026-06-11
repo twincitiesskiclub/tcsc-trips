@@ -28,7 +28,7 @@ const entries = (await getCollection('wax_entries'))
     </div>
     <div class="pt-8 pb-16 md:pb-20">
       <div class="flex items-end justify-between mb-8">
-        <h2 class="font-display text-3xl md:text-4xl text-navy leading-[1.05]">From the Wax Room</h2>
+        <h2 class="font-display font-semibold text-3xl md:text-4xl text-navy leading-[1.05]">From the Wax Room</h2>
         <a href="/wax-room" class="shrink-0 text-mint-deep text-sm hover:text-navy">All entries</a>
       </div>
       {entries.length === 0 ? (
@@ -44,7 +44,7 @@ const entries = (await getCollection('wax_entries'))
                 <span class="text-xs text-mint-deep tabular-nums">
                   {shortDate(e.data.date)}{e.data.author_name ? ` · ${e.data.author_name}` : ''}
                 </span>
-                <span class="font-display text-lg text-navy leading-tight transition-colors duration-150 group-hover:text-mint-deep">
+                <span class="font-display font-semibold text-lg text-navy leading-tight transition-colors duration-150 group-hover:text-mint-deep">
                   {e.data.slug}
                   {e.data.lede && (
                     <span class="ml-3 font-sans text-sm font-normal text-slate">{e.data.lede}</span>

@@ -62,8 +62,9 @@ export default {
           },
         },
       },
-      // One family, two voices: Archivo Variable's width axis separates the
-      // display cut from body (global.css widens .font-display to 125%).
+      // One family, two voices: weight separates the display cut from body
+      // (headings add font-semibold; global.css pins .font-display to normal
+      // width after the expanded cut was retired 2026-06-10).
       fontFamily: {
         sans: ['ArchivoVariable', 'system-ui', 'sans-serif'],
         display: ['ArchivoVariable', 'system-ui', 'sans-serif'],
