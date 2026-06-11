@@ -31,8 +31,7 @@ PHOTOS = [
     ('korte-medals.jpg', '2022-02-25_1645852380-232989_0.jpg', 'page_body', 800),
     ('birkie-start.jpg', '2024-02-23_1708738564-829599_1.jpg', 'page_body', 800),
     ('finlandia-podium.jpg', '2026-02-14_1771096714-097109_0.jpg', 'page_body', 800),
-    # skijor-race.jpg deliberately ABSENT pending the rights check
-    # (re-add '2024-02-07_1707360103-835559_0.jpg' here if cleared).
+    ('skijor-race.jpg', '2024-02-07_1707360103-835559_0.jpg', 'page_body', 800),
 ]
 
 

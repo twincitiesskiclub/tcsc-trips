@@ -19,10 +19,10 @@ const facts: Array<{ value: string; label: string; big?: boolean }> = [
       <ul class="md:col-span-3 md:col-start-10 self-center md:border-l md:border-ink/15 md:pl-7 space-y-5">
         {facts.map((f) => (
           <li>
-            <div class:list={['font-display font-semibold text-mint-deep leading-none', f.big ? 'text-2xl md:text-3xl' : 'text-lg md:text-xl']}>
+            <div class:list={['font-display font-semibold text-navy leading-none', f.big ? 'text-2xl md:text-3xl' : 'text-lg md:text-xl']}>
               {f.value}
             </div>
-            <div class="text-[11px] tracking-[0.14em] uppercase text-slate mt-1.5">{f.label}</div>
+            <div class="text-[11px] tracking-[0.14em] uppercase text-mint-deep mt-1.5">{f.label}</div>
           </li>
         ))}
       </ul>
