@@ -1,6 +1,9 @@
 ---
-// SeasonsGrid: two-up grid of practice seasons (fees, dates, what's included).
-// Renders nothing at all when no seasons exist (content lands in a later phase).
+// SeasonsGrid: two-up grid of practice seasons. Per card: date range, name,
+// fee + per-season registration status on one row, a one-sentence character
+// summary, then three labeled fact lines (When / Where / Trips) that use
+// identical slots on every card so the seasons scan in parallel.
+// Renders nothing at all when no seasons exist.
 // entry.id is the file-name slug; entry.data.slug is the DISPLAY NAME
 // (see content.config.ts header).
 import { getCollection } from 'astro:content';
@@ -37,6 +40,7 @@ const dollar = (cents: number) => {
 const hairline = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
 const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
 const accent = variant === 'navy' ? 'text-mint' : 'text-mint-deep';
+const muted = variant === 'navy' ? 'text-paper/60' : 'text-slate';
 ---
 {seasons.length > 0 && (
   <div>
@@ -48,26 +52,37 @@ const accent = variant === 'navy' ? 'text-mint' : 'text-mint-deep';
     >
       {seasons.map((s) => (
         <div class:list={['p-8 md:p-10', surface]}>
-          <p class:list={['text-sm', variant === 'navy' ? 'text-paper/60' : 'text-slate']}>{s.data.date_range}</p>
+          <p class:list={['text-sm', muted]}>{s.data.date_range}</p>
           <HeadingTag class="mt-3 font-display font-semibold text-2xl md:text-3xl">{s.data.slug}</HeadingTag>
-          <p class:list={['mt-2 text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
+          <div class="mt-2 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
+            <p class:list={['text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
+            <p class:list={['text-[13px]', s.data.registration_open ? `font-semibold ${accent}` : muted]}>
+              {s.data.registration_note}
+            </p>
+          </div>
           <p class="mt-4 max-w-prose">{s.data.summary}</p>
-          {s.data.what_included.length > 0 && (
-            <ul class="mt-6 space-y-1 text-sm">
-              {s.data.what_included.map((item) => (
-                <li class="before:content-['·'] before:mr-2">{item}</li>
-              ))}
-            </ul>
-          )}
+          <dl class="mt-6 space-y-2.5 text-sm">
+            {[
+              ['When', s.data.when],
+              ['Where', s.data.where],
+              ['Trips', s.data.trips],
+            ].map(([label, value]) => (
+              <div class="flex gap-4">
+                <dt class:list={['w-14 shrink-0 text-[11px] tracking-[0.14em] uppercase font-semibold pt-0.5', accent]}>
+                  {label}
+                </dt>
+                <dd>{value}</dd>
+              </div>
+            ))}
+          </dl>
         </div>
       ))}
     </div>
     {/* Dues transparency and shared practice details, rendered once below
         both season columns. Fee line is verbatim from the club's register
-        page; practices line is composed from the items that were identical
-        across both season yamls. */}
+        page. */}
     <div class:list={['px-8 md:px-10 py-6', surface]}>
-      <p class:list={['text-sm', variant === 'navy' ? 'text-paper/60' : 'text-slate']}>
+      <p class:list={['text-sm', muted]}>
         Organized evening practices twice per week, coached by KJ, Greg, Rebecca, and Michael. Dues cover coaching, workout space reservations, and the season's odds and ends.
       </p>
     </div>

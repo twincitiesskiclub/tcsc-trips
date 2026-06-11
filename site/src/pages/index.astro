@@ -16,6 +16,7 @@ import SectionBand from '@/components/SectionBand.astro';
 import SeasonsGrid from '@/components/SeasonsGrid.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import WaxRoomFeed from '@/components/WaxRoomFeed.astro';
+import SponsorWall from '@/components/SponsorWall.astro';
 import CTAStrip from '@/components/CTAStrip.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
@@ -50,7 +51,7 @@ const ctaStripLabel =
 const ctaStripSubhead =
   cta.state === 'open'
     ? 'Intermediate ability and up. No racing required.'
-    : 'Registration reopens in the fall. Intermediate ability and up, no racing required.';
+    : 'Registration reopens Aug/Sep. Intermediate ability and up, no racing required.';
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -75,7 +76,7 @@ const ctaStripSubhead =
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
-  <SectionBand variant="navy" seam="Practices">
+  <SectionBand variant="navy" seam="Seasons">
     <SeasonsGrid variant="navy" headingLevel="h2" />
   </SectionBand>
   <PhotoMosaic
@@ -86,6 +87,15 @@ const ctaStripSubhead =
     more_label="More from the community"
   />
   <WaxRoomFeed />
+  <SectionBand variant="paper" seam="Our sponsors">
+    <div class="flex flex-wrap items-center justify-between gap-x-12 gap-y-8">
+      <SponsorWall variant="strip" />
+      <a
+        href="/sponsors"
+        class="text-sm font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+      >About our sponsors</a>
+    </div>
+  </SectionBand>
   <CTAStrip
     heading="Come ski with us."
     subhead={ctaStripSubhead}

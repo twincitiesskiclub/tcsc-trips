@@ -119,7 +119,14 @@ const practice_seasons = defineCollection({
       date_range: z.string(),
       fee_cents: z.number().int(),
       summary: z.string(),
-      what_included: z.array(z.string()).default([]),
+      // Per-season registration status line ("Registration opens Aug/Sep").
+      // registration_open=true renders it in the accent color, false muted.
+      registration_note: z.string(),
+      registration_open: z.boolean().default(false),
+      // Parallel scannable facts, identical slots on every season card.
+      when: z.string(),
+      where: z.string(),
+      trips: z.string(),
       order: z.number().int().default(0),
     })
     .strict(),

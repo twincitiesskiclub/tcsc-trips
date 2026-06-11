@@ -19,7 +19,10 @@ const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
   title="Coaches · Twin Cities Ski Club"
   description="KJ, Greg, Rebecca, and Michael bring joy, excitement, and knowledge to every practice."
   headline={headline}
-  facts={['Two seasons a year', 'Practices Tuesday · Thursday']}
+  facts={[
+    { value: 'Two seasons a year', label: 'Coaching' },
+    { value: 'Tuesday · Thursday', label: 'Practices' },
+  ]}
 >
   {rendered.map(({ c, Content }, i) => (
     <CoachEntry

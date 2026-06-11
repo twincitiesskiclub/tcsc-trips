@@ -1,29 +1,80 @@
 ---
-// /community: community story from the `community` singleton, the grouped
-// "what we've done" takeaways ledger (volunteering / members who coach /
-// socials, mined from club Slack), and the FULL consented photo mosaic (no
-// homeOnly filter).
+// /community: community story from the `community` singleton, a photo
+// cluster pairing with the "Our members" prose, the grouped "what we've
+// done" takeaways ledger (volunteering / members who coach / socials, mined
+// from club Slack; volunteering and socials carry an anchor photo), and the
+// FULL consented photo mosaic (no homeOnly filter).
+// The cluster/anchor photos are direct imports, NOT photos-collection
+// entries: a collection entry would also land them in the mosaic below and
+// double them up on this very page.
 import { getEntry, render } from 'astro:content';
+import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import { metaDescription } from '@/lib/metaDescription';
+import { CARD } from '@/components/imageWidths';
+import canoeSocial from '@/assets/images/photos/canoe-social.jpg';
+import backyardSocial from '@/assets/images/photos/backyard-social.jpg';
+import runClubSelfie from '@/assets/images/photos/run-club-selfie.jpg';
+import winterFive from '@/assets/images/photos/winter-five.jpg';
+import lakesidePicnic from '@/assets/images/photos/lakeside-picnic.jpg';
+import secondHarvest from '@/assets/images/photos/second-harvest.jpg';
+import barnBanquet from '@/assets/images/photos/barn-banquet.jpg';
 
 const community = await getEntry('community', 'community');
 if (!community) throw new Error('community singleton missing (src/content/pages/community.mdoc)');
 const { Content } = await render(community);
 const takeaways = community.data.takeaways;
+
+const memberCluster = [
+  { src: backyardSocial, alt: 'A full group of members posing together at a backyard social, name tags on' },
+  { src: runClubSelfie, alt: 'A grinning group selfie mid-run, thumbs up all around' },
+  { src: winterFive, alt: 'Five members in club kits shoulder to shoulder on a snowy trail in low winter sun' },
+  { src: lakesidePicnic, alt: 'A lakeside picnic crowd in novelty hats around a packed picnic table' },
+];
+
+// Anchor photo per takeaways group; groups without one render unchanged.
+const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: string }> = {
+  Volunteering: {
+    src: secondHarvest,
+    alt: 'Members posing together at a Second Harvest food-packing volunteer night',
+    position: 'center 65%',
+  },
+  Socials: {
+    src: barnBanquet,
+    alt: 'The club banquet in a barn venue strung with lights, every table full',
+  },
+};
 ---
 <InnerPageLayout
   title="Community · Twin Cities Ski Club"
   description={community.data.intro && metaDescription(community.data.intro)}
   headline={community.data.headline ?? 'A welcoming community'}
   subhead={community.data.intro}
-  facts={['Founded 2020', 'Photos by club members']}
+  facts={[
+    { value: '2020', label: 'Founded' },
+    { value: 'Photos by club members', label: 'Credits' },
+  ]}
+  photo={canoeSocial}
+  photoAlt="Members in canoes rafted together on a city lake at golden hour"
+  photoPosition="center 52%"
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
     <div class="prose prose-lg max-w-prose text-ink">
       <Content />
+    </div>
+    <div class="mt-10 grid grid-cols-2 gap-px bg-ink/15">
+      {memberCluster.map((p) => (
+        <Image
+          src={p.src}
+          alt={p.alt}
+          widths={CARD}
+          sizes="(min-width: 768px) 360px, 50vw"
+          class="w-full h-48 md:h-64 object-cover"
+          loading="lazy"
+        />
+      ))}
     </div>
   </div>
   {takeaways.length > 0 && (
@@ -36,25 +87,38 @@ const takeaways = community.data.takeaways;
       <div class="space-y-14">
         {takeaways.map((g) => (
           <div class="grid gap-4 md:gap-10 md:grid-cols-12">
-            <h3 class="md:col-span-3 text-base font-semibold text-navy pt-5">
+            <h3 class="md:col-span-3 font-display font-semibold text-2xl text-navy pt-4">
               {g.group}
             </h3>
-            <div class="md:col-span-9 divide-y divide-ink/10 border-t border-ink/10">
-              {g.items.map((item) => (
-                <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(14rem,18rem)_1fr]">
-                  <div class="font-semibold text-navy">
-                    {item.href ? (
-                      <a
-                        href={item.href}
-                        class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-                      >{item.line}</a>
-                    ) : (
-                      item.line
-                    )}
+            <div class="md:col-span-9">
+              {groupPhotos[g.group] && (
+                <Image
+                  src={groupPhotos[g.group].src}
+                  alt={groupPhotos[g.group].alt}
+                  widths={CARD}
+                  sizes="(min-width: 768px) 720px, 100vw"
+                  class="w-full h-56 md:h-72 object-cover mb-2"
+                  style={groupPhotos[g.group].position ? `object-position: ${groupPhotos[g.group].position}` : undefined}
+                  loading="lazy"
+                />
+              )}
+              <div class="divide-y divide-ink/10 border-t border-ink/10">
+                {g.items.map((item) => (
+                  <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(14rem,18rem)_1fr]">
+                    <div class="font-semibold text-navy">
+                      {item.href ? (
+                        <a
+                          href={item.href}
+                          class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+                        >{item.line}</a>
+                      ) : (
+                        item.line
+                      )}
+                    </div>
+                    {item.detail && <p class="text-ink/80">{item.detail}</p>}
                   </div>
-                  {item.detail && <p class="text-ink/80">{item.detail}</p>}
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           </div>
         ))}

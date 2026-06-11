@@ -1,21 +1,43 @@
 ---
 // /racing: racing story from the `racing` singleton plus the structured
-// races list (date / name / location rows, optional full-width notes).
+// races list (date / name / location rows, optional full-width notes) and a
+// member-shot race photo strip. Strip photos are direct imports, not
+// photos-collection entries (entries would also join the community mosaic).
 import { getEntry, render } from 'astro:content';
+import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import { metaDescription } from '@/lib/metaDescription';
+import { CARD } from '@/components/imageWidths';
+import raceCrewFrosty from '@/assets/images/photos/race-crew-frosty.jpg';
+import skiDeSheTrio from '@/assets/images/photos/ski-de-she-trio.jpg';
+import korteMedals from '@/assets/images/photos/korte-medals.jpg';
+import birkieStart from '@/assets/images/photos/birkie-start.jpg';
+import finlandiaPodium from '@/assets/images/photos/finlandia-podium.jpg';
 
 const racing = await getEntry('racing', 'racing');
 if (!racing) throw new Error('racing singleton missing (src/content/pages/racing.mdoc)');
 const { Content } = await render(racing);
 const races = racing.data.races;
+
+const raceStrip = [
+  { src: skiDeSheTrio, alt: 'Three members in TCSC jerseys and race bibs in front of the Ski de She sponsor wall' },
+  { src: korteMedals, alt: 'Two finishers with Kortelopet medals and bibs grinning in bright winter sun' },
+  { src: birkieStart, alt: 'Two members in matching TCSC kits with arms raised at the Birkie start area' },
+  { src: finlandiaPodium, alt: 'Three skiers holding trophy axes in front of the Minnesota Finlandia Ski Marathon banner' },
+];
 ---
 <InnerPageLayout
   title="Racing · Twin Cities Ski Club"
   description={racing.data.intro && metaDescription(racing.data.intro)}
   headline={racing.data.headline ?? 'Twin Cities Ski Club racers'}
   subhead={racing.data.intro}
-  facts={['80+ skiers at the 2026 Birkie', 'Racing always voluntary']}
+  facts={[
+    { value: '80+', label: 'Skiers at the 2026 Birkie' },
+    { value: 'Always voluntary', label: 'Racing' },
+  ]}
+  photo={raceCrewFrosty}
+  photoAlt="Six members in race bibs, arms around each other, in frosty woods before a start"
+  photoPosition="center 30%"
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
     <div class="prose prose-lg max-w-prose text-ink">
@@ -44,6 +66,18 @@ const races = racing.data.races;
             <div class="text-slate">{r.location}</div>
             {r.notes && <div class="sm:col-span-full text-sm text-ink/80">{r.notes}</div>}
           </div>
+        ))}
+      </div>
+      <div class="mt-10 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink/15">
+        {raceStrip.map((p) => (
+          <Image
+            src={p.src}
+            alt={p.alt}
+            widths={CARD}
+            sizes="(min-width: 768px) 180px, 50vw"
+            class="w-full aspect-[3/4] object-cover"
+            loading="lazy"
+          />
         ))}
       </div>
     </section>
