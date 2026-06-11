@@ -67,3 +67,28 @@ roller and rider wear TCSC race tops; the runner's affiliation is not
 established. The board re-confirmation should treat these three explicitly
 as public-event photography, a different consent posture than the
 member-hangout photos above.
+
+## June 2026 design-feedback round additions (page photos)
+
+Direct page imports (About / Community / Racing placements), not mosaic
+entries; same Slack consent basis as above. Selected 2026-06-11 by Rob from a
+493-candidate curation pass. The skijor photo
+(2024-02-07_1707360103-835559_0.jpg) is EXCLUDED pending a rights check
+(poster account deactivated; slight professional look).
+
+| Page placement | Image file | Slack source file |
+|---|---|---|
+| About header | site/src/assets/images/photos/team-banner.jpg | 2024-03-30_1711812078-797759_0.jpg |
+| About body | site/src/assets/images/photos/rollerski-golden-hour.jpg | 2024-08-13_1723597154-617769_0.jpg |
+| Community header | site/src/assets/images/photos/canoe-social.jpg | 2024-07-09_1720579793-084489_1.jpg |
+| Community members | site/src/assets/images/photos/backyard-social.jpg | 2024-05-16_1715917971-931869_0.jpg |
+| Community members | site/src/assets/images/photos/run-club-selfie.jpg | 2026-04-23_1776954511-019769_2.jpg |
+| Community members | site/src/assets/images/photos/winter-five.jpg | 2023-01-08_1673242364-942339_1.jpg |
+| Community members | site/src/assets/images/photos/lakeside-picnic.jpg | 2024-03-03_1709501583-457379_0.jpg |
+| Community volunteering | site/src/assets/images/photos/second-harvest.jpg | 2024-01-17_1705546321-840949_0.jpg |
+| Community socials | site/src/assets/images/photos/barn-banquet.jpg | 2026-04-12_1776027078-470899_0.jpg |
+| Racing header | site/src/assets/images/photos/race-crew-frosty.jpg | 2023-01-21_1674324661-077579_0.jpg |
+| Racing strip | site/src/assets/images/photos/ski-de-she-trio.jpg | 2023-01-28_1674942658-549799_0.jpg |
+| Racing strip | site/src/assets/images/photos/korte-medals.jpg | 2022-02-25_1645852380-232989_0.jpg |
+| Racing strip | site/src/assets/images/photos/birkie-start.jpg | 2024-02-23_1708738564-829599_1.jpg |
+| Racing strip | site/src/assets/images/photos/finlandia-podium.jpg | 2026-02-14_1771096714-097109_0.jpg |
