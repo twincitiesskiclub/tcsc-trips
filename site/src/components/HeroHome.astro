@@ -1,0 +1,77 @@
+---
+import { Picture } from 'astro:assets';
+import CtaForState from '@/components/CtaForState.astro';
+import { FULL_BLEED } from '@/components/imageWidths';
+
+interface Props {
+  headline: string;
+  /** One factual line under the headline (kept out of the content schema:
+      it changes with design passes, not with editing sessions). */
+  subline?: string;
+  /** astro:assets metadata from the home singleton (undefined → typography fallback). */
+  image?: ImageMetadata;
+  imageAlt: string;
+  state: 'open' | 'coming_soon' | 'closed';
+  cta_open_label: string; cta_open_url?: string;
+  cta_coming_soon_label: string; cta_coming_soon_url?: string;
+  cta_closed_label: string; cta_closed_url?: string;
+}
+const props = Astro.props;
+
+// Widths are passed straight through: Astro's image service clamps each
+// requested width to the source's intrinsic width and appends the intrinsic
+// width itself as a candidate, so it never upscales (see imageWidths.ts).
+---
+<section class="relative bg-navy overflow-hidden">
+  <div class="relative h-[74vh] min-h-[540px]">
+    {props.image && (
+      <Picture
+        src={props.image}
+        formats={['avif', 'webp']}
+        alt={props.imageAlt}
+        widths={FULL_BLEED}
+        sizes="100vw"
+        class="absolute inset-0 w-full h-full object-cover object-[center_38%]"
+        loading="eager"
+        fetchpriority="high"
+        decoding="async"
+      />
+    )}
+    {/* Functional scrim: heavy only at the text zone, light by 45% up so
+        the photograph actually shows. */}
+    <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
+    <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-14 md:pb-20 text-paper">
+      <h1 class="hero-headline font-display font-semibold text-4xl sm:text-5xl md:text-7xl leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
+      {props.subline && (
+        <p class="hero-headline mt-4 text-base md:text-lg text-paper/85 max-w-prose-narrow">{props.subline}</p>
+      )}
+      <div class="mt-8">
+        <CtaForState
+          state={props.state}
+          label_open={props.cta_open_label} url_open={props.cta_open_url}
+          label_coming_soon={props.cta_coming_soon_label} url_coming_soon={props.cta_coming_soon_url}
+          label_closed={props.cta_closed_label} url_closed={props.cta_closed_url}
+        />
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  /* The single orchestrated page-load: photo fades in, headline rises 8px
+     just behind it. One entrance per load, then total stillness (no scroll
+     animation anywhere on the site). Transform/opacity only; the global
+     reduced-motion rule collapses the animations. */
+  @keyframes hero-photo-in {
+    from { opacity: 0; }
+  }
+  @keyframes hero-headline-in {
+    from { opacity: 0; transform: translateY(8px); }
+  }
+  section :global(picture) {
+    animation: hero-photo-in 400ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  .hero-headline {
+    animation: hero-headline-in 250ms cubic-bezier(0.16, 1, 0.3, 1) 120ms both;
+  }
+</style>

@@ -1,0 +1,52 @@
+---
+// TripsTable: a ledger, not a data grid. A labeled column-header row over
+// ruled rows (dates / trip / where) gives one or two trips the dignity of a
+// schedule instead of an orphaned row; the empty state is a ruled placeholder
+// row in the same grammar (static copy, can't flicker). Rows link straight to
+// the trip's tcsc.ski registration page (signup_url); there are no local trip
+// detail pages. entry.data.slug is the DISPLAY NAME (see content.config.ts).
+import { getCollection } from 'astro:content';
+
+const trips = await getCollection('trips');
+trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b.data.dates));
+
+const COLS = 'grid items-baseline gap-x-6 gap-y-1 md:grid-cols-[8rem_1fr_minmax(8rem,auto)]';
+---
+<div>
+  <div class:list={[COLS, 'text-[11px] tracking-wider uppercase text-slate pb-2 border-b border-ink/15 max-md:hidden']}>
+    <span>Dates</span>
+    <span>Trip</span>
+    <span>Where</span>
+  </div>
+  {trips.length === 0 ? (
+    <p class="py-6 border-b border-ink/10 text-slate">
+      No trips posted. New trips are announced here each fall;{' '}
+      <a href="mailto:contact@twincitiesskiclub.org" class="text-mint-deep underline">get in touch</a>{' '}
+      with questions in the meantime.
+    </p>
+  ) : (
+    <ul class="divide-y divide-ink/10 border-b border-ink/10">
+      {trips.map((t) => {
+        const Row = t.data.signup_url ? 'a' : 'div';
+        return (
+          <li>
+            <Row
+              {...(t.data.signup_url ? { href: t.data.signup_url } : {})}
+              class:list={[
+                COLS,
+                'py-6 md:-mx-3 md:px-3',
+                t.data.signup_url && 'group transition-colors duration-150 hover:bg-ink/[0.03]',
+              ]}
+            >
+              <span class="text-sm text-slate tabular-nums">{t.data.dates}</span>
+              <span class="font-display text-lg md:text-xl font-semibold text-navy transition-colors duration-150 group-hover:text-mint-deep">
+                {t.data.slug}
+              </span>
+              <span class="text-sm text-slate">{t.data.location}</span>
+            </Row>
+          </li>
+        );
+      })}
+    </ul>
+  )}
+</div>

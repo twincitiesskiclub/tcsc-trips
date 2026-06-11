@@ -1,0 +1,73 @@
+---
+// /community: community story from the `community` singleton, the grouped
+// "what we've done" takeaways ledger (volunteering / members who coach /
+// socials, mined from club Slack), and the FULL consented photo mosaic (no
+// homeOnly filter).
+import { getEntry, render } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import PhotoMosaic from '@/components/PhotoMosaic.astro';
+import SectionBand from '@/components/SectionBand.astro';
+import { metaDescription } from '@/lib/metaDescription';
+
+const community = await getEntry('community', 'community');
+if (!community) throw new Error('community singleton missing (src/content/pages/community.mdoc)');
+const { Content } = await render(community);
+const takeaways = community.data.takeaways;
+---
+<InnerPageLayout
+  title="Community · Twin Cities Ski Club"
+  description={community.data.intro && metaDescription(community.data.intro)}
+  headline={community.data.headline ?? 'A welcoming community'}
+  subhead={community.data.intro}
+  facts={['Founded 2020', 'Photos by club members']}
+>
+  <div class="mx-auto max-w-3xl px-6 py-12">
+    <div class="prose prose-lg max-w-prose text-ink">
+      <Content />
+    </div>
+  </div>
+  {takeaways.length > 0 && (
+    <SectionBand
+      variant="paper"
+      seam="Club record"
+      heading="What we've done"
+      subhead="A few seasons of volunteering, coaching, and socials."
+    >
+      <div class="space-y-14">
+        {takeaways.map((g) => (
+          <div class="grid gap-4 md:gap-10 md:grid-cols-12">
+            <h3 class="md:col-span-3 text-base font-semibold text-navy pt-5">
+              {g.group}
+            </h3>
+            <div class="md:col-span-9 divide-y divide-ink/10 border-t border-ink/10">
+              {g.items.map((item) => (
+                <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(14rem,18rem)_1fr]">
+                  <div class="font-semibold text-navy">
+                    {item.href ? (
+                      <a
+                        href={item.href}
+                        class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+                      >{item.line}</a>
+                    ) : (
+                      item.line
+                    )}
+                  </div>
+                  {item.detail && <p class="text-ink/80">{item.detail}</p>}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+        {/* The training half of this culture has its own page. */}
+        <p class="text-ink/80">
+          Member-organized workouts are on their own page:{' '}
+          <a
+            href="/extra-training-fun"
+            class="font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+          >Extra training fun</a>.
+        </p>
+      </div>
+    </SectionBand>
+  )}
+  <PhotoMosaic />
+</InnerPageLayout>

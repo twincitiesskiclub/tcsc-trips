@@ -1,0 +1,51 @@
+---
+// /racing: racing story from the `racing` singleton plus the structured
+// races list (date / name / location rows, optional full-width notes).
+import { getEntry, render } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import { metaDescription } from '@/lib/metaDescription';
+
+const racing = await getEntry('racing', 'racing');
+if (!racing) throw new Error('racing singleton missing (src/content/pages/racing.mdoc)');
+const { Content } = await render(racing);
+const races = racing.data.races;
+---
+<InnerPageLayout
+  title="Racing · Twin Cities Ski Club"
+  description={racing.data.intro && metaDescription(racing.data.intro)}
+  headline={racing.data.headline ?? 'Twin Cities Ski Club racers'}
+  subhead={racing.data.intro}
+  facts={['80+ skiers at the 2026 Birkie', 'Racing always voluntary']}
+>
+  <div class="mx-auto max-w-3xl px-6 py-12">
+    <div class="prose prose-lg max-w-prose text-ink">
+      <Content />
+    </div>
+  </div>
+  {races.length > 0 && (
+    <section class="mx-auto max-w-3xl px-6 pb-12">
+      <h2 class="font-display font-semibold text-3xl text-navy">Races</h2>
+      <div class="mt-6 divide-y divide-ink/10">
+        {races.map((r) => (
+          <div class="py-4 grid gap-x-6 gap-y-1 sm:grid-cols-[10rem_1fr_1fr]">
+            {/* date/name/location always render (possibly empty) so the
+                three grid columns never shift when a field is omitted. */}
+            <div class="text-mint-deep text-sm tracking-wider uppercase pt-0.5">{r.date}</div>
+            <div class="font-semibold text-navy">
+              {r.href ? (
+                <a
+                  href={r.href}
+                  class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+                >{r.name}</a>
+              ) : (
+                r.name
+              )}
+            </div>
+            <div class="text-slate">{r.location}</div>
+            {r.notes && <div class="sm:col-span-full text-sm text-ink/80">{r.notes}</div>}
+          </div>
+        ))}
+      </div>
+    </section>
+  )}
+</InnerPageLayout>

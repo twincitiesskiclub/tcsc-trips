@@ -1,0 +1,83 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: light; }
+
+/* Body: Archivo Variable (full character set, all weights).
+   Display: PolySans BulkyWide trial (large headlines only — trial subset
+   covers basic latin A-Z/a-z/0-9 but not apostrophes, hyphens, or parens;
+   Archivo is the fallback for any missing glyphs). Do not use font-display
+   on elements containing punctuation until the full commercial license lands.
+   Swap point for future full-license upgrade: these @font-face blocks +
+   tailwind.config.ts fontFamily.display + FontPreload.astro. */
+@font-face {
+  font-family: 'ArchivoVariable';
+  src: url('/fonts/archivo/ArchivoVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'ArchivoVariable';
+  src: url('/fonts/archivo/ArchivoVariable-Italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'PolySansBulkyWide';
+  src: url('/fonts/polysans/PolySansBulkyWide.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+html {
+  font-family: 'ArchivoVariable', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background: oklch(0.985 0.003 90);
+  color: oklch(0.18 0.04 260);
+}
+
+/* Focus-visible baseline (DESIGN.md): always-visible 2px ring, mint on navy
+   surfaces, navy on paper. The surface utilities set an inherited custom
+   property, so the NEAREST surface ancestor wins regardless of nesting depth
+   (e.g. paper card inside a navy band gets the navy ring). */
+@layer base {
+  :root {
+    --focus-ring-color: theme(colors.navy);
+  }
+  .bg-navy, .bg-navy-deep {
+    --focus-ring-color: theme(colors.mint);
+  }
+  .bg-paper, .bg-paper-card {
+    --focus-ring-color: theme(colors.navy);
+  }
+  :focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+
+/* The display voice: PolySans BulkyWide is already wide by design, so no
+   font-stretch needed. Tracking tightens slightly; weight is baked into the
+   cut (700 in the @font-face). font-semibold at call sites still applies but
+   is redundant — it degrades gracefully if the font is unavailable. */
+@layer utilities {
+  .font-display {
+    font-stretch: 100%;
+    letter-spacing: -0.02em;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}

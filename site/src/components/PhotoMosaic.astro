@@ -1,0 +1,197 @@
+---
+// PhotoMosaic: asymmetric photo grid over the consent-cleared photo pool.
+// Renders nothing at all when no photos qualify (spec: 0 photos, no section).
+//
+// RESOLUTION CONTRACT (a prior implementation shipped ~305px-wide variants
+// stretched into large tiles and a fullscreen lightbox; do not regress):
+// - Tile <img> uses the MOSAIC widths preset. Astro's image service clamps
+//   every requested width to the source's intrinsic width and appends the
+//   intrinsic width itself, so small sources never upscale (see
+//   imageWidths.ts for why the preset is never pre-filtered).
+// - The lightbox NEVER reads the tile's rendered src/currentSrc (that is the
+//   small grid-optimized variant, exactly the prior bug). Each tile button
+//   instead carries data-full / data-full-srcset computed here via
+//   getImage() with the LIGHTBOX widths preset: data-full is the LARGEST
+//   generated candidate (2048w when the source allows, exactly intrinsic
+//   when smaller), used as the <img src> fallback; data-full-srcset is the
+//   full candidate list so browsers on small/low-DPR screens can still pick
+//   a lighter variant.
+import { getCollection } from 'astro:content';
+import { Image, getImage } from 'astro:assets';
+import { MOSAIC, LIGHTBOX } from '@/components/imageWidths';
+
+interface Props {
+  limit?: number;
+  homeOnly?: boolean;
+  /** Optional section header (e.g. on home). Rendered only when the mosaic
+      itself renders, so an empty photo pool can't orphan a heading. `number`
+      is the seam label text (defaults to 'Community'); pass null to render
+      the hairline rule without any label text. */
+  number?: string | null;
+  heading?: string;
+  more_href?: string;
+  more_label?: string;
+}
+const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label } = Astro.props;
+
+const all = await getCollection(
+  'photos',
+  (e) => e.data.photo_consent_recorded === true && (!homeOnly || e.data.show_on_home),
+);
+all.sort((a, b) => a.data.order - b.data.order);
+const photos = typeof limit === 'number' ? all.slice(0, limit) : all;
+
+// Under 12 photos the asymmetric spans leave ragged holes, so fall back to a
+// uniform grid with no span classes.
+const sparse = photos.length < 12;
+
+// Cycle through size classes for asymmetric tiling on desktop.
+//
+// Row sizing (measured in-browser, not theoretical): the dense grid uses
+// auto-rows-fr, so every implicit row equalizes to the largest
+// content-sized row, i.e. the 1x1 aspect-square tiles (one column width).
+// Without it, span tiles distort row heights: an aspect-square col-span-2
+// tile forces a double-height row (gaps under 1x1 neighbors), and a 2x2's
+// extra space distributes across BOTH spanned tracks (299/448/150px rows).
+// Single-row col-span-2 tiles also get md:aspect-auto so they stretch to
+// their 2:1 grid area instead of demanding a 2-column-wide square; the 2x2
+// keeps aspect-square (two uniform rows + gap = square already).
+//
+// Tail note: photo counts of 4 mod 8 (12, 20, 28...) end on the 2x2 tile
+// with empty cells beside it; counts like 15 or 23 finish the last row
+// cleanly, so prefer those when passing `limit`.
+const sizeClasses = [
+  '',
+  'md:col-span-2 md:aspect-auto',
+  '',
+  'md:row-span-2 md:col-span-2',
+  '',
+  '',
+  'md:col-span-2 md:aspect-auto',
+  '',
+];
+
+const tiles = await Promise.all(
+  photos.map(async (photo, i) => {
+    const span = sparse ? '' : sizeClasses[i % sizeClasses.length];
+    // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
+    // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
+    // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
+    // stacked side tiles and remainder cells ~33vw on md+.
+    const sizesAttr = sparse
+      ? i === 0
+        ? '(min-width: 768px) 66vw, 100vw'
+        : '(min-width: 768px) 34vw, 50vw'
+      : span.includes('md:col-span-2')
+        ? '50vw'
+        : '(min-width: 768px) 25vw, 50vw';
+    // Explicit width clamps the FALLBACK rendition: without it, Astro also
+    // generates the plain `src` at full source resolution (a 4000px+ webp
+    // nobody downloads, roughly half the image payload at scale).
+    const full = await getImage({
+      src: photo.data.image,
+      width: Math.min(2048, photo.data.image.width),
+      widths: LIGHTBOX,
+      format: 'webp',
+    });
+    // Defensive loop (a plain reduce throws on an empty candidate list
+    // before the ?? fallback could apply).
+    let largest: (typeof full.srcSet.values)[number] | undefined;
+    for (const candidate of full.srcSet.values) {
+      const w = parseInt(candidate.descriptor ?? '0', 10);
+      if (!largest || w > parseInt(largest.descriptor ?? '0', 10)) largest = candidate;
+    }
+    return {
+      photo,
+      span,
+      sizesAttr,
+      fullSrc: largest?.url ?? full.src,
+      fullSrcset: full.srcSet.attribute,
+    };
+  }),
+);
+
+// Composed sparse fallback: under 12 photos, the first three form one
+// deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
+// stacked side tiles) and the rest run as a uniform grid, so the degraded
+// state reads as composed, not abandoned. Keyed only on photo count (never
+// on homeOnly), so every consumer inherits it.
+const composed = sparse && photos.length >= 3;
+---
+{photos.length > 0 && (
+  <section class:list={['bg-navy pb-20', !heading && 'pt-20']} data-photo-mosaic>
+    {heading && (
+      <div class="max-w-7xl mx-auto px-6 md:px-10 pt-12 md:pt-16">
+        {/* Seam: section name in the Trail Report label voice, hairline
+            running to the right edge (one device family site-wide). */}
+        <div class="flex items-center gap-4">
+          {number && <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">{number}</span>}
+          <span class="h-px flex-1 bg-mint/20" aria-hidden="true"></span>
+        </div>
+        <div class="mb-8 mt-8 flex items-end justify-between gap-6">
+          <h2 class="font-display font-semibold text-3xl md:text-5xl text-paper leading-[1.05]">{heading}</h2>
+          {more_href && more_label && (
+            <a href={more_href} class="shrink-0 text-mint/80 text-sm hover:text-mint">{more_label}</a>
+          )}
+        </div>
+      </div>
+    )}
+    {/* The grid runs edge to edge with hairline gaps: the one section that
+        breaks the page column. data-tag exists for the /community event_tag
+        filtering planned in the spec. */}
+    <div
+      class={composed
+        ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
+        : sparse
+          ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
+          : 'grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
+    >
+      {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
+        <button
+          type="button"
+          class:list={[
+            'group relative overflow-hidden bg-paper-card',
+            composed && i === 0
+              ? 'col-span-2 md:row-span-2 aspect-video'
+              : composed && i < 3
+                ? 'aspect-auto max-md:aspect-square'
+                : 'aspect-square',
+            !composed && span,
+          ]}
+          data-index={i}
+          data-caption={photo.data.caption ?? ''}
+          data-alt={photo.data.alt_text}
+          data-tag={photo.data.event_tag}
+          data-full={fullSrc}
+          data-full-srcset={fullSrcset}
+        >
+          <Image
+            src={photo.data.image}
+            alt={photo.data.alt_text}
+            width={Math.min(1600, photo.data.image.width)}
+            widths={MOSAIC}
+            sizes={sizesAttr}
+            class="absolute inset-0 w-full h-full object-cover"
+            loading="lazy"
+            decoding="async"
+          />
+          {photo.data.caption && (
+            <span
+              class="hidden md:flex absolute inset-0 items-end bg-navy/70 p-4 text-left text-sm text-paper opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100 transition-opacity duration-150"
+              aria-hidden="true"
+            >
+              {photo.data.caption}
+            </span>
+          )}
+        </button>
+      ))}
+    </div>
+  </section>
+)}
+
+<script>
+  // Bundled once per page regardless of the conditional section above;
+  // init() no-ops when no mosaic/lightbox is in the DOM.
+  import { init } from '@/components/PhotoMosaic.client';
+  init();
+</script>

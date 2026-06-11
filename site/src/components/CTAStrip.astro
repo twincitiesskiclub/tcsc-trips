@@ -1,0 +1,21 @@
+---
+interface Props {
+  heading: string;
+  subhead?: string;
+  cta_label: string;
+  cta_url: string;
+}
+const { heading, subhead, cta_label, cta_url } = Astro.props;
+---
+<section class="bg-navy border-t-[3px] border-coral text-paper">
+  <div class="mx-auto max-w-7xl px-6 py-16 md:py-20 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+    <div>
+      <h2 class="font-display font-semibold text-3xl md:text-4xl text-mint leading-tight">{heading}</h2>
+      {subhead && <p class="mt-2 text-paper/75 text-sm md:text-base max-w-xl text-balance">{subhead}</p>}
+    </div>
+    <a
+      href={cta_url}
+      class="inline-flex items-center px-6 py-3 bg-mint text-navy font-semibold rounded-md"
+    >{cta_label}</a>
+  </div>
+</section>

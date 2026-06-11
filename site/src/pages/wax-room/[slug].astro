@@ -1,0 +1,48 @@
+---
+// /wax-room/{slug}: one Wax Room entry. The route param is entry.id (the
+// filename slug); entry.data.slug is the display title. No HeroInner:
+// WaxEntry owns the page h1, so it mounts straight into the layout's main.
+import { getCollection, render } from 'astro:content';
+import type { CollectionEntry } from 'astro:content';
+import { getImage } from 'astro:assets';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import WaxEntry from '@/components/WaxEntry.astro';
+import { metaDescription } from '@/lib/metaDescription';
+
+export async function getStaticPaths() {
+  const entries = await getCollection('wax_entries');
+  return entries.map((e) => ({ params: { slug: e.id }, props: { entry: e } }));
+}
+
+interface Props {
+  entry: CollectionEntry<'wax_entries'>;
+}
+
+const { entry } = Astro.props;
+const { Content } = await render(entry);
+// Per-page og:image from the entry photo when one exists (jpeg for crawler
+// compatibility); BaseLayout absolutizes the path against Astro.site.
+const ogImage = entry.data.photo
+  ? (await getImage({ src: entry.data.photo, width: 1200, format: 'jpeg' })).src
+  : undefined;
+---
+<InnerPageLayout
+  title={entry.data.slug + ' · The Wax Room · Twin Cities Ski Club'}
+  description={metaDescription(
+    entry.data.lede ?? 'A Wax Room field report from Twin Cities Ski Club.',
+  )}
+  ogImage={ogImage}
+>
+  <WaxEntry
+    date={entry.data.date}
+    author_name={entry.data.author_name}
+    author_role={entry.data.author_role}
+    title={entry.data.slug}
+    lede={entry.data.lede}
+    photo={entry.data.photo}
+    photo_alt={entry.data.photo_alt}
+    conditions_snapshot={entry.data.conditions_snapshot}
+  >
+    <Content />
+  </WaxEntry>
+</InnerPageLayout>

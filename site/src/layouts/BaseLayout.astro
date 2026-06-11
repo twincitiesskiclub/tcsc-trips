@@ -1,0 +1,74 @@
+---
+import '@/styles/global.css';
+import FontPreload from '@/components/FontPreload.astro';
+import Lightbox from '@/components/Lightbox.astro';
+
+interface Props {
+  title: string;
+  description?: string;
+  ogImage?: string;
+  variant?: 'home' | 'inner';
+}
+
+const {
+  title,
+  description = 'Twin Cities Ski Club is a nonprofit dedicated to fostering a supportive community for young adults (21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.',
+  // Default OG image lives in public/og/ (see site_meta.og_image convention).
+  ogImage = '/og/og-default.jpg',
+  variant = 'inner',
+} = Astro.props;
+
+const isHome = variant === 'home';
+
+// JSON-LD contact fields: contact singleton removed (F07); literal fallbacks
+// are the canonical values.
+const orgEmail = 'contact@twincitiesskiclub.org';
+const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
+---
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta property="og:image" content={new URL(ogImage, Astro.site).href} />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Twin Cities Ski Club" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="canonical" href={Astro.url.href} />
+    {/* Favicon set: SVG for modern browsers, 32px ICO fallback (also kills
+        the default /favicon.ico 404), 180px PNG for iOS home screens. */}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="icon" href="/favicon.ico" sizes="32x32" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <FontPreload />
+    <script type="application/ld+json" is:inline set:html={JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'SportsOrganization',
+      name: 'Twin Cities Ski Club',
+      alternateName: 'TCSC',
+      url: 'https://twincitiesskiclub.org',
+      email: orgEmail,
+      sport: 'Cross-country skiing',
+      address: {
+        '@type': 'PostalAddress',
+        addressLocality: 'Minneapolis',
+        addressRegion: 'MN',
+        addressCountry: 'US',
+      },
+      sameAs: orgSameAs,
+    })} />
+  </head>
+  <body class={`min-h-svh flex flex-col ${isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}`}>
+    {/* Skip link: every page gives its <main> id="main" (the home page and
+        InnerPageLayout both do). Visually hidden until keyboard-focused. */}
+    <a
+      href="#main"
+      class="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:rounded-md focus:bg-mint focus:px-4 focus:py-2 focus:font-semibold focus:text-navy"
+    >Skip to content</a>
+    <slot />
+    <Lightbox />
+  </body>
+</html>

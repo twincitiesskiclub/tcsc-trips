@@ -29,7 +29,7 @@ Colors expressed in OKLCH, tinted faintly toward the brand hue to avoid pure-whi
 | `navy` | `oklch(0.25 0.06 260)` | `#202A44` | The home page surface (drenched). Hero strips, footer, and navy bands on inner pages. |
 | `navy-deep` | `oklch(0.18 0.05 260)` | derived | Slightly darker navy — used for navy-on-navy elevation in the live conditions strip and nav. Subtle. |
 | `mint` | `oklch(0.91 0.12 155)` | `#AAF0C1` | On navy: primary reading color for headings, key body text, primary CTA fills, the brand-mark ski tracks in the logo. On paper: not used directly (too pale); use `mint-deep` for legibility. |
-| `mint-deep` | `oklch(0.55 0.13 155)` | derived | The accessible mint for text/links on paper. Pairs with paper at ≥4.5:1. |
+| `mint-deep` | `oklch(0.52 0.13 155)` | derived | The accessible mint for text/links on paper. Measured 4.95:1 on paper, 4.74:1 on paper-card. |
 | `coral` | `oklch(0.74 0.16 15)` | `#FF8FA3` | Energy accent. Live indicators (the green dot is mint; the pink dot is coral and means "now / current / open"). Section punctuation. CTA close strip top border. ≤4 uses per page. |
 | `paper` | `oklch(0.985 0.003 90)` | near-white, faintly warm | Inner-page surface. Tinted faintly warm (sand direction) — but not "tinted toward sand because heritage." Tinted because pure white on a sport-club site reads clinical. |
 | `paper-card` | `oklch(0.97 0.004 90)` | slightly darker paper | Embedded content on paper sections (a wax room entry preview, a coach card if needed). Difference is barely visible. |
@@ -192,7 +192,7 @@ Lucide (open source, consistent line weight). Used sparingly: hamburger, lightbo
 - Focus rings: 2px mint on navy, 2px navy on paper. Always visible on keyboard navigation.
 - Contrast verified for the actual pairings used:
   - mint / navy: 8:1 (large text and UI elements)
-  - mint-deep / paper: 5.2:1 (body text on paper)
+  - mint-deep / paper: 4.95:1 (body text on paper; 4.74:1 on paper-card)
   - paper / navy: 14:1 (paper card on home)
   - ink / paper: 17:1 (inner-page body)
   - slate / paper: 7.2:1 (secondary body)

@@ -1,0 +1,13 @@
+# Consent basis: posted by a member in the club Slack #photos-videos;
+# flag for board re-confirmation before DNS cutover (see migration/CONSENT.md).
+slug: Breadwinners
+image: ../../assets/images/photos/breadwinners.jpg
+alt_text: >-
+  Two members grinning with their awards at the Breadwinners race
+caption: >-
+  Breadwinners podium, December.
+event_tag: race
+member_names: []
+order: 30
+show_on_home: false
+photo_consent_recorded: true

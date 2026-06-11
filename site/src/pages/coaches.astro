@@ -1,0 +1,37 @@
+---
+// /coaches: every coach as an alternating editorial split CoachEntry,
+// sorted by order. name comes from c.data.slug, the Keystatic DISPLAY NAME
+// (entry.id is the url slug; see content.config.ts header).
+import { getCollection, render } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import CoachEntry from '@/components/CoachEntry.astro';
+
+const coaches = (await getCollection('coaches')).sort(
+  (a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id),
+);
+const rendered = await Promise.all(
+  coaches.map(async (c) => ({ c, Content: (await render(c)).Content })),
+);
+// Singular headline when exactly one coach exists (spec empty-state rule).
+const headline = coaches.length === 1 ? 'Our coach' : 'Our coaches';
+---
+<InnerPageLayout
+  title="Coaches · Twin Cities Ski Club"
+  description="KJ, Greg, Rebecca, and Michael bring joy, excitement, and knowledge to every practice."
+  headline={headline}
+  facts={['Two seasons a year', 'Practices Tuesday · Thursday']}
+>
+  {rendered.map(({ c, Content }, i) => (
+    <CoachEntry
+      name={c.data.slug}
+      role={c.data.role}
+      photo={c.data.photo}
+      photoAlt={c.data.photo_alt}
+      credentials={c.data.credentials}
+      anchor={c.id}
+      loading={i === 0 ? 'eager' : 'lazy'}
+    >
+      <Content />
+    </CoachEntry>
+  ))}
+</InnerPageLayout>

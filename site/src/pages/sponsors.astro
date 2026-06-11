@@ -1,0 +1,26 @@
+---
+// /sponsors: intro from the `sponsors_page` singleton + the tiered logo
+// wall (SponsorWall renders nothing for empty tiers).
+import { getEntry } from 'astro:content';
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import SponsorWall from '@/components/SponsorWall.astro';
+import { metaDescription } from '@/lib/metaDescription';
+
+const page = await getEntry('sponsors_page', 'sponsors_page');
+if (!page) throw new Error('sponsors_page singleton missing (src/content/pages/sponsors_page.yaml)');
+---
+<InnerPageLayout
+  title="Sponsors · Twin Cities Ski Club"
+  description={page.data.intro && metaDescription(page.data.intro)}
+  headline={page.data.headline ?? 'Meet our sponsors'}
+  subhead={page.data.intro}
+>
+  <div class="mx-auto max-w-5xl px-6 py-12">
+    {/* h2: the tier headings sit directly under the page h1. */}
+    <SponsorWall headingLevel="h2" />
+    <p class="mt-12 text-ink/80">
+      Interested in sponsoring TCSC? Email{' '}
+      <a href="mailto:contact@twincitiesskiclub.org" class="underline underline-offset-2 hover:text-navy transition-colors">contact@twincitiesskiclub.org</a>.
+    </p>
+  </div>
+</InnerPageLayout>

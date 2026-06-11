@@ -1,0 +1,60 @@
+---
+import CtaForState from '@/components/CtaForState.astro';
+import { getNavLinks, isActiveLink } from '@/components/navLinks';
+import { getRegistrationCta } from '@/components/registrationCta';
+
+const links = await getNavLinks();
+const cta = await getRegistrationCta();
+const pathname = Astro.url.pathname;
+---
+<header class="bg-navy text-paper border-b border-mint/10">
+  <div class="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-6">
+    <a href="/" class="flex items-center gap-3.5" aria-label="Twin Cities Ski Club home">
+      <svg width="62" height="20" viewBox="0 0 100 30" aria-hidden="true">
+        <g class="fill-mint">
+          <rect x="0" y="6" width="22" height="4" rx="2" />
+          <rect x="0" y="18" width="22" height="4" rx="2" />
+          <rect x="28" y="6" width="14" height="4" rx="2" />
+          <rect x="28" y="18" width="14" height="4" rx="2" />
+          <rect x="48" y="6" width="14" height="4" rx="2" />
+          <rect x="48" y="18" width="14" height="4" rx="2" />
+          <rect x="68" y="6" width="14" height="4" rx="2" />
+          <rect x="68" y="18" width="14" height="4" rx="2" />
+        </g>
+      </svg>
+      <span class="font-display font-bold uppercase text-[15px] tracking-[0.14em]">TCSC</span>
+    </a>
+
+    <nav aria-label="Primary" class="hidden md:flex items-center gap-7 text-sm text-paper/85">
+      {links.map((l) => {
+        const active = isActiveLink(l.href, pathname);
+        return (
+          <a
+            href={l.href}
+            aria-current={active ? 'page' : undefined}
+            class:list={[
+              'transition-colors duration-150 hover:text-mint',
+              active && 'text-mint underline underline-offset-[10px] decoration-mint/50',
+            ]}
+          >{l.label}</a>
+        );
+      })}
+    </nav>
+
+    <div class="hidden md:flex items-center gap-5">
+      <CtaForState {...cta} />
+    </div>
+
+    <button
+      class="md:hidden p-2.5 -m-2.5 text-paper"
+      aria-label="Open menu"
+      aria-expanded="false"
+      aria-controls="mobile-nav-panel"
+      data-mobile-toggle
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M4 6h16M4 12h16M4 18h16" />
+      </svg>
+    </button>
+  </div>
+</header>

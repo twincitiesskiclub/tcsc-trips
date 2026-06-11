@@ -1,0 +1,79 @@
+---
+// SponsorWall: sponsor logos grouped by tier. Tiers with no sponsors render
+// nothing (no orphan headings). A sponsor without a url gets a plain <div>
+// wrapper, never a dead `<a href="#">` (dynamic Wrapper tag below). Logo alt
+// text is the sponsor's display name (entry.data.slug, see content.config.ts
+// header).
+//
+// headingLevel keeps the document outline contiguous: the sponsors page
+// mounts the wall directly under its h1, so it passes 'h2'; the default
+// 'h3' suits mounts beneath an existing h2.
+import { getCollection } from 'astro:content';
+import { Image } from 'astro:assets';
+import { THUMB } from '@/components/imageWidths';
+
+interface Props {
+  headingLevel?: 'h2' | 'h3';
+}
+const { headingLevel: Heading = 'h3' } = Astro.props;
+
+const sponsors = await getCollection('sponsors');
+
+const tiers: Array<{ tier: 'trailblazer' | 'supporter' | 'friend'; label: string }> = [
+  { tier: 'trailblazer', label: 'Trailblazer' },
+  { tier: 'supporter', label: 'Supporter' },
+  { tier: 'friend', label: 'Friend' },
+];
+
+const tierGroups = tiers
+  .map(({ tier, label }) => ({
+    label,
+    items: sponsors
+      .filter((s) => s.data.tier === tier)
+      .sort((a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id)),
+  }))
+  .filter((g) => g.items.length > 0);
+---
+{tierGroups.map(({ label, items }) => {
+  // Scale the layout to the content: small groups (fewer than 4) render
+  // larger logos in a flex row; 4+ items use the standard 4-col grid.
+  // Tier headings are suppressed when only one tier group exists.
+  const showHeading = tierGroups.length > 1;
+  const isSmall = items.length < 4;
+  return (
+    <section class="mt-12 first:mt-0">
+      {showHeading && (
+        <Heading class="font-display font-semibold text-2xl text-navy">{label}</Heading>
+      )}
+      <div
+        class={
+          isSmall
+            ? (showHeading ? 'mt-6' : '') + ' flex flex-wrap gap-12 items-center'
+            : (showHeading ? 'mt-6' : '') + ' grid grid-cols-2 md:grid-cols-4 gap-8 items-center'
+        }
+      >
+        {items.map((s) => {
+          const Wrapper = s.data.url ? 'a' : 'div';
+          // Small groups: taller max-h and a generous max-w so wide lockups
+          // get proportional optical weight alongside square marks.
+          const imgClass = isSmall
+            ? 'max-h-20 max-w-[280px] h-auto w-auto'
+            : 'max-h-16 max-w-full h-auto w-auto';
+          return (
+            <Wrapper {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}>
+              <Image
+                src={s.data.logo}
+                alt={s.data.slug}
+                widths={THUMB}
+                width={Math.min(600, s.data.logo.width)}
+                sizes={isSmall ? '280px' : '(min-width: 768px) 200px, 40vw'}
+                class={imgClass}
+                loading="lazy"
+              />
+            </Wrapper>
+          );
+        })}
+      </div>
+    </section>
+  );
+})}

@@ -1,0 +1,111 @@
+---
+import { getNavLinks, isActiveLink } from '@/components/navLinks';
+
+const links = await getNavLinks();
+const pathname = Astro.url.pathname;
+---
+<div
+  id="mobile-nav-panel"
+  data-mobile-panel
+  role="dialog"
+  aria-modal="true"
+  aria-label="Menu"
+  class="fixed inset-0 z-50 bg-navy text-paper p-8 hidden flex-col"
+  aria-hidden="true"
+>
+  <button class="self-end p-2.5 -m-2.5" aria-label="Close menu" data-mobile-close>
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+      <path d="M6 6l12 12M6 18L18 6" />
+    </svg>
+  </button>
+
+  {/* "Mobile", not "Primary": the desktop header nav already owns that
+      name and both landmarks coexist in the DOM. */}
+  <nav aria-label="Mobile" class="flex-1 flex flex-col justify-center gap-6 text-2xl">
+    {links.map((l) => {
+      const active = isActiveLink(l.href, pathname);
+      return (
+        <a
+          href={l.href}
+          aria-current={active ? 'page' : undefined}
+          class:list={['hover:text-mint', active && 'text-mint']}
+        >{l.label}</a>
+      );
+    })}
+  </nav>
+
+  <div class="mt-auto">
+    <slot name="cta" />
+  </div>
+</div>
+
+<style>
+  /* Opening transition only (closing stays instant): panel fades, the link
+     list rises 8px. Transform/opacity only; the global reduced-motion rule
+     collapses both. */
+  [data-mobile-panel] {
+    opacity: 0;
+    transition: opacity 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-mobile-panel] nav {
+    transform: translateY(8px);
+    transition: transform 200ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-mobile-panel][data-open='true'] {
+    opacity: 1;
+  }
+  [data-mobile-panel][data-open='true'] nav {
+    transform: translateY(0);
+  }
+</style>
+
+<script>
+  // Lifecycle assumptions: (1) no ClientRouter / view transitions, so this
+  // runs once per full page load; (2) exactly one panel + toggle per page.
+  const toggle = document.querySelector<HTMLButtonElement>('[data-mobile-toggle]');
+  const panel = document.querySelector<HTMLElement>('[data-mobile-panel]');
+  const closeBtn = document.querySelector<HTMLButtonElement>('[data-mobile-close]');
+  if (toggle && panel && closeBtn) {
+    const open = () => {
+      panel.classList.remove('hidden');
+      panel.classList.add('flex');
+      panel.setAttribute('aria-hidden', 'false');
+      toggle.setAttribute('aria-expanded', 'true');
+      document.body.style.overflow = 'hidden';
+      // Two frames so the display change commits before the transition
+      // starts (one rAF can coalesce with the style flush).
+      requestAnimationFrame(() => requestAnimationFrame(() => { panel.dataset.open = 'true'; }));
+      closeBtn.focus();
+    };
+    const close = () => {
+      // Closing is instant by design; only opening eases in.
+      delete panel.dataset.open;
+      panel.classList.add('hidden');
+      panel.classList.remove('flex');
+      panel.setAttribute('aria-hidden', 'true');
+      toggle.setAttribute('aria-expanded', 'false');
+      document.body.style.overflow = '';
+      toggle.focus();
+    };
+    toggle.addEventListener('click', open);
+    closeBtn.addEventListener('click', close);
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !panel.classList.contains('hidden')) close();
+    });
+    // Wrap Tab focus inside the open panel.
+    panel.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      const focusables = panel.querySelectorAll<HTMLElement>('a[href], button');
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (!first || !last) return;
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    });
+  }
+</script>

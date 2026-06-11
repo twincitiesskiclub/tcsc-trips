@@ -18,6 +18,7 @@ Gemfile.lock
 # Python files
 __pycache__
 venv
+env/
 
 # PHP files
 vendor
@@ -49,3 +50,14 @@ validate_posted_ts.json
 
 # Claude Code dynamic-workflow worktrees (never commit)
 .claude/worktrees/
+
+# Wix scrape image dump (~160MB of full-resolution originals; audit trail
+# lives in migration/images.csv — images stay on disk for the content port)
+migration/images/
+migration/slack_photos/
+migration/survey/
+# Slack channel extracts + mined fact sheets (contain member names; the
+# 2026-06-10 community/extra-training/dry-tri content cites them)
+migration/slack_facts/
+migration/survey-2026-06-10/
+.impeccable/

@@ -1,0 +1,138 @@
+---
+// Live conditions strip: current temp + wax recommendation at four Twin Cities
+// ski areas, fetched client-side from the Flask /api/conditions endpoint.
+interface Props {
+  variant?: 'prominent' | 'compact';
+}
+const { variant = 'prominent' } = Astro.props;
+const apiUrl = import.meta.env.PUBLIC_CONDITIONS_API_URL ?? 'https://tcsc.ski/api/conditions';
+// Coupled to LOCATIONS in app/conditions/locations.py (Flask repo). Names
+// are server-rendered so the strip reads as four named venues even before
+// hydration or when the API is unreachable; the client overwrites them with
+// the API's names on every successful fetch. The fifth cell is the Birkie
+// likelihood status (payload.birkie), not a venue.
+const locations = [
+  { id: 'wirth', name: 'Theo' },
+  { id: 'elm', name: 'Elm' },
+  { id: 'hyland', name: 'Hyland' },
+  { id: 'telemark', name: 'Telemark' },
+];
+---
+<section
+  class={variant === 'prominent'
+    ? 'bg-navy-deep text-paper border-y border-mint/10'
+    // Compact strip: solid navy-deep (like prominent), NOT bg-navy/40: the
+    // translucent navy over the paper page background landed text-paper/70
+    // at 1.91:1 (axe fail); on solid navy-deep it measures 9.1:1 (AA pass).
+    : 'bg-navy-deep text-paper text-xs border-t border-mint/10'}
+  data-live-conditions
+  data-api-url={apiUrl}
+  aria-label="Current ski conditions"
+>
+  <span class="sr-only" aria-live="polite" data-announcer></span>
+  {variant === 'prominent' ? (
+    <>
+      <div class="mx-auto max-w-7xl px-6 pt-3 pb-2 flex items-baseline justify-between gap-4">
+        <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">Trail report</span>
+        <span class="text-[11px] text-coral" data-updated>Loading conditions…</span>
+      </div>
+      <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
+        {/* Venue cells are desktop-only: on a phone the full grid is
+            overwhelming, so mobile gets just the Birkie fever cell. */}
+        {locations.map(({ id, name }) => (
+          <div
+            data-location={id}
+            class="max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5"
+          >
+            <div class="text-[10px] tracking-widest uppercase text-paper/55" data-name>{name}</div>
+            <div class="mt-1 flex items-baseline gap-2">
+              <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-temp>·</span>
+              <span class="text-[11px] text-paper/60" data-feels></span>
+            </div>
+            {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
+                the post-hydration wax label can wrap without pushing the hero
+                down (CLS guard). */}
+            <div class="text-xs text-paper/70 mt-1 min-h-8 flex items-start gap-1.5">
+              <span class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0" data-wax-chip hidden></span>
+              <span data-wax>·</span>
+            </div>
+          </div>
+        ))}
+        {/* Fifth cell: Birkie fever. The big number reads like the venue
+            temperature cells beside it, except it's your fever (the
+            likelihood, on a thermometer: 98.6 in June, 104 when the trail
+            skis good in the race window). The cell is also a button:
+            clicking plays the club's Birkie Fever song (lazy Audio,
+            nothing fetched until the click). */}
+        <button
+          type="button"
+          data-birkie
+          data-birkie-audio="/audio/birkie-fever.mp3"
+          aria-pressed="false"
+          aria-label="Birkie fever. Press to play the song."
+          class="group py-1 text-left col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
+        >
+          <div class="text-[10px] tracking-widest uppercase text-paper/55">
+            Birkie fever
+            <span class="ml-1 text-mint/50 transition-colors duration-150 group-hover:text-mint" data-fever-note aria-hidden="true">♪</span>
+          </div>
+          <div class="mt-1">
+            <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
+          </div>
+          <div class="text-xs text-paper/70 mt-1 min-h-8" data-birkie-detail>·</div>
+        </button>
+      </div>
+    </>
+  ) : (
+    <div class="mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
+      {/* Venue lines are desktop-only here too; mobile keeps one line of
+          Birkie fever. */}
+      {locations.map(({ id, name }) => (
+        <div data-location={id} class="max-md:hidden flex items-baseline gap-1.5">
+          <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
+          <span class="font-display text-paper" data-temp>·</span>
+          <span data-wax>·</span>
+        </div>
+      ))}
+      <div data-birkie class="flex items-baseline gap-1.5">
+        <span class="tracking-widest uppercase text-mint">Birkie</span>
+        <span class="font-display text-paper" data-birkie-word>·</span>
+      </div>
+    </div>
+  )}
+</section>
+
+<style>
+  /* First-fill entrance (group fade, no stagger): cells sit at opacity 0
+     only between client init and the first render, keyed on data attributes
+     the client sets, so no-JS visitors always see the server-rendered names
+     and every 5-minute refresh after first paint is inert by construction.
+     The client also arms a timeout backstop so a slow API can't hold the
+     strip invisible. Transform/opacity only; the global reduced-motion rule
+     collapses the transition. */
+  [data-live-conditions] [data-location],
+  [data-live-conditions] [data-birkie] {
+    transition:
+      opacity 250ms cubic-bezier(0.16, 1, 0.3, 1),
+      transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  [data-live-conditions][data-lc-initialized='true']:not([data-filled='true']) [data-location],
+  [data-live-conditions][data-lc-initialized='true']:not([data-filled='true']) [data-birkie] {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  /* Wax chips: the dot's color IS the recommendation (the literal color of
+     the glide wax for the band), set per-render via data-band. Deliberate
+     non-token colors: this is data encoding, not palette decoration, muted
+     to sit quietly on navy-deep. */
+  .wax-chip[data-band='green'] { background: oklch(0.62 0.13 150); }
+  .wax-chip[data-band='blue'] { background: oklch(0.62 0.12 245); }
+  .wax-chip[data-band='purple'] { background: oklch(0.62 0.12 300); }
+  .wax-chip[data-band='red'] { background: oklch(0.62 0.15 25); }
+</style>
+
+<script>
+  import { init } from '@/components/LiveConditions.client';
+  init();
+</script>
