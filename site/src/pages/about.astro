@@ -16,7 +16,10 @@ const { Content } = await render(about);
   description={about.data.intro && metaDescription(about.data.intro)}
   headline={about.data.headline ?? 'About Twin Cities Ski Club'}
   subhead={about.data.intro}
-  facts={['501(c)(3) nonprofit', 'Minneapolis · St. Paul']}
+  facts={[
+    { value: '501(c)(3) nonprofit', label: 'Status' },
+    { value: 'Minneapolis · St. Paul', label: 'Based in' },
+  ]}
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
     <div class="prose prose-lg max-w-prose text-ink [&_h2]:font-semibold [&_h2]:tracking-tight">

@@ -19,7 +19,10 @@ const takeaways = community.data.takeaways;
   description={community.data.intro && metaDescription(community.data.intro)}
   headline={community.data.headline ?? 'A welcoming community'}
   subhead={community.data.intro}
-  facts={['Founded 2020', 'Photos by club members']}
+  facts={[
+    { value: '2020', label: 'Founded' },
+    { value: 'Photos by club members', label: 'Credits' },
+  ]}
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
     <div class="prose prose-lg max-w-prose text-ink">

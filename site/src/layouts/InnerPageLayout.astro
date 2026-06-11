@@ -24,6 +24,7 @@ import HeroInner from '@/components/HeroInner.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
+import type { Fact } from '@/components/heroFacts';
 
 interface Props {
   title: string;
@@ -32,9 +33,13 @@ interface Props {
   headline?: string;
   subhead?: string;
   /** Static org facts for the masthead's narrow column (HeroInner). */
-  facts?: string[];
+  facts?: Fact[];
+  /** Optional full-bleed photo band under the masthead (HeroInner). */
+  photo?: ImageMetadata;
+  photoAlt?: string;
+  photoPosition?: string;
 }
-const { title, description, ogImage, headline, subhead, facts } = Astro.props;
+const { title, description, ogImage, headline, subhead, facts, photo, photoAlt, photoPosition } = Astro.props;
 const cta = await getRegistrationCta();
 ---
 <BaseLayout title={title} variant="inner" description={description} ogImage={ogImage}>
@@ -45,7 +50,16 @@ const cta = await getRegistrationCta();
   {/* The club's pulse sits under the nav on every page, not above the
       footer: a snow club leads with the snow. */}
   <LiveConditions variant="compact" />
-  {headline && <HeroInner headline={headline} subhead={subhead} facts={facts} />}
+  {headline && (
+    <HeroInner
+      headline={headline}
+      subhead={subhead}
+      facts={facts}
+      photo={photo}
+      photoAlt={photoAlt}
+      photoPosition={photoPosition}
+    />
+  )}
   <main id="main" class="bg-paper flex-1">
     <slot />
   </main>

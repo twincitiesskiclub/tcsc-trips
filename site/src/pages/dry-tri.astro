@@ -25,7 +25,11 @@ const legs = [
   description={d.intro && metaDescription(d.intro)}
   headline={d.headline ?? 'The Dry Tri'}
   subhead={d.intro}
-  facts={['Roll · Ride · Run', 'Carver Park Reserve', 'First held October 2025']}
+  facts={[
+    { value: 'Roll · Ride · Run', label: 'Format' },
+    { value: 'Carver Park Reserve', label: 'Venue' },
+    { value: 'October 2025', label: 'First held' },
+  ]}
 >
   {legs.length === 3 && (
     <section class="mx-auto max-w-7xl px-6 md:px-10 pt-14 md:pt-20" aria-label="The three legs">

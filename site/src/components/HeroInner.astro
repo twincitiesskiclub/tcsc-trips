@@ -1,15 +1,28 @@
 ---
 // Ruled two-cell ledger masthead: H1 in the wide column, page-specific
-// STATIC org facts bottom-baselined in the narrow column (build-time
+// STATIC org facts bottom-baselined in the narrow column as a stat stack
+// (value over small-caps label, behind a vertical hairline; build-time
 // strings only; live data belongs exclusively to the conditions strip).
-// With no facts the band collapses to a single column, no hole. The single
-// floating-H1 hero this replaces made five pages wear one shape.
+// With no facts the band collapses to a single column, no hole.
+// Optional `photo` renders a full-bleed photo band directly under the
+// masthead grid (About: team photo, Community: canoe social, Racing: race
+// crew) - the answer to "the pages feel blank" without inventing a new
+// hero shape per page.
+import { Image } from 'astro:assets';
+import { FULL_BLEED } from '@/components/imageWidths';
+import type { Fact } from '@/components/heroFacts';
+
 interface Props {
   headline: string;
   subhead?: string;
-  facts?: string[];
+  facts?: Fact[];
+  photo?: ImageMetadata;
+  /** Required in practice for content photos; omit only for a genuinely decorative band. */
+  photoAlt?: string;
+  /** CSS object-position for the band crop, e.g. "center 40%". */
+  photoPosition?: string;
 }
-const { headline, subhead, facts = [] } = Astro.props;
+const { headline, subhead, facts = [], photo, photoAlt, photoPosition } = Astro.props;
 ---
 <section class="bg-paper text-ink border-y border-ink/15">
   <div class="mx-auto max-w-7xl px-6 py-10 md:py-14 grid gap-x-10 gap-y-6 md:grid-cols-12">
@@ -18,9 +31,27 @@ const { headline, subhead, facts = [] } = Astro.props;
       {subhead && <p class="mt-4 text-lg md:text-xl text-slate max-w-prose">{subhead}</p>}
     </div>
     {facts.length > 0 && (
-      <ul class="md:col-span-3 md:col-start-10 self-end text-sm text-slate space-y-1 tabular-nums">
-        {facts.map((f) => <li>{f}</li>)}
+      <ul class="md:col-span-3 md:col-start-10 self-end md:border-l md:border-ink/15 md:pl-6 space-y-3">
+        {facts.map((f) => (
+          <li>
+            <div class="font-display font-semibold text-mint-deep text-base md:text-lg leading-tight">{f.value}</div>
+            <div class="text-[11px] tracking-[0.14em] uppercase text-slate mt-0.5">{f.label}</div>
+          </li>
+        ))}
       </ul>
     )}
   </div>
+  {photo && (
+    <Image
+      src={photo}
+      alt={photoAlt ?? ''}
+      widths={FULL_BLEED}
+      sizes="100vw"
+      class="w-full h-[230px] md:h-[280px] object-cover"
+      style={photoPosition ? `object-position: ${photoPosition}` : undefined}
+      loading="eager"
+      fetchpriority="high"
+      decoding="async"
+    />
+  )}
 </section>
