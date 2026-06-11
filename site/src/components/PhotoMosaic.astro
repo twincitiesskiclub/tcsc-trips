@@ -25,13 +25,14 @@ interface Props {
   homeOnly?: boolean;
   /** Optional section header (e.g. on home). Rendered only when the mosaic
       itself renders, so an empty photo pool can't orphan a heading. `number`
-      is the seam label text (defaults to 'Community'). */
-  number?: string;
+      is the seam label text (defaults to 'Community'); pass null to render
+      the hairline rule without any label text. */
+  number?: string | null;
   heading?: string;
   more_href?: string;
   more_label?: string;
 }
-const { limit, homeOnly = false, number, heading, more_href, more_label } = Astro.props;
+const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label } = Astro.props;
 
 const all = await getCollection(
   'photos',
@@ -124,7 +125,7 @@ const composed = sparse && photos.length >= 3;
         {/* Seam: section name in the Trail Report label voice, hairline
             running to the right edge (one device family site-wide). */}
         <div class="flex items-center gap-4">
-          <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">{number ?? 'Community'}</span>
+          {number && <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">{number}</span>}
           <span class="h-px flex-1 bg-mint/20" aria-hidden="true"></span>
         </div>
         <div class="mb-8 mt-8 flex items-end justify-between gap-6">

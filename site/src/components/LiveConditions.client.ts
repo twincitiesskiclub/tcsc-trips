@@ -35,6 +35,15 @@ function renderInto(root: HTMLElement, data: Resp) {
   if (data.error || !Array.isArray(data.locations) || data.locations.length === 0) {
     return renderFailure(root);
   }
+  // Restore venue cells that were hidden during off-season, and remove any
+  // injected dryland label so the grid layout comes back cleanly.
+  root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
+    el.hidden = false;
+    // Inline display is the actual hide mechanism (the compact cells carry a
+    // `flex` class that out-specifies the UA [hidden] rule).
+    el.style.removeProperty('display');
+  });
+  root.querySelector('[data-dryland-label]')?.remove();
   const announcements: string[] = [];
   data.locations.forEach((loc) => {
     const el = root.querySelector(`[data-location="${loc.id}"]`) as HTMLElement | null;
@@ -84,15 +93,41 @@ function renderFailure(root: HTMLElement) {
   // outage.
   const offSeason = new Date().getMonth() + 1 >= 4 && new Date().getMonth() + 1 <= 10;
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
+    // Clear temp so the server-rendered middot placeholder does not dangle.
+    setText(el, '[data-temp]', '');
     setText(el, '[data-wax]', offSeason ? 'Dryland season' : 'No report');
     setText(el, '[data-feels]', '');
     const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
     if (chip) chip.hidden = true;
+    // Off-season: hide the four venue cells entirely; the stamp already
+    // carries the message for the prominent variant, and the compact variant
+    // will show one "Dryland season" label instead of four. Inline display,
+    // not the hidden attribute: the compact cells' `flex` class would
+    // out-specify the UA [hidden] rule.
+    if (offSeason) {
+      el.hidden = true;
+      el.style.display = 'none';
+    }
   });
-  // Fever scale matches app/conditions/birkie.py: 98.6 means summer.
+  // Inject a single "Dryland season" label before the Birkie cell in the
+  // compact variant. The prominent variant relies on the stamp line.
+  // Distinguish compact (no [data-updated] stamp) from prominent.
+  const isCompact = !root.querySelector('[data-updated]');
   const birkie = root.querySelector('[data-birkie]') as HTMLElement | null;
+  if (offSeason && isCompact && birkie) {
+    if (!root.querySelector('[data-dryland-label]')) {
+      const label = document.createElement('span');
+      label.dataset.drylandLabel = '';
+      // max-md:hidden keeps the mobile compact strip as the single Birkie
+      // line, matching the venue cells it replaces.
+      label.className = 'max-md:hidden flex items-baseline gap-1.5 text-paper/70';
+      label.textContent = 'Dryland season';
+      birkie.parentElement?.insertBefore(label, birkie);
+    }
+  }
+  // Fever scale matches app/conditions/birkie.py: 98.6 means summer.
   if (birkie) {
-    setText(birkie, '[data-birkie-word]', offSeason ? '98.6°' : '·');
+    setText(birkie, '[data-birkie-word]', offSeason ? '98.6°' : '');
     setText(birkie, '[data-birkie-detail]', offSeason ? 'No fever yet. Birkie talk starts in November.' : 'No report');
   }
   delete root.dataset.updatedAt;

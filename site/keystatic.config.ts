@@ -74,7 +74,7 @@ export default config({
           ],
           defaultValue: 'closed',
         }),
-        cta_open_label: fields.text({ label: 'CTA label when open', defaultValue: 'Register for the season →' }),
+        cta_open_label: fields.text({ label: 'CTA label when open', defaultValue: 'Register for the season' }),
         cta_open_url: fields.url({ label: 'CTA URL when open' }),
         cta_coming_soon_label: fields.text({ label: 'CTA label when coming soon', defaultValue: 'Get on the list' }),
         cta_coming_soon_url: fields.url({ label: 'CTA URL when coming soon' }),
@@ -212,17 +212,6 @@ export default config({
         run_photo_alt: fields.text({ label: 'Run photo alt text' }),
         register_url: fields.url({ label: 'Registration URL' }),
         results_url: fields.url({ label: 'Latest results URL' }),
-      },
-    }),
-
-    contact: singleton({
-      label: 'Contact page',
-      path: 'src/content/pages/contact',
-      schema: {
-        email: fields.text({ label: 'Email' }),
-        mailing_address: fields.text({ label: 'Mailing address', multiline: true }),
-        instagram_url: fields.url({ label: 'Instagram URL' }),
-        slack_invite_url: fields.url({ label: 'Slack invite URL' }),
       },
     }),
 

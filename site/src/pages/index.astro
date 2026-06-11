@@ -8,6 +8,7 @@ import { getEntry } from 'astro:content';
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Nav from '@/components/Nav.astro';
 import MobileNavPanel from '@/components/MobileNavPanel.astro';
+import CtaForState from '@/components/CtaForState.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
 import HeroHome from '@/components/HeroHome.astro';
 import MissionPanel from '@/components/MissionPanel.astro';
@@ -43,13 +44,13 @@ const ctaStripLabel =
     ? cta.label_open
     : cta.state === 'coming_soon'
       ? cta.label_coming_soon
-      : `${cta.label_closed} →`;
+      : cta.label_closed;
 // Honest about the registration window when closed (the original site's
 // register page says the next period "will open this Fall").
 const ctaStripSubhead =
   cta.state === 'open'
-    ? 'Ages 21-35 in the Twin Cities. Intermediate ability and up. No racing required.'
-    : 'Registration reopens in the fall. Ages 21-35 in the Twin Cities, intermediate ability and up.';
+    ? 'Intermediate ability and up. No racing required.'
+    : 'Registration reopens in the fall. Intermediate ability and up, no racing required.';
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -58,7 +59,9 @@ const ctaStripSubhead =
   ogImage={meta?.data.og_image}
 >
   <Nav />
-  <MobileNavPanel />
+  <MobileNavPanel>
+    <CtaForState slot="cta" {...cta} />
+  </MobileNavPanel>
   <LiveConditions variant="prominent" />
   <main id="main">
   <HeroHome
@@ -72,12 +75,12 @@ const ctaStripSubhead =
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
-  <SectionBand variant="navy" seam="Practices" heading="Year-round cross-country ski training.">
-    <SeasonsGrid variant="navy" />
+  <SectionBand variant="navy" seam="Practices">
+    <SeasonsGrid variant="navy" headingLevel="h2" />
   </SectionBand>
   <PhotoMosaic
     homeOnly={true}
-    number="Community"
+    number={null}
     heading="A welcoming community"
     more_href="/community"
     more_label="More from the community"

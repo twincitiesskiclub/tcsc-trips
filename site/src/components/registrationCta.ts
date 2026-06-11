@@ -21,7 +21,7 @@ export async function getRegistrationCta(): Promise<RegistrationCta> {
   const d = home?.data;
   return {
     state: d?.registration_state ?? 'closed',
-    label_open: d?.cta_open_label ?? 'Register for the season →',
+    label_open: d?.cta_open_label ?? 'Register for the season',
     url_open: d?.cta_open_url ?? 'https://tcsc.ski',
     label_coming_soon: d?.cta_coming_soon_label ?? 'Get on the list',
     url_coming_soon: d?.cta_coming_soon_url,

@@ -55,7 +55,6 @@ CONTENT_MAP: dict[str, list[str]] = {
         'site/src/content/pages/sponsors_page.yaml',
         'site/src/content/sponsors/*.yaml',
     ],
-    'contact': ['site/src/content/pages/contact.yaml'],
     'sisu-information': ['site/src/content/trips/sisu-ski-fest.mdoc'],
 }
 
@@ -69,6 +68,7 @@ REDIRECT_SLUGS = {
     'trip-confirmation',   # Wix form thank-you page; obsolete -> /
     'confirmation',        # Wix form thank-you page; obsolete -> /
     'trip-information',    # stale Hayward trip page -> /trips
+    'contact',             # retired 2026-06-10; footer carries contact -> /
 }
 
 # Slugs waived entirely (neither content nor redirect), with reasons.

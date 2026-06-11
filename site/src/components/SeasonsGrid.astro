@@ -7,8 +7,12 @@ import { getCollection } from 'astro:content';
 
 interface Props {
   variant?: 'navy' | 'paper';
+  /** Heading level for the season name. Home passes 'h2' after the band
+      heading is removed; /about keeps the default 'h3'. */
+  headingLevel?: 'h2' | 'h3';
 }
-const { variant = 'navy' } = Astro.props;
+const { variant = 'navy', headingLevel = 'h3' } = Astro.props;
+const HeadingTag = headingLevel;
 
 const seasons = await getCollection('practice_seasons');
 seasons.sort((a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id));
@@ -35,31 +39,37 @@ const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
 const accent = variant === 'navy' ? 'text-mint' : 'text-mint-deep';
 ---
 {seasons.length > 0 && (
-  <div
-    class:list={[
-      'grid md:grid-cols-2 gap-px md:[&>:last-child:nth-child(odd)]:col-span-2',
-      hairline,
-    ]}
-  >
-    {seasons.map((s) => (
-      <div class:list={['p-8 md:p-10', surface]}>
-        <p class:list={['text-sm uppercase tracking-widest', accent]}>{s.data.date_range}</p>
-        <h3 class="mt-3 font-display font-semibold text-2xl md:text-3xl">{s.data.slug}</h3>
-        <p class:list={['mt-2 text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
-        {/* Dues transparency, verbatim from the club's register page: the fee
-            is membership in something, not a price tag. */}
-        <p class:list={['mt-1 text-sm', variant === 'navy' ? 'text-paper/60' : 'text-slate']}>
-          Covers coaching, workout space reservations, and the season's odds and ends.
-        </p>
-        <p class="mt-4 max-w-prose">{s.data.summary}</p>
-        {s.data.what_included.length > 0 && (
-          <ul class="mt-6 space-y-1 text-sm">
-            {s.data.what_included.map((item) => (
-              <li class="before:content-['·'] before:mr-2">{item}</li>
-            ))}
-          </ul>
-        )}
-      </div>
-    ))}
+  <div>
+    <div
+      class:list={[
+        'grid md:grid-cols-2 gap-px md:[&>:last-child:nth-child(odd)]:col-span-2',
+        hairline,
+      ]}
+    >
+      {seasons.map((s) => (
+        <div class:list={['p-8 md:p-10', surface]}>
+          <p class:list={['text-sm', variant === 'navy' ? 'text-paper/60' : 'text-slate']}>{s.data.date_range}</p>
+          <HeadingTag class="mt-3 font-display font-semibold text-2xl md:text-3xl">{s.data.slug}</HeadingTag>
+          <p class:list={['mt-2 text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
+          <p class="mt-4 max-w-prose">{s.data.summary}</p>
+          {s.data.what_included.length > 0 && (
+            <ul class="mt-6 space-y-1 text-sm">
+              {s.data.what_included.map((item) => (
+                <li class="before:content-['·'] before:mr-2">{item}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      ))}
+    </div>
+    {/* Dues transparency and shared practice details, rendered once below
+        both season columns. Fee line is verbatim from the club's register
+        page; practices line is composed from the items that were identical
+        across both season yamls. */}
+    <div class:list={['px-8 md:px-10 py-6', surface]}>
+      <p class:list={['text-sm', variant === 'navy' ? 'text-paper/60' : 'text-slate']}>
+        Organized evening practices twice per week, coached by KJ, Greg, Rebecca, and Michael. Dues cover coaching, workout space reservations, and the season's odds and ends.
+      </p>
+    </div>
   </div>
 )}

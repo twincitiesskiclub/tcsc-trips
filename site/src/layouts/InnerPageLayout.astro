@@ -19,9 +19,11 @@
 import BaseLayout from '@/layouts/BaseLayout.astro';
 import Nav from '@/components/Nav.astro';
 import MobileNavPanel from '@/components/MobileNavPanel.astro';
+import CtaForState from '@/components/CtaForState.astro';
 import HeroInner from '@/components/HeroInner.astro';
 import LiveConditions from '@/components/LiveConditions.astro';
 import Footer from '@/components/Footer.astro';
+import { getRegistrationCta } from '@/components/registrationCta';
 
 interface Props {
   title: string;
@@ -33,15 +35,18 @@ interface Props {
   facts?: string[];
 }
 const { title, description, ogImage, headline, subhead, facts } = Astro.props;
+const cta = await getRegistrationCta();
 ---
 <BaseLayout title={title} variant="inner" description={description} ogImage={ogImage}>
   <Nav />
-  <MobileNavPanel />
+  <MobileNavPanel>
+    <CtaForState slot="cta" {...cta} />
+  </MobileNavPanel>
   {/* The club's pulse sits under the nav on every page, not above the
       footer: a snow club leads with the snow. */}
   <LiveConditions variant="compact" />
   {headline && <HeroInner headline={headline} subhead={subhead} facts={facts} />}
-  <main id="main" class="bg-paper">
+  <main id="main" class="bg-paper flex-1">
     <slot />
   </main>
   <Footer />

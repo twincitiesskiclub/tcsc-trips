@@ -40,6 +40,11 @@ services:
       - type: redirect
         source: /confirmation
         destination: /
+      - type: redirect
+        # Page retired 2026-06-10 (polish pass #4): footer carries contact
+        # info site-wide. Redirect keeps old Wix bookmarks working.
+        source: /contact
+        destination: /
 
 ## Cutover dashboard checklist (plan Task 39)
 # The tcsc-marketing service was created via API, not the Blueprint flow, so the

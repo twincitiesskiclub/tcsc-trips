@@ -1,8 +1,8 @@
 ---
 // /community: community story from the `community` singleton, the grouped
 // "what we've done" takeaways ledger (volunteering / members who coach /
-// socials, mined from club Slack), the FULL consented photo mosaic (no
-// homeOnly filter), and the team-bonding activities as a chip list.
+// socials, mined from club Slack), and the FULL consented photo mosaic (no
+// homeOnly filter).
 import { getEntry, render } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
@@ -12,7 +12,6 @@ import { metaDescription } from '@/lib/metaDescription';
 const community = await getEntry('community', 'community');
 if (!community) throw new Error('community singleton missing (src/content/pages/community.mdoc)');
 const { Content } = await render(community);
-const activities = community.data.team_bonding_activities;
 const takeaways = community.data.takeaways;
 ---
 <InnerPageLayout
@@ -20,7 +19,7 @@ const takeaways = community.data.takeaways;
   description={community.data.intro && metaDescription(community.data.intro)}
   headline={community.data.headline ?? 'A welcoming community'}
   subhead={community.data.intro}
-  facts={['Ages 21-35', 'Founded 2020', 'Photos by club members']}
+  facts={['Founded 2020', 'Photos by club members']}
 >
   <div class="mx-auto max-w-3xl px-6 py-12">
     <div class="prose prose-lg max-w-prose text-ink">
@@ -37,7 +36,7 @@ const takeaways = community.data.takeaways;
       <div class="space-y-14">
         {takeaways.map((g) => (
           <div class="grid gap-4 md:gap-10 md:grid-cols-12">
-            <h3 class="md:col-span-3 text-[11px] tracking-[0.18em] uppercase font-semibold text-mint-deep pt-5">
+            <h3 class="md:col-span-3 text-base font-semibold text-navy pt-5">
               {g.group}
             </h3>
             <div class="md:col-span-9 divide-y divide-ink/10 border-t border-ink/10">
@@ -71,14 +70,4 @@ const takeaways = community.data.takeaways;
     </SectionBand>
   )}
   <PhotoMosaic />
-  {activities.length > 0 && (
-    <section class="mx-auto max-w-3xl px-6 py-12">
-      <h2 class="font-display font-semibold text-3xl text-navy">Team-bonding activities</h2>
-      <ul class="mt-6 flex flex-wrap gap-3">
-        {activities.map((a) => (
-          <li class="bg-paper-card rounded-full px-4 py-2 text-sm">{a}</li>
-        ))}
-      </ul>
-    </section>
-  )}
 </InnerPageLayout>

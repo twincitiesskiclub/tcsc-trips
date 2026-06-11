@@ -1,6 +1,5 @@
 ---
 import '@/styles/global.css';
-import { getEntry } from 'astro:content';
 import FontPreload from '@/components/FontPreload.astro';
 import Lightbox from '@/components/Lightbox.astro';
 
@@ -13,7 +12,7 @@ interface Props {
 
 const {
   title,
-  description = 'Twin Cities Ski Club is a nonprofit dedicated to fostering a supportive community for young adults (21 - 35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.',
+  description = 'Twin Cities Ski Club is a nonprofit dedicated to fostering a supportive community for young adults (21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.',
   // Default OG image lives in public/og/ (see site_meta.og_image convention).
   ogImage = '/og/og-default.jpg',
   variant = 'inner',
@@ -21,13 +20,10 @@ const {
 
 const isHome = variant === 'home';
 
-// JSON-LD contact fields come from the contact singleton so Keystatic edits
-// don't silently diverge from structured data; literals remain as fallback.
-const contact = await getEntry('contact', 'contact');
-const orgEmail = contact?.data.email ?? 'contact@twincitiesskiclub.org';
-const orgSameAs = [
-  contact?.data.instagram_url ?? 'https://www.instagram.com/twincitiesskiclub/',
-];
+// JSON-LD contact fields: contact singleton removed (F07); literal fallbacks
+// are the canonical values.
+const orgEmail = 'contact@twincitiesskiclub.org';
+const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
 ---
 <html lang="en">
   <head>
@@ -65,7 +61,7 @@ const orgSameAs = [
       sameAs: orgSameAs,
     })} />
   </head>
-  <body class={isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}>
+  <body class={`min-h-svh flex flex-col ${isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}`}>
     {/* Skip link: every page gives its <main> id="main" (the home page and
         InnerPageLayout both do). Visually hidden until keyboard-focused. */}
     <a

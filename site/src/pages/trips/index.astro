@@ -1,25 +1,13 @@
 ---
 // /trips: index of upcoming trips. TripsTable handles its own empty state.
-// Masthead fact is computed at build time from the first trip (static
-// string by the time it renders; no fetch).
-import { getCollection } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import TripsTable from '@/components/TripsTable.astro';
-
-const trips = (await getCollection('trips')).sort(
-  (a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b.data.dates),
-);
-const next = trips[0];
-const facts = next
-  ? [`Next up: ${next.data.slug}`, `${next.data.dates} · ${next.data.location}`]
-  : ['New trips are announced each fall'];
 ---
 <InnerPageLayout
   title="Trips · Twin Cities Ski Club"
   description="Team travel to the Sisu Ski Fest, the Birkie, the Prebirkie, the Great Bear Chase, and more. Lodging and meals organized."
   headline="Trips"
   subhead="Sisu Ski Fest, the Birkie, the Prebirkie, the Great Bear Chase. Plus training trips and team weekends."
-  facts={facts}
 >
   <div class="mx-auto max-w-4xl px-6 py-12">
     <TripsTable />

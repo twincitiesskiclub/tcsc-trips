@@ -59,3 +59,5 @@ migration/survey/
 # Slack channel extracts + mined fact sheets (contain member names; the
 # 2026-06-10 community/extra-training/dry-tri content cites them)
 migration/slack_facts/
+migration/survey-2026-06-10/
+.impeccable/

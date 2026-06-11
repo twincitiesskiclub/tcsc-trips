@@ -20,10 +20,9 @@ const entries = (await getCollection('wax_entries'))
 ---
 <section class="bg-paper text-ink">
   <div class="mx-auto max-w-7xl px-6 md:px-10">
-    {/* Seam: section name in the Trail Report label voice, hairline running
-        to the right edge (one device family site-wide). */}
+    {/* Seam: hairline running to the right edge (one device family
+        site-wide); no label text, the h2 below names the section. */}
     <div class="pt-12 md:pt-16 flex items-center gap-4">
-      <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint-deep">Wax Room</span>
       <span class="h-px flex-1 bg-ink/15" aria-hidden="true"></span>
     </div>
     <div class="pt-8 pb-16 md:pb-20">
@@ -41,7 +40,7 @@ const entries = (await getCollection('wax_entries'))
                 href={'/wax-room/' + e.id}
                 class="group grid items-baseline gap-x-6 gap-y-1 py-4 md:grid-cols-[8.5rem_1fr_auto]"
               >
-                <span class="text-xs text-mint-deep tabular-nums">
+                <span class="text-xs text-slate tabular-nums">
                   {shortDate(e.data.date)}{e.data.author_name ? ` · ${e.data.author_name}` : ''}
                 </span>
                 <span class="font-display font-semibold text-lg text-navy leading-tight transition-colors duration-150 group-hover:text-mint-deep">

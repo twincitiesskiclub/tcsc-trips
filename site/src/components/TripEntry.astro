@@ -65,36 +65,51 @@ const {
     <div class="mt-6 prose prose-lg max-w-prose text-ink">
       <slot />
     </div>
-    <dl class="mt-10 grid gap-6 sm:grid-cols-3 text-sm">
-      <div>
-        <dt class="text-slate uppercase tracking-wider">Cost</dt>
-        <dd class="mt-1 font-semibold text-ink">{cost_summary}</dd>
-      </div>
-      {signup_deadline && (
-        <div>
-          <dt class="text-slate uppercase tracking-wider">Sign up by</dt>
-          <dd class="mt-1 font-semibold text-ink">{signup_deadline}</dd>
-        </div>
-      )}
-      {capacity && (
-        <div>
-          <dt class="text-slate uppercase tracking-wider">Capacity</dt>
-          <dd class="mt-1 font-semibold text-ink">{capacity}</dd>
-        </div>
-      )}
-      {refund_policy && (
-        <div class="sm:col-span-3">
-          <dt class="text-slate uppercase tracking-wider">Refund policy</dt>
-          <dd class="mt-1 text-ink leading-relaxed">{refund_policy}</dd>
-        </div>
-      )}
-    </dl>
+    {/* Split cost_summary at the first sentence so the short price fact sits
+        in the top three-col row and the lodging/meals/exclusions detail drops
+        to a full-width regular-weight row (same rhythm as the refund policy). */}
+    {(() => {
+      const firstDot = cost_summary.search(/\.(?:\s|$)/);
+      const costShort = firstDot >= 0 ? cost_summary.slice(0, firstDot + 1) : cost_summary;
+      const costDetail = firstDot >= 0 ? cost_summary.slice(firstDot + 1).trim() : '';
+      return (
+        <dl class="mt-10 grid gap-6 sm:grid-cols-3 text-sm">
+          <div>
+            <dt class="text-slate uppercase tracking-wider">Cost</dt>
+            <dd class="mt-1 font-semibold text-ink">{costShort}</dd>
+          </div>
+          {signup_deadline && (
+            <div>
+              <dt class="text-slate uppercase tracking-wider">Sign up by</dt>
+              <dd class="mt-1 font-semibold text-ink">{signup_deadline}</dd>
+            </div>
+          )}
+          {capacity && (
+            <div>
+              <dt class="text-slate uppercase tracking-wider">Capacity</dt>
+              <dd class="mt-1 font-semibold text-ink">{capacity}</dd>
+            </div>
+          )}
+          {costDetail && (
+            <div class="sm:col-span-3 mt-1">
+              <dd class="text-ink leading-relaxed">{costDetail}</dd>
+            </div>
+          )}
+          {refund_policy && (
+            <div class="sm:col-span-3">
+              <dt class="text-slate uppercase tracking-wider">Refund policy</dt>
+              <dd class="mt-1 text-ink leading-relaxed">{refund_policy}</dd>
+            </div>
+          )}
+        </dl>
+      );
+    })()}
     {signup_url && (
       <a
         href={signup_url}
         class="mt-10 inline-block rounded-md bg-navy px-6 py-3 font-semibold text-mint"
       >
-        Sign up &rarr;
+        Sign up
       </a>
     )}
   </div>

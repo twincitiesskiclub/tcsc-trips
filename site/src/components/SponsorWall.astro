@@ -34,26 +34,46 @@ const tierGroups = tiers
   }))
   .filter((g) => g.items.length > 0);
 ---
-{tierGroups.map(({ label, items }) => (
-  <section class="mt-12 first:mt-0">
-    <Heading class="font-display font-semibold text-2xl text-navy">{label}</Heading>
-    <div class="mt-6 grid grid-cols-2 md:grid-cols-4 gap-8 items-center">
-      {items.map((s) => {
-        const Wrapper = s.data.url ? 'a' : 'div';
-        return (
-          <Wrapper {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}>
-            <Image
-              src={s.data.logo}
-              alt={s.data.slug}
-              widths={THUMB}
-              width={Math.min(600, s.data.logo.width)}
-              sizes="(min-width: 768px) 200px, 40vw"
-              class="max-h-16 max-w-full h-auto w-auto"
-              loading="lazy"
-            />
-          </Wrapper>
-        );
-      })}
-    </div>
-  </section>
-))}
+{tierGroups.map(({ label, items }) => {
+  // Scale the layout to the content: small groups (fewer than 4) render
+  // larger logos in a flex row; 4+ items use the standard 4-col grid.
+  // Tier headings are suppressed when only one tier group exists.
+  const showHeading = tierGroups.length > 1;
+  const isSmall = items.length < 4;
+  return (
+    <section class="mt-12 first:mt-0">
+      {showHeading && (
+        <Heading class="font-display font-semibold text-2xl text-navy">{label}</Heading>
+      )}
+      <div
+        class={
+          isSmall
+            ? (showHeading ? 'mt-6' : '') + ' flex flex-wrap gap-12 items-center'
+            : (showHeading ? 'mt-6' : '') + ' grid grid-cols-2 md:grid-cols-4 gap-8 items-center'
+        }
+      >
+        {items.map((s) => {
+          const Wrapper = s.data.url ? 'a' : 'div';
+          // Small groups: taller max-h and a generous max-w so wide lockups
+          // get proportional optical weight alongside square marks.
+          const imgClass = isSmall
+            ? 'max-h-20 max-w-[280px] h-auto w-auto'
+            : 'max-h-16 max-w-full h-auto w-auto';
+          return (
+            <Wrapper {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}>
+              <Image
+                src={s.data.logo}
+                alt={s.data.slug}
+                widths={THUMB}
+                width={Math.min(600, s.data.logo.width)}
+                sizes={isSmall ? '280px' : '(min-width: 768px) 200px, 40vw'}
+                class={imgClass}
+                loading="lazy"
+              />
+            </Wrapper>
+          );
+        })}
+      </div>
+    </section>
+  );
+})}

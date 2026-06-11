@@ -14,7 +14,7 @@
 //     generated url-slug becomes the file name. So `data.slug` here is a
 //     human-readable display name, NOT a url slug.
 // - Singletons serialize as single files:
-//     pure data    -> src/content/pages/home.yaml, src/content/pages/contact.yaml,
+//     pure data    -> src/content/pages/home.yaml,
 //                     src/content/pages/sponsors_page.yaml, src/content/nav.yaml,
 //                     src/content/site_meta.yaml
 //     markdoc body -> src/content/pages/about.mdoc, community.mdoc, racing.mdoc
@@ -196,7 +196,7 @@ const home = defineCollection({
         hero_image: image(),
         hero_image_alt: z.string(),
         registration_state: z.enum(['open', 'coming_soon', 'closed']).default('closed'),
-        cta_open_label: z.string().default('Register for the season →'),
+        cta_open_label: z.string().default('Register for the season'),
         cta_open_url: z.string().url().optional(),
         cta_coming_soon_label: z.string().default('Get on the list'),
         cta_coming_soon_url: z.string().url().optional(),
@@ -364,18 +364,6 @@ const dry_tri = defineCollection({
       .strict(),
 });
 
-const contact = defineCollection({
-  loader: singletonLoader('contact.yaml'),
-  schema: z
-    .object({
-      email: z.string().optional(),
-      mailing_address: z.string().optional(),
-      instagram_url: z.string().url().optional(),
-      slack_invite_url: z.string().url().optional(),
-    })
-    .strict(),
-});
-
 const nav = defineCollection({
   loader: singletonLoader('nav.yaml', './src/content'),
   schema: z
@@ -413,7 +401,6 @@ export const collections = {
   sponsors_page,
   extra_training,
   dry_tri,
-  contact,
   nav,
   site_meta,
 };
