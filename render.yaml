@@ -29,8 +29,14 @@ services:
         source: /trip-sign-up
         destination: https://tcsc.ski/trips
       - type: redirect
+        # Marketing trip page retired 2026-06-11 (registration happens on
+        # tcsc.ski); both the old Wix slug and the retired page route land on
+        # the trips ledger.
         source: /sisu-information
-        destination: /trips/sisu-ski-fest
+        destination: /trips
+      - type: redirect
+        source: /trips/sisu-ski-fest
+        destination: /trips
       - type: redirect
         source: /trip-information
         destination: /trips

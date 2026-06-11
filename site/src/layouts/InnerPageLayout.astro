@@ -5,13 +5,13 @@
 // optional HeroInner + <main class="bg-paper"> slot + Footer.
 //
 // Pass `headline` (plus optional `subhead`) to get the standard HeroInner;
-// omit it on pages whose main content owns the <h1> (TripEntry, WaxEntry
-// detail pages mount exactly one h1 themselves).
+// omit it on pages whose main content owns the <h1> (WaxEntry detail pages
+// mount exactly one h1 themselves).
 //
 // The default slot mounts UNCONSTRAINED inside <main>: full-bleed
 // components whose comments declare a sizes="100vw" mounting contract
-// (CoachEntry, TripEntry) and full-bleed bands (PhotoMosaic, SectionBand)
-// go straight in; text content brings its own max-w-* wrapper.
+// (CoachEntry) and full-bleed bands (PhotoMosaic, SectionBand) go straight
+// in; text content brings its own max-w-* wrapper.
 //
 // LiveConditions: exactly one mount per page (the client announcer assumes
 // this), always the compact variant here; the prominent variant is the
