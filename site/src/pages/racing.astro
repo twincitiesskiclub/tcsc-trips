@@ -13,6 +13,7 @@ import skiDeSheTrio from '@/assets/images/photos/ski-de-she-trio.jpg';
 import korteMedals from '@/assets/images/photos/korte-medals.jpg';
 import birkieStart from '@/assets/images/photos/birkie-start.jpg';
 import finlandiaPodium from '@/assets/images/photos/finlandia-podium.jpg';
+import skijorRace from '@/assets/images/photos/skijor-race.jpg';
 
 const racing = await getEntry('racing', 'racing');
 if (!racing) throw new Error('racing singleton missing (src/content/pages/racing.mdoc)');
@@ -24,6 +25,7 @@ const raceStrip = [
   { src: korteMedals, alt: 'Two finishers with Kortelopet medals and bibs grinning in bright winter sun' },
   { src: birkieStart, alt: 'Two members in matching TCSC kits with arms raised at the Birkie start area' },
   { src: finlandiaPodium, alt: 'Three skiers holding trophy axes in front of the Minnesota Finlandia Ski Marathon banner' },
+  { src: skijorRace, alt: 'A member skijoring with their dog mid-race, bib 9527, in a TCSC suit on a snowy course', position: '82% center' },
 ];
 ---
 <InnerPageLayout
@@ -68,14 +70,15 @@ const raceStrip = [
           </div>
         ))}
       </div>
-      <div class="mt-10 grid grid-cols-2 md:grid-cols-4 gap-px bg-ink/15">
+      <div class="mt-10 grid grid-cols-2 md:grid-cols-5 gap-px bg-ink/15">
         {raceStrip.map((p) => (
           <Image
             src={p.src}
             alt={p.alt}
             widths={CARD}
-            sizes="(min-width: 768px) 180px, 50vw"
+            sizes="(min-width: 768px) 144px, 50vw"
             class="w-full aspect-[3/4] object-cover"
+            style={p.position ? `object-position: ${p.position}` : undefined}
             loading="lazy"
           />
         ))}

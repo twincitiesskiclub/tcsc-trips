@@ -34,8 +34,8 @@ const { headline, subhead, facts = [], photo, photoAlt, photoPosition } = Astro.
       <ul class="md:col-span-3 md:col-start-10 self-end md:border-l md:border-ink/15 md:pl-6 space-y-3">
         {facts.map((f) => (
           <li>
-            <div class="font-display font-semibold text-mint-deep text-base md:text-lg leading-tight">{f.value}</div>
-            <div class="text-[11px] tracking-[0.14em] uppercase text-slate mt-0.5">{f.label}</div>
+            <div class="font-display font-semibold text-navy text-base md:text-lg leading-tight">{f.value}</div>
+            <div class="text-[11px] tracking-[0.14em] uppercase text-mint-deep mt-0.5">{f.label}</div>
           </li>
         ))}
       </ul>

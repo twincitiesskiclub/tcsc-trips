@@ -73,8 +73,8 @@ member-hangout photos above.
 Direct page imports (About / Community / Racing placements), not mosaic
 entries; same Slack consent basis as above. Selected 2026-06-11 by Rob from a
 493-candidate curation pass. The skijor photo
-(2024-02-07_1707360103-835559_0.jpg) is EXCLUDED pending a rights check
-(poster account deactivated; slight professional look).
+(2024-02-07_1707360103-835559_0.jpg) was initially excluded pending a rights
+check; rights confirmed 2026-06-11 by Rob.
 
 | Page placement | Image file | Slack source file |
 |---|---|---|
@@ -92,3 +92,4 @@ entries; same Slack consent basis as above. Selected 2026-06-11 by Rob from a
 | Racing strip | site/src/assets/images/photos/korte-medals.jpg | 2022-02-25_1645852380-232989_0.jpg |
 | Racing strip | site/src/assets/images/photos/birkie-start.jpg | 2024-02-23_1708738564-829599_1.jpg |
 | Racing strip | site/src/assets/images/photos/finlandia-podium.jpg | 2026-02-14_1771096714-097109_0.jpg |
+| Racing strip | site/src/assets/images/photos/skijor-race.jpg | 2024-02-07_1707360103-835559_0.jpg (rights confirmed 2026-06-11 by Rob) |
