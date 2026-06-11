@@ -4,14 +4,13 @@
 
 :root { color-scheme: light; }
 
-/* Archivo Variable carries the whole site: one family, two voices via
-   WEIGHT (body at 400, display moments at semibold 600 set per call site).
-   The width-axis treatment (display at 125% expanded, the Söhne Breit
-   imitation) was retired 2026-06-10: stretched Archivo plus negative
-   tracking read as "squished and too big at the same time". Do not
-   reintroduce font-stretch on .font-display. Swap point if a commercial
-   face is ever licensed: these @font-face blocks + tailwind.config.ts
-   fontFamily + the .font-display rule below + FontPreload.astro. */
+/* Body: Archivo Variable (full character set, all weights).
+   Display: PolySans BulkyWide trial (large headlines only — trial subset
+   covers basic latin A-Z/a-z/0-9 but not apostrophes, hyphens, or parens;
+   Archivo is the fallback for any missing glyphs). Do not use font-display
+   on elements containing punctuation until the full commercial license lands.
+   Swap point for future full-license upgrade: these @font-face blocks +
+   tailwind.config.ts fontFamily.display + FontPreload.astro. */
 @font-face {
   font-family: 'ArchivoVariable';
   src: url('/fonts/archivo/ArchivoVariable.woff2') format('woff2');
@@ -26,6 +25,13 @@
   font-weight: 100 900;
   font-stretch: 62% 125%;
   font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'PolySansBulkyWide';
+  src: url('/fonts/polysans/PolySansBulkyWide.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
   font-display: swap;
 }
 
@@ -57,10 +63,10 @@ html {
   }
 }
 
-/* The display voice: Tailwind's font-display utility supplies the family;
-   this companion rule pins normal width and tightens tracking at headline
-   scale. Weight comes from font-semibold at the heading call sites, so
-   explicit weight and tracking utilities keep working. */
+/* The display voice: PolySans BulkyWide is already wide by design, so no
+   font-stretch needed. Tracking tightens slightly; weight is baked into the
+   cut (700 in the @font-face). font-semibold at call sites still applies but
+   is redundant — it degrades gracefully if the font is unavailable. */
 @layer utilities {
   .font-display {
     font-stretch: 100%;

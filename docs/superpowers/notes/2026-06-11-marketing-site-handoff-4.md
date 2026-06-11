@@ -106,6 +106,16 @@ across 52 files was negative.
    ([&_h2] semibold tracking-tight on the prose wrapper). If the two-grammar
    tension still bothers at review, the next step would be sizing prose h2s
    up one step, not moving the band.
+9. **PolySans full license (pre-cutover).** Rob supplied the Pangram Pangram
+   trial; PolySans BulkyWide now carries `font-display` (large headlines
+   only), Archivo stays as body. The TRIAL SUBSET covers only basic latin
+   (no apostrophes/hyphens/parens/degree sign); Archivo fallback fills
+   missing glyphs per-character, verified visually fine at display scale
+   ("What we've done" apostrophe). Buy the full license before cutover for
+   complete glyph coverage; swap points: the @font-face block in global.css,
+   tailwind.config.ts fontFamily.display, FontPreload.astro. Only the
+   BulkyWide cut is committed (repo is public; do not commit the rest of
+   the trial family).
 
 ## Operational gotchas (new this session)
 

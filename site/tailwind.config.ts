@@ -67,7 +67,9 @@ export default {
       // width after the expanded cut was retired 2026-06-10).
       fontFamily: {
         sans: ['ArchivoVariable', 'system-ui', 'sans-serif'],
-        display: ['ArchivoVariable', 'system-ui', 'sans-serif'],
+        // PolySans BulkyWide trial for display moments (H1s, inner mastheads).
+        // Trial subset: basic latin only; Archivo fallback handles punctuation.
+        display: ['PolySansBulkyWide', 'ArchivoVariable', 'system-ui', 'sans-serif'],
       },
       maxWidth: { prose: '62ch', 'prose-narrow': '56ch' },
     },
