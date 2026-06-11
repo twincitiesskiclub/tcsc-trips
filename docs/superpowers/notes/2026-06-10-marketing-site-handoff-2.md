@@ -50,7 +50,20 @@ Operational notes for the next session:
 - **Future-dated copy to refresh next season:** "Wooden Hill in 2026"
   (community socials row), "Third annual in 2025" (TCSC Classic), Dry Tri
   "2026 edition" paragraph + register/results URLs on the dry_tri
-  singleton (tcsc.ski/tri is still the 2025 page as of today).
+  singleton (tcsc.ski/tri is still the 2025 page as of today; 2026
+  registration opens this summer per Rob and the page says so).
+- **Voice sweep (7ce304e):** Rob flagged "cringe" constructions in the new
+  copy; the full pattern and his callouts are in the memory file
+  feedback_site_copy_voice.md. Plain club register only; Pickleball
+  Sundays was removed as not actually a fixture.
+- **Display type fix (0e5fe06):** the 125% expanded Archivo display cut is
+  RETIRED (Rob: "squished and too big at the same time"). Display voice is
+  now weight-led: .font-display = normal width + -0.02em tracking, every
+  display heading carries font-semibold, home hero stepped bold to
+  semibold. Decision made against on-page specimens of Hanken Grotesk,
+  Space Grotesk, and Bricolage Grotesque; Rob chose keeping Archivo.
+  PolySans remains the commercial upgrade path at the same swap points.
+  Do not reintroduce font-stretch on .font-display.
 
 ## Where things stand
 
