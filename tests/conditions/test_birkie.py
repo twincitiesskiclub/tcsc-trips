@@ -43,8 +43,15 @@ def test_response_includes_birkie_block():
     from types import SimpleNamespace
 
     wx = SimpleNamespace(temperature_f=20, feels_like_f=12)
+    report = SimpleNamespace(
+        ski_quality='good',
+        report_url=None,
+        report_date=None,
+        groomed=False,
+        groomed_for=None,
+    )
     with patch('app.conditions.service.get_weather', return_value=wx), \
-         patch('app.conditions.service.get_trail_conditions', return_value='good'):
+         patch('app.conditions.service.get_trail_report', return_value=report):
         resp = build_conditions_response()
     assert set(resp['birkie'].keys()) == {'status', 'word', 'detail'}
     ids = [loc['id'] for loc in resp['locations']]

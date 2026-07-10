@@ -93,3 +93,15 @@ check; rights confirmed 2026-06-11 by Rob.
 | Racing strip | site/src/assets/images/photos/birkie-start.jpg | 2024-02-23_1708738564-829599_1.jpg |
 | Racing strip | site/src/assets/images/photos/finlandia-podium.jpg | 2026-02-14_1771096714-097109_0.jpg |
 | Racing strip | site/src/assets/images/photos/skijor-race.jpg | 2024-02-07_1707360103-835559_0.jpg (rights confirmed 2026-06-11 by Rob) |
+
+## July 2026 round 2 addition (Community "Extra training fun" anchor)
+
+Standing consent basis, per Rob 2026-07-10: all photos posted in the club
+Slack are approved for site use as a standing rule, no per-photo clearance
+needed. The RIGHTS exclusion still holds (no professional race-gallery /
+brockit / official Birkie photography). This member-shot group-ride photo is
+covered by that standing basis, same Slack source as the entries above.
+
+| Page placement | Image file | Slack source file |
+|---|---|---|
+| Community extra training fun | site/src/assets/images/photos/etf-fall-ride.jpg | 2025-10-19_1760903418-383239_0.jpg |

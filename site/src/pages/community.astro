@@ -21,6 +21,7 @@ import winterFive from '@/assets/images/photos/winter-five.jpg';
 import lakesidePicnic from '@/assets/images/photos/lakeside-picnic.jpg';
 import secondHarvest from '@/assets/images/photos/second-harvest.jpg';
 import barnBanquet from '@/assets/images/photos/barn-banquet.jpg';
+import etfFallRide from '@/assets/images/photos/etf-fall-ride.jpg';
 
 const community = await getEntry('community', 'community');
 if (!community) throw new Error('community singleton missing (src/content/pages/community.mdoc)');
@@ -39,11 +40,15 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   Volunteering: {
     src: secondHarvest,
     alt: 'Members posing together at a Second Harvest food-packing volunteer night',
-    position: 'center 65%',
+    position: 'center 50%',
   },
   Socials: {
     src: barnBanquet,
     alt: 'The club banquet in a barn venue strung with lights, every table full',
+  },
+  'Extra training fun': {
+    src: etfFallRide,
+    alt: 'A grinning group of members gathered with a mountain bike at a wooded trailhead in fall color',
   },
 };
 ---
@@ -82,7 +87,7 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
       variant="paper"
       seam="Club record"
       heading="What we've done"
-      subhead="A few seasons of volunteering, coaching, and socials."
+      subhead="A few seasons of volunteering, coaching, socials, and member-led training."
     >
       <div class="space-y-14">
         {takeaways.map((g) => (
@@ -122,14 +127,6 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
             </div>
           </div>
         ))}
-        {/* The training half of this culture has its own page. */}
-        <p class="text-ink/80">
-          Member-organized workouts are on their own page:{' '}
-          <a
-            href="/extra-training-fun"
-            class="font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-          >Extra training fun</a>.
-        </p>
       </div>
     </SectionBand>
   )}

@@ -9,5 +9,5 @@ caption: >-
 event_tag: race
 member_names: []
 order: 210
-show_on_home: false
+show_on_home: true
 photo_consent_recorded: true
