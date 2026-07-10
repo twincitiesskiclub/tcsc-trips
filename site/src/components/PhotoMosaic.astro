@@ -128,10 +128,10 @@ const composed = sparse && photos.length >= 3;
           {number && <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">{number}</span>}
           <span class="h-px flex-1 bg-mint/20" aria-hidden="true"></span>
         </div>
-        <div class="mb-8 mt-8 flex items-end justify-between gap-6">
+        <div class="mb-8 mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
           <h2 class="font-display font-semibold text-3xl md:text-5xl text-paper leading-[1.05]">{heading}</h2>
           {more_href && more_label && (
-            <a href={more_href} class="shrink-0 text-mint/80 text-sm hover:text-mint">{more_label}</a>
+            <a href={more_href} class="shrink-0 ml-auto text-mint/80 text-sm hover:text-mint">{more_label}</a>
           )}
         </div>
       </div>
