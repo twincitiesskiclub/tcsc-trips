@@ -33,7 +33,11 @@ def app():
 def week(app):
     """Two scheduled practices in the same week, both linked to the summary."""
     with app.app_context():
-        loc = PracticeLocation.query.first()
+        # Create our own location: the test DB may be empty and this test
+        # must not depend on ambient dev data.
+        loc = PracticeLocation(name='Delete Exclusion Test Park')
+        db.session.add(loc)
+        db.session.commit()
         ts = '1780837200.000001'
         keep = Practice(date=datetime(2026, 6, 9, 18, 15), day_of_week='Tuesday',
                         status='scheduled', location_id=loc.id,
@@ -50,6 +54,10 @@ def week(app):
             obj = db.session.get(Practice, p.id)
             if obj:
                 db.session.delete(obj)
+        db.session.commit()
+        loc_obj = db.session.get(PracticeLocation, loc.id)
+        if loc_obj:
+            db.session.delete(loc_obj)
         db.session.commit()
 
 
