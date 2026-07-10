@@ -1,8 +1,23 @@
-from flask import Blueprint, render_template
+from flask import Blueprint, redirect, render_template, url_for
 from ..models import Trip, Season, SocialEvent
 from ..utils import get_current_times
 
 main = Blueprint('main', __name__)
+
+MARKETING_TRIPS_URL = 'https://twincitiesskiclub.org/trips'
+
+
+@main.route('/register', strict_slashes=False)
+def legacy_register():
+    """Retire the Wix-era generic registration path to the app home page."""
+    return redirect(url_for('main.get_home_page'), code=301)
+
+
+@main.route('/trips', strict_slashes=False)
+@main.route('/trips/sisu-ski-fest', strict_slashes=False)
+def legacy_trip_signup():
+    """Send retired trip-signup destinations to the marketing trip ledger."""
+    return redirect(MARKETING_TRIPS_URL, code=301)
 
 
 @main.route('/')
@@ -44,4 +59,3 @@ def get_home_page():
 @main.route('/tri')
 def dryland_triathlon_page():
     return render_template('dryland-triathlon.html')
-
