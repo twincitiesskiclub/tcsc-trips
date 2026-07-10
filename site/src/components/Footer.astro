@@ -7,15 +7,16 @@
 const email = 'contact@twincitiesskiclub.org';
 const ig = 'https://www.instagram.com/twincitiesskiclub/';
 
-// Six top-nav destinations plus Trips, Extra Training & Fun, and Dry Tri.
+// Two columns reading top-to-bottom in nav order: the six top-nav
+// destinations plus Trips, Extra Training & Fun, and Dry Tri.
 const colA = [
   { label: 'About', href: '/about' },
   { label: 'Community', href: '/community' },
   { label: 'Racing', href: '/racing' },
   { label: 'Coaches', href: '/coaches' },
+  { label: 'Wax Room', href: '/wax-room' },
 ];
 const colB = [
-  { label: 'Wax Room', href: '/wax-room' },
   { label: 'Sponsors', href: '/sponsors' },
   { label: 'Trips', href: '/trips' },
   { label: 'Extra Training & Fun', href: '/extra-training-fun' },
@@ -30,9 +31,13 @@ const colB = [
         A 501(c)(3) nonprofit for young adults (21-35) in Minneapolis · St. Paul. Two seasons of cross-country ski training a year.
       </p>
     </div>
-    <nav aria-label="Footer" class="text-sm grid grid-cols-2 gap-x-6 gap-y-2 content-start">
-      {colA.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
-      {colB.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
+    <nav aria-label="Footer" class="text-sm grid grid-cols-2 gap-x-6 content-start">
+      <div class="space-y-2">
+        {colA.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
+      </div>
+      <div class="space-y-2">
+        {colB.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
+      </div>
     </nav>
     <div class="text-sm space-y-2">
       <a class="block hover:text-mint" href={'mailto:' + email}>{email}</a>
