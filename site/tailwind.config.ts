@@ -27,10 +27,8 @@ export default {
   content: ['./src/**/*.{astro,html,ts,tsx,md,mdx}'],
   theme: {
     extend: {
-      // `/ <alpha-value>` is REQUIRED on every token: without it Tailwind 3.4
-      // cannot inject opacity modifiers, so classes like border-mint/20 or
-      // bg-ink/95 are silently dropped from the build (borders then fall back
-      // to preflight gray-200).
+      // `/ <alpha-value>` keeps opacity modifiers working through Tailwind 4's
+      // legacy-config bridge, including border-mint/20 and bg-ink/95.
       colors: Object.fromEntries(
         Object.entries(palette).map(([name, value]) => [
           name,
@@ -67,8 +65,8 @@ export default {
       // width after the expanded cut was retired 2026-06-10).
       fontFamily: {
         sans: ['ArchivoVariable', 'system-ui', 'sans-serif'],
-        // PolySans BulkyWide trial for display moments (H1s, inner mastheads).
-        // Trial subset: basic latin only; Archivo fallback handles punctuation.
+        // Licensed PolySans BulkyWide subset for display moments. Archivo
+        // handles punctuation and any glyphs outside the optimized subset.
         display: ['PolySansBulkyWide', 'ArchivoVariable', 'system-ui', 'sans-serif'],
       },
       maxWidth: { prose: '62ch', 'prose-narrow': '56ch' },

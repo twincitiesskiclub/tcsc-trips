@@ -1,5 +1,10 @@
 # Marketing Site v2 · Session Handoff #5 (2026-06-11, overnight, FINAL for this session)
 
+> **Status update (2026-07-10):** Club leadership confirmed full publication
+> consent for the current site photos and a production PolySans web license.
+> The related pre-cutover gates below are historical and closed;
+> `migration/CONSENT.md` is the current photo-consent record.
+
 Grounding doc for the NEXT session. Supersedes handoffs #3 and #4
 (`2026-06-10-marketing-site-handoff-3.md`, `2026-06-11-marketing-site-handoff-4.md`;
 #4 was written mid-session and is stale on page count, racing copy, fonts,
@@ -79,18 +84,15 @@ coaches anchor index, normalize "Sisu Ski Fest" casing. Highlights:
   (tcsc.ski) directly, no local detail pages. Racing's Sisu row href
   removed. Hero photo stays committed (consented, in the manifest).
 
-## Open items for the next session
+## Follow-up status and open items
 
 1. **KJ headshot swap (still open; Rob sourcing).** Procedure unchanged from
    handoff #3 item 1 (exif_transpose -> 2560px -> quality 90 progressive ->
    photo_alt -> manifest row + CONSENT line, or verify.py fails).
-2. **PolySans full license (pre-cutover).** The committed trial cut
-   (`site/public/fonts/polysans/PolySansBulkyWide.woff2`, the only file;
-   repo is public, do not commit the rest of the family) covers ONLY basic
-   latin: no apostrophes, hyphens, parens, or degree signs. Archivo fills
-   missing glyphs per-character; verified visually fine at display scale
-   ("What we've done"). Buy the full PP license before cutover; consider
-   PolySans Median for body at that point (the original DESIGN.md intent).
+2. **PolySans license (resolved 2026-07-10).** Club leadership confirmed the
+   production web license. The committed optimized subset remains limited to
+   basic Latin, with Archivo filling missing glyphs per character. Only the
+   BulkyWide subset is committed to the public repository.
 3. **Nav decision (Rob's call, still open).** Top nav 6 links; footer now
    covers all 9 destinations, lowering the pressure.
 4. **Fact-gated items (need Rob's words):** mission-panel manifesto rewrite;
@@ -102,9 +104,10 @@ coaches anchor index, normalize "Sisu Ski Fest" casing. Highlights:
 6. **Backlog:** mosaic event_tag filter UI; Lighthouse re-measure (hero
    unchanged but font payload changed: +6KB preloaded woff2); seed one real
    wax-room entry pre-launch; BlurHash only if scroll-in feels flat.
-7. **Consent gate (HARD, pre-cutover):** unchanged (original handoff §4 +
-   Dry Tri public-event caveat). recess-ski + sisu hero are committed but
-   unreferenced; both keep their CONSENT/manifest lines.
+7. **Photo consent (resolved 2026-07-10):** club leadership confirmed full
+   publication consent for the current site set, including the Dry Tri
+   public-event photos. Professional race-gallery images remain excluded on
+   copyright grounds. `migration/CONSENT.md` is the system of record.
 8. **Future-dated copy to refresh next season:** unchanged list from
    handoff #3 item 7, MINUS the dry_tri URLs item (now item 5 here).
 9. **Trips ledger revival.** When a new trip is announced: create the mdoc

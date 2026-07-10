@@ -1,5 +1,10 @@
 # Marketing Site v2 · Session Handoff (2026-06-10)
 
+> **Status update (2026-07-10):** Club leadership confirmed full publication
+> consent for the current site photos and a production PolySans web license.
+> The related pre-cutover gates below are historical and closed;
+> `migration/CONSENT.md` is the current photo-consent record.
+
 Grounding doc for the next session: polish pass, cutover to live, and the decision log from the subagent-driven execution of `docs/superpowers/plans/2026-05-16-marketing-site-transition.md`.
 
 ## Where things stand

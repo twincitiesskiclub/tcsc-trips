@@ -3,13 +3,13 @@ hero_image: ../../assets/images/uploads/home-hero-trail.jpg
 hero_image_alt: >-
   Four TCSC skiers grinning on a groomed trail through a forest completely
   coated in fresh snow, skis and poles in hand
-registration_state: closed
+registration_state: coming_soon
 cta_open_label: Register for the season
-cta_open_url: https://tcsc.ski
-cta_coming_soon_label: Registration opens soon
-cta_coming_soon_url: https://tcsc.ski
+cta_open_url: https://tcsc.ski/
+cta_coming_soon_label: Registration opens Aug 28
+cta_coming_soon_url: https://tcsc.ski/
 cta_closed_label: How to register
-cta_closed_url: https://tcsc.ski
+cta_closed_url: https://tcsc.ski/
 mission_paragraph: >-
   Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a
   supportive community for young adults (ages 21-35) by promoting a healthy

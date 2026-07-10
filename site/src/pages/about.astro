@@ -4,9 +4,8 @@
 // rides the masthead band; the rollerski group closes the prose column.
 // The first body paragraph (the founding story) renders as an emphasized
 // lede via the [&>p:first-child] overrides on the prose wrapper. Lede uses
-// font-semibold, NOT font-display: the trial display cut lacks the hyphen
-// glyph and the paragraph contains "cross-country" (see global.css font
-// warning). Swap to font-display when the full license lands. NOTE: the
+// font-semibold, NOT font-display: the optimized display subset lacks the
+// hyphen glyph and the paragraph contains "cross-country". NOTE: the
 // lede targets whatever <p> is the first child - it depends on about.mdoc
 // starting with the founding paragraph; reordering the source moves it.
 import { getEntry, render } from 'astro:content';

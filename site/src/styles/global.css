@@ -1,16 +1,12 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import 'tailwindcss';
+@config '../../tailwind.config.ts';
 
 :root { color-scheme: light; }
 
 /* Body: Archivo Variable (full character set, all weights).
-   Display: PolySans BulkyWide trial (large headlines only — trial subset
-   covers basic latin A-Z/a-z/0-9 but not apostrophes, hyphens, or parens;
-   Archivo is the fallback for any missing glyphs). Do not use font-display
-   on elements containing punctuation until the full commercial license lands.
-   Swap point for future full-license upgrade: these @font-face blocks +
-   tailwind.config.ts fontFamily.display + FontPreload.astro. */
+   Display: PolySans BulkyWide, covered by TCSC's production web license.
+   This optimized subset covers basic Latin A-Z/a-z/0-9; Archivo supplies
+   punctuation and other missing glyphs. */
 @font-face {
   font-family: 'ArchivoVariable';
   src: url('/fonts/archivo/ArchivoVariable.woff2') format('woff2');

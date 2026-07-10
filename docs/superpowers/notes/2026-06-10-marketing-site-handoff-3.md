@@ -1,5 +1,10 @@
 # Marketing Site v2 · Polish Session Handoff #3 (2026-06-10, night)
 
+> **Status update (2026-07-10):** Club leadership confirmed full publication
+> consent for the current site photos and a production PolySans web license.
+> The related pre-cutover gates below are historical and closed;
+> `migration/CONSENT.md` is the current photo-consent record.
+
 Grounding doc for the NEXT polish round. Supersedes handoff #2 and its
 bolted-on addendums (`2026-06-10-marketing-site-handoff-2.md`); the ORIGINAL
 handoff's **§2 cutover runbook, §3 decision log, and §4 cross-session

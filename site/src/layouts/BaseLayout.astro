@@ -8,6 +8,7 @@ interface Props {
   description?: string;
   ogImage?: string;
   variant?: 'home' | 'inner';
+  robots?: string;
 }
 
 const {
@@ -16,9 +17,24 @@ const {
   // Default OG image lives in public/og/ (see site_meta.og_image convention).
   ogImage = '/og/og-default.jpg',
   variant = 'inner',
+  robots,
 } = Astro.props;
 
 const isHome = variant === 'home';
+
+// Build formats expose either a generated filename or a directory slash
+// through Astro.url during prerendering. Public routes remain extensionless,
+// so keep canonicals in sync with the sitemap and URL-normalization rules.
+const generatedPath = Astro.url.pathname;
+const canonicalPath =
+  generatedPath === '/index.html'
+    ? '/'
+    : generatedPath.endsWith('.html')
+      ? generatedPath.slice(0, -'.html'.length)
+      : generatedPath !== '/' && generatedPath.endsWith('/')
+        ? generatedPath.slice(0, -1)
+        : generatedPath;
+const canonicalUrl = new URL(canonicalPath, Astro.site);
 
 // JSON-LD contact fields: contact singleton removed (F07); literal fallbacks
 // are the canonical values.
@@ -31,13 +47,24 @@ const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {robots && <meta name="robots" content={robots} />}
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta property="og:image" content={new URL(ogImage, Astro.site).href} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Twin Cities Ski Club" />
     <meta name="twitter:card" content="summary_large_image" />
-    <link rel="canonical" href={Astro.url.href} />
+    <link rel="canonical" href={canonicalUrl.href} />
+    {/* Code-only Render deploys preserve directory resources for compatibility.
+        Keep their visible URL aligned with the extensionless canonical until
+        the Blueprint's edge 301s are active. */}
+    <script is:inline>
+      if (window.location.pathname.length > 1 && window.location.pathname.endsWith('/')) {
+        const canonicalUrl = new URL(window.location.href);
+        canonicalUrl.pathname = canonicalUrl.pathname.slice(0, -1);
+        window.location.replace(canonicalUrl.href);
+      }
+    </script>
     {/* Favicon set: SVG for modern browsers, 32px ICO fallback (also kills
         the default /favicon.ico 404), 180px PNG for iOS home screens. */}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
