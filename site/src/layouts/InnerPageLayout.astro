@@ -30,6 +30,7 @@ interface Props {
   title: string;
   description?: string;
   ogImage?: string;
+  robots?: string;
   headline?: string;
   subhead?: string;
   /** Static org facts for the masthead's narrow column (HeroInner). */
@@ -39,10 +40,10 @@ interface Props {
   photoAlt?: string;
   photoPosition?: string;
 }
-const { title, description, ogImage, headline, subhead, facts, photo, photoAlt, photoPosition } = Astro.props;
+const { title, description, ogImage, robots, headline, subhead, facts, photo, photoAlt, photoPosition } = Astro.props;
 const cta = await getRegistrationCta();
 ---
-<BaseLayout title={title} variant="inner" description={description} ogImage={ogImage}>
+<BaseLayout title={title} variant="inner" description={description} ogImage={ogImage} robots={robots}>
   <Nav />
   <MobileNavPanel>
     <CtaForState slot="cta" {...cta} />

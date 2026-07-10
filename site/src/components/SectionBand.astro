@@ -1,8 +1,6 @@
 ---
 interface Props {
   variant?: 'navy' | 'paper' | 'paper-on-navy';
-  /** @deprecated numbered eyebrow markers; use `seam` instead. */
-  number?: string;
   /** Section seam: the section name in the Trail Report label voice (small
       tracked caps) with a hairline running from it to the right edge, on one
       baseline. One device family across the site; physical chapter breaks
@@ -12,7 +10,7 @@ interface Props {
   subhead?: string;
   contentMax?: 'wide' | 'narrow';
 }
-const { variant = 'paper', number, seam, heading, subhead, contentMax = 'wide' } = Astro.props;
+const { variant = 'paper', seam, heading, subhead, contentMax = 'wide' } = Astro.props;
 
 // paper-on-navy: navy band with a rounded paper card inside; the px-6 gutter
 // keeps the card off the viewport edges below the max width.
@@ -36,9 +34,6 @@ const seamRule = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
   )}
   <div class={isCard ? 'px-6' : undefined}>
     <div class={'mx-auto ' + innerMax + ' ' + (isCard ? 'bg-paper text-ink ' : '') + padding}>
-      {number && (
-        <div class={'text-sm font-semibold tracking-wider mb-3 ' + (variant === 'navy' ? 'text-mint' : 'text-mint-deep')}>{number}</div>
-      )}
       {heading && (
         <h2 class="font-display font-semibold text-4xl md:text-5xl leading-[1.05] mb-4">{heading}</h2>
       )}

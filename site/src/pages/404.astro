@@ -1,0 +1,74 @@
+---
+// Astro emits this route as /404.html in static builds. Render serves that
+// file for unmatched paths and preserves the original 404 response status.
+export const prerender = true;
+
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import trailPhoto from '@/assets/images/photos/oo-corridor.jpg';
+
+const destinations = [
+  {
+    href: '/trips',
+    label: 'Club trips',
+    detail: 'See where the club is headed next.',
+  },
+  {
+    href: '/about',
+    label: 'About TCSC',
+    detail: 'Meet the community and learn how our seasons work.',
+  },
+  {
+    href: 'https://tcsc.ski/',
+    label: 'Registration and member tools',
+    detail: 'Practice sign-ups and club registration live at tcsc.ski.',
+  },
+];
+---
+
+<InnerPageLayout
+  title="Page not found | Twin Cities Ski Club"
+  description="This Twin Cities Ski Club page could not be found. Return home or find club trips, membership information, and registration."
+  robots="noindex"
+  headline="This trail ends here."
+  subhead="The page may have moved, or the link may be from our old site. We can get you back on a familiar track."
+  photo={trailPhoto}
+  photoAlt="A freshly groomed ski trail running through a forest coated in snow"
+  photoPosition="center 72%"
+>
+  <section class="mx-auto max-w-7xl px-6 py-16 md:py-24">
+    <div class="grid gap-14 md:grid-cols-12 md:gap-10">
+      <div class="md:col-span-6 lg:col-span-5">
+        <p class="text-sm font-semibold tracking-[0.08em] text-mint-deep">404 · Page not found</p>
+        <h2 class="mt-4 max-w-lg font-display text-3xl font-semibold leading-tight text-navy md:text-5xl">
+          Head back to the clubhouse.
+        </h2>
+        <p class="mt-5 max-w-prose text-lg leading-relaxed text-slate">
+          Start from the home page, or use one of the well-groomed routes nearby.
+        </p>
+        <a
+          href="/"
+          class="mt-8 inline-flex min-h-11 items-center rounded-md bg-navy px-5 py-3 font-semibold text-mint transition-colors hover:bg-navy-deep"
+        >Back to home</a>
+      </div>
+
+      <nav aria-label="Helpful destinations" class="md:col-span-5 md:col-start-8">
+        <h2 class="text-sm font-semibold text-navy">Helpful destinations</h2>
+        <ul class="mt-3 border-y border-ink/15 divide-y divide-ink/15">
+          {destinations.map((destination) => (
+            <li>
+              <a
+                href={destination.href}
+                class="group block min-h-11 py-5"
+              >
+                <span class="font-semibold text-navy underline decoration-ink/25 underline-offset-4 transition-colors group-hover:text-mint-deep group-hover:decoration-mint-deep">
+                  {destination.label}
+                </span>
+                <span class="mt-1 block text-sm leading-relaxed text-slate">{destination.detail}</span>
+              </a>
+            </li>
+          ))}
+        </ul>
+      </nav>
+    </div>
+  </section>
+</InnerPageLayout>

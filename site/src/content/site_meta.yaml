@@ -1,8 +1,7 @@
-# description: from the live Wix site's meta description
-# (migration/pages/home.json), with its 'programing' typo corrected.
+# Complete search/social description written for the Astro site. Keep this
+# below roughly 155 characters so snippets do not end mid-thought.
 title: Twin Cities Ski Club
 description: >-
-  Twin Cities Ski Club is a nonprofit dedicated to fostering a supportive
-  community for young adults (21-35) by promoting a healthy lifestyle through
-  cross-country ski training sessions and educational programming.
+  Year-round cross-country ski training and community for adults 21-35 in
+  Minneapolis-St. Paul, with coached practices, racing, and trips.
 og_image: /og/og-default.jpg

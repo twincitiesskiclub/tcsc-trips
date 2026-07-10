@@ -2,15 +2,14 @@
 
 ## Basis
 
-As of the 2026-06-10 photo refresh, every photo on the site is sourced from
-the club Slack #photos-videos channel (posted there by the members named in
-`migration/slack_photos/manifest.csv`, traceable by the date-stamped source
-filename). Posting to the club's shared photo channel is the provisional
-basis for `photo_consent_recorded: true` on each entry. These images were
-NOT previously on the public web, so the board re-confirmation below is a
-hard gate, not a formality. Professional race-gallery photos circulating in
-the channel (brockit / official Birkie galleries) were deliberately
-excluded: rights unclear.
+As of 2026-07-10, club leadership confirmed full consent for every photo
+published on the site. Member-posted photos from the club Slack
+#photos-videos channel are covered by the club's standing site-use policy.
+Each source is traceable through the `source_migration_file` column in
+`migration/port-manifest.csv` and its date-stamped filename. Professional
+race-gallery photos circulating in the channel (brockit / official Birkie
+galleries) remain excluded because the club does not hold their publication
+rights.
 
 History: the original 27 photos re-published from the public Wix site
 (prior-public-display basis) were removed from the site in this refresh in
@@ -18,15 +17,13 @@ favor of an all-recent pool; see git history of this file and
 `site/src/content/photos/` before commit range 2026-06-10 if they are ever
 wanted back.
 
-**Board re-confirmation is required before DNS cutover.** Until the board
-re-confirms, this basis is provisional: any photo the board does not
-re-confirm must have `photo_consent_recorded` set to `false` (which removes
-it from every mosaic) or be deleted outright.
-
 To trace any photo back to its source, see the `source_migration_file` and
-`consent_basis` columns in `migration/port-manifest.csv`.
+`consent_basis` columns in `migration/port-manifest.csv`. The latter records
+the asset's original migration basis, such as prior public display or a
+member Slack post; the current site-wide publication approval is recorded
+above.
 
-## Covered photos (23 mosaic + hero + 1 coach + 1 page photo)
+## Slack-sourced covered photos (full consent confirmed)
 
 | Content entry | Image file | Slack source file |
 |---|---|---|
@@ -57,16 +54,16 @@ To trace any photo back to its source, see the `source_migration_file` and
 | dry-tri-runner | site/src/assets/images/photos/dry-tri-runner.jpg | 2025-10-25_1761420816-201549_5.jpg |
 | (dry-tri page, roll leg) | site/src/assets/images/photos/dry-tri-roller.jpg | 2025-10-25_1761420816-201549_7.jpg |
 
-## Dry Tri photo caveat (for the board re-confirmation)
+## Dry Tri public-event photos
 
 The three Dry Tri photos (dry-tri-roller, dry-tri-rider, dry-tri-runner;
 all from the member photographer's 2025-10-25 set in #photos-videos) were
 shot at a PUBLIC race the club hosted. Registration was open beyond the
-club, so the people pictured may include non-member participants. The
-roller and rider wear TCSC race tops; the runner's affiliation is not
-established. The board re-confirmation should treat these three explicitly
-as public-event photography, a different consent posture than the
-member-hangout photos above.
+club, so the people pictured may include non-member participants. Full
+publication consent for all three images was confirmed with the rest of the
+site photo set on 2026-07-10. The roller and rider wear TCSC race tops; the
+runner's affiliation is not established, so this provenance remains recorded
+even though the approval question is closed.
 
 ## June 2026 design-feedback round additions (page photos)
 
@@ -96,11 +93,11 @@ check; rights confirmed 2026-06-11 by Rob.
 
 ## July 2026 round 2 addition (Community "Extra training fun" anchor)
 
-Standing consent basis, per Rob 2026-07-10: all photos posted in the club
-Slack are approved for site use as a standing rule, no per-photo clearance
-needed. The RIGHTS exclusion still holds (no professional race-gallery /
-brockit / official Birkie photography). This member-shot group-ride photo is
-covered by that standing basis, same Slack source as the entries above.
+The standing consent basis was confirmed by Rob on 2026-07-10: member-posted
+photos in the club Slack are approved for site use without per-photo
+clearance. The rights exclusion still holds for professional race-gallery,
+brockit, and official Birkie photography. This member-shot group-ride photo
+is covered by the same standing basis as the entries above.
 
 | Page placement | Image file | Slack source file |
 |---|---|---|

@@ -325,7 +325,7 @@ export default config({
         photo_consent_recorded: fields.checkbox({
           label: 'Photo consent recorded (required to render)',
           description:
-            'Provenance for ported photos: republished from the public Wix site, documented in migration/CONSENT.md (board re-confirmation required before DNS cutover).',
+            'Confirm that this photo is covered by the site-use policy documented in migration/CONSENT.md.',
           defaultValue: false,
         }),
       },

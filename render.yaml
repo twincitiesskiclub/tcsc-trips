@@ -2,32 +2,127 @@ services:
   - type: web
     name: tcsc-marketing
     runtime: static
-    branch: feat/marketing-site-v2   # switch to main after PR-1 merges
-    buildCommand: cd site && npm install && npm run build
+    branch: main
+    buildCommand: cd site && npm ci && npm run build
     staticPublishPath: ./site/dist
     envVars:
+      # Astro 7 requires Node >=22.12. Pin the production builder so Render
+      # does not fall back to an older workspace default.
+      - key: NODE_VERSION
+        value: 22.22.0
+      # Signals that this Blueprint's edge redirects and headers are active.
+      # Without it, Astro preserves resource-based compatibility fallbacks for
+      # the existing dashboard-managed service.
+      - key: TCSC_EDGE_CONFIG
+        value: "true"
       - key: PUBLIC_CONDITIONS_API_URL
         value: https://tcsc.ski/api/conditions
     headers:
-      # STAGING SAFETY: prevents the onrender.com URL from being indexed.
-      # MUST BE REMOVED in the DNS-cutover PR (Task 39) before twincitiesskiclub.org goes live.
+      # Browser security baseline for every static response. The CSP permits
+      # Astro's generated inline modules/styles and the live conditions fetch;
+      # all other executable and embedded content remains same-origin only.
       - path: /*
-        name: X-Robots-Tag
-        value: noindex
+        name: Content-Security-Policy
+        value: "default-src 'self'; base-uri 'self'; connect-src 'self' https://tcsc.ski; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests"
+      - path: /*
+        name: Permissions-Policy
+        value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin
+      - path: /*
+        name: Strict-Transport-Security
+        value: "max-age=31536000"
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+
+      # Astro fingerprints everything emitted under /_astro/. These files can
+      # be cached permanently because a content change creates a new URL.
+      - path: /_astro/*
+        name: Cache-Control
+        value: "public, max-age=31536000, immutable"
+
+      # HTML is revalidated on every visit. Route-family patterns cover both
+      # slash/no-slash requests; Render's unmatched 404 default is also short
+      # lived (three minutes).
+      - path: /
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /*.html
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /**/*.html
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /about*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /coaches*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /community*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /dry-tri*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /extra-training-fun*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /racing*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /sponsors*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /trips*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /wax-room*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /register*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /copy-of-register*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /sisu-signup*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
+      - path: /trip-sign-up*
+        name: Cache-Control
+        value: "public, max-age=0, must-revalidate"
     routes:
       # Ported from site/public/_redirects: Render Static does NOT read _redirects files.
       - type: redirect
         source: /register
-        destination: https://tcsc.ski/register
+        destination: https://tcsc.ski/
+      - type: redirect
+        source: /register/
+        destination: https://tcsc.ski/
       - type: redirect
         source: /copy-of-register
-        destination: https://tcsc.ski/register
+        destination: https://tcsc.ski/
+      - type: redirect
+        source: /copy-of-register/
+        destination: https://tcsc.ski/
       - type: redirect
         source: /sisu-signup
-        destination: https://tcsc.ski/trips/sisu-ski-fest
+        destination: /trips
+      - type: redirect
+        source: /sisu-signup/
+        destination: /trips
       - type: redirect
         source: /trip-sign-up
-        destination: https://tcsc.ski/trips
+        destination: /trips
+      - type: redirect
+        source: /trip-sign-up/
+        destination: /trips
       - type: redirect
         # Marketing trip page retired 2026-06-11 (registration happens on
         # tcsc.ski); both the old Wix slug and the retired page route land on
@@ -52,11 +147,46 @@ services:
         source: /contact
         destination: /
 
-## Cutover dashboard checklist (plan Task 39)
+      # With TCSC_EDGE_CONFIG enabled, Astro emits inner pages in file format
+      # so these rules can normalize known routes. Root assets, legacy routes,
+      # and the custom /404.html remain untouched.
+      - type: redirect
+        source: /about/
+        destination: /about
+      - type: redirect
+        source: /coaches/
+        destination: /coaches
+      - type: redirect
+        source: /community/
+        destination: /community
+      - type: redirect
+        source: /dry-tri/
+        destination: /dry-tri
+      - type: redirect
+        source: /extra-training-fun/
+        destination: /extra-training-fun
+      - type: redirect
+        source: /racing/
+        destination: /racing
+      - type: redirect
+        source: /sponsors/
+        destination: /sponsors
+      - type: redirect
+        source: /trips/
+        destination: /trips
+      - type: redirect
+        source: /wax-room/
+        destination: /wax-room
+      - type: redirect
+        source: /wax-room/:slug/
+        destination: /wax-room/:slug
+
+## Render dashboard sync note
 # The tcsc-marketing service was created via API, not the Blueprint flow, so the
-# headers/routes above are NOT auto-applied. Pending actions:
-# 1. Redirects: add the 8 redirect rules above via Dashboard -> tcsc-marketing ->
-#    Redirects/Rewrites (or recreate the service via Blueprint) BEFORE cutover.
-# 2. X-Robots-Tag noindex: dashboard-managed if added there; REMOVE at cutover.
-# 3. robots.txt: restore Allow: / + Sitemap line (see site/public/robots.txt
-#    header comment) in the cutover PR.
+# headers/routes and TCSC_EDGE_CONFIG above are not applied merely by an
+# application deploy. Link the existing service to this Blueprint (preferred),
+# or mirror these settings in Dashboard -> tcsc-marketing before relying on them
+# in production. Without the flag, Astro deliberately keeps compatible static
+# redirect resources and directory URLs so the code-only deploy remains safe.
+# Also remove any dashboard-managed X-Robots-Tag: noindex rule left from staging;
+# deleting it from this file cannot delete a separate dashboard rule.

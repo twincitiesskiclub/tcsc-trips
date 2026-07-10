@@ -54,8 +54,9 @@
 // extension, i.e. the Keystatic url-slug. Singleton collections contain
 // exactly one entry whose id is the singleton name, e.g.
 // `getEntry('home', 'home')`, `getEntry('nav', 'nav')`.
-import { defineCollection, z } from 'astro:content';
+import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
+import { z } from 'astro/zod';
 
 /** entry.id = file name without extension (ignore frontmatter `slug`). */
 const idFromFileName = ({ entry }: { entry: string }) =>
@@ -88,9 +89,8 @@ const photos = defineCollection({
         member_names: z.array(z.string()).default([]),
         order: z.number().int().default(0),
         show_on_home: z.boolean().default(false),
-        // Consent provenance for ported photos: republished from the public
-        // Wix site; see migration/CONSENT.md (board re-confirmation required
-        // before DNS cutover).
+        // Consent provenance and the club's standing site-use policy are
+        // documented in migration/CONSENT.md.
         photo_consent_recorded: z.boolean().default(false),
       })
       .strict(),
@@ -119,7 +119,7 @@ const practice_seasons = defineCollection({
       date_range: z.string(),
       fee_cents: z.number().int(),
       summary: z.string(),
-      // Per-season registration status line ("Registration opens Aug/Sep").
+      // Per-season registration status line (for example, exact opening dates).
       // registration_open=true renders it in the accent color, false muted.
       registration_note: z.string(),
       registration_open: z.boolean().default(false),
@@ -144,7 +144,7 @@ const trips = defineCollection({
         signup_deadline: z.string().optional(),
         capacity: z.string().optional(),
         refund_policy: z.string().optional(),
-        signup_url: z.string().url().optional(),
+        signup_url: z.url().optional(),
         // POLICY: must come from the consent-cleared pool.
         hero_photo: image().optional(),
         hero_photo_alt: z.string().optional(),
@@ -186,7 +186,7 @@ const sponsors = defineCollection({
         slug: z.string(), // display name ("Sponsor name")
         logo: image(),
         tier: z.enum(['trailblazer', 'supporter', 'friend']).default('supporter'),
-        url: z.string().url().optional(),
+        url: z.url().optional(),
         order: z.number().int().default(0),
       })
       .strict(),
@@ -204,11 +204,11 @@ const home = defineCollection({
         hero_image_alt: z.string(),
         registration_state: z.enum(['open', 'coming_soon', 'closed']).default('closed'),
         cta_open_label: z.string().default('Register for the season'),
-        cta_open_url: z.string().url().optional(),
+        cta_open_url: z.url().optional(),
         cta_coming_soon_label: z.string().default('Get on the list'),
-        cta_coming_soon_url: z.string().url().optional(),
+        cta_coming_soon_url: z.url().optional(),
         cta_closed_label: z.string().default('Register'),
-        cta_closed_url: z.string().url().optional(),
+        cta_closed_url: z.url().optional(),
         mission_paragraph: z.string().optional(),
       })
       .strict(),
@@ -365,8 +365,8 @@ const dry_tri = defineCollection({
         ride_photo_alt: z.string().optional(),
         run_photo: image().optional(),
         run_photo_alt: z.string().optional(),
-        register_url: z.string().url().optional(),
-        results_url: z.string().url().optional(),
+        register_url: z.url().optional(),
+        results_url: z.url().optional(),
       })
       .strict(),
 });
