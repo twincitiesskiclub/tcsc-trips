@@ -15,7 +15,7 @@ from app.conditions.locations import LOCATIONS, Location
 from app.conditions.wax import recommend_wax
 from app.integrations import trail_conditions as _trail_integration
 from app.integrations import weather as _weather_integration
-from app.practices.interfaces import WeatherConditions
+from app.practices.interfaces import TrailCondition, WeatherConditions
 from app.utils import now_central_naive
 
 logger = logging.getLogger(__name__)
@@ -39,19 +39,17 @@ def get_weather(lat: float, lon: float) -> WeatherConditions | None:
         return None
 
 
-def get_trail_conditions(name: str) -> str | None:
-    """Snow/ski quality string for a venue via the SkinnySkI scraper.
+def get_trail_report(name: str) -> TrailCondition | None:
+    """Full trail report for a venue via the SkinnySkI scraper.
 
     The integration fuzzy-matches the given name against scraped reports, so
     callers pass the canonical venue name (e.g. 'Hyland Lake Park Reserve',
-    which avoids mismatching St. Paul's 'Highland Park'). Returns the
-    ski_quality string (e.g. 'good', 'fair') or None on any failure.
+    which avoids mismatching St. Paul's 'Highland Park'). Returns the whole
+    TrailCondition (ski quality plus report provenance and grooming) or None
+    on any failure.
     """
     try:
-        condition = _trail_integration.get_trail_conditions(name)
-        if condition is None:
-            return None
-        return condition.ski_quality
+        return _trail_integration.get_trail_conditions(name)
     except Exception as e:
         logger.warning(f"Trail conditions lookup failed for '{name}': {e}")
         return None
@@ -62,7 +60,7 @@ def _build_location_entry(loc: Location) -> dict:
     weather = get_weather(loc.lat, loc.lon)
     temp_f = weather.temperature_f if weather is not None else None
     wind_chill_f = weather.feels_like_f if weather is not None else None
-    snow_conditions = get_trail_conditions(loc.skinnyski_name)
+    report = get_trail_report(loc.skinnyski_name)
 
     wax_band = recommend_wax(temp_f) if temp_f is not None else None
 
@@ -71,9 +69,14 @@ def _build_location_entry(loc: Location) -> dict:
         'name': loc.name,
         'temp_f': round(temp_f) if temp_f is not None else None,
         'wind_chill_f': round(wind_chill_f) if wind_chill_f is not None else None,
-        'snow_conditions': snow_conditions,
+        'snow_conditions': report.ski_quality if report is not None else None,
         'wax_band': wax_band.slug if wax_band is not None else None,
         'wax_label': wax_band.label if wax_band is not None else None,
+        'source_url': report.report_url if report is not None else None,
+        'report_date': (report.report_date.date().isoformat()
+                        if report is not None and report.report_date is not None else None),
+        'groomed_for': (report.groomed_for or ('both' if report.groomed else None))
+                       if report is not None else None,
     }
 
 
