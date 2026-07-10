@@ -32,6 +32,8 @@ PHOTOS = [
     ('birkie-start.jpg', '2024-02-23_1708738564-829599_1.jpg', 'page_body', 800),
     ('finlandia-podium.jpg', '2026-02-14_1771096714-097109_0.jpg', 'page_body', 800),
     ('skijor-race.jpg', '2024-02-07_1707360103-835559_0.jpg', 'page_body', 800),
+    # July 2026 round 2: Community "Extra training fun" anchor photo.
+    ('etf-fall-ride.jpg', '2025-10-19_1760903418-383239_0.jpg', 'page_body', 800),
 ]
 
 
