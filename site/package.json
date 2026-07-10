@@ -9,7 +9,6 @@
   "scripts": {
     "dev": "astro dev --port 4321",
     "build": "astro build",
-    "postbuild": "node scripts/emit-legacy-redirect-aliases.mjs",
     "preview": "astro preview --port 4321",
     "check": "astro check"
   },

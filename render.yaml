@@ -188,5 +188,7 @@ services:
 # or mirror these settings in Dashboard -> tcsc-marketing before relying on them
 # in production. Without the flag, Astro deliberately keeps compatible static
 # redirect resources and directory URLs so the code-only deploy remains safe.
+# The stale dashboard rules for no-slash legacy URLs terminate at permanent
+# compatibility redirects in app/routes/main.py until this edge config is synced.
 # Also remove any dashboard-managed X-Robots-Tag: noindex rule left from staging;
 # deleting it from this file cannot delete a separate dashboard rule.

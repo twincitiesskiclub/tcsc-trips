@@ -12,9 +12,10 @@ import tailwindcss from '@tailwindcss/vite';
 // react() exists solely for the Keystatic admin UI, so it is gated with it.
 const isProductionBuild = process.env.NODE_ENV === 'production';
 // The existing Render service is dashboard-managed. Until it is linked to
-// the Blueprint, retain static resources for legacy and slash URLs so a code
-// deploy cannot turn previously valid links into 404s. The Blueprint sets
-// this flag and then Render's real 301 rules can take over.
+// the Blueprint, retain static resources for slash-form legacy URLs and page
+// directories so a code deploy cannot turn valid links into 404s. The stale
+// no-slash dashboard rules land on compatibility routes in the registration
+// app. The Blueprint sets this flag and then real edge 301s can take over.
 const hasManagedEdgeConfig = process.env.TCSC_EDGE_CONFIG === 'true';
 
 export default defineConfig({
