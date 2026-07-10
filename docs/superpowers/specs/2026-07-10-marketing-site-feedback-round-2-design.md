@@ -104,7 +104,15 @@ Implementer Reads each source image and screenshot-verifies each rendered crop a
 `site/src/content/pages/racing.mdoc` races list: replace month-level date labels with officially announced 2026-27 dates, verified against the official race sites (research agent output reviewed before use; a date ships only with a confirmed-official source). Expected shape, subject to what is actually announced:
 - Sisu Ski Fest, Prebirkie & North End Classic, American Birkebeiner, Great Bear Chase: `Jan 9, 2027`-style values where confirmed; otherwise the current label stays.
 - Tour de Finn stays `Local series`; TCSC Dry Tri stays `Late October` (no public 2026 date; prior note confirms).
-- Date format: `Feb 25-27, 2027` (short month, no leading zeros, hyphen ranges), consistent column width in the existing `sm:grid-cols-[10rem_1fr_1fr]` grid.
+- Date format: `Feb 27, 2027` (short month, no leading zeros, hyphen ranges when needed), consistent column width in the existing `sm:grid-cols-[10rem_1fr_1fr]` grid.
+
+Verified 2026-27 race dates (web research, 2026-07-10; official race sites):
+- Sisu Ski Fest: `Jan 9, 2027` (sisuskifest.com homepage) - confirmed, use it.
+- American Birkebeiner: `Feb 27, 2027` (birkie.com event page; Birkie Week Feb 23-28) - confirmed, use it.
+- Great Bear Chase: `Mar 13, 2027` (greatbearchase.com homepage) - confirmed, use it.
+- Prebirkie & North End Classic: no official 2027 dates published (only a third-party tentative listing) - keep the current `Late January` label.
+- Tour de Finn: season-long points series, no 2027 list posted - keep `Local series`.
+- TCSC Dry Tri: no public 2026 date - keep `Late October`.
 
 ## 11. Footer link order
 
