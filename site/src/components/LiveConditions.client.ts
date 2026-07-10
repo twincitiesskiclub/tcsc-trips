@@ -6,6 +6,9 @@ type LocResp = {
   snow_conditions: string | null;
   wax_band: string | null;
   wax_label: string | null;
+  source_url: string | null;
+  report_date: string | null;
+  groomed_for: string | null;
 };
 type BirkieResp = { status: string; word: string; detail: string };
 type Resp = { updated_at: string; locations: LocResp[]; birkie?: BirkieResp; error?: string };
@@ -44,11 +47,15 @@ function renderInto(root: HTMLElement, data: Resp) {
     el.style.removeProperty('display');
   });
   root.querySelector('[data-dryland-label]')?.remove();
+  // The groomed line rides below the wax line and is prominent-only (the
+  // compact variant keeps one line per venue); the stamp only exists there.
+  const isCompact = !root.querySelector('[data-updated]');
   const announcements: string[] = [];
   data.locations.forEach((loc) => {
     const el = root.querySelector(`[data-location="${loc.id}"]`) as HTMLElement | null;
     if (!el) return;
-    setText(el, '[data-name]', loc.name ?? '·');
+    setName(el, loc.name ?? '·', loc.source_url);
+    if (!isCompact) setGroomed(el, loc.groomed_for, loc.report_date);
     setText(el, '[data-temp]', loc.temp_f == null ? '·' : `${loc.temp_f}°F`);
     // Wind chill earns its spot only when it materially differs from air temp.
     const showFeels =
@@ -97,6 +104,12 @@ function renderFailure(root: HTMLElement) {
     setText(el, '[data-temp]', '');
     setText(el, '[data-wax]', offSeason ? 'Dryland season' : 'No report');
     setText(el, '[data-feels]', '');
+    // Drop any report link or groomed line a prior winter fetch left behind:
+    // an outage should not keep advertising a stale report.
+    const nameEl = el.querySelector('[data-name]') as HTMLElement | null;
+    const link = nameEl?.querySelector('a[data-source-link]');
+    if (nameEl && link) nameEl.textContent = link.textContent;
+    el.querySelector('[data-groomed]')?.remove();
     const chip = el.querySelector('[data-wax-chip]') as HTMLElement | null;
     if (chip) chip.hidden = true;
     // Off-season: hide the four venue cells entirely; the stamp already
@@ -156,6 +169,68 @@ function updateStamp(root: HTMLElement) {
 function setText(el: HTMLElement, sel: string, val: string) {
   const t = el.querySelector(sel) as HTMLElement | null;
   if (t && t.textContent !== val) t.textContent = val;
+}
+
+// Venue name: a quiet link to the SkinnySkI report when the payload carries
+// one, plain text otherwise (exactly the server-rendered default). Ledger link
+// treatment, opens in a new tab.
+function setName(el: HTMLElement, name: string, sourceUrl: string | null) {
+  const target = el.querySelector('[data-name]') as HTMLElement | null;
+  if (!target) return;
+  if (sourceUrl) {
+    let a = target.querySelector('a[data-source-link]') as HTMLAnchorElement | null;
+    if (!a) {
+      a = document.createElement('a');
+      a.dataset.sourceLink = '';
+      a.target = '_blank';
+      a.rel = 'noopener';
+      a.className = 'underline underline-offset-4 decoration-mint/40 hover:decoration-mint';
+      target.replaceChildren(a);
+    }
+    a.href = sourceUrl;
+    if (a.textContent !== name) a.textContent = name;
+  } else if (target.querySelector('a[data-source-link]') || target.textContent !== name) {
+    target.textContent = name;
+  }
+}
+
+// Groomed-as-of line injected below the wax line (prominent variant only);
+// nothing renders when the report is not groomed, so dryland is unchanged.
+function setGroomed(el: HTMLElement, groomedFor: string | null, reportDate: string | null) {
+  const text = groomedLine(groomedFor, reportDate);
+  let line = el.querySelector('[data-groomed]') as HTMLElement | null;
+  if (!text) {
+    line?.remove();
+    return;
+  }
+  if (!line) {
+    line = document.createElement('div');
+    line.dataset.groomed = '';
+    line.className = 'text-[11px] text-paper/50 mt-0.5';
+    el.appendChild(line);
+  }
+  if (line.textContent !== text) line.textContent = text;
+}
+
+function groomedLine(groomedFor: string | null, reportDate: string | null): string {
+  if (!groomedFor) return '';
+  const label =
+    groomedFor === 'skate' ? 'Groomed skate' :
+    groomedFor === 'classic' ? 'Groomed classic' :
+    'Groomed';
+  const date = formatShortDate(reportDate);
+  return date ? `${label} · ${date}` : label;
+}
+
+// 'YYYY-MM-DD' to short month + day, no year ('2026-02-08' -> 'Feb 8').
+// Parsed as a local date (not the Date string parser, which reads bare ISO
+// dates as UTC and can shift the day across US time zones).
+function formatShortDate(iso: string | null): string {
+  if (!iso) return '';
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return '';
+  const d = new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
 function initBirkieFever(root: HTMLElement) {
