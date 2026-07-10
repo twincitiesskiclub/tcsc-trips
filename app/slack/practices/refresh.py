@@ -190,11 +190,17 @@ def _refresh_coach_summary(practice, change_type):
 
         week_start, week_end = _week_bounds(practice.date)
 
-        # Get all practices for the week
-        practices_for_week = Practice.query.filter(
+        # Get all practices for the week. On delete the row is still in the
+        # session (the route refreshes before committing the delete), so drop
+        # it explicitly — otherwise its now-dead Edit button gets rebuilt back
+        # into the post and the next click hits "Practice not found".
+        week_query = Practice.query.filter(
             Practice.date >= week_start,
-            Practice.date < week_end
-        ).order_by(Practice.date).all()
+            Practice.date < week_end,
+        )
+        if change_type == 'delete':
+            week_query = week_query.filter(Practice.id != practice.id)
+        practices_for_week = week_query.order_by(Practice.date).all()
 
         # Get expected days from config
         expected_days = AppConfig.get('practice_days', [
@@ -243,15 +249,19 @@ def _refresh_weekly_summary(practice, change_type):
 
         week_start, week_end = _week_bounds(practice.date)
 
-        # Get all scheduled/confirmed practices for the week
-        practices_for_week = Practice.query.filter(
+        # Get all scheduled/confirmed practices for the week. On delete the row
+        # is still in the session, so exclude it (see _refresh_coach_summary).
+        week_query = Practice.query.filter(
             Practice.date >= week_start,
             Practice.date < week_end,
             Practice.status.in_([
                 PracticeStatus.SCHEDULED.value,
                 PracticeStatus.CONFIRMED.value
             ])
-        ).order_by(Practice.date).all()
+        )
+        if change_type == 'delete':
+            week_query = week_query.filter(Practice.id != practice.id)
+        practices_for_week = week_query.order_by(Practice.date).all()
 
         # Build weather data
         weather_data = {}

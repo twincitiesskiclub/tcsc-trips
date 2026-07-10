@@ -626,7 +626,8 @@ def build_practice_create_modal(
     practice_date: 'datetime', default_time: str, locations: list = None,
     channel_id: str = None, message_ts: str = None,
     all_activities: list = None, all_types: list = None,
-    slot_defaults: dict = None, silent_defaults: dict = None
+    slot_defaults: dict = None, silent_defaults: dict = None,
+    eligible_coaches: list = None, eligible_leads: list = None
 ) -> dict:
     """Build modal for creating a new practice from weekly summary.
 
@@ -638,13 +639,17 @@ def build_practice_create_modal(
         message_ts: Timestamp of the summary post (for updating)
         all_activities: List of (id, name) tuples for activity multi-select
         all_types: List of (id, name) tuples for type multi-select
-        slot_defaults: Dict of default field values from config (location_id, warmup, etc.)
-        silent_defaults: Dict of defaults applied silently on submit (social_location_id, coach_ids)
+        slot_defaults: Dict of default field values from config (location_id, workout,
+            coach_ids, lead_ids, etc.); coach_ids/lead_ids pre-select the pickers
+        silent_defaults: Dict of defaults applied silently on submit (social_location_id)
+        eligible_coaches: List of (user_id, name, slack_uid) tuples for the coach picker
+        eligible_leads: List of (user_id, name, slack_uid) tuples for the lead picker
 
     Returns:
         Slack modal view payload
     """
     import json
+    from types import SimpleNamespace
     date_str = practice_date.strftime('%A, %B %-d')
     defaults = slot_defaults or {}
 
@@ -761,6 +766,34 @@ def build_practice_create_modal(
             "label": {"type": "plain_text", "text": "Practice Types"},
             "element": _build_activity_type_multi_select(
                 "type_ids", "Select practice types", all_types, default_type_ids
+            )
+        })
+
+    # Coaches multi-select, pre-selected from slot defaults (coach_ids)
+    if eligible_coaches:
+        default_coaches = [SimpleNamespace(user_id=cid, display_name=None)
+                           for cid in defaults.get('coach_ids', [])]
+        blocks.append({
+            "type": "input",
+            "block_id": "coaches_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Coaches"},
+            "element": _build_person_multi_select(
+                "coach_ids", "Select coach(es)", eligible_coaches, default_coaches
+            )
+        })
+
+    # Leads multi-select, pre-selected from slot defaults (lead_ids)
+    if eligible_leads:
+        default_leads = [SimpleNamespace(user_id=lid, display_name=None)
+                         for lid in defaults.get('lead_ids', [])]
+        blocks.append({
+            "type": "input",
+            "block_id": "leads_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Practice Leads"},
+            "element": _build_person_multi_select(
+                "lead_ids", "Select lead(s)", eligible_leads, default_leads
             )
         })
 
