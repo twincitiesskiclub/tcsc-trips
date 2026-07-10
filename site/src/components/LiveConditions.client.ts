@@ -122,21 +122,22 @@ function renderFailure(root: HTMLElement) {
       el.style.display = 'none';
     }
   });
-  // Inject a single "Dryland season" label before the Birkie cell in the
-  // compact variant. The prominent variant relies on the stamp line.
-  // Distinguish compact (no [data-updated] stamp) from prominent.
+  // Off-season: put a single "Dryland season" statement where the venue cells
+  // were, so a phone visitor gets a member's read instead of a bare fever
+  // number or an empty strip. Compact (inner) pages show it at all widths in
+  // place of the venue lines; the prominent (home) strip shows it on mobile
+  // only, where the fever cell is now md+, and keeps the fever reading on
+  // desktop. Distinguish compact (no [data-updated] stamp) from prominent.
   const isCompact = !root.querySelector('[data-updated]');
   const birkie = root.querySelector('[data-birkie]') as HTMLElement | null;
-  if (offSeason && isCompact && birkie) {
-    if (!root.querySelector('[data-dryland-label]')) {
-      const label = document.createElement('span');
-      label.dataset.drylandLabel = '';
-      // max-md:hidden keeps the mobile compact strip as the single Birkie
-      // line, matching the venue cells it replaces.
-      label.className = 'max-md:hidden flex items-baseline gap-1.5 text-paper/70';
-      label.textContent = 'Dryland season';
-      birkie.parentElement?.insertBefore(label, birkie);
-    }
+  if (offSeason && birkie && !root.querySelector('[data-dryland-label]')) {
+    const label = document.createElement('span');
+    label.dataset.drylandLabel = '';
+    label.textContent = 'Dryland season';
+    label.className = isCompact
+      ? 'flex items-baseline gap-1.5 text-paper/70'
+      : 'md:hidden col-span-2 text-paper/70';
+    birkie.parentElement?.insertBefore(label, birkie);
   }
   // Fever scale matches app/conditions/birkie.py: 98.6 means summer.
   if (birkie) {

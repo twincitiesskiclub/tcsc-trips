@@ -37,12 +37,15 @@ const locations = [
         <span class="text-[11px] text-coral" data-updated>Loading conditions…</span>
       </div>
       <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
-        {/* Venue cells are desktop-only: on a phone the full grid is
-            overwhelming, so mobile gets just the Birkie fever cell. */}
+        {/* On a phone the full grid is overwhelming, so mobile leads with just
+            the Theodore Wirth cell (the club's home venue); the other three
+            venues and the fever cell are desktop-only. */}
         {locations.map(({ id, name }) => (
           <div
             data-location={id}
-            class="max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5"
+            class={id === 'wirth'
+              ? 'py-1 col-span-2 md:col-span-1 md:pr-5'
+              : 'max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5'}
           >
             <div class="text-[10px] tracking-widest uppercase text-paper/55" data-name>{name}</div>
             <div class="mt-1 flex items-baseline gap-2">
@@ -70,7 +73,7 @@ const locations = [
           data-birkie-audio="/audio/birkie-fever.mp3"
           aria-pressed="false"
           aria-label="Birkie fever. Press to play the song."
-          class="group py-1 text-left col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
+          class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
         >
           <div class="text-[10px] tracking-widest uppercase text-paper/55">
             Birkie fever
@@ -85,16 +88,16 @@ const locations = [
     </>
   ) : (
     <div class="mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
-      {/* Venue lines are desktop-only here too; mobile keeps one line of
-          Birkie fever. */}
+      {/* Mobile keeps just the Theodore Wirth line; the other venues and the
+          fever line are desktop-only. */}
       {locations.map(({ id, name }) => (
-        <div data-location={id} class="max-md:hidden flex items-baseline gap-1.5">
+        <div data-location={id} class={id === 'wirth' ? 'flex items-baseline gap-1.5' : 'max-md:hidden flex items-baseline gap-1.5'}>
           <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
           <span class="font-display text-paper" data-temp>·</span>
           <span data-wax>·</span>
         </div>
       ))}
-      <div data-birkie class="flex items-baseline gap-1.5">
+      <div data-birkie class="max-md:hidden flex items-baseline gap-1.5">
         <span class="tracking-widest uppercase text-mint">Birkie</span>
         <span class="font-display text-paper" data-birkie-word>·</span>
       </div>
