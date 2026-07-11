@@ -1,194 +1,269 @@
-services:
-  - type: web
-    name: tcsc-marketing
-    runtime: static
-    branch: main
-    buildCommand: cd site && npm ci && npm run build
-    staticPublishPath: ./site/dist
-    envVars:
-      # Astro 7 requires Node >=22.12. Pin the production builder so Render
-      # does not fall back to an older workspace default.
-      - key: NODE_VERSION
-        value: 22.22.0
-      # Signals that this Blueprint's edge redirects and headers are active.
-      # Without it, Astro preserves resource-based compatibility fallbacks for
-      # the existing dashboard-managed service.
-      - key: TCSC_EDGE_CONFIG
-        value: "true"
-      - key: PUBLIC_CONDITIONS_API_URL
-        value: https://tcsc.ski/api/conditions
-    headers:
-      # Browser security baseline for every static response. The CSP permits
-      # Astro's generated inline modules/styles and the live conditions fetch;
-      # all other executable and embedded content remains same-origin only.
-      - path: /*
-        name: Content-Security-Policy
-        value: "default-src 'self'; base-uri 'self'; connect-src 'self' https://tcsc.ski; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests"
-      - path: /*
-        name: Permissions-Policy
-        value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
-      - path: /*
-        name: Referrer-Policy
-        value: strict-origin-when-cross-origin
-      - path: /*
-        name: Strict-Transport-Security
-        value: "max-age=31536000"
-      - path: /*
-        name: X-Content-Type-Options
-        value: nosniff
-      - path: /*
-        name: X-Frame-Options
-        value: DENY
+# Existing production resources exported from Render on 2026-07-11 and
+# reconciled into one Blueprint. Resource names must remain exact so Render
+# adopts the live services instead of creating suffixed duplicates.
+version: "1"
+projects:
+  - name: Twin Cities Ski Club
+    environments:
+      - name: Production
+        services:
+          - type: web
+            name: tcsc-registration
+            runtime: python
+            repo: https://github.com/twincitiesskiclub/tcsc-trips
+            plan: starter
+            envVars:
+              # Existing values remain in Render. Secrets never enter git.
+              - key: SLACK_YOUR_X_ID
+                sync: false
+              - key: SLACK_SIGNING_SECRET
+                sync: false
+              - key: STRIPE_DEV_WEBHOOK_SECRET
+                sync: false
+              - key: GOOGLE_CLIENT_SECRET
+                sync: false
+              - key: DATABASE_URL
+                sync: false
+              - key: FLASK_ENV
+                sync: false
+              - key: SLACK_APP_TOKEN
+                sync: false
+              - key: STRIPE_DEV_SECRET_KEY
+                sync: false
+              - key: SLACK_YOUR_COOKIE
+                sync: false
+              - key: GOOGLE_PLACES_API_KEY
+                sync: false
+              - key: SLACK_ADMIN_TOKEN
+                sync: false
+              - key: STRIPE_DEV_PUBLISHABLE_KEY
+                sync: false
+              - key: STRIPE_SECRET_KEY
+                sync: false
+              - key: GOOGLE_CLIENT_ID
+                sync: false
+              - key: SLACK_BOT_TOKEN
+                sync: false
+              - key: SLACK_USER_TOKEN
+                sync: false
+              - key: SLACK_WEBHOOK_URL
+                sync: false
+              - key: STRIPE_PUBLISHABLE_KEY
+                sync: false
+              - key: FLASK_SECRET_KEY
+                sync: false
+              - key: STRIPE_WEBHOOK_SECRET
+                sync: false
+              - key: EXPERTVOICE_SFTP_PASSWORD
+                sync: false
+              - key: EXPERTVOICE_SFTP_USERNAME
+                sync: false
+              - key: FLASK_DEBUG
+                sync: false
+              - key: ANTHROPIC_API_KEY
+                sync: false
+            region: oregon
+            buildCommand: pip install -r requirements.txt
+            startCommand: gunicorn "app:create_app()"
+            preDeployCommand: ./scripts/release.sh
+            domains:
+              - www.tcsc.ski
+              - tcsc.ski
+            autoDeployTrigger: commit
 
-      # Astro fingerprints everything emitted under /_astro/. These files can
-      # be cached permanently because a content change creates a new URL.
-      - path: /_astro/*
-        name: Cache-Control
-        value: "public, max-age=31536000, immutable"
+          - type: web
+            name: tcsc-team-site
+            runtime: static
+            repo: https://github.com/twincitiesskiclub/tcsc-trips
+            envVars:
+              - key: PUBLIC_CONDITIONS_API_URL
+                value: https://tcsc.ski/api/conditions
+              # Astro 7 requires Node >=22.12. Keep the production builder on
+              # the same Node release used for clean-install verification.
+              - key: NODE_VERSION
+                value: 22.22.0
+              # This flag is enabled only alongside the edge routes below. It
+              # switches Astro from compatibility resources to flat pages so
+              # Render can issue true redirects before serving content.
+              - key: TCSC_EDGE_CONFIG
+                value: "true"
+            buildCommand: cd site && npm ci && npm run build
+            staticPublishPath: site/dist
+            domains:
+              - twincitiesskiclub.org
+              - www.twincitiesskiclub.org
+            headers:
+              # Browser security baseline for every static response. The CSP
+              # permits Astro's inline modules/styles and the conditions API.
+              - path: /*
+                name: Content-Security-Policy
+                value: "default-src 'self'; base-uri 'self'; connect-src 'self' https://tcsc.ski; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests"
+              - path: /*
+                name: Permissions-Policy
+                value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
+              - path: /*
+                name: Referrer-Policy
+                value: strict-origin-when-cross-origin
+              - path: /*
+                name: Strict-Transport-Security
+                value: "max-age=31536000"
+              - path: /*
+                name: X-Content-Type-Options
+                value: nosniff
+              - path: /*
+                name: X-Frame-Options
+                value: DENY
 
-      # HTML is revalidated on every visit. Route-family patterns cover both
-      # slash/no-slash requests; Render's unmatched 404 default is also short
-      # lived (three minutes).
-      - path: /
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /*.html
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /**/*.html
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /about*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /coaches*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /community*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /dry-tri*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /extra-training-fun*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /racing*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /sponsors*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /trips*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /wax-room*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /register*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /copy-of-register*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /sisu-signup*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-      - path: /trip-sign-up*
-        name: Cache-Control
-        value: "public, max-age=0, must-revalidate"
-    routes:
-      # Ported from site/public/_redirects: Render Static does NOT read _redirects files.
-      - type: redirect
-        source: /register
-        destination: https://tcsc.ski/
-      - type: redirect
-        source: /register/
-        destination: https://tcsc.ski/
-      - type: redirect
-        source: /copy-of-register
-        destination: https://tcsc.ski/
-      - type: redirect
-        source: /copy-of-register/
-        destination: https://tcsc.ski/
-      - type: redirect
-        source: /sisu-signup
-        destination: /trips
-      - type: redirect
-        source: /sisu-signup/
-        destination: /trips
-      - type: redirect
-        source: /trip-sign-up
-        destination: /trips
-      - type: redirect
-        source: /trip-sign-up/
-        destination: /trips
-      - type: redirect
-        # Marketing trip page retired 2026-06-11 (registration happens on
-        # tcsc.ski); both the old Wix slug and the retired page route land on
-        # the trips ledger.
-        source: /sisu-information
-        destination: /trips
-      - type: redirect
-        source: /trips/sisu-ski-fest
-        destination: /trips
-      - type: redirect
-        source: /trip-information
-        destination: /trips
-      - type: redirect
-        source: /trip-confirmation
-        destination: /
-      - type: redirect
-        source: /confirmation
-        destination: /
-      - type: redirect
-        # Page retired 2026-06-10 (polish pass #4): footer carries contact
-        # info site-wide. Redirect keeps old Wix bookmarks working.
-        source: /contact
-        destination: /
+              # Astro fingerprints everything under /_astro/. A content
+              # change produces a new URL, so these files are immutable.
+              - path: /_astro/*
+                name: Cache-Control
+                value: "public, max-age=31536000, immutable"
 
-      # With TCSC_EDGE_CONFIG enabled, Astro emits inner pages in file format
-      # so these rules can normalize known routes. Root assets, legacy routes,
-      # and the custom /404.html remain untouched.
-      - type: redirect
-        source: /about/
-        destination: /about
-      - type: redirect
-        source: /coaches/
-        destination: /coaches
-      - type: redirect
-        source: /community/
-        destination: /community
-      - type: redirect
-        source: /dry-tri/
-        destination: /dry-tri
-      - type: redirect
-        source: /extra-training-fun/
-        destination: /extra-training-fun
-      - type: redirect
-        source: /racing/
-        destination: /racing
-      - type: redirect
-        source: /sponsors/
-        destination: /sponsors
-      - type: redirect
-        source: /trips/
-        destination: /trips
-      - type: redirect
-        source: /wax-room/
-        destination: /wax-room
-      - type: redirect
-        source: /wax-room/:slug/
-        destination: /wax-room/:slug
+              # Revalidate HTML and redirect resources on every visit.
+              - path: /
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /*.html
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /**/*.html
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /about*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /coaches*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /community*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /dry-tri*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /extra-training-fun*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /racing*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /sponsors*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /trips*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /wax-room*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /register*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /copy-of-register*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /sisu-signup*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /trip-sign-up*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
 
-## Render dashboard sync note
-# The tcsc-marketing service was created via API, not the Blueprint flow, so the
-# headers/routes and TCSC_EDGE_CONFIG above are not applied merely by an
-# application deploy. Link the existing service to this Blueprint (preferred),
-# or mirror these settings in Dashboard -> tcsc-marketing before relying on them
-# in production. Without the flag, Astro deliberately keeps compatible static
-# redirect resources and directory URLs so the code-only deploy remains safe.
-# The stale dashboard rules for no-slash legacy URLs terminate at permanent
-# compatibility redirects in app/routes/main.py until this edge config is synced.
-# Also remove any dashboard-managed X-Robots-Tag: noindex rule left from staging;
-# deleting it from this file cannot delete a separate dashboard rule.
+            routes:
+              # Retired Wix/signup routes. Both URL forms resolve directly to
+              # their working destination with a Render 301.
+              - type: redirect
+                source: /register
+                destination: https://tcsc.ski/
+              - type: redirect
+                source: /register/
+                destination: https://tcsc.ski/
+              - type: redirect
+                source: /copy-of-register
+                destination: https://tcsc.ski/
+              - type: redirect
+                source: /copy-of-register/
+                destination: https://tcsc.ski/
+              - type: redirect
+                source: /sisu-signup
+                destination: /trips
+              - type: redirect
+                source: /sisu-signup/
+                destination: /trips
+              - type: redirect
+                source: /trip-sign-up
+                destination: /trips
+              - type: redirect
+                source: /trip-sign-up/
+                destination: /trips
+              - type: redirect
+                source: /sisu-information
+                destination: /trips
+              - type: redirect
+                source: /sisu-information/
+                destination: /trips
+              - type: redirect
+                source: /trips/sisu-ski-fest
+                destination: /trips
+              - type: redirect
+                source: /trips/sisu-ski-fest/
+                destination: /trips
+              - type: redirect
+                source: /trip-information
+                destination: /trips
+              - type: redirect
+                source: /trip-information/
+                destination: /trips
+              - type: redirect
+                source: /trip-confirmation
+                destination: /
+              - type: redirect
+                source: /trip-confirmation/
+                destination: /
+              - type: redirect
+                source: /confirmation
+                destination: /
+              - type: redirect
+                source: /confirmation/
+                destination: /
+              - type: redirect
+                source: /contact
+                destination: /
+              - type: redirect
+                source: /contact/
+                destination: /
+
+              # Flat page output leaves slash URLs available to edge rules.
+              # Normalize known pages to the extensionless canonical form.
+              - type: redirect
+                source: /about/
+                destination: /about
+              - type: redirect
+                source: /coaches/
+                destination: /coaches
+              - type: redirect
+                source: /community/
+                destination: /community
+              - type: redirect
+                source: /dry-tri/
+                destination: /dry-tri
+              - type: redirect
+                source: /extra-training-fun/
+                destination: /extra-training-fun
+              - type: redirect
+                source: /racing/
+                destination: /racing
+              - type: redirect
+                source: /sponsors/
+                destination: /sponsors
+              - type: redirect
+                source: /trips/
+                destination: /trips
+              - type: redirect
+                source: /wax-room/
+                destination: /wax-room
+              - type: redirect
+                source: /wax-room/:slug/
+                destination: /wax-room/:slug
+            autoDeployTrigger: commit
