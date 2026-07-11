@@ -23,7 +23,7 @@ export default defineConfig({
   output: 'static',
   trailingSlash: hasManagedEdgeConfig ? 'never' : 'ignore',
   build: {
-    // Flat files let Blueprint-managed edge rules see slash URLs. Directory
+    // Flat files let Blueprint-managed rules handle retired routes. Directory
     // output is the safe fallback while the existing service has only its
     // older dashboard rules, because Render serves resources before rules.
     format: hasManagedEdgeConfig ? 'file' : 'directory',
