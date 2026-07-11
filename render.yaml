@@ -234,36 +234,39 @@ projects:
                 source: /contact/
                 destination: /
 
-              # Flat page output leaves slash URLs available to edge rules.
-              # Normalize known pages to the extensionless canonical form.
-              - type: redirect
+              # Render matches these slash-form sources against the clean URL
+              # after resource lookup. Rewriting to the generated flat file
+              # keeps clean URLs at 200 without the self-redirect loops that
+              # a redirect to the same extensionless path would create.
+              - type: rewrite
                 source: /about/
-                destination: /about
-              - type: redirect
+                destination: /about.html
+              - type: rewrite
                 source: /coaches/
-                destination: /coaches
-              - type: redirect
+                destination: /coaches.html
+              - type: rewrite
                 source: /community/
-                destination: /community
-              - type: redirect
+                destination: /community.html
+              - type: rewrite
                 source: /dry-tri/
-                destination: /dry-tri
-              - type: redirect
+                destination: /dry-tri.html
+              - type: rewrite
                 source: /extra-training-fun/
-                destination: /extra-training-fun
-              - type: redirect
+                destination: /extra-training-fun.html
+              - type: rewrite
                 source: /racing/
-                destination: /racing
-              - type: redirect
+                destination: /racing.html
+              - type: rewrite
                 source: /sponsors/
-                destination: /sponsors
-              - type: redirect
+                destination: /sponsors.html
+              - type: rewrite
                 source: /trips/
-                destination: /trips
-              - type: redirect
+                destination: /trips.html
+              - type: rewrite
                 source: /wax-room/
-                destination: /wax-room
-              - type: redirect
+                destination: /wax-room.html
+              - type: rewrite
                 source: /wax-room/:slug/
-                destination: /wax-room/:slug
+                destination: /wax-room/:slug.html
+
             autoDeployTrigger: commit
