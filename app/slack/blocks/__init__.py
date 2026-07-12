@@ -42,6 +42,16 @@ from app.slack.blocks.recap import (
 from app.slack.blocks.dispatch import (
     build_dispatch_submission_section,
 )
+from app.slack.blocks.text import (
+    CONTEXT_TEXT_MAX,
+    FALLBACK_TEXT_MAX,
+    HEADER_TEXT_MAX,
+    SECTION_FIELD_TEXT_MAX,
+    SECTION_TEXT_MAX,
+    guard_fallback_text,
+    guard_slack_blocks,
+    truncate_slack_text,
+)
 
 __all__ = [
     # announcements
@@ -72,4 +82,13 @@ __all__ = [
     "build_daily_practice_recap_blocks",
     # dispatch
     "build_dispatch_submission_section",
+    # text
+    "CONTEXT_TEXT_MAX",
+    "FALLBACK_TEXT_MAX",
+    "HEADER_TEXT_MAX",
+    "SECTION_FIELD_TEXT_MAX",
+    "SECTION_TEXT_MAX",
+    "guard_fallback_text",
+    "guard_slack_blocks",
+    "truncate_slack_text",
 ]
