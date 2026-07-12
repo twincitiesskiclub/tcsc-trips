@@ -554,7 +554,19 @@ def build_practice_edit_full_modal(
             )
         })
 
-    # Add location and workout description blocks
+    # Add location and practice authoring blocks
+    formatted_plan_reactions = format_plan_reaction_lines(
+        practice.plan_reactions or []
+    )
+    plan_reactions_element = {
+        "type": "plain_text_input",
+        "action_id": "plan_reactions",
+        "multiline": True,
+        "max_length": 1000,
+        "placeholder": {"type": "plain_text", "text": ":emoji: What it means"},
+    }
+    if formatted_plan_reactions:
+        plan_reactions_element["initial_value"] = formatted_plan_reactions
     blocks.extend([
         {
             "type": "input",
@@ -575,6 +587,34 @@ def build_practice_edit_full_modal(
                 "placeholder": {"type": "plain_text", "text": "e.g., 5 x 4min @ threshold (2min rest)"},
                 "initial_value": practice.workout_description or ""
             }
+        },
+        {
+            "type": "input",
+            "block_id": "notes_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Notes / Logistics"},
+            "element": {
+                "type": "plain_text_input",
+                "action_id": "logistics_notes",
+                "multiline": True,
+                "max_length": 2500,
+                "placeholder": {
+                    "type": "plain_text",
+                    "text": "Weather, trail conditions, meeting spot, adjustments, etc."
+                },
+                "initial_value": practice.logistics_notes or ""
+            }
+        },
+        {
+            "type": "input",
+            "block_id": "plan_reactions_block",
+            "optional": True,
+            "label": {"type": "plain_text", "text": "Plan reactions"},
+            "hint": {
+                "type": "plain_text",
+                "text": "Edit this practice's saved reactions, one per line.",
+            },
+            "element": plan_reactions_element,
         }
     ])
 

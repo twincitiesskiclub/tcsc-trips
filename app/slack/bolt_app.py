@@ -924,93 +924,12 @@ if _bot_token:
         Updates practice details, then updates both #practices and collab posts,
         and adds thread replies noting who updated.
         """
-        user_id = body["user"]["id"]
-        practice_id = int(view.get("private_metadata") or "0")
-        values = _safe_get(view, "state", "values", default={})
-        authoring, errors = _parse_practice_authoring_values(
-            values, include_plan_reactions=False
+        return _handle_practice_edit_full_submission(
+            ack=ack,
+            body=body,
+            view=view,
+            logger=logger,
         )
-        if errors:
-            ack(response_action="errors", errors=errors)
-            return
-        ack()
-
-        with get_app_context():
-            from app.practices.models import Practice, PracticeLead, PracticeActivity, PracticeType
-            from app.models import db
-            from app.slack.practices import refresh_practice_posts
-
-            practice = Practice.query.get(practice_id)
-            if not practice:
-                logger.error(f"Practice {practice_id} not found")
-                return
-
-            # Extract form values
-            # Location is a dropdown (static_select)
-            location_id = _safe_get(values, "location_block", "location_id", "selected_option", "value")
-
-            # Extract checkbox flags
-            selected_flags = _safe_get(values, "flags_block", "practice_flags", "selected_options", default=[])
-            flag_values = [opt.get("value") for opt in selected_flags]
-            is_dark_practice = "is_dark_practice" in flag_values
-            has_social = "has_social" in flag_values
-
-            # Extract notify preference (default: True if checkbox checked)
-            notify_options = _safe_get(values, "notify_block", "notify_update", "selected_options", default=[])
-            should_notify = any(opt.get("value") == "notify" for opt in notify_options)
-
-            # Extract coach/lead selections (if blocks were present)
-            selected_coaches = _safe_get(values, "coaches_block", "coach_ids", "selected_options", default=[])
-            coach_user_ids = [int(opt["value"]) for opt in selected_coaches if opt.get("value")]
-
-            selected_leads = _safe_get(values, "leads_block", "lead_ids", "selected_options", default=[])
-            lead_user_ids = [int(opt["value"]) for opt in selected_leads if opt.get("value")]
-
-            # Extract activity/type selections (if blocks were present)
-            selected_activities = _safe_get(values, "activities_block", "activity_ids", "selected_options", default=[])
-            activity_ids = [int(opt["value"]) for opt in selected_activities if opt.get("value")]
-
-            selected_types = _safe_get(values, "types_block", "type_ids", "selected_options", default=[])
-            type_ids = [int(opt["value"]) for opt in selected_types if opt.get("value")]
-
-            # Update database
-            if location_id:
-                practice.location_id = int(location_id)
-            practice.workout_description = authoring["workout_description"]
-            practice.is_dark_practice = is_dark_practice
-            # has_social is a computed property - clear social_location_id if unchecked
-            if not has_social:
-                practice.social_location_id = None
-
-            # Update coaches if the block was present in the modal
-            if "coaches_block" in values:
-                PracticeLead.query.filter_by(practice_id=practice.id, role='coach').delete()
-                for uid in coach_user_ids:
-                    db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='coach'))
-
-            # Update leads if the block was present in the modal
-            if "leads_block" in values:
-                PracticeLead.query.filter_by(practice_id=practice.id, role='lead').delete()
-                for uid in lead_user_ids:
-                    db.session.add(PracticeLead(practice_id=practice.id, user_id=uid, role='lead'))
-
-            # Update activities if the block was present in the modal
-            if "activities_block" in values:
-                practice.activities.clear()
-                for activity in PracticeActivity.query.filter(PracticeActivity.id.in_(activity_ids)).all():
-                    practice.activities.append(activity)
-
-            # Update types if the block was present in the modal
-            if "types_block" in values:
-                practice.practice_types.clear()
-                for ptype in PracticeType.query.filter(PracticeType.id.in_(type_ids)).all():
-                    practice.practice_types.append(ptype)
-
-            db.session.commit()
-            logger.info(f"Practice {practice_id} fully updated by {user_id}")
-
-            # Refresh all Slack posts
-            refresh_practice_posts(practice, change_type='edit', actor_slack_id=user_id, notify=should_notify)
 
     @bolt_app.view("practice_rsvp")
     def handle_rsvp_modal_submission(ack, body, view, client, logger):
@@ -1481,6 +1400,7 @@ def _parse_practice_authoring_values(
     values: dict,
     *,
     include_plan_reactions: bool,
+    include_logistics_notes: bool = False,
 ) -> tuple[dict, dict[str, str]]:
     from app.practices.plan_reactions import (
         PlanReactionValidationError,
@@ -1496,6 +1416,15 @@ def _parse_practice_authoring_values(
     if len(fields["workout_description"]) > 2500:
         errors["workout_block"] = "Workout must be 2,500 characters or fewer"
 
+    if include_logistics_notes:
+        fields["logistics_notes"] = _safe_get(
+            values, "notes_block", "logistics_notes", "value", default=""
+        )
+        if len(fields["logistics_notes"]) > 2500:
+            errors["notes_block"] = (
+                "Notes / Logistics must be 2,500 characters or fewer"
+            )
+
     if include_plan_reactions:
         plan_text = _safe_get(
             values, "plan_reactions_block", "plan_reactions", "value", default=""
@@ -1505,6 +1434,169 @@ def _parse_practice_authoring_values(
         except PlanReactionValidationError as exc:
             errors["plan_reactions_block"] = str(exc)
     return fields, errors
+
+
+def _handle_practice_edit_full_submission(ack, body, view, logger):
+    """Validate and persist the active full-edit modal submission."""
+    user_id = body["user"]["id"]
+    practice_id = int(view.get("private_metadata") or "0")
+    values = _safe_get(view, "state", "values", default={})
+    authoring, errors = _parse_practice_authoring_values(
+        values,
+        include_plan_reactions=True,
+        include_logistics_notes=True,
+    )
+    if errors:
+        ack(response_action="errors", errors=errors)
+        return
+    ack()
+
+    with get_app_context():
+        from app.practices.models import (
+            Practice,
+            PracticeActivity,
+            PracticeLead,
+            PracticeType,
+        )
+        from app.models import db
+        from app.slack.practices import refresh_practice_posts
+
+        practice = Practice.query.get(practice_id)
+        if not practice:
+            logger.error(f"Practice {practice_id} not found")
+            return
+
+        location_id = _safe_get(
+            values,
+            "location_block",
+            "location_id",
+            "selected_option",
+            "value",
+        )
+
+        selected_flags = _safe_get(
+            values,
+            "flags_block",
+            "practice_flags",
+            "selected_options",
+            default=[],
+        )
+        flag_values = [option.get("value") for option in selected_flags]
+        is_dark_practice = "is_dark_practice" in flag_values
+        has_social = "has_social" in flag_values
+
+        notify_options = _safe_get(
+            values,
+            "notify_block",
+            "notify_update",
+            "selected_options",
+            default=[],
+        )
+        should_notify = any(
+            option.get("value") == "notify" for option in notify_options
+        )
+
+        selected_coaches = _safe_get(
+            values,
+            "coaches_block",
+            "coach_ids",
+            "selected_options",
+            default=[],
+        )
+        coach_user_ids = [
+            int(option["value"])
+            for option in selected_coaches
+            if option.get("value")
+        ]
+        selected_leads = _safe_get(
+            values,
+            "leads_block",
+            "lead_ids",
+            "selected_options",
+            default=[],
+        )
+        lead_user_ids = [
+            int(option["value"])
+            for option in selected_leads
+            if option.get("value")
+        ]
+
+        selected_activities = _safe_get(
+            values,
+            "activities_block",
+            "activity_ids",
+            "selected_options",
+            default=[],
+        )
+        activity_ids = [
+            int(option["value"])
+            for option in selected_activities
+            if option.get("value")
+        ]
+        selected_types = _safe_get(
+            values,
+            "types_block",
+            "type_ids",
+            "selected_options",
+            default=[],
+        )
+        type_ids = [
+            int(option["value"])
+            for option in selected_types
+            if option.get("value")
+        ]
+
+        if location_id:
+            practice.location_id = int(location_id)
+        practice.workout_description = authoring["workout_description"]
+        practice.logistics_notes = authoring["logistics_notes"] or None
+        practice.plan_reactions = authoring["plan_reactions"]
+        practice.is_dark_practice = is_dark_practice
+        if not has_social:
+            practice.social_location_id = None
+
+        if "coaches_block" in values:
+            PracticeLead.query.filter_by(
+                practice_id=practice.id, role="coach"
+            ).delete()
+            for user_id_value in coach_user_ids:
+                db.session.add(PracticeLead(
+                    practice_id=practice.id,
+                    user_id=user_id_value,
+                    role="coach",
+                ))
+
+        if "leads_block" in values:
+            PracticeLead.query.filter_by(
+                practice_id=practice.id, role="lead"
+            ).delete()
+            for user_id_value in lead_user_ids:
+                db.session.add(PracticeLead(
+                    practice_id=practice.id,
+                    user_id=user_id_value,
+                    role="lead",
+                ))
+
+        if "activities_block" in values:
+            practice.activities.clear()
+            practice.activities.extend(PracticeActivity.query.filter(
+                PracticeActivity.id.in_(activity_ids)
+            ).all())
+
+        if "types_block" in values:
+            practice.practice_types.clear()
+            practice.practice_types.extend(PracticeType.query.filter(
+                PracticeType.id.in_(type_ids)
+            ).all())
+
+        db.session.commit()
+        logger.info(f"Practice {practice_id} fully updated by {user_id}")
+        refresh_practice_posts(
+            practice,
+            change_type="edit",
+            actor_slack_id=user_id,
+            notify=should_notify,
+        )
 
 
 def _load_modal_ref_data():
