@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <title>TCSC Season Registration</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {{ csrf_meta_tag() }}
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
@@ -50,6 +51,7 @@
         {% endwith %}
 
         <form id="registration-form" method="POST" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 
           <!-- Section 1: About You -->
           <div id="section-about" class="form-section">
@@ -240,6 +242,7 @@
         </form>
       </div>
     </div>
+    <script src="{{ url_for('static', filename='csrf.js') }}"></script>
     <script src="https://js.stripe.com/v3/"></script>
     <script src="{{ url_for('static', filename='script.js') }}" defer></script>
     <script src="{{ url_for('static', filename='progress.js') }}" defer></script>

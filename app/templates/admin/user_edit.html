@@ -28,6 +28,7 @@
 {% endif %}
 
 <form method="post">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <input type="hidden" name="form_type" value="full">
 
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mb-8">
@@ -206,6 +207,7 @@
         <div class="flex gap-3 justify-end">
             <button type="button" class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="hideDeleteModal()">Cancel</button>
             <form method="post" action="{{ url_for('admin.delete_user', user_id=user.id) }}" class="inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                 <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-red-700 transition-all">Delete</button>
             </form>
         </div>

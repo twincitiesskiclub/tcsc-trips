@@ -5,9 +5,11 @@
     <title>{% block title %}TCSC Trip Registration{% endblock %}</title>
     <meta name="description" content="{% block meta_description %}TCSC Trip Registration and Payment{% endblock %}" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    {{ csrf_meta_tag() }}
     <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
     <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
     <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
+    <script src="{{ url_for('static', filename='csrf.js') }}"></script>
     <script src="https://js.stripe.com/v3/"></script>
     <script src="{{ url_for('static', filename='script.js') }}" defer></script>
   </head>
@@ -26,17 +28,18 @@
           </div>
         </div>
 
+        {% if registration_open %}
         {% if trip.price_low != trip.price_high %}
           <div class="payment-view">
             <div class="pill-group__label">Select Price</div>
             <div class="price-selector">
               <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_low/100) }}">
-                <input type="radio" id="price-low" name="price-choice" value="{{ "%.2f"|format(trip.price_low/100) }}">
+                <input type="radio" id="price-low" name="price-choice" value="{{ "%.2f"|format(trip.price_low/100) }}" data-tier="low">
                 <div class="price-option__label">Lower Price</div>
                 <div class="price-option__amount">${{ "%.2f"|format(trip.price_low/100) }}</div>
               </div>
               <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_high/100) }}">
-                <input type="radio" id="price-high" name="price-choice" value="{{ "%.2f"|format(trip.price_high/100) }}">
+                <input type="radio" id="price-high" name="price-choice" value="{{ "%.2f"|format(trip.price_high/100) }}" data-tier="high">
                 <div class="price-option__label">Higher Price</div>
                 <div class="price-option__amount">${{ "%.2f"|format(trip.price_high/100) }}</div>
               </div>
@@ -49,7 +52,7 @@
           </div>
         {% endif %}
 
-        <div class="sr-payment-form payment-view">
+        <div class="sr-payment-form payment-view" data-trip-slug="{{ trip.slug }}">
           <div class="form-field">
             <label class="form-field__label" for="name">Full Name</label>
             <input type="text" id="name" class="form-input" placeholder="Full Name" autocomplete="name">
@@ -83,6 +86,11 @@
             </div>
           </div>
         </div>
+        {% else %}
+          <div class="notice notice--info" role="status">
+            {{ registration_message }}
+          </div>
+        {% endif %}
       </div>
     </div>
   </body>

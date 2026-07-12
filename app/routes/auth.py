@@ -37,7 +37,7 @@ def authorize():
 
     return redirect(url_for('main.get_home_page'))
 
-@auth.route('/logout')
+@auth.route('/logout', methods=['POST'])
 def logout():
     session.pop('user', None)
     session.pop('next_url', None)

@@ -41,6 +41,10 @@ target/
 # Generated data exports (may contain production PII: addresses, coords)
 scripts/output/locations_current.csv
 scripts/output/locations_proposed.csv
+/scripts/output/
+/export_dob_age.csv
+/export_season_history.csv
+/beever-atlas-creds.txt
 .superpowers/
 
 # Practice announcement redesign — generated data artifacts (never commit)

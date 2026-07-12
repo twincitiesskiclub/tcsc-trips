@@ -124,7 +124,7 @@ def reject_proposal(proposal_id):
         return jsonify({'error': str(e)}), 500
 
 
-@admin_skipper_bp.route('/evaluate/<int:practice_id>')
+@admin_skipper_bp.route('/evaluate/<int:practice_id>', methods=['POST'])
 @admin_required
 def evaluate_practice(practice_id):
     """Manually trigger evaluation for a practice."""
