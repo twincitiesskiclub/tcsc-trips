@@ -1,5 +1,8 @@
 """Tests for centralized refresh_practice_posts function."""
 
+from contextlib import nullcontext
+from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import patch, MagicMock
 
 import pytest
@@ -61,7 +64,31 @@ class TestRefreshAnnouncement:
         mock_update.return_value = {'success': True}
         practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
         result = _refresh_announcement(practice, 'edit')
-        mock_update.assert_called_once_with(practice)
+        mock_update.assert_called_once_with(
+            practice,
+            announcement_notice=None,
+            previous_plan_reactions=None,
+        )
+
+    @patch('app.slack.practices.announcements.update_practice_slack_post')
+    def test_edit_forwards_temporary_announcement_context(self, mock_update):
+        mock_update.return_value = {'success': True}
+        practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
+        previous = [{"emoji": "old_choice", "label": "Old choice"}]
+
+        result = _refresh_announcement(
+            practice,
+            'edit',
+            announcement_notice="📍 Location updated, check Where below.",
+            previous_plan_reactions=previous,
+        )
+
+        assert result == {'success': True}
+        mock_update.assert_called_once_with(
+            practice,
+            announcement_notice="📍 Location updated, check Where below.",
+            previous_plan_reactions=previous,
+        )
 
     @patch('app.slack.practices.cancellations.update_practice_as_cancelled')
     def test_cancel_calls_update_as_cancelled(self, mock_cancel):
@@ -147,7 +174,150 @@ class TestSurfaceRegistry:
         from app.slack.practices.refresh import PracticeSurface
         s = PracticeSurface(
             "x", "slack_message_ts", ["edit"],
-            lambda p, c: {"success": True, "ct": c},
+            lambda p, c, **context: {
+                "success": True,
+                "ct": c,
+                "context": context,
+            },
         )
         practice = FakePractice(slack_message_ts="1")
-        assert s.refresh(practice, "edit") == {"success": True, "ct": "edit"}
+        assert s.refresh(practice, "edit", notice="temporary") == {
+            "success": True,
+            "ct": "edit",
+            "context": {"notice": "temporary"},
+        }
+
+
+class TestTemporaryAnnouncementNotice:
+    def test_safety_note_posts_once_even_when_general_notifications_are_off(self):
+        from app.slack.practices.refresh import PracticeSurface
+
+        practice = FakePractice(
+            slack_message_ts="123",
+            slack_channel_id="C123",
+        )
+        notice = "🕒 Date or time updated, check the heading above."
+        announcement = PracticeSurface(
+            "announcement",
+            "slack_message_ts",
+            ["edit"],
+            lambda _practice, _change_type, **_context: {"success": True},
+        )
+
+        with patch(
+            "app.slack.practices.refresh.PRACTICE_SURFACES", [announcement]
+        ), patch(
+            "app.slack.practices.rsvp.post_thread_reply",
+            return_value={"success": True, "message_ts": "456"},
+        ) as mock_reply, patch(
+            "app.slack.practices.refresh._post_edit_logs"
+        ) as mock_logs:
+            results = refresh_practice_posts(
+                practice,
+                change_type="edit",
+                actor_slack_id=None,
+                notify=False,
+                announcement_notice=notice,
+            )
+
+        mock_reply.assert_called_once_with(
+            practice, notice, user_mention=None
+        )
+        mock_logs.assert_not_called()
+        assert results["announcement_change_note"]["success"] is True
+
+    def test_safety_note_replaces_only_the_duplicate_announcement_edit_log(self):
+        from app.slack.practices.refresh import PracticeSurface
+
+        practice = FakePractice(
+            slack_message_ts="123",
+            slack_channel_id="C123",
+        )
+        notice = "📍 Location updated, check Where below."
+        announcement = PracticeSurface(
+            "announcement",
+            "slack_message_ts",
+            ["edit"],
+            lambda _practice, _change_type, **_context: {"success": True},
+        )
+
+        with patch(
+            "app.slack.practices.refresh.PRACTICE_SURFACES", [announcement]
+        ), patch(
+            "app.slack.practices.rsvp.post_thread_reply",
+            return_value={"success": True, "message_ts": "456"},
+        ), patch(
+            "app.slack.practices.refresh._post_edit_logs",
+            return_value={"coach_summary_log": {"success": True}},
+        ) as mock_logs:
+            refresh_practice_posts(
+                practice,
+                change_type="edit",
+                actor_slack_id="U123",
+                notify=True,
+                announcement_notice=notice,
+            )
+
+        mock_logs.assert_called_once_with(
+            practice, "U123", skip_announcement=True
+        )
+
+    def test_full_slack_edit_passes_location_notice_and_previous_plan_snapshot(
+        self,
+    ):
+        from app.slack.bolt_app import _handle_practice_edit_full_submission
+
+        previous = [{"emoji": "old_choice", "label": "Old choice"}]
+        practice = MagicMock(
+            id=42,
+            date=datetime(2026, 7, 14, 18, 15),
+            location_id=10,
+            plan_reactions=previous,
+        )
+        query = MagicMock()
+        query.get.return_value = practice
+        practice_model = SimpleNamespace(query=query)
+        ack = MagicMock()
+        values = {
+            "location_block": {
+                "location_id": {"selected_option": {"value": "20"}}
+            },
+            "workout_block": {
+                "workout_description": {"value": "6 x 3 minutes"}
+            },
+            "notes_block": {"logistics_notes": {"value": ""}},
+            "plan_reactions_block": {
+                "plan_reactions": {"value": ":new_choice: New choice"}
+            },
+            "flags_block": {"practice_flags": {"selected_options": []}},
+            "notify_block": {"notify_update": {"selected_options": []}},
+        }
+
+        with patch(
+            "app.slack.bolt_app.get_app_context",
+            return_value=nullcontext(),
+        ), patch(
+            "app.practices.models.Practice", practice_model
+        ), patch(
+            "app.models.db.session.commit"
+        ), patch(
+            "app.slack.practices.refresh_practice_posts"
+        ) as mock_refresh:
+            _handle_practice_edit_full_submission(
+                ack=ack,
+                body={"user": {"id": "U123"}},
+                view={
+                    "private_metadata": "42",
+                    "state": {"values": values},
+                },
+                logger=MagicMock(),
+            )
+
+        mock_refresh.assert_called_once_with(
+            practice,
+            change_type="edit",
+            actor_slack_id="U123",
+            notify=False,
+            announcement_notice="📍 Location updated, check Where below.",
+            previous_plan_reactions=previous,
+        )

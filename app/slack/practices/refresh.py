@@ -34,7 +34,7 @@ class PracticeSurface:
     def is_present(self, practice):
         return bool(getattr(practice, self.ts_field, None))
 
-    def refresh(self, practice, change_type):
+    def refresh(self, practice, change_type, **context):
         if not self.is_present(practice):
             # The post exists in Slack but this practice isn't linked to it
             # (e.g. created out-of-band after the post). Distinguished from a
@@ -42,7 +42,7 @@ class PracticeSurface:
             return {"skipped": "absent"}
         if change_type not in self.applies_to:
             return {"skipped": "not_applicable"}
-        return self._refresh_fn(practice, change_type)
+        return self._refresh_fn(practice, change_type, **context)
 
 
 def _week_bounds(practice_date):
@@ -54,7 +54,14 @@ def _week_bounds(practice_date):
     return week_start, week_start + timedelta(days=7)
 
 
-def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, notify=True):
+def refresh_practice_posts(
+    practice,
+    change_type='edit',
+    actor_slack_id=None,
+    notify=True,
+    announcement_notice=None,
+    previous_plan_reactions=None,
+):
     """Update all Slack posts for a practice after DB changes.
 
     Args:
@@ -72,14 +79,39 @@ def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, no
             'weekly_summary': {'skipped': True},
         }
     """
-    results = {}
+    context = {
+        "announcement_notice": announcement_notice,
+        "previous_plan_reactions": previous_plan_reactions,
+    }
+    results = {
+        surface.name: surface.refresh(practice, change_type, **context)
+        for surface in PRACTICE_SURFACES
+    }
 
-    for surface in PRACTICE_SURFACES:
-        results[surface.name] = surface.refresh(practice, change_type)
+    safety_note_posted = False
+    announcement_result = results.get("announcement", {})
+    if (
+        announcement_notice
+        and announcement_result.get("success") is True
+        and practice.slack_message_ts
+        and practice.slack_channel_id
+    ):
+        from app.slack.practices.rsvp import post_thread_reply
+        note_result = post_thread_reply(
+            practice,
+            announcement_notice,
+            user_mention=actor_slack_id,
+        )
+        results["announcement_change_note"] = note_result
+        safety_note_posted = note_result.get("success") is True
 
     # Edit logging (thread replies) remains a post-pass keyed on notify + type
     if notify and actor_slack_id and change_type in ('edit', 'workout'):
-        results['edit_logs'] = _post_edit_logs(practice, actor_slack_id)
+        results['edit_logs'] = _post_edit_logs(
+            practice,
+            actor_slack_id,
+            skip_announcement=safety_note_posted,
+        )
 
     _log_refresh_results(practice, change_type, results)
 
@@ -125,7 +157,14 @@ def _log_refresh_results(practice, change_type, results):
         )
 
 
-def _refresh_announcement(practice, change_type):
+def _refresh_announcement(
+    practice,
+    change_type,
+    *,
+    announcement_notice=None,
+    previous_plan_reactions=None,
+    **_context,
+):
     """Update the main practice announcement post."""
     if not practice.slack_message_ts or not practice.slack_channel_id:
         return {'skipped': True}
@@ -153,14 +192,18 @@ def _refresh_announcement(practice, change_type):
         # threaded "Practice Details" reply transitively, so no separate
         # surface registration is needed for the details thread.
         from app.slack.practices.announcements import update_practice_slack_post
-        return update_practice_slack_post(practice)
+        return update_practice_slack_post(
+            practice,
+            announcement_notice=announcement_notice,
+            previous_plan_reactions=previous_plan_reactions,
+        )
 
     except Exception as e:
         logger.warning(f"Failed to refresh announcement for practice #{practice.id}: {e}")
         return {'success': False, 'error': str(e)}
 
 
-def _refresh_collab(practice, change_type):
+def _refresh_collab(practice, change_type, **_context):
     """Update the collab review post in #collab-coaches-practices."""
     if not practice.slack_collab_message_ts:
         return {'skipped': True}
@@ -173,7 +216,7 @@ def _refresh_collab(practice, change_type):
         return {'success': False, 'error': str(e)}
 
 
-def _refresh_coach_summary(practice, change_type):
+def _refresh_coach_summary(practice, change_type, **_context):
     """Rebuild and update the coach weekly summary post."""
     if not practice.slack_coach_summary_ts:
         return {'skipped': True}
@@ -235,7 +278,7 @@ def _refresh_coach_summary(practice, change_type):
         return {'success': False, 'error': str(e)}
 
 
-def _refresh_weekly_summary(practice, change_type):
+def _refresh_weekly_summary(practice, change_type, **_context):
     """Rebuild and update the weekly summary post in #announcements-practices."""
     if not practice.slack_weekly_summary_ts:
         return {'skipped': True}
@@ -316,12 +359,12 @@ PRACTICE_SURFACES = [
 ]
 
 
-def _post_edit_logs(practice, actor_slack_id):
+def _post_edit_logs(practice, actor_slack_id, *, skip_announcement=False):
     """Post edit notification thread replies."""
     results = {}
 
     # Log to announcement thread
-    if practice.slack_message_ts:
+    if practice.slack_message_ts and not skip_announcement:
         try:
             from app.slack.practices.coach_review import log_practice_edit
             results['announcement_log'] = log_practice_edit(practice, actor_slack_id)

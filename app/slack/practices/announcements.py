@@ -10,7 +10,10 @@ from app.slack.blocks import (
     build_practice_announcement_blocks,
     build_combined_lift_blocks,
     build_practice_details_blocks,
+    build_practice_details_fallback_text,
+    build_practice_fallback_text,
 )
+from app.practices.plan_reactions import plan_reaction_names
 from app.practices.models import Practice
 from app.practices.interfaces import (
     AnnouncementConditions,
@@ -71,6 +74,101 @@ def _gather_conditions(practice, *, weather=_UNSET, trail_conditions=_UNSET):
         trail_conditions=resolved_trails,
         duration_minutes=get_default_duration_minutes(),
     )
+
+
+def _conditions_for_render(
+    practice, *, weather=_UNSET, trail_conditions=_UNSET
+):
+    """Resolve one render snapshot while preserving explicit unavailable values."""
+    overrides = {}
+    if weather is not _UNSET:
+        overrides["weather"] = weather
+    if trail_conditions is not _UNSET:
+        overrides["trail_conditions"] = trail_conditions
+    return _gather_conditions(practice, **overrides)
+
+
+def build_announcement_change_notice(
+    *, previous_date, previous_location_id, practice
+):
+    """Describe a date/time or location change for one Slack refresh only."""
+    time_changed = previous_date != practice.date
+    location_changed = previous_location_id != practice.location_id
+    if time_changed and location_changed:
+        return (
+            "🕒 Date/time and location updated, check the heading and Where below."
+        )
+    if time_changed:
+        return "🕒 Date or time updated, check the heading above."
+    if location_changed:
+        return "📍 Location updated, check Where below."
+    return None
+
+
+def _reaction_error_name(exc):
+    response = getattr(exc, "response", None)
+    return response.get("error") if response else None
+
+
+def _seed_plan_reactions(client, practice):
+    names = ["white_check_mark"] + plan_reaction_names(
+        practice.plan_reactions or []
+    )
+    for name in names:
+        try:
+            client.reactions_add(
+                channel=practice.slack_channel_id,
+                timestamp=practice.slack_message_ts,
+                name=name,
+            )
+        except Exception as exc:
+            if _reaction_error_name(exc) != "already_reacted":
+                current_app.logger.warning(
+                    "Could not seed :%s: on practice #%s: %s",
+                    name,
+                    practice.id,
+                    exc,
+                )
+
+
+def _reconcile_plan_reactions(
+    client,
+    practice,
+    *,
+    previous_plan_reactions=None,
+):
+    previous = set(plan_reaction_names(previous_plan_reactions or []))
+    current = set(plan_reaction_names(practice.plan_reactions or []))
+    for name in sorted(previous - current):
+        try:
+            client.reactions_remove(
+                channel=practice.slack_channel_id,
+                timestamp=practice.slack_message_ts,
+                name=name,
+            )
+        except Exception as exc:
+            if _reaction_error_name(exc) != "no_reaction":
+                current_app.logger.warning(
+                    "Could not remove :%s: from practice #%s: %s",
+                    name,
+                    practice.id,
+                    exc,
+                )
+    for name in sorted(current - previous):
+        try:
+            client.reactions_add(
+                channel=practice.slack_channel_id,
+                timestamp=practice.slack_message_ts,
+                name=name,
+            )
+        except Exception as exc:
+            if _reaction_error_name(exc) != "already_reacted":
+                current_app.logger.warning(
+                    "Could not add :%s: to practice #%s: %s",
+                    name,
+                    practice.id,
+                    exc,
+                )
 
 
 def _upsert_combined_details_reply(client, practices: list) -> None:
@@ -137,59 +235,66 @@ def _upsert_details_reply(
     client,
     practice,
     practice_info,
-    weather=_UNSET,
-    trail_conditions=_UNSET,
+    conditions,
 ):
     """Post or update the threaded 'Practice Details' reply. Best-effort.
 
-    Creates a new thread reply when slack_details_ts is absent (initial post or
-    backfill after an edit). Updates the existing reply otherwise.
-    Saves slack_details_ts to the practice row on first creation.
+    Creates a reply when absent, updates it while content remains, and deletes
+    a stale reply when rebuilt Details are empty. Timestamp changes are saved
+    only after the corresponding Slack write succeeds.
     """
+    original_ts = practice.slack_details_ts
     try:
-        conditions = _gather_conditions(
-            practice,
-            weather=weather,
-            trail_conditions=trail_conditions,
-        )
-        blocks = build_practice_details_blocks(
-            practice_info,
-            weather=conditions.weather,
-            trail_conditions=conditions.trail_conditions,
-            daylight=conditions.daylight,
-            air_quality=conditions.air_quality,
-        )
+        blocks = build_practice_details_blocks(practice_info, conditions)
         if not blocks:
-            return
-        if practice.slack_details_ts:
+            if not original_ts:
+                return {"success": True, "skipped": "no_details"}
+            client.chat_delete(
+                channel=practice.slack_channel_id,
+                ts=original_ts,
+            )
+            practice.slack_details_ts = None
+            db.session.commit()
+            return {"success": True, "deleted": True}
+
+        fallback = build_practice_details_fallback_text(
+            practice_info, conditions
+        )
+        if original_ts:
             client.chat_update(
                 channel=practice.slack_channel_id,
-                ts=practice.slack_details_ts,
+                ts=original_ts,
                 blocks=blocks,
-                text="Practice details",
+                text=fallback,
             )
-        else:
-            reply = client.chat_postMessage(
-                channel=practice.slack_channel_id,
-                thread_ts=practice.slack_message_ts,
-                blocks=blocks,
-                text="Practice details",
-                reply_broadcast=False,
-                unfurl_links=False,
-                unfurl_media=False,
-            )
-            # Only persist a real ts; saving None would make the next refresh
-            # post a second reply. Known/accepted gap: if the process dies
-            # between this post succeeding and the commit below, no ts is
-            # persisted, so a later refresh will post a duplicate reply.
-            ts = reply.get('ts')
-            if ts:
-                practice.slack_details_ts = ts
-                db.session.commit()
-    except Exception as e:
-        current_app.logger.warning(
-            f"Could not upsert practice details reply for #{practice.id}: {e}"
+            return {"success": True, "updated": True}
+
+        reply = client.chat_postMessage(
+            channel=practice.slack_channel_id,
+            thread_ts=practice.slack_message_ts,
+            blocks=blocks,
+            text=fallback,
+            reply_broadcast=False,
+            unfurl_links=False,
+            unfurl_media=False,
         )
+        details_ts = reply.get("ts")
+        if not details_ts:
+            return {
+                "success": False,
+                "error": "Slack did not return a Details timestamp",
+            }
+        practice.slack_details_ts = details_ts
+        db.session.commit()
+        return {"success": True, "message_ts": details_ts}
+    except Exception as exc:
+        practice.slack_details_ts = original_ts
+        current_app.logger.warning(
+            "Could not sync practice Details reply for #%s: %s",
+            practice.id,
+            exc,
+        )
+        return {"success": False, "error": str(exc)}
 
 
 def post_practice_announcement(
@@ -226,24 +331,24 @@ def post_practice_announcement(
     if not channel_id:
         return {'success': False, 'error': 'Could not find announcement channel'}
 
+    conditions = _conditions_for_render(
+        practice,
+        weather=weather,
+        trail_conditions=trail_conditions,
+    )
+
     # Convert SQLAlchemy model to PracticeInfo dataclass
     from app.practices.service import convert_practice_to_info
     practice_info = convert_practice_to_info(practice)
 
-    # Build blocks
-    rendered_weather = None if weather is _UNSET else weather
-    rendered_trails = None if trail_conditions is _UNSET else trail_conditions
-    blocks = build_practice_announcement_blocks(
-        practice_info,
-        rendered_weather,
-        rendered_trails,
-    )
+    blocks = build_practice_announcement_blocks(practice_info, conditions)
+    fallback = build_practice_fallback_text(practice_info, conditions)
 
     try:
         response = client.chat_postMessage(
             channel=channel_id,
             blocks=blocks,
-            text=f"Practice on {practice.date.strftime('%A, %B %d')}",  # Fallback text
+            text=fallback,
             unfurl_links=False,
             unfurl_media=False
         )
@@ -257,25 +362,8 @@ def post_practice_announcement(
         db.session.commit()
 
         # Post the threaded "Practice Details" reply (sunset/wind/AQI/parking/gear)
-        _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
-
-        # Add pre-seeded checkmark emoji for RSVP
-        try:
-            client.reactions_add(
-                channel=channel_id,
-                timestamp=message_ts,
-                name="white_check_mark"
-            )
-            # Add evergreen tree for interval practices (endurance option)
-            has_intervals = any(getattr(t, 'has_intervals', False) for t in practice.practice_types) if practice.practice_types else False
-            if has_intervals:
-                client.reactions_add(
-                    channel=channel_id,
-                    timestamp=message_ts,
-                    name="evergreen_tree"
-                )
-        except Exception as e:
-            current_app.logger.warning(f"Could not add reaction: {e}")
+        _upsert_details_reply(client, practice, practice_info, conditions)
+        _seed_plan_reactions(client, practice)
 
         # Create logging thread in #tcsc-logging
         try:
@@ -287,7 +375,7 @@ def post_practice_announcement(
         return {
             'success': True,
             'message_ts': message_ts,
-            'channel_id': channel_id
+            'channel_id': channel_id,
         }
 
     except SlackApiError as e:
@@ -398,6 +486,9 @@ def update_practice_announcement(
     practice: Practice,
     weather: Optional[WeatherConditions] = _UNSET,
     trail_conditions: Optional[TrailCondition] = _UNSET,
+    *,
+    announcement_notice=None,
+    previous_plan_reactions=None,
 ) -> dict:
     """Update an existing practice announcement message.
 
@@ -415,18 +506,25 @@ def update_practice_announcement(
         return {'success': False, 'error': 'No Slack message to update'}
 
     client = get_slack_client()
+    conditions = _conditions_for_render(
+        practice,
+        weather=weather,
+        trail_conditions=trail_conditions,
+    )
 
     # Convert to dataclass
     from app.practices.service import convert_practice_to_info
     practice_info = convert_practice_to_info(practice)
 
-    # Build updated blocks
-    rendered_weather = None if weather is _UNSET else weather
-    rendered_trails = None if trail_conditions is _UNSET else trail_conditions
     blocks = build_practice_announcement_blocks(
         practice_info,
-        rendered_weather,
-        rendered_trails,
+        conditions,
+        announcement_notice=announcement_notice,
+    )
+    fallback = build_practice_fallback_text(
+        practice_info,
+        conditions,
+        announcement_notice=announcement_notice,
     )
 
     try:
@@ -434,14 +532,20 @@ def update_practice_announcement(
             channel=practice.slack_channel_id,
             ts=practice.slack_message_ts,
             blocks=blocks,
-            text=f"Practice on {practice.date.strftime('%A, %B %d')}"
+            text=fallback,
         )
 
-        # Update (or backfill) the threaded "Practice Details" reply
-        _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
+        _reconcile_plan_reactions(
+            client,
+            practice,
+            previous_plan_reactions=previous_plan_reactions,
+        )
+        details_result = _upsert_details_reply(
+            client, practice, practice_info, conditions
+        )
 
         current_app.logger.info(f"Updated practice announcement for practice #{practice.id}")
-        return {'success': True}
+        return {'success': True, 'details': details_result}
 
     except SlackApiError as e:
         error_msg = e.response.get('error', str(e))
@@ -449,7 +553,12 @@ def update_practice_announcement(
         return {'success': False, 'error': error_msg}
 
 
-def update_practice_post(practice: Practice) -> dict:
+def update_practice_post(
+    practice: Practice,
+    *,
+    announcement_notice=None,
+    previous_plan_reactions=None,
+) -> dict:
     """Update the main practice announcement post with current data.
 
     Args:
@@ -460,36 +569,11 @@ def update_practice_post(practice: Practice) -> dict:
         - success: bool
         - error: str (only if success=False)
     """
-    if not practice.slack_message_ts or not practice.slack_channel_id:
-        return {'success': False, 'error': 'No practice message to update'}
-
-    client = get_slack_client()
-
-    # Convert SQLAlchemy model to PracticeInfo dataclass
-    from app.practices.service import convert_practice_to_info
-    practice_info = convert_practice_to_info(practice)
-
-    # Build updated blocks (without weather/trail data)
-    blocks = build_practice_announcement_blocks(practice_info)
-
-    try:
-        client.chat_update(
-            channel=practice.slack_channel_id,
-            ts=practice.slack_message_ts,
-            blocks=blocks,
-            text=f"Practice on {practice.date.strftime('%A, %B %d')}"
-        )
-
-        # Update (or backfill) the threaded "Practice Details" reply (no weather on edit path)
-        _upsert_details_reply(client, practice, practice_info)
-
-        current_app.logger.info(f"Updated practice post for practice #{practice.id}")
-        return {'success': True}
-
-    except SlackApiError as e:
-        error_msg = e.response.get('error', str(e))
-        current_app.logger.error(f"Error updating practice post: {error_msg}")
-        return {'success': False, 'error': error_msg}
+    return update_practice_announcement(
+        practice,
+        announcement_notice=announcement_notice,
+        previous_plan_reactions=previous_plan_reactions,
+    )
 
 
 def is_combined_lift_practice(practice: Practice) -> bool:
@@ -575,7 +659,12 @@ def update_combined_lift_post(practice: Practice) -> dict:
         return {'success': False, 'error': error_msg}
 
 
-def update_practice_slack_post(practice: Practice) -> dict:
+def update_practice_slack_post(
+    practice: Practice,
+    *,
+    announcement_notice=None,
+    previous_plan_reactions=None,
+) -> dict:
     """Smart update that handles both individual and combined posts.
 
     Detects whether the practice is part of a combined lift post and
@@ -595,4 +684,8 @@ def update_practice_slack_post(practice: Practice) -> dict:
     if is_combined_lift_practice(practice):
         return update_combined_lift_post(practice)
     else:
-        return update_practice_post(practice)
+        return update_practice_post(
+            practice,
+            announcement_notice=announcement_notice,
+            previous_plan_reactions=previous_plan_reactions,
+        )

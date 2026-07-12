@@ -441,7 +441,6 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
         from app.practices.models import Practice
         from app.practices.interfaces import PracticeStatus
         from app.slack.practices import post_practice_announcement, post_combined_lift_announcement
-        from app.integrations.weather import get_weather_for_location
 
         app.logger.info("=" * 60)
         app.logger.info("Starting practice announcements job")
@@ -532,21 +531,8 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
                     # Only one strength practice, post individually
                     for practice in strength_in_window:
                         try:
-                            # Fetch weather if location has coordinates
-                            weather = None
-                            if practice.location and practice.location.latitude and practice.location.longitude:
-                                try:
-                                    weather = get_weather_for_location(
-                                        lat=practice.location.latitude,
-                                        lon=practice.location.longitude,
-                                        target_datetime=practice.date
-                                    )
-                                except Exception as e:
-                                    app.logger.warning(f"Could not fetch weather for practice #{practice.id}: {e}")
-
                             result = post_practice_announcement(
                                 practice,
-                                weather=weather,
                                 channel_override=channel_override
                             )
                             if result.get('success'):
@@ -562,21 +548,8 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
             # Announce regular (non-strength) practices individually
             for practice in regular_practices:
                 try:
-                    # Fetch weather if location has coordinates
-                    weather = None
-                    if practice.location and practice.location.latitude and practice.location.longitude:
-                        try:
-                            weather = get_weather_for_location(
-                                lat=practice.location.latitude,
-                                lon=practice.location.longitude,
-                                target_datetime=practice.date
-                            )
-                        except Exception as e:
-                            app.logger.warning(f"Could not fetch weather for practice #{practice.id}: {e}")
-
                     result = post_practice_announcement(
                         practice,
-                        weather=weather,
                         channel_override=channel_override
                     )
                     if result.get('success'):

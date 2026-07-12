@@ -1466,6 +1466,12 @@ def _handle_practice_edit_full_submission(ack, body, view, logger):
             logger.error(f"Practice {practice_id} not found")
             return
 
+        previous_date = practice.date
+        previous_location_id = practice.location_id
+        previous_plan_reactions = [
+            dict(item) for item in (practice.plan_reactions or [])
+        ]
+
         location_id = _safe_get(
             values,
             "location_block",
@@ -1591,11 +1597,21 @@ def _handle_practice_edit_full_submission(ack, body, view, logger):
 
         db.session.commit()
         logger.info(f"Practice {practice_id} fully updated by {user_id}")
+        from app.slack.practices.announcements import (
+            build_announcement_change_notice,
+        )
+        announcement_notice = build_announcement_change_notice(
+            previous_date=previous_date,
+            previous_location_id=previous_location_id,
+            practice=practice,
+        )
         refresh_practice_posts(
             practice,
             change_type="edit",
             actor_slack_id=user_id,
             notify=should_notify,
+            announcement_notice=announcement_notice,
+            previous_plan_reactions=previous_plan_reactions,
         )
 
 

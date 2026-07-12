@@ -223,6 +223,81 @@ def test_editing_tags_without_plan_key_preserves_snapshot(
     assert practice_with_plan_reactions.plan_reactions == original
 
 
+def test_date_edit_passes_temporary_notice_and_previous_plan_snapshot(
+    admin_client, practice_with_plan_reactions, monkeypatch
+):
+    refresh_calls = []
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: refresh_calls.append((args, kwargs)),
+    )
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={
+            "date": "2026-07-14T19:15",
+            "plan_reactions": [
+                {"emoji": "snowflake", "label": "New shorter route"}
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert len(refresh_calls) == 1
+    args, kwargs = refresh_calls[0]
+    assert args == (practice_with_plan_reactions,)
+    assert kwargs == {
+        "change_type": "edit",
+        "announcement_notice": (
+            "🕒 Date or time updated, check the heading above."
+        ),
+        "previous_plan_reactions": [
+            {"emoji": "evergreen_tree", "label": "Saved endurance option"}
+        ],
+    }
+
+
+def test_location_edit_passes_temporary_notice(
+    admin_client, db_session, practice_with_plan_reactions, monkeypatch
+):
+    replacement = PracticeLocation(name="Plan Reaction Test New Location")
+    db.session.add(replacement)
+    db.session.commit()
+    refresh_calls = []
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: refresh_calls.append((args, kwargs)),
+    )
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={"location_id": replacement.id},
+    )
+
+    assert response.status_code == 200
+    assert refresh_calls[0][1]["announcement_notice"] == (
+        "📍 Location updated, check Where below."
+    )
+
+
+def test_workout_only_edit_passes_no_temporary_notice(
+    admin_client, practice_with_plan_reactions, monkeypatch
+):
+    refresh_calls = []
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: refresh_calls.append((args, kwargs)),
+    )
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={"workout_description": "6 x 3 minutes"},
+    )
+
+    assert response.status_code == 200
+    assert refresh_calls[0][1]["announcement_notice"] is None
+
+
 def test_restore_defaults_resolves_current_selected_sources(
     admin_client,
     db_session,

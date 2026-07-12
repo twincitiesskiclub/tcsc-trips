@@ -303,6 +303,12 @@ def edit_practice(practice_id):
         if not data:
             return jsonify({'error': 'JSON body required'}), 400
 
+        previous_date = practice.date
+        previous_location_id = practice.location_id
+        previous_plan_reactions = [
+            dict(item) for item in (practice.plan_reactions or [])
+        ]
+
         for field, label in (
             ('workout_description', 'Workout'),
             ('logistics_notes', 'Notes / Logistics'),
@@ -411,7 +417,20 @@ def edit_practice(practice_id):
 
         # Update all Slack posts
         from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='edit')
+        from app.slack.practices.announcements import (
+            build_announcement_change_notice,
+        )
+        announcement_notice = build_announcement_change_notice(
+            previous_date=previous_date,
+            previous_location_id=previous_location_id,
+            practice=practice,
+        )
+        refresh_practice_posts(
+            practice,
+            change_type='edit',
+            announcement_notice=announcement_notice,
+            previous_plan_reactions=previous_plan_reactions,
+        )
 
         return jsonify({
             'success': True,
