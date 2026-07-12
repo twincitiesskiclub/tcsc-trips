@@ -132,6 +132,14 @@
 #workout-editor .btn-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #workout-editor .btn-sm{padding:7px 14px;font-size:13px;min-height:0}
 
+/* ── per-practice Plan reactions ── */
+#workout-editor .plan-reaction-rows{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+#workout-editor .plan-reaction-row{display:grid;grid-template-columns:160px minmax(220px,1fr) auto auto auto;gap:8px;align-items:center}
+#workout-editor .plan-reaction-action{min-height:40px;padding:0 10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#475569;cursor:pointer}
+#workout-editor .plan-reaction-action:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#workout-editor #plan-reaction-status{display:block;min-height:18px;font-size:12px;color:#64748b}
+#workout-editor #plan-reaction-status.field-error{color:#c53030}
+
 /* ── loading state ── */
 #workout-editor .form-loading{opacity:.6;pointer-events:none}
 
@@ -141,6 +149,10 @@
   #workout-editor .field-row{grid-template-columns:1fr}
   #workout-editor .sticky-bar{flex-direction:row;margin-left:-24px;margin-right:-24px}
   #workout-editor .rail-col{position:static}
+  #workout-editor .plan-reaction-row{grid-template-columns:repeat(3,1fr)}
+  #workout-editor .plan-reaction-emoji,#workout-editor .plan-reaction-label{grid-column:1/-1;width:100%;min-height:44px}
+  #workout-editor .plan-reaction-action{min-height:44px}
+  #workout-editor #add-plan-reaction,#workout-editor #restore-plan-reactions{min-height:44px}
 }
 
 /* ── rail: Skipper evaluation ── */
@@ -289,12 +301,23 @@
         <h2 class="section-label">Workout Plan</h2>
         <div class="field">
           <label for="workout_description">Workout</label>
-          <textarea id="workout_description" name="workout_description" class="workout-main" placeholder="e.g., 4 × 6 min @ threshold, 3 min easy between. Cue: relaxed tempo, strong kick.">{{ practice.workout_description if practice else '' }}</textarea>
+          <textarea id="workout_description" name="workout_description" class="workout-main" maxlength="2500" placeholder="e.g., 4 × 6 min @ threshold, 3 min easy between. Cue: relaxed tempo, strong kick.">{{ practice.workout_description if practice else '' }}</textarea>
         </div>
         <div class="field">
           <label for="logistics_notes">Notes / Logistics</label>
-          <textarea id="logistics_notes" name="logistics_notes" placeholder="e.g., Meet at the flagpole. Cold out, warm up extra. Newer skiers grab a lead for waxing.">{{ practice.logistics_notes if practice else '' }}</textarea>
+          <textarea id="logistics_notes" name="logistics_notes" maxlength="2500" placeholder="e.g., Meet at the flagpole. Cold out, warm up extra. Newer skiers grab a lead for waxing.">{{ practice.logistics_notes if practice else '' }}</textarea>
         </div>
+      </section>
+
+      <section class="card">
+        <div class="section-head">
+          <h2 class="section-label">Plan reactions</h2>
+          <button type="button" id="restore-plan-reactions" class="btn-ghost btn-sm">Restore defaults</button>
+        </div>
+        <p class="field-hint">✅ is attendance. These reactions describe a member's practice plan.</p>
+        <div id="plan-reaction-rows" class="plan-reaction-rows"></div>
+        <button type="button" id="add-plan-reaction" class="btn-ghost btn-sm">Add reaction</button>
+        <span id="plan-reaction-status" role="status" aria-live="polite"></span>
       </section>
     </div>
 
@@ -345,6 +368,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='plan_reactions.js') }}"></script>
 <script src="{{ url_for('static', filename='practice_editor.js') }}"></script>
 <script>
 {% include 'admin/practices/_detail_script.js' %}

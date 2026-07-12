@@ -13,6 +13,7 @@ from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, Cancell
 from ..practices.plan_reactions import (
     PlanReactionValidationError,
     normalize_plan_reactions,
+    resolve_default_plan_reactions,
 )
 from sqlalchemy.orm import joinedload
 
@@ -188,6 +189,39 @@ def create_practice():
     if not data.get('location_id'):
         return jsonify({'error': 'Location is required'}), 400
 
+    for field, label in (
+        ('workout_description', 'Workout'),
+        ('logistics_notes', 'Notes / Logistics'),
+    ):
+        value = data.get(field)
+        if value is not None and len(value) > 2500:
+            return jsonify({
+                'error': f'{label} must be 2,500 characters or fewer',
+                'field': field,
+            }), 400
+
+    activity_ids = data.get('activity_ids') or []
+    type_ids = data.get('type_ids') or []
+    selected_activities = (
+        PracticeActivity.query.filter(PracticeActivity.id.in_(activity_ids)).all()
+        if activity_ids else []
+    )
+    selected_types = (
+        PracticeType.query.filter(PracticeType.id.in_(type_ids)).all()
+        if type_ids else []
+    )
+
+    try:
+        plan_reactions = (
+            normalize_plan_reactions(data['plan_reactions'])
+            if 'plan_reactions' in data
+            else resolve_default_plan_reactions(
+                selected_types, selected_activities
+            )
+        )
+    except PlanReactionValidationError as exc:
+        return jsonify({'error': str(exc), 'field': 'plan_reactions'}), 400
+
     try:
         # Parse date
         date = datetime.fromisoformat(data['date'])
@@ -201,8 +235,11 @@ def create_practice():
             status=PracticeStatus.SCHEDULED.value,
             workout_description=data.get('workout_description'),
             logistics_notes=data.get('logistics_notes') or None,
+            plan_reactions=plan_reactions,
             is_dark_practice=data.get('is_dark_practice', False),
         )
+        practice.activities = selected_activities
+        practice.practice_types = selected_types
         db.session.add(practice)
         db.session.flush()
 
@@ -211,20 +248,6 @@ def create_practice():
         practice.slack_coach_summary_ts = _week_coach_summary_ts(
             practice.date, exclude_id=practice.id
         )
-
-        # Add activities (many-to-many)
-        if data.get('activity_ids'):
-            activities = PracticeActivity.query.filter(
-                PracticeActivity.id.in_(data['activity_ids'])
-            ).all()
-            practice.activities.extend(activities)
-
-        # Add practice types (many-to-many)
-        if data.get('type_ids'):
-            types = PracticeType.query.filter(
-                PracticeType.id.in_(data['type_ids'])
-            ).all()
-            practice.practice_types.extend(types)
 
         # Add coaches (now using user_id)
         if data.get('coach_ids'):
@@ -280,6 +303,43 @@ def edit_practice(practice_id):
         if not data:
             return jsonify({'error': 'JSON body required'}), 400
 
+        for field, label in (
+            ('workout_description', 'Workout'),
+            ('logistics_notes', 'Notes / Logistics'),
+        ):
+            value = data.get(field)
+            if value is not None and len(value) > 2500:
+                return jsonify({
+                    'error': f'{label} must be 2,500 characters or fewer',
+                    'field': field,
+                }), 400
+
+        selected_activities = (
+            PracticeActivity.query.filter(
+                PracticeActivity.id.in_(data['activity_ids'])
+            ).all() if data.get('activity_ids') else []
+        ) if 'activity_ids' in data else list(practice.activities)
+        selected_types = (
+            PracticeType.query.filter(
+                PracticeType.id.in_(data['type_ids'])
+            ).all() if data.get('type_ids') else []
+        ) if 'type_ids' in data else list(practice.practice_types)
+
+        try:
+            if data.get('restore_plan_reaction_defaults') is True:
+                practice.plan_reactions = resolve_default_plan_reactions(
+                    selected_types, selected_activities
+                )
+            elif 'plan_reactions' in data:
+                practice.plan_reactions = normalize_plan_reactions(
+                    data['plan_reactions']
+                )
+        except PlanReactionValidationError as exc:
+            return jsonify({
+                'error': str(exc),
+                'field': 'plan_reactions',
+            }), 400
+
         # Update fields if provided
         if 'date' in data:
             date = datetime.fromisoformat(data['date'])
@@ -306,21 +366,11 @@ def edit_practice(practice_id):
 
         # Update activities if provided
         if 'activity_ids' in data:
-            practice.activities = []
-            if data['activity_ids']:
-                activities = PracticeActivity.query.filter(
-                    PracticeActivity.id.in_(data['activity_ids'])
-                ).all()
-                practice.activities = activities
+            practice.activities = selected_activities
 
         # Update types if provided
         if 'type_ids' in data:
-            practice.practice_types = []
-            if data['type_ids']:
-                types = PracticeType.query.filter(
-                    PracticeType.id.in_(data['type_ids'])
-                ).all()
-                practice.practice_types = types
+            practice.practice_types = selected_types
 
         # Update coaches, leads, and assistants if provided (now using user_id)
         if 'coach_ids' in data or 'lead_ids' in data or 'assist_ids' in data:
