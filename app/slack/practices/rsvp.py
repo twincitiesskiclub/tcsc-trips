@@ -207,21 +207,23 @@ def update_practice_rsvp_counts(practice: Practice) -> dict:
             if going_context_idx is not None:
                 break
 
-        if going_context_idx is not None:
-            current_blocks[going_context_idx] = {
-                "type": "context",
-                "elements": [{
-                    "type": "mrkdwn",
-                    "text": f":white_check_mark: *{going_count} going* — _see thread for list_"
-                }]
-            }
+        if going_context_idx is None:
+            return {'success': True, 'skipped': 'no_legacy_count_block'}
+
+        current_blocks[going_context_idx] = {
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": f":white_check_mark: *{going_count} going* — _see thread for list_"
+            }]
+        }
 
         # Update message
         client.chat_update(
             channel=practice.slack_channel_id,
             ts=practice.slack_message_ts,
             blocks=current_blocks,
-            text=f"Practice on {practice.date.strftime('%A, %B %d')}"
+            text=messages[0].get('text') or 'Practice details unavailable'
         )
 
         current_app.logger.info(f"Updated going count for practice #{practice.id}: {going_count}")

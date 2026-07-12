@@ -1239,46 +1239,28 @@ if _bot_token:
             logger.error(f"Error publishing app home: {e}")
 
     @bolt_app.event("reaction_added")
-    def handle_reaction_added(event, client, logger):
-        """Handle emoji reaction as RSVP."""
-        reaction = event.get("reaction")
-        user_id = event.get("user")
-        item = event.get("item", {})
+    def handle_reaction_added(event, logger):
+        """Delegate an added reaction event to attendance routing."""
+        _delegate_reaction(event, removed=False)
 
+    @bolt_app.event("reaction_removed")
+    def handle_reaction_removed(event, logger):
+        """Delegate a removed reaction event to attendance routing."""
+        _delegate_reaction(event, removed=True)
+
+    def _delegate_reaction(event, *, removed):
+        item = event.get("item", {})
         if item.get("type") != "message":
             return
-
-        channel = item.get("channel")
-        message_ts = item.get("ts")
-
-        reaction_map = {
-            "white_check_mark": "going",
-            "ballot_box_with_check": "going",
-            "+1": "going",
-            "thumbsup": "going",
-            "heavy_check_mark": "going",
-            "raised_hands": "going",
-            "muscle": "going",
-            "ski": "going",
-            "skier": "going",
-            # Hour-based RSVP emojis for combined-lift posts (e.g. :six: + :seven:)
-            "one": "going", "two": "going", "three": "going", "four": "going",
-            "five": "going", "six": "going", "seven": "going", "eight": "going",
-            "nine": "going", "keycap_ten": "going",
-            "question": "maybe",
-            "thinking_face": "maybe",
-            "shrug": "maybe",
-            "x": "not_going",
-            "-1": "not_going",
-            "thumbsdown": "not_going",
-        }
-
-        status = reaction_map.get(reaction)
-        if not status:
-            return
-
+        from app.slack.practices.reactions import handle_attendance_reaction
         with get_app_context():
-            _process_reaction_rsvp(channel, message_ts, status, user_id, reaction=reaction)
+            handle_attendance_reaction(
+                channel=item.get("channel"),
+                message_ts=item.get("ts"),
+                reaction=event.get("reaction"),
+                slack_user_id=event.get("user"),
+                removed=removed,
+            )
 
     # =========================================================================
     # Custom Functions (Workflow Builder Custom Steps)
@@ -1922,81 +1904,6 @@ def _process_lead_confirmation(practice_id: int, confirmed: bool, slack_user_id:
             "Lead indicated they cannot make it (reason not provided)"
         )
         return result
-
-
-def _process_reaction_rsvp(channel: str, message_ts: str, status: str, user_id: str, reaction: str = None):
-    """Process emoji reaction as RSVP.
-
-    For combined-lift posts (multiple practices sharing the same
-    slack_message_ts), `reaction` is used to route the RSVP to the
-    correct sibling via its hour-based / position-based emoji.
-    """
-    from app.models import db, User
-    from app.practices.models import Practice, PracticeRSVP
-    from app.slack.client import get_combined_practice_emojis
-    from app.slack.practices import update_practice_rsvp_counts
-
-    siblings = Practice.query.filter_by(
-        slack_message_ts=message_ts,
-        slack_channel_id=channel
-    ).order_by(Practice.date).all()
-
-    if not siblings:
-        return
-
-    if len(siblings) == 1:
-        practice = siblings[0]
-    else:
-        # Combined post — pick the sibling whose slot emoji matches the reaction.
-        practice = None
-        if reaction:
-            slot_emojis = get_combined_practice_emojis(siblings)
-            for sib, slot_emoji in zip(siblings, slot_emojis):
-                if slot_emoji == reaction:
-                    practice = sib
-                    break
-        if practice is None:
-            # Reaction doesn't match any slot — ignore rather than misattribute.
-            logger.debug(
-                f"Combined-post reaction :{reaction}: from {user_id} didn't "
-                f"match any slot emoji on ts={message_ts}; ignoring."
-            )
-            return
-
-    user = User.query.join(User.slack_user).filter_by(slack_uid=user_id).first()
-
-    if not user:
-        # User's Slack account is not linked - silently ignore reaction RSVPs
-        # (no way to send error message for reaction events)
-        logger.debug(f"Ignoring reaction RSVP from unlinked user {user_id}")
-        return
-
-    rsvp = PracticeRSVP.query.filter_by(
-        practice_id=practice.id,
-        user_id=user.id
-    ).first()
-
-    if rsvp:
-        rsvp.status = status
-        rsvp.responded_at = datetime.utcnow()
-    else:
-        rsvp = PracticeRSVP(
-            practice_id=practice.id,
-            user_id=user.id,
-            status=status,
-            slack_user_id=user_id,
-            responded_at=datetime.utcnow()
-        )
-        db.session.add(rsvp)
-
-    db.session.commit()
-
-    try:
-        update_practice_rsvp_counts(practice)
-    except Exception as e:
-        logger.warning(f"Could not update RSVP counts after reaction: {e}")
-
-    logger.info(f"RSVP via reaction: {user_id} -> {status} for practice #{practice.id}")
 
 
 def get_flask_handler():

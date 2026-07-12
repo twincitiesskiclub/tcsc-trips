@@ -15,6 +15,7 @@ from app.slack.practices.refresh import (
     _refresh_weekly_summary,
     _post_edit_logs,
 )
+from app.slack.practices.rsvp import update_practice_rsvp_counts
 
 
 class FakePractice:
@@ -103,6 +104,117 @@ class TestRefreshAnnouncement:
         practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
         result = _refresh_announcement(practice, 'rsvp')
         mock_rsvp.assert_called_once_with(practice)
+
+
+class TestLegacyRsvpCountRefresh:
+    def _practice(self):
+        return SimpleNamespace(
+            id=42,
+            date=datetime(2026, 7, 14, 18, 15),
+            slack_channel_id="C123",
+            slack_message_ts="1710000000.000100",
+        )
+
+    def _rsvp_model(self, count=3):
+        model = MagicMock()
+        model.query.filter_by.return_value.count.return_value = count
+        return model
+
+    def test_modern_root_without_legacy_count_block_skips_chat_update(self):
+        client = MagicMock()
+        client.conversations_history.return_value = {
+            "messages": [
+                {
+                    "text": "Modern accessible fallback",
+                    "blocks": [
+                        {
+                            "type": "context",
+                            "elements": [
+                                {
+                                    "type": "mrkdwn",
+                                    "text": ":evergreen_tree: Plan choice",
+                                }
+                            ],
+                        }
+                    ],
+                }
+            ]
+        }
+
+        with patch(
+            "app.slack.practices.rsvp.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.practices.models.PracticeRSVP",
+            self._rsvp_model(),
+        ), patch(
+            "app.slack.practices.rsvp.current_app",
+            SimpleNamespace(logger=MagicMock()),
+        ):
+            result = update_practice_rsvp_counts(self._practice())
+
+        assert result == {
+            "success": True,
+            "skipped": "no_legacy_count_block",
+        }
+        client.chat_update.assert_not_called()
+
+    def test_legacy_count_update_preserves_complete_existing_fallback_text(self):
+        client = MagicMock()
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": "Practice"}},
+            {
+                "type": "context",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": ":white_check_mark: *1 going* — _see thread for list_",
+                    }
+                ],
+            },
+        ]
+        client.conversations_history.return_value = {
+            "messages": [
+                {
+                    "text": "Complete accessible fallback",
+                    "blocks": blocks,
+                }
+            ]
+        }
+
+        with patch(
+            "app.slack.practices.rsvp.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.practices.models.PracticeRSVP",
+            self._rsvp_model(count=4),
+        ), patch(
+            "app.slack.practices.rsvp.current_app",
+            SimpleNamespace(logger=MagicMock()),
+        ):
+            result = update_practice_rsvp_counts(self._practice())
+
+        assert result == {"success": True}
+        client.chat_update.assert_called_once_with(
+            channel="C123",
+            ts="1710000000.000100",
+            blocks=[
+                {
+                    "type": "section",
+                    "text": {"type": "mrkdwn", "text": "Practice"},
+                },
+                {
+                    "type": "context",
+                    "elements": [
+                        {
+                            "type": "mrkdwn",
+                            "text": ":white_check_mark: *4 going* — _see thread for list_",
+                        }
+                    ],
+                },
+            ],
+            text="Complete accessible fallback",
+        )
 
 
 class TestRefreshCollab:
