@@ -88,6 +88,7 @@ class PracticeActivityInfo:
     id: int
     name: str
     gear_required: list[str] = field(default_factory=list)  # e.g., ["classic skis", "poles"]
+    default_plan_reactions: list[dict[str, str]] = field(default_factory=list)
     airtable_id: Optional[str] = None
 
 
@@ -98,6 +99,7 @@ class PracticeTypeInfo:
     name: str
     fitness_goals: list[str] = field(default_factory=list)  # e.g., ["Threshold", "VO2 Max"]
     has_intervals: bool = False
+    default_plan_reactions: list[dict[str, str]] = field(default_factory=list)
     airtable_id: Optional[str] = None
 
 
@@ -144,6 +146,7 @@ class PracticeInfo:
     workout_description: Optional[str] = None
     cooldown_description: Optional[str] = None
     logistics_notes: Optional[str] = None
+    plan_reactions: list[dict[str, str]] = field(default_factory=list)
     slack_details_ts: Optional[str] = None
 
     # Flags
@@ -156,6 +159,7 @@ class PracticeInfo:
     # Slack integration
     slack_message_ts: Optional[str] = None
     slack_channel_id: Optional[str] = None
+    slack_session_emoji: Optional[str] = None
 
     # Cancellation
     cancellation_reason: Optional[str] = None
@@ -176,6 +180,7 @@ class PracticeCreate:
     warmup_description: Optional[str] = None
     workout_description: Optional[str] = None
     cooldown_description: Optional[str] = None
+    plan_reactions: Optional[list[dict[str, str]]] = None
     has_social: bool = False
     is_dark_practice: bool = False
     lead_user_ids: list[int] = field(default_factory=list)
@@ -194,6 +199,7 @@ class PracticeUpdate:
     warmup_description: Optional[str] = None
     workout_description: Optional[str] = None
     cooldown_description: Optional[str] = None
+    plan_reactions: Optional[list[dict[str, str]]] = None
     has_social: Optional[bool] = None
     is_dark_practice: Optional[bool] = None
     status: Optional[PracticeStatus] = None
