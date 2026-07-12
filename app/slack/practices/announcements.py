@@ -12,38 +12,65 @@ from app.slack.blocks import (
     build_practice_details_blocks,
 )
 from app.practices.models import Practice
-from app.practices.interfaces import WeatherConditions, TrailCondition
+from app.practices.interfaces import (
+    AnnouncementConditions,
+    TrailCondition,
+    WeatherConditions,
+)
 
-from app.slack.practices._config import _get_announcement_channel
+from app.slack.practices._config import (
+    _get_announcement_channel,
+    get_default_duration_minutes,
+)
 
 
-def _gather_conditions(practice):
-    """Best-effort fetch of weather, daylight, and AQI for a practice location.
+_UNSET = object()
 
-    Returns (weather, daylight, aqi) with each None on any failure.
-    Only attempts the fetch when the location has lat/lon coordinates.
-    """
-    weather, daylight, aqi = None, None, None
-    loc = practice.location
-    if not (loc and loc.latitude and loc.longitude):
-        return weather, daylight, aqi
-    try:
-        from app.integrations.weather import get_weather_for_location
-        weather = get_weather_for_location(loc.latitude, loc.longitude, practice.date)
-    except Exception as e:
-        current_app.logger.warning(f"weather fetch failed for practice #{practice.id}: {e}")
-    try:
-        from app.integrations.daylight import get_daylight_info
-        daylight = get_daylight_info(loc.latitude, loc.longitude, practice.date)
-    except Exception as e:
-        current_app.logger.warning(f"daylight fetch failed for practice #{practice.id}: {e}")
-    try:
-        from app.integrations.air_quality import get_air_quality
-        info = get_air_quality(loc.latitude, loc.longitude)
-        aqi = info.aqi if info else None
-    except Exception as e:
-        current_app.logger.warning(f"AQI fetch failed for practice #{practice.id}: {e}")
-    return weather, daylight, aqi
+
+def _gather_conditions(practice, *, weather=_UNSET, trail_conditions=_UNSET):
+    """Fetch each external condition at most once for one render."""
+    has_coordinates = bool(
+        practice.location
+        and practice.location.latitude is not None
+        and practice.location.longitude is not None
+    )
+    resolved_weather = None if weather is _UNSET else weather
+    resolved_trails = None if trail_conditions is _UNSET else trail_conditions
+    daylight = None
+    aqi = None
+    if has_coordinates:
+        lat = practice.location.latitude
+        lon = practice.location.longitude
+        if weather is _UNSET:
+            try:
+                from app.integrations.weather import get_weather_for_location
+                resolved_weather = get_weather_for_location(lat, lon, practice.date)
+            except Exception as exc:
+                current_app.logger.warning(
+                    "weather fetch failed for practice #%s: %s", practice.id, exc
+                )
+        try:
+            from app.integrations.daylight import get_daylight_info
+            daylight = get_daylight_info(lat, lon, practice.date)
+        except Exception as exc:
+            current_app.logger.warning(
+                "daylight fetch failed for practice #%s: %s", practice.id, exc
+            )
+        try:
+            from app.integrations.air_quality import get_air_quality
+            air_info = get_air_quality(lat, lon)
+            aqi = air_info.aqi if air_info else None
+        except Exception as exc:
+            current_app.logger.warning(
+                "AQI fetch failed for practice #%s: %s", practice.id, exc
+            )
+    return AnnouncementConditions(
+        weather=resolved_weather,
+        daylight=daylight,
+        air_quality=aqi,
+        trail_conditions=resolved_trails,
+        duration_minutes=get_default_duration_minutes(),
+    )
 
 
 def _upsert_combined_details_reply(client, practices: list) -> None:
@@ -114,14 +141,18 @@ def _upsert_details_reply(client, practice, practice_info, weather=None, trail_c
     Saves slack_details_ts to the practice row on first creation.
     """
     try:
-        fetched_weather, daylight, aqi = _gather_conditions(practice)
-        weather = weather or fetched_weather
+        gather_kwargs = {}
+        if weather is not None:
+            gather_kwargs["weather"] = weather
+        if trail_conditions is not None:
+            gather_kwargs["trail_conditions"] = trail_conditions
+        conditions = _gather_conditions(practice, **gather_kwargs)
         blocks = build_practice_details_blocks(
             practice_info,
-            weather=weather,
-            trail_conditions=trail_conditions,
-            daylight=daylight,
-            air_quality=aqi,
+            weather=conditions.weather,
+            trail_conditions=conditions.trail_conditions,
+            daylight=conditions.daylight,
+            air_quality=conditions.air_quality,
         )
         if not blocks:
             return

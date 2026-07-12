@@ -425,3 +425,13 @@ class DaylightInfo:
     civil_twilight_begin: datetime
     civil_twilight_end: datetime
     day_length_hours: float
+
+
+@dataclass(frozen=True)
+class AnnouncementConditions:
+    """External conditions gathered once for one announcement render."""
+    weather: Optional[WeatherConditions] = None
+    daylight: Optional[DaylightInfo] = None
+    air_quality: Optional[int] = None
+    trail_conditions: Optional[TrailCondition] = None
+    duration_minutes: int = 90

@@ -41,7 +41,11 @@ def get_daylight_info(lat: float, lon: float, date: datetime) -> DaylightInfo:
     # Calculate sun times for the given date
     # astral returns timezone-aware datetimes in the location's timezone
     try:
-        s = sun(location.observer, date=date.date())
+        s = sun(
+            location.observer,
+            date=date.date(),
+            tzinfo=location.timezone,
+        )
 
         sunrise = s['sunrise']
         sunset = s['sunset']

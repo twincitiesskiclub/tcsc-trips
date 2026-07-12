@@ -61,11 +61,11 @@ class TestGatherConditions:
         with patch("app.integrations.daylight.get_daylight_info") as mock_day, \
              patch("app.integrations.air_quality.get_air_quality") as mock_aqi, \
              patch("app.integrations.weather.get_weather_for_location") as mock_wx:
-            weather, daylight, aqi = _gather_conditions(p)
+            conditions = _gather_conditions(p)
 
-        assert weather is None
-        assert daylight is None
-        assert aqi is None
+        assert conditions.weather is None
+        assert conditions.daylight is None
+        assert conditions.air_quality is None
         mock_wx.assert_not_called()
         mock_day.assert_not_called()
         mock_aqi.assert_not_called()
@@ -77,10 +77,10 @@ class TestGatherConditions:
         p.id = 7
         p.location = None
 
-        weather, daylight, aqi = _gather_conditions(p)
-        assert weather is None
-        assert daylight is None
-        assert aqi is None
+        conditions = _gather_conditions(p)
+        assert conditions.weather is None
+        assert conditions.daylight is None
+        assert conditions.air_quality is None
 
     def test_weather_fetch_fails_returns_none_weather(self, app_context):
         from app.slack.practices.announcements import _gather_conditions
@@ -92,11 +92,11 @@ class TestGatherConditions:
         with patch("app.integrations.weather.get_weather_for_location", side_effect=Exception("nws boom")), \
              patch("app.integrations.daylight.get_daylight_info", return_value=daylight_obj), \
              patch("app.integrations.air_quality.get_air_quality", return_value=aqi_obj):
-            weather, daylight, aqi = _gather_conditions(p)
+            conditions = _gather_conditions(p)
 
-        assert weather is None
-        assert daylight is daylight_obj
-        assert aqi == 78
+        assert conditions.weather is None
+        assert conditions.daylight is daylight_obj
+        assert conditions.air_quality == 78
 
     def test_daylight_raises_but_aqi_and_weather_succeed(self, app_context):
         from app.slack.practices.announcements import _gather_conditions
@@ -108,11 +108,11 @@ class TestGatherConditions:
         with patch("app.integrations.weather.get_weather_for_location", return_value=weather_obj), \
              patch("app.integrations.daylight.get_daylight_info", side_effect=Exception("astral boom")), \
              patch("app.integrations.air_quality.get_air_quality", return_value=aqi_obj):
-            weather, daylight, aqi = _gather_conditions(p)
+            conditions = _gather_conditions(p)
 
-        assert weather is weather_obj
-        assert daylight is None
-        assert aqi == 78
+        assert conditions.weather is weather_obj
+        assert conditions.daylight is None
+        assert conditions.air_quality == 78
 
     def test_aqi_none_yields_none_aqi(self, app_context):
         from app.slack.practices.announcements import _gather_conditions
@@ -124,11 +124,11 @@ class TestGatherConditions:
         with patch("app.integrations.weather.get_weather_for_location", return_value=weather_obj), \
              patch("app.integrations.daylight.get_daylight_info", return_value=daylight_obj), \
              patch("app.integrations.air_quality.get_air_quality", return_value=None):
-            weather, daylight, aqi = _gather_conditions(p)
+            conditions = _gather_conditions(p)
 
-        assert weather is weather_obj
-        assert daylight is daylight_obj
-        assert aqi is None
+        assert conditions.weather is weather_obj
+        assert conditions.daylight is daylight_obj
+        assert conditions.air_quality is None
 
     def test_all_succeed_returns_weather_daylight_aqi(self, app_context):
         from app.slack.practices.announcements import _gather_conditions
@@ -141,11 +141,113 @@ class TestGatherConditions:
         with patch("app.integrations.weather.get_weather_for_location", return_value=weather_obj), \
              patch("app.integrations.daylight.get_daylight_info", return_value=daylight_obj), \
              patch("app.integrations.air_quality.get_air_quality", return_value=aqi_obj):
-            weather, daylight, aqi = _gather_conditions(p)
+            conditions = _gather_conditions(p)
 
-        assert weather is weather_obj
-        assert daylight is daylight_obj
-        assert aqi == 42
+        assert conditions.weather is weather_obj
+        assert conditions.daylight is daylight_obj
+        assert conditions.air_quality == 42
+
+    def test_gather_conditions_returns_an_immutable_snapshot(self, app_context):
+        from dataclasses import FrozenInstanceError
+
+        from app.practices.interfaces import AnnouncementConditions
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords(lat=None, lon=None)
+        conditions = _gather_conditions(practice)
+
+        assert isinstance(conditions, AnnouncementConditions)
+        assert conditions.duration_minutes == 90
+        with pytest.raises(FrozenInstanceError):
+            conditions.duration_minutes = 105
+
+    def test_gather_conditions_uses_injected_weather_without_refetch(
+        self, monkeypatch, app_context
+    ):
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords()
+        supplied = object()
+        monkeypatch.setattr(
+            "app.integrations.weather.get_weather_for_location",
+            lambda *args, **kwargs: pytest.fail("weather was fetched twice"),
+        )
+        conditions = _gather_conditions(practice, weather=supplied)
+        assert conditions.weather is supplied
+        assert conditions.duration_minutes == 90
+
+    def test_gather_conditions_does_not_refetch_explicit_none(
+        self, monkeypatch, app_context
+    ):
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords()
+        monkeypatch.setattr(
+            "app.integrations.weather.get_weather_for_location",
+            lambda *args, **kwargs: pytest.fail("explicit None was refetched"),
+        )
+        assert _gather_conditions(practice, weather=None).weather is None
+
+    def test_gather_conditions_preserves_injected_trail_conditions(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords(lat=None, lon=None)
+        supplied = object()
+
+        assert (
+            _gather_conditions(practice, trail_conditions=supplied).trail_conditions
+            is supplied
+        )
+
+    def test_gather_conditions_accepts_zero_coordinates(
+        self, monkeypatch, app_context
+    ):
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords(lat=0.0, lon=0.0)
+        called = []
+        monkeypatch.setattr(
+            "app.integrations.weather.get_weather_for_location",
+            lambda *args, **kwargs: called.append(args) or None,
+        )
+        _gather_conditions(practice)
+        assert called
+
+
+class TestPracticeConfig:
+    def test_default_duration_must_be_positive(self, monkeypatch, caplog, app_context):
+        from app.slack.practices import _config
+
+        monkeypatch.setattr(
+            _config,
+            "_practice_config_cache",
+            {"practices": {"default_duration_minutes": 105}},
+        )
+        assert _config.get_default_duration_minutes() == 105
+
+        monkeypatch.setattr(
+            _config,
+            "_practice_config_cache",
+            {"practices": {"default_duration_minutes": 0}},
+        )
+        with caplog.at_level("WARNING"):
+            assert _config.get_default_duration_minutes() == 90
+        assert "Invalid practice duration; using 90 minutes" in caplog.text
+
+    def test_reload_config_resets_practice_config_cache(
+        self, monkeypatch, app_context
+    ):
+        from app.slack.practices import _config
+
+        monkeypatch.setattr(_config, "_config_cache", {"cached": "skipper"})
+        monkeypatch.setattr(_config, "_practice_config_cache", {"cached": "practice"})
+
+        reloaded = _config.reload_config()
+
+        assert reloaded is _config._config_cache
+        assert _config._practice_config_cache is None
 
 
 class TestUpsertDetailsReply:
@@ -162,7 +264,10 @@ class TestUpsertDetailsReply:
         # Patch build_practice_details_blocks to return controlled blocks
         default_blocks = blocks if blocks is not None else [{"type": "section", "text": {"type": "mrkdwn", "text": "details"}}]
 
-        with patch("app.slack.practices.announcements._gather_conditions", return_value=(None, daylight, aqi)), \
+        from app.practices.interfaces import AnnouncementConditions
+
+        conditions = AnnouncementConditions(daylight=daylight, air_quality=aqi)
+        with patch("app.slack.practices.announcements._gather_conditions", return_value=conditions), \
              patch("app.slack.practices.announcements.build_practice_details_blocks", return_value=default_blocks), \
              patch("app.slack.practices.announcements.db") as mock_db:
             _upsert_details_reply(client, practice, practice_info, weather=weather, trail_conditions=trail_conditions)
@@ -234,7 +339,12 @@ class TestUpsertDetailsReply:
 
         # Should not raise
         from app.slack.practices.announcements import _upsert_details_reply
-        with patch("app.slack.practices.announcements._gather_conditions", return_value=(None, None, None)), \
+        from app.practices.interfaces import AnnouncementConditions
+
+        with patch(
+            "app.slack.practices.announcements._gather_conditions",
+            return_value=AnnouncementConditions(),
+        ), \
              patch("app.slack.practices.announcements.build_practice_details_blocks",
                    return_value=[{"type": "section"}]), \
              patch("app.slack.practices.announcements.db"):
@@ -352,7 +462,12 @@ class TestUpdatePracticePostWiring:
         client.chat_postMessage.return_value = {"ts": "NEW.TS"}
         practice = _make_practice(slack_message_ts="1234.5678", slack_details_ts=None)
 
-        with patch("app.slack.practices.announcements._gather_conditions", return_value=(None, None, None)), \
+        from app.practices.interfaces import AnnouncementConditions
+
+        with patch(
+            "app.slack.practices.announcements._gather_conditions",
+            return_value=AnnouncementConditions(),
+        ), \
              patch("app.slack.practices.announcements.build_practice_details_blocks",
                    return_value=[{"type": "section"}]), \
              patch("app.slack.practices.announcements.db") as mock_db:
