@@ -1,14 +1,27 @@
 """Block Kit builders for practice announcements."""
 
+from datetime import timedelta
 from typing import Optional
 from urllib.parse import quote_plus
+
 from app.practices.interfaces import (
-    PracticeInfo,
-    WeatherConditions,
-    TrailCondition,
+    AnnouncementConditions,
     LeadRole,
+    PracticeInfo,
+    TrailCondition,
+    WeatherConditions,
+)
+from app.practices.plan_reactions import format_plan_reaction_legend
+from app.slack.blocks.text import (
+    SECTION_TEXT_MAX,
+    guard_fallback_text,
+    guard_slack_blocks,
+    truncate_slack_text,
 )
 from app.utils import utc_naive_to_central_naive
+
+
+_SPACER = "\n\u200b"
 
 
 def _activity_label(activities) -> str:
@@ -20,91 +33,200 @@ def _activity_label(activities) -> str:
     return " + ".join(names)
 
 
-def build_practice_announcement_blocks(practice, *args, **kwargs) -> list[dict]:
-    """Hero (top message) for a single practice announcement.
-
-    Weather/trail/daylight/AQI live in the threaded details reply, not here.
-    Extra positional/keyword args are accepted and ignored for backward
-    compatibility with old callers that passed weather/trail.
-    """
+def _join_block_groups(groups):
     blocks = []
+    for group in groups:
+        if not group:
+            continue
+        if blocks:
+            blocks.append({"type": "divider"})
+        blocks.extend(group)
+    return blocks
 
-    # Trailing blank-line spacer so each section has even breathing room below
-    # its text (Slack trims plain trailing newlines, but keeps a zero-width
-    # space, which renders as an empty line).
-    spacer = "\n​"
 
-    day = practice.date.strftime('%A')
-    time_str = practice.date.strftime('%I:%M %p').lstrip('0')
-    activity = _activity_label(practice.activities)
+def _practice_end(practice, duration_minutes):
+    return practice.date + timedelta(minutes=duration_minutes)
 
-    # HEADER: {day} · {activity} at {time}
-    blocks.append({
+
+def _sunset_local(daylight):
+    sunset = getattr(daylight, "sunset", None) if daylight else None
+    return utc_naive_to_central_naive(sunset) if sunset else None
+
+
+def _requires_headlamp(practice, daylight, duration_minutes):
+    if getattr(practice, "is_dark_practice", False):
+        return True
+    sunset_local = _sunset_local(daylight)
+    return bool(
+        sunset_local
+        and _practice_end(practice, duration_minutes) >= sunset_local
+    )
+
+
+def _urgent_exception_lines(practice, conditions, announcement_notice=None):
+    lines = []
+    if announcement_notice:
+        lines.append(announcement_notice)
+
+    for alert in (getattr(conditions.weather, "alerts", None) or []):
+        headline = getattr(alert, "headline", None) or getattr(alert, "event", None)
+        if headline:
+            lines.append(f"⚠️ {headline}")
+
+    if conditions.air_quality is not None and conditions.air_quality >= 101:
+        lines.append(f"🌫️ Air quality {conditions.air_quality}")
+
+    if _requires_headlamp(
+        practice, conditions.daylight, conditions.duration_minutes
+    ):
+        sunset_local = _sunset_local(conditions.daylight)
+        lines.append(
+            f"🔦 Headlamp required · Sunset {sunset_local.strftime('%-I:%M %p')}"
+            if sunset_local
+            else "🔦 Headlamp required"
+        )
+    return lines
+
+
+def build_practice_announcement_blocks(
+    practice,
+    conditions: AnnouncementConditions,
+    *,
+    announcement_notice=None,
+) -> list[dict]:
+    """Build the standalone practice announcement from one conditions snapshot."""
+    header_group = [{
         "type": "header",
-        "text": {"type": "plain_text", "text": f"{day} · {activity} at {time_str}", "emoji": True},
+        "text": {
+            "type": "plain_text",
+            "text": (
+                f"{practice.date:%A} · {_activity_label(practice.activities)} at "
+                f"{practice.date.strftime('%-I:%M %p')}"
+            ),
+            "emoji": True,
+        },
+    }]
+
+    urgent = _urgent_exception_lines(
+        practice, conditions, announcement_notice=announcement_notice
+    )
+    if urgent:
+        header_group.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n".join(urgent) + _SPACER},
+        })
+
+    location_name = practice.location.name if practice.location else "TBD"
+    spot = (
+        practice.location.spot
+        if practice.location and practice.location.spot
+        else None
+    )
+    where_text = f"*Where:* {location_name + (' - ' + spot if spot else '')}"
+    address = _address_link(practice.location) if practice.location else None
+    if address:
+        where_text += f"\n📍 {address}"
+    header_group.append({
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": where_text + _SPACER},
     })
 
-    # WHERE + address
-    location_name = practice.location.name if practice.location else "TBD"
-    spot = practice.location.spot if practice.location and practice.location.spot else None
-    where = f"{location_name} - {spot}" if spot else location_name
-    where_text = f"*Where:* {where}"
-    addr = _address_link(practice.location) if practice.location else None
-    if addr:
-        where_text += f"\n📍 {addr}"
-    blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": where_text + spacer}})
-
-    blocks.append({"type": "divider"})
-
-    # WORKOUT · type
-    type_names = ", ".join(t.name for t in practice.practice_types) if practice.practice_types else ""
+    type_names = ", ".join(
+        item.name for item in (practice.practice_types or [])
+    )
     workout_label = f"*Workout · {type_names}*" if type_names else "*Workout*"
-    if practice.workout_description:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"{workout_label}\n{practice.workout_description}{spacer}"}})
+    workout_prefix = f"{workout_label}\n"
+    workout = (
+        str(practice.workout_description).strip()
+        if getattr(practice, "workout_description", None)
+        else "Workout details coming soon."
+    )
+    workout = truncate_slack_text(
+        workout,
+        SECTION_TEXT_MAX - len(workout_prefix) - len(_SPACER),
+        field="workout_description",
+        surface="practice_announcement",
+        practice_id=practice.id,
+    )
+    workout_group = [{
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": workout_prefix + workout + _SPACER,
+        },
+    }]
 
-    # NOTES (logistics)
     if getattr(practice, "logistics_notes", None):
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"*📌 Notes*\n{practice.logistics_notes}{spacer}"}})
+        notes_prefix = "*📌 Notes*\n"
+        notes = truncate_slack_text(
+            practice.logistics_notes,
+            SECTION_TEXT_MAX - len(notes_prefix) - len(_SPACER),
+            field="logistics_notes",
+            surface="practice_announcement",
+            practice_id=practice.id,
+        )
+        workout_group.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": notes_prefix + notes + _SPACER,
+            },
+        })
 
-    # SOCIAL
     if practice.has_social:
         social = getattr(practice, "social_location", None)
-        if social and getattr(social, "name", None):
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🍹 *Social after at {social.name}*{spacer}"}})
-        else:
-            blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": f"🍹 *Social after!*{spacer}"}})
+        social_text = (
+            f"🍹 *Social after at {social.name}*"
+            if social and getattr(social, "name", None)
+            else "🍹 *Social after!*"
+        )
+        workout_group.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": social_text + _SPACER},
+        })
 
-    blocks.append({"type": "divider"})
+    rsvp_lines = ["Bop ✅ if you're coming."]
+    if getattr(practice, "plan_reactions", None):
+        rsvp_lines.extend([
+            "",
+            "*Your Practice Plan:*",
+            format_plan_reaction_legend(practice.plan_reactions),
+        ])
+    ending_group = [{
+        "type": "context",
+        "elements": [{"type": "mrkdwn", "text": "\n".join(rsvp_lines)}],
+    }]
 
-    # RSVP CTA (emoji reactions)
-    has_intervals = any(getattr(t, 'has_intervals', False) for t in practice.practice_types) if practice.practice_types else False
-    if has_intervals:
-        cta_text = ("Bop :white_check_mark: so we'll know you'll be there. "
-                    ":evergreen_tree: if you'll be there but doing endurance instead. "
-                    "Running late? Reply in the thread. <!channel>")
-    else:
-        cta_text = ("Bop :white_check_mark: so we'll know you'll be there. "
-                    "Running late? Reply in the thread. <!channel>")
-    blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": cta_text}]})
-
-    # COACH / LEADS (context)
     coaches, leads = [], []
     for lead in (practice.leads or []):
-        mention = f"<@{lead.slack_user_id}>" if lead.slack_user_id else (lead.display_name or "Unknown")
-        role = lead.role.name if hasattr(lead.role, "name") else str(lead.role)
-        if role == "COACH":
+        mention = (
+            f"<@{lead.slack_user_id}>"
+            if lead.slack_user_id
+            else lead.display_name or "Unknown"
+        )
+        role_name = getattr(lead.role, "name", str(lead.role)).upper()
+        if role_name == "COACH":
             coaches.append(mention)
-        elif role in ("LEAD", "ASSIST"):
+        elif role_name in {"LEAD", "ASSIST"}:
             leads.append(mention)
-    cl = []
+    lead_parts = []
     if coaches:
-        cl.append(f"👨‍🏫 Coach {', '.join(coaches)}")
+        lead_parts.append(f"👨‍🏫 Coach {', '.join(coaches)}")
     if leads:
-        cl.append(f"🧑‍🤝‍🧑 Leads {', '.join(leads)}")
-    if cl:
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": " · ".join(cl)}]})
+        lead_parts.append(f"🧑‍🤝‍🧑 Leads {', '.join(leads)}")
+    if lead_parts:
+        ending_group.append({
+            "type": "context",
+            "elements": [
+                {"type": "mrkdwn", "text": " · ".join(lead_parts)}
+            ],
+        })
 
-    return blocks
+    return guard_slack_blocks(
+        _join_block_groups([header_group, workout_group, ending_group]),
+        surface="practice_announcement",
+        practice_id=practice.id,
+    )
 
 
 def _gear_list(practice) -> list[str]:
@@ -115,73 +237,183 @@ def _gear_list(practice) -> list[str]:
             continue
         items.extend(gear if isinstance(gear, list) else [gear])
     seen = set()
-    return [g for g in items if not (g in seen or seen.add(g))]
+    return [item for item in items if not (item in seen or seen.add(item))]
+
+
+def _details_content(practice, conditions):
+    parking = practice.location.parking_notes if practice.location else None
+    gear = _gear_list(practice)
+    block_conditions = []
+    plain_conditions = []
+
+    weather = conditions.weather
+    if weather:
+        temperature = f"🌡️ {weather.temperature_f:.0f}°F"
+        feels_like = getattr(weather, "feels_like_f", None)
+        if feels_like is not None and abs(feels_like - weather.temperature_f) > 3:
+            temperature += f" (feels {feels_like:.0f}°)"
+        if getattr(weather, "conditions_summary", None):
+            temperature += f", {weather.conditions_summary}"
+        block_conditions.append(temperature)
+        plain_conditions.append(temperature)
+
+        if getattr(weather, "wind_speed_mph", None):
+            direction = getattr(weather, "wind_direction", None)
+            wind = (
+                f"💨 Wind {direction + ' ' if direction else ''}"
+                f"{weather.wind_speed_mph:.0f} mph"
+            )
+            block_conditions.append(wind)
+            plain_conditions.append(wind)
+
+    sunset_local = _sunset_local(conditions.daylight)
+    if sunset_local:
+        sunset = f"☀️ Sunset {sunset_local.strftime('%-I:%M %p')}"
+        block_conditions.append(sunset)
+        plain_conditions.append(sunset)
+
+    if conditions.air_quality is not None and 50 <= conditions.air_quality <= 100:
+        air = f"🌫️ AQI {conditions.air_quality}"
+        block_conditions.append(air)
+        plain_conditions.append(air)
+
+    trail = conditions.trail_conditions
+    if trail:
+        trail_block = f"🎿 Trails: {trail.ski_quality.replace('_', ' ').title()}"
+        trail_plain = trail_block
+        if trail.groomed:
+            trail_block += ", Groomed"
+            trail_plain += ", Groomed"
+        if getattr(trail, "report_url", None):
+            trail_block += f" · <{trail.report_url}|Trail report>"
+            trail_plain += f" · Trail report: {trail.report_url}"
+        block_conditions.append(trail_block)
+        plain_conditions.append(trail_plain)
+
+    return {
+        "parking": parking,
+        "gear": gear,
+        "block_conditions": block_conditions,
+        "plain_conditions": plain_conditions,
+    }
 
 
 def build_practice_details_blocks(
-    practice,
-    weather=None,
-    trail_conditions=None,
-    daylight=None,
-    air_quality=None,
+    practice, conditions: AnnouncementConditions
 ) -> list[dict]:
-    """Threaded 'Practice Details' reply: parking, gear, conditions.
+    """Build the optional routine-details thread reply."""
+    content = _details_content(practice, conditions)
+    sections = []
+    logistics = []
+    if content["parking"]:
+        logistics.append(f"*Parking*\n{content['parking']}")
+    if content["gear"]:
+        logistics.append(f"*Gear*\n{', '.join(content['gear'])}")
+    if logistics:
+        sections.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "\n\n".join(logistics)},
+        })
+    if content["block_conditions"]:
+        sections.append({
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    "*Conditions*\n" + "\n".join(content["block_conditions"])
+                ),
+            },
+        })
+    if not sections:
+        return []
 
-    air_quality is an int AQI value (or None). Sunset uses comma + 'bring a
-    headlamp' (no em dash) when the practice starts at/after sunset.
-    """
-    blocks = [{"type": "header", "text": {"type": "plain_text", "text": "Practice Details", "emoji": True}}]
+    blocks = [{
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": "Practice Details",
+            "emoji": True,
+        },
+    }]
+    for index, section in enumerate(sections):
+        if index:
+            blocks.append({"type": "divider"})
+        blocks.append(section)
+    return guard_slack_blocks(
+        blocks,
+        surface="practice_details",
+        practice_id=practice.id,
+    )
 
-    # Parking + Gear (one section, blank-line separated)
-    parts = []
-    parking = practice.location.parking_notes if practice.location else None
-    if parking:
-        parts.append(f"*Parking*\n{parking}")
-    gear = _gear_list(practice)
-    if gear:
-        parts.append(f"*Gear*\n{', '.join(gear)}")
-    if parts:
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "\n\n".join(parts)}})
 
-    # Conditions
-    cond = []
-    if weather:
-        temp = f"🌡️ {weather.temperature_f:.0f}°F"
-        if weather.feels_like_f is not None and abs(weather.feels_like_f - weather.temperature_f) > 3:
-            temp += f" (feels {weather.feels_like_f:.0f}°)"
-        if getattr(weather, "conditions_summary", None):
-            temp += f", {weather.conditions_summary}"
-        if getattr(weather, "alerts", None):
-            temp += f". ⚠️ {weather.alerts[0].headline}"
-        else:
-            temp += ". No alerts."
-        cond.append(temp)
-        if getattr(weather, "wind_speed_mph", None):
-            direction = getattr(weather, "wind_direction", None)
-            cond.append(f"💨 Wind {direction + ' ' if direction else ''}{weather.wind_speed_mph:.0f} mph")
-    if daylight and getattr(daylight, "sunset", None):
-        # sunset is stored as naive UTC; practice.date is naive Central. Convert
-        # once so both the comparison and the displayed time are Central.
-        sunset_central = utc_naive_to_central_naive(daylight.sunset)
-        sunset_str = sunset_central.strftime('%I:%M %p').lstrip('0')
-        if practice.date >= sunset_central:
-            cond.append(f"🔦 Sunset {sunset_str}, bring a headlamp")
-        else:
-            cond.append(f"☀️ Sunset {sunset_str}")
-    if air_quality is not None and air_quality > 49:
-        cond.append(f"🌫️ AQI {air_quality}")
-    if trail_conditions:
-        trail = f"🎿 Trails: {trail_conditions.ski_quality.replace('_', ' ').title()}"
-        if trail_conditions.groomed:
-            trail += ", Groomed"
-        if getattr(trail_conditions, "report_url", None):
-            trail += f" · <{trail_conditions.report_url}|Trail report>"
-        cond.append(trail)
-    if cond:
-        blocks.append({"type": "divider"})
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": "*Conditions*\n" + "\n".join(cond)}})
+def build_practice_fallback_text(
+    practice,
+    conditions: AnnouncementConditions,
+    *,
+    announcement_notice=None,
+):
+    """Build complete notification fallback text for the hero message."""
+    location = practice.location.name if practice.location else "TBD"
+    workout = (
+        str(practice.workout_description).strip()
+        if getattr(practice, "workout_description", None)
+        else "Workout details coming soon."
+    )
+    workout = truncate_slack_text(
+        workout,
+        2500,
+        field="workout_description",
+        surface="practice_fallback",
+        practice_id=practice.id,
+    )
+    parts = [
+        (
+            f"{practice.date.strftime('%A, %B %-d')} at "
+            f"{practice.date.strftime('%-I:%M %p')} at {location}."
+        ),
+        f"Workout: {workout}",
+    ]
+    urgent = _urgent_exception_lines(
+        practice, conditions, announcement_notice=announcement_notice
+    )
+    if urgent:
+        parts.append(" ".join(urgent))
+    parts.append("RSVP with ✅.")
+    if getattr(practice, "plan_reactions", None):
+        parts.append(
+            "Your Practice Plan: "
+            + format_plan_reaction_legend(practice.plan_reactions)
+            + "."
+        )
+    fallback = " ".join(parts)
+    return guard_fallback_text(
+        fallback,
+        surface="practice_announcement",
+        practice_id=practice.id,
+    )
 
-    return blocks
+
+def build_practice_details_fallback_text(
+    practice, conditions: AnnouncementConditions
+):
+    """Build notification fallback text from the normalized Details content."""
+    content = _details_content(practice, conditions)
+    parts = [
+        f"Practice details for {practice.date.strftime('%A, %B %-d')}."
+    ]
+    if content["parking"]:
+        parts.append(f"Parking: {content['parking']}.")
+    if content["gear"]:
+        parts.append(f"Gear: {', '.join(content['gear'])}.")
+    if content["plain_conditions"]:
+        parts.append(
+            "Conditions: " + " ".join(content["plain_conditions"]) + "."
+        )
+    return guard_fallback_text(
+        " ".join(parts),
+        surface="practice_details",
+        practice_id=practice.id,
+    )
 
 
 def _get_day_suffix(day: int) -> str:
