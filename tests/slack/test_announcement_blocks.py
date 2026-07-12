@@ -466,6 +466,38 @@ def test_public_hero_guard_limits_long_header(practice_info, conditions):
     assert len(blocks[0]["text"]["text"]) <= HEADER_TEXT_MAX
 
 
+def test_long_activity_preserves_fixed_header_time_suffix(
+    practice_info, conditions, caplog
+):
+    practice_info.activities = [_act("a" * 255)]
+    header = build_practice_announcement_blocks(
+        practice_info, conditions
+    )[0]["text"]["text"]
+    assert len(header) <= HEADER_TEXT_MAX
+    assert header.startswith("Monday · ")
+    assert header.endswith(" at 6:00 PM")
+    assert "activity_label" in caplog.text
+
+
+def test_many_long_practice_types_preserve_workout_placeholder(
+    practice_info, conditions, caplog
+):
+    practice_info.practice_types = [
+        SimpleNamespace(name=f"Type {index} " + "t" * 255, has_intervals=False)
+        for index in range(30)
+    ]
+    practice_info.workout_description = None
+    workout = next(
+        block["text"]["text"]
+        for block in build_practice_announcement_blocks(practice_info, conditions)
+        if block.get("type") == "section"
+        and block.get("text", {}).get("text", "").startswith("*Workout")
+    )
+    assert len(workout) <= SECTION_TEXT_MAX
+    assert "Workout details coming soon." in workout
+    assert "practice_type_names" in caplog.text
+
+
 def test_hero_has_no_em_dash_and_no_adjacent_dividers(practice_info, conditions):
     blocks = build_practice_announcement_blocks(practice_info, conditions)
     blob = json.dumps(blocks)
@@ -531,6 +563,18 @@ def test_public_details_guard_limits_long_section(practice_info, empty_condition
     assert len(section["text"]["text"]) <= SECTION_TEXT_MAX
 
 
+def test_long_parking_cannot_remove_gear_from_details(
+    practice_info, empty_conditions
+):
+    practice_info.location.parking_notes = "p" * 4_000
+    practice_info.activities = [_act("Classic Ski", ["Classic skis"])]
+    blocks = build_practice_details_blocks(practice_info, empty_conditions)
+    text = rendered_text(blocks)
+    assert "*Parking*" in text
+    assert "*Gear*\nClassic skis" in text
+    _assert_no_adjacent_dividers(blocks)
+
+
 def test_details_has_no_em_dash(practice_info, conditions):
     blob = json.dumps(build_practice_details_blocks(practice_info, conditions))
     assert "—" not in blob and "–" not in blob
@@ -561,6 +605,16 @@ def test_announcement_fallback_covers_hero_and_omits_routine_details(
     assert "Trails" not in fallback
 
 
+def test_announcement_fallback_includes_plain_practice_status(
+    practice_info, conditions
+):
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info, conditions
+    )
+    assert "Status: Scheduled." in fallback
+    assert "Monday, July 13 at 6:00 PM at Theodore Wirth." in fallback
+
+
 def test_announcement_fallback_uses_missing_workout_placeholder(
     practice_info, conditions
 ):
@@ -569,6 +623,94 @@ def test_announcement_fallback_uses_missing_workout_placeholder(
         practice_info, conditions
     )
     assert "Workout: Workout details coming soon." in fallback
+
+
+def test_whitespace_only_workout_uses_placeholder_in_hero_and_fallback(
+    practice_info, conditions
+):
+    practice_info.workout_description = " \n\t "
+    hero = rendered_text(
+        build_practice_announcement_blocks(practice_info, conditions)
+    )
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info, conditions
+    )
+    assert "Workout details coming soon." in hero
+    assert "Workout: Workout details coming soon." in fallback
+
+
+def test_long_alerts_cannot_remove_later_hero_promotions(
+    practice_info, conditions
+):
+    alerts = [
+        SimpleNamespace(headline=f"Alert {index} " + "a" * 4_000, event=None)
+        for index in range(2)
+    ]
+    conditions = replace(
+        conditions,
+        weather=_weather(alerts=alerts),
+        daylight=daylight_for(practice_info.date, 16, 53),
+        air_quality=121,
+    )
+    blocks = build_practice_announcement_blocks(practice_info, conditions)
+    text = rendered_text(blocks)
+    assert "Alert 0" in text
+    assert "Alert 1" in text
+    assert "Air quality 121" in text
+    assert "Headlamp required" in text
+    _assert_urgent_precedes_location_and_workout(blocks, "Air quality 121")
+    _assert_urgent_precedes_location_and_workout(blocks, "Headlamp required")
+
+
+def test_long_workout_and_alerts_cannot_remove_required_fallback_end(
+    practice_info, conditions
+):
+    practice_info.workout_description = "w" * 10_000
+    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
+    alerts = [
+        SimpleNamespace(headline=f"Alert {index} " + "a" * 4_000, event=None)
+        for index in range(2)
+    ]
+    conditions = replace(
+        conditions,
+        weather=_weather(alerts=alerts),
+        daylight=daylight_for(practice_info.date, 16, 53),
+        air_quality=121,
+    )
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info, conditions
+    )
+    assert "Headlamp required" in fallback
+    assert "RSVP with ✅." in fallback
+    assert "Your Practice Plan:" in fallback
+    assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert len(fallback) <= FALLBACK_TEXT_MAX
+
+
+def test_configured_duration_variance_controls_fallback_headlamp(
+    practice_info, conditions
+):
+    sunset = daylight_for(practice_info.date, 19, 30)
+    short_conditions = replace(
+        conditions,
+        weather=None,
+        daylight=sunset,
+        duration_minutes=60,
+    )
+    long_conditions = replace(
+        conditions,
+        weather=_weather(
+            alerts=[SimpleNamespace(headline="a" * 4_000, event=None)]
+        ),
+        daylight=sunset,
+        duration_minutes=120,
+    )
+    assert "Headlamp required" not in announcement_blocks.build_practice_fallback_text(
+        practice_info, short_conditions
+    )
+    assert "Headlamp required" in announcement_blocks.build_practice_fallback_text(
+        practice_info, long_conditions
+    )
 
 
 def test_details_fallback_uses_same_plain_normalized_content(
@@ -588,6 +730,21 @@ def test_details_fallback_uses_same_plain_normalized_content(
     assert "🌫️ AQI 78" in fallback
     assert "Trail report: https://trails.example/report" in fallback
     assert "<https://trails.example/report|Trail report>" not in fallback
+
+
+def test_long_parking_cannot_remove_details_fallback_gear_or_conditions(
+    practice_info, conditions
+):
+    practice_info.location.parking_notes = "p" * 10_000
+    practice_info.activities = [_act("Classic Ski", ["Classic skis"])]
+    fallback = announcement_blocks.build_practice_details_fallback_text(
+        practice_info, conditions
+    )
+    assert "Gear: Classic skis." in fallback
+    assert "Conditions:" in fallback
+    assert "💨 Wind NW 12 mph" in fallback
+    assert "☀️ Sunset 8:59 PM" in fallback
+    assert len(fallback) <= FALLBACK_TEXT_MAX
 
 
 def test_empty_details_fallback_contains_only_the_practice_date(

@@ -13,6 +13,7 @@ from app.practices.interfaces import (
 )
 from app.practices.plan_reactions import format_plan_reaction_legend
 from app.slack.blocks.text import (
+    HEADER_TEXT_MAX,
     SECTION_TEXT_MAX,
     guard_fallback_text,
     guard_slack_blocks,
@@ -22,6 +23,16 @@ from app.utils import utc_naive_to_central_naive
 
 
 _SPACER = "\n\u200b"
+_WORKOUT_PLACEHOLDER = "Workout details coming soon."
+_FALLBACK_STATUS_MAX = 80
+_FALLBACK_LOCATION_MAX = 300
+_FALLBACK_WORKOUT_MAX = 1200
+_FALLBACK_NOTICE_MAX = 300
+_FALLBACK_ALERTS_MAX = 800
+_FALLBACK_PLAN_MAX = 600
+_DETAILS_FALLBACK_PARKING_MAX = 1000
+_DETAILS_FALLBACK_GEAR_MAX = 800
+_DETAILS_FALLBACK_CONDITIONS_MAX = 1700
 
 
 def _activity_label(activities) -> str:
@@ -63,29 +74,70 @@ def _requires_headlamp(practice, daylight, duration_minutes):
     )
 
 
-def _urgent_exception_lines(practice, conditions, announcement_notice=None):
-    lines = []
+def _urgent_exception_categories(practice, conditions, announcement_notice=None):
+    categories = []
     if announcement_notice:
-        lines.append(announcement_notice)
+        categories.append(("announcement_notice", [str(announcement_notice)]))
 
+    alerts = []
     for alert in (getattr(conditions.weather, "alerts", None) or []):
         headline = getattr(alert, "headline", None) or getattr(alert, "event", None)
         if headline:
-            lines.append(f"⚠️ {headline}")
+            alerts.append(f"⚠️ {headline}")
+    if alerts:
+        categories.append(("weather_alert_headlines", alerts))
 
     if conditions.air_quality is not None and conditions.air_quality >= 101:
-        lines.append(f"🌫️ Air quality {conditions.air_quality}")
+        categories.append(
+            ("air_quality", [f"🌫️ Air quality {conditions.air_quality}"])
+        )
 
     if _requires_headlamp(
         practice, conditions.daylight, conditions.duration_minutes
     ):
         sunset_local = _sunset_local(conditions.daylight)
-        lines.append(
-            f"🔦 Headlamp required · Sunset {sunset_local.strftime('%-I:%M %p')}"
-            if sunset_local
-            else "🔦 Headlamp required"
+        categories.append(
+            (
+                "headlamp",
+                [
+                    (
+                        "🔦 Headlamp required · Sunset "
+                        f"{sunset_local.strftime('%-I:%M %p')}"
+                    )
+                    if sunset_local
+                    else "🔦 Headlamp required"
+                ],
+            )
         )
-    return lines
+    return categories
+
+
+def _urgent_exception_lines(practice, conditions, announcement_notice=None):
+    return [
+        line
+        for _, lines in _urgent_exception_categories(
+            practice,
+            conditions,
+            announcement_notice=announcement_notice,
+        )
+        for line in lines
+    ]
+
+
+def _workout_text(practice):
+    return str(getattr(practice, "workout_description", None) or "").strip() or (
+        _WORKOUT_PLACEHOLDER
+    )
+
+
+def _practice_status_label(practice):
+    status = getattr(practice, "status", None)
+    value = getattr(status, "value", status)
+    return str(value or "unknown").replace("_", " ").title()
+
+
+def _sentence(prefix, value):
+    return f"{prefix}{value}{'' if value.endswith('…') else '.'}"
 
 
 def build_practice_announcement_blocks(
@@ -95,26 +147,43 @@ def build_practice_announcement_blocks(
     announcement_notice=None,
 ) -> list[dict]:
     """Build the standalone practice announcement from one conditions snapshot."""
+    header_prefix = f"{practice.date:%A} · "
+    header_suffix = f" at {practice.date.strftime('%-I:%M %p')}"
+    activity = truncate_slack_text(
+        _activity_label(practice.activities),
+        max(1, HEADER_TEXT_MAX - len(header_prefix) - len(header_suffix)),
+        field="activity_label",
+        surface="practice_announcement",
+        practice_id=practice.id,
+    )
     header_group = [{
         "type": "header",
         "text": {
             "type": "plain_text",
-            "text": (
-                f"{practice.date:%A} · {_activity_label(practice.activities)} at "
-                f"{practice.date.strftime('%-I:%M %p')}"
-            ),
+            "text": header_prefix + activity + header_suffix,
             "emoji": True,
         },
     }]
 
-    urgent = _urgent_exception_lines(
+    urgent_categories = _urgent_exception_categories(
         practice, conditions, announcement_notice=announcement_notice
     )
-    if urgent:
-        header_group.append({
-            "type": "section",
-            "text": {"type": "mrkdwn", "text": "\n".join(urgent) + _SPACER},
-        })
+    for field, lines in urgent_categories:
+        category_texts = (
+            lines if field == "weather_alert_headlines" else ["\n".join(lines)]
+        )
+        for category_text in category_texts:
+            urgent_text = truncate_slack_text(
+                category_text,
+                SECTION_TEXT_MAX - len(_SPACER),
+                field=field,
+                surface="practice_announcement",
+                practice_id=practice.id,
+            )
+            header_group.append({
+                "type": "section",
+                "text": {"type": "mrkdwn", "text": urgent_text + _SPACER},
+            })
 
     location_name = practice.location.name if practice.location else "TBD"
     spot = (
@@ -132,18 +201,34 @@ def build_practice_announcement_blocks(
     })
 
     type_names = ", ".join(
-        item.name for item in (practice.practice_types or [])
+        str(item.name) for item in (practice.practice_types or [])
     )
-    workout_label = f"*Workout · {type_names}*" if type_names else "*Workout*"
+    if type_names:
+        type_prefix = "*Workout · "
+        type_suffix = "*"
+        type_names = truncate_slack_text(
+            type_names,
+            max(
+                1,
+                SECTION_TEXT_MAX
+                - len(type_prefix)
+                - len(type_suffix)
+                - 1
+                - len(_SPACER)
+                - len(_WORKOUT_PLACEHOLDER),
+            ),
+            field="practice_type_names",
+            surface="practice_announcement",
+            practice_id=practice.id,
+        )
+        workout_label = type_prefix + type_names + type_suffix
+    else:
+        workout_label = "*Workout*"
     workout_prefix = f"{workout_label}\n"
-    workout = (
-        str(practice.workout_description).strip()
-        if getattr(practice, "workout_description", None)
-        else "Workout details coming soon."
-    )
+    workout = _workout_text(practice)
     workout = truncate_slack_text(
         workout,
-        SECTION_TEXT_MAX - len(workout_prefix) - len(_SPACER),
+        max(1, SECTION_TEXT_MAX - len(workout_prefix) - len(_SPACER)),
         field="workout_description",
         surface="practice_announcement",
         practice_id=practice.id,
@@ -304,15 +389,31 @@ def build_practice_details_blocks(
     """Build the optional routine-details thread reply."""
     content = _details_content(practice, conditions)
     sections = []
-    logistics = []
     if content["parking"]:
-        logistics.append(f"*Parking*\n{content['parking']}")
-    if content["gear"]:
-        logistics.append(f"*Gear*\n{', '.join(content['gear'])}")
-    if logistics:
+        parking_prefix = "*Parking*\n"
+        parking = truncate_slack_text(
+            content["parking"],
+            SECTION_TEXT_MAX - len(parking_prefix),
+            field="parking_notes",
+            surface="practice_details",
+            practice_id=practice.id,
+        )
         sections.append({
             "type": "section",
-            "text": {"type": "mrkdwn", "text": "\n\n".join(logistics)},
+            "text": {"type": "mrkdwn", "text": parking_prefix + parking},
+        })
+    if content["gear"]:
+        gear_prefix = "*Gear*\n"
+        gear = truncate_slack_text(
+            ", ".join(content["gear"]),
+            SECTION_TEXT_MAX - len(gear_prefix),
+            field="gear_required",
+            surface="practice_details",
+            practice_id=practice.id,
+        )
+        sections.append({
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": gear_prefix + gear},
         })
     if content["block_conditions"]:
         sections.append({
@@ -353,37 +454,68 @@ def build_practice_fallback_text(
     announcement_notice=None,
 ):
     """Build complete notification fallback text for the hero message."""
-    location = practice.location.name if practice.location else "TBD"
-    workout = (
-        str(practice.workout_description).strip()
-        if getattr(practice, "workout_description", None)
-        else "Workout details coming soon."
+    status = truncate_slack_text(
+        _practice_status_label(practice),
+        _FALLBACK_STATUS_MAX,
+        field="practice_status",
+        surface="practice_fallback",
+        practice_id=practice.id,
+    )
+    location = truncate_slack_text(
+        practice.location.name if practice.location else "TBD",
+        _FALLBACK_LOCATION_MAX,
+        field="location_name",
+        surface="practice_fallback",
+        practice_id=practice.id,
     )
     workout = truncate_slack_text(
-        workout,
-        2500,
+        _workout_text(practice),
+        _FALLBACK_WORKOUT_MAX,
         field="workout_description",
         surface="practice_fallback",
         practice_id=practice.id,
     )
     parts = [
+        f"Status: {status}.",
         (
             f"{practice.date.strftime('%A, %B %-d')} at "
             f"{practice.date.strftime('%-I:%M %p')} at {location}."
         ),
         f"Workout: {workout}",
     ]
-    urgent = _urgent_exception_lines(
+    urgent_categories = _urgent_exception_categories(
         practice, conditions, announcement_notice=announcement_notice
     )
-    if urgent:
-        parts.append(" ".join(urgent))
+    urgent_budgets = {
+        "announcement_notice": _FALLBACK_NOTICE_MAX,
+        "weather_alert_headlines": _FALLBACK_ALERTS_MAX,
+    }
+    for field, lines in urgent_categories:
+        budget = urgent_budgets.get(field, 100)
+        separator_chars = max(0, len(lines) - 1)
+        item_budget = max(1, (budget - separator_chars) // len(lines))
+        bounded_lines = [
+            truncate_slack_text(
+                line,
+                item_budget,
+                field=field,
+                surface="practice_fallback",
+                practice_id=practice.id,
+            )
+            for line in lines
+        ]
+        parts.append(" ".join(bounded_lines))
     parts.append("RSVP with ✅.")
     if getattr(practice, "plan_reactions", None):
+        plan = truncate_slack_text(
+            format_plan_reaction_legend(practice.plan_reactions),
+            _FALLBACK_PLAN_MAX,
+            field="plan_reactions",
+            surface="practice_fallback",
+            practice_id=practice.id,
+        )
         parts.append(
-            "Your Practice Plan: "
-            + format_plan_reaction_legend(practice.plan_reactions)
-            + "."
+            "Your Practice Plan: " + plan + "."
         )
     fallback = " ".join(parts)
     return guard_fallback_text(
@@ -402,13 +534,32 @@ def build_practice_details_fallback_text(
         f"Practice details for {practice.date.strftime('%A, %B %-d')}."
     ]
     if content["parking"]:
-        parts.append(f"Parking: {content['parking']}.")
-    if content["gear"]:
-        parts.append(f"Gear: {', '.join(content['gear'])}.")
-    if content["plain_conditions"]:
-        parts.append(
-            "Conditions: " + " ".join(content["plain_conditions"]) + "."
+        parking = truncate_slack_text(
+            content["parking"],
+            _DETAILS_FALLBACK_PARKING_MAX,
+            field="parking_notes",
+            surface="practice_details_fallback",
+            practice_id=practice.id,
         )
+        parts.append(_sentence("Parking: ", parking))
+    if content["gear"]:
+        gear = truncate_slack_text(
+            ", ".join(content["gear"]),
+            _DETAILS_FALLBACK_GEAR_MAX,
+            field="gear_required",
+            surface="practice_details_fallback",
+            practice_id=practice.id,
+        )
+        parts.append(_sentence("Gear: ", gear))
+    if content["plain_conditions"]:
+        conditions_text = truncate_slack_text(
+            " ".join(content["plain_conditions"]),
+            _DETAILS_FALLBACK_CONDITIONS_MAX,
+            field="conditions",
+            surface="practice_details_fallback",
+            practice_id=practice.id,
+        )
+        parts.append(_sentence("Conditions: ", conditions_text))
     return guard_fallback_text(
         " ".join(parts),
         surface="practice_details",
