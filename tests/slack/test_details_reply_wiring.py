@@ -359,6 +359,57 @@ class TestUpsertDetailsReply:
 class TestPostPracticeAnnouncementWiring:
     """post_practice_announcement calls _upsert_details_reply after the hero commit."""
 
+    def test_explicit_none_weather_is_not_refetched_for_details(self, app_context):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements.get_channel_id_by_name", return_value="CTEST"), \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks", return_value=[]), \
+             patch("app.integrations.weather.get_weather_for_location") as mock_weather, \
+             patch("app.integrations.daylight.get_daylight_info", return_value=None), \
+             patch("app.integrations.air_quality.get_air_quality", return_value=None), \
+             patch("app.slack.practices.announcements.db"), \
+             patch("app.slack.practices.coach_review.create_practice_log_thread", create=True):
+            mock_client = MagicMock()
+            mock_client.chat_postMessage.return_value = {"ts": "1111.0001"}
+            mock_get_client.return_value = mock_client
+
+            result = post_practice_announcement(practice, weather=None)
+
+        assert result.get("success") is True
+        mock_weather.assert_not_called()
+
+    def test_omitted_weather_is_fetched_for_details(self, app_context):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
+        fetched = object()
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements.get_channel_id_by_name", return_value="CTEST"), \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_details_blocks", return_value=[]), \
+             patch("app.integrations.weather.get_weather_for_location", return_value=fetched) as mock_weather, \
+             patch("app.integrations.daylight.get_daylight_info", return_value=None), \
+             patch("app.integrations.air_quality.get_air_quality", return_value=None), \
+             patch("app.slack.practices.announcements.db"), \
+             patch("app.slack.practices.coach_review.create_practice_log_thread", create=True):
+            mock_client = MagicMock()
+            mock_client.chat_postMessage.return_value = {"ts": "1111.0001"}
+            mock_get_client.return_value = mock_client
+
+            result = post_practice_announcement(practice)
+
+        assert result.get("success") is True
+        mock_weather.assert_called_once()
+
     def test_details_reply_posted_after_hero(self, app_context):
         """On initial post, _upsert_details_reply is called with weather+trail."""
         from app.slack.practices.announcements import post_practice_announcement

@@ -133,7 +133,13 @@ def _upsert_combined_details_reply(client, practices: list) -> None:
         )
 
 
-def _upsert_details_reply(client, practice, practice_info, weather=None, trail_conditions=None):
+def _upsert_details_reply(
+    client,
+    practice,
+    practice_info,
+    weather=_UNSET,
+    trail_conditions=_UNSET,
+):
     """Post or update the threaded 'Practice Details' reply. Best-effort.
 
     Creates a new thread reply when slack_details_ts is absent (initial post or
@@ -141,12 +147,11 @@ def _upsert_details_reply(client, practice, practice_info, weather=None, trail_c
     Saves slack_details_ts to the practice row on first creation.
     """
     try:
-        gather_kwargs = {}
-        if weather is not None:
-            gather_kwargs["weather"] = weather
-        if trail_conditions is not None:
-            gather_kwargs["trail_conditions"] = trail_conditions
-        conditions = _gather_conditions(practice, **gather_kwargs)
+        conditions = _gather_conditions(
+            practice,
+            weather=weather,
+            trail_conditions=trail_conditions,
+        )
         blocks = build_practice_details_blocks(
             practice_info,
             weather=conditions.weather,
@@ -189,8 +194,8 @@ def _upsert_details_reply(client, practice, practice_info, weather=None, trail_c
 
 def post_practice_announcement(
     practice: Practice,
-    weather: Optional[WeatherConditions] = None,
-    trail_conditions: Optional[TrailCondition] = None,
+    weather: Optional[WeatherConditions] = _UNSET,
+    trail_conditions: Optional[TrailCondition] = _UNSET,
     channel_override: Optional[str] = None
 ) -> dict:
     """Post practice announcement to #practices channel.
@@ -226,7 +231,13 @@ def post_practice_announcement(
     practice_info = convert_practice_to_info(practice)
 
     # Build blocks
-    blocks = build_practice_announcement_blocks(practice_info, weather, trail_conditions)
+    rendered_weather = None if weather is _UNSET else weather
+    rendered_trails = None if trail_conditions is _UNSET else trail_conditions
+    blocks = build_practice_announcement_blocks(
+        practice_info,
+        rendered_weather,
+        rendered_trails,
+    )
 
     try:
         response = client.chat_postMessage(
@@ -385,8 +396,8 @@ def post_combined_lift_announcement(
 
 def update_practice_announcement(
     practice: Practice,
-    weather: Optional[WeatherConditions] = None,
-    trail_conditions: Optional[TrailCondition] = None
+    weather: Optional[WeatherConditions] = _UNSET,
+    trail_conditions: Optional[TrailCondition] = _UNSET,
 ) -> dict:
     """Update an existing practice announcement message.
 
@@ -410,7 +421,13 @@ def update_practice_announcement(
     practice_info = convert_practice_to_info(practice)
 
     # Build updated blocks
-    blocks = build_practice_announcement_blocks(practice_info, weather, trail_conditions)
+    rendered_weather = None if weather is _UNSET else weather
+    rendered_trails = None if trail_conditions is _UNSET else trail_conditions
+    blocks = build_practice_announcement_blocks(
+        practice_info,
+        rendered_weather,
+        rendered_trails,
+    )
 
     try:
         client.chat_update(
