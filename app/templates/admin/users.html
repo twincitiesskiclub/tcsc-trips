@@ -323,6 +323,7 @@
     </div>
     <div class="mr-modal-body">
       <form id="mr-edit-form" method="POST">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="hidden" name="form_type" value="quick">
         <div class="mr-form-group">
           <label for="mr-edit-email">Email</label>

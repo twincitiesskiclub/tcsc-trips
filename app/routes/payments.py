@@ -9,6 +9,7 @@ from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, P
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
 from ..notifications.slack import send_payment_notification
+from ..security import csrf
 from .. import late_link
 
 payments = Blueprint('payments', __name__)
@@ -18,6 +19,15 @@ def build_statement_descriptor(payment_type, identifier):
     sanitized = re.sub(r'[^A-Z0-9_ .\-]', '', identifier.upper())
     return (prefix + sanitized)[:22]
 
+
+def stripe_idempotency_options():
+    """Forward the browser's per-attempt key using Stripe's request option."""
+    idempotency_key = request.headers.get('Idempotency-Key')
+    if not idempotency_key:
+        return {}
+    return {'idempotency_key': idempotency_key[:255]}
+
+
 @payments.route('/get-stripe-key')
 def get_stripe_key():
     return jsonify({'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')})
@@ -25,14 +35,28 @@ def get_stripe_key():
 @payments.route('/create-payment-intent', methods=['POST'])
 def create_payment():
     try:
-        data = request.get_json()
+        data = request.get_json(silent=True) or {}
         email = normalize_email(data.get('email', ''))
-        name = data.get('name', '')
-        amount = float(data.get('amount', 135.00))
-        trip_slug = request.referrer.split('/')[-1] if request.referrer else None
+        name = (data.get('name') or '').strip()
+        trip_slug = (data.get('trip_slug') or '').strip()
+        price_tier = data.get('price_tier')
 
-        # Look up trip by slug to get the actual trip_id
-        trip = Trip.query.filter_by(slug=trip_slug).first() if trip_slug else None
+        if not all([email, name, trip_slug, price_tier]):
+            return json_error('Missing required fields')
+
+        # Price and trip identity must come from the database, never from the
+        # browser-provided amount or Referer header.
+        trip = Trip.query.filter_by(slug=trip_slug).first()
+        if not trip:
+            return json_error('Trip not found')
+        if trip.status != 'active' or not (trip.signup_start <= datetime.utcnow() <= trip.signup_end):
+            return json_error('Trip registration is not currently open')
+        if price_tier == 'low':
+            amount_cents = trip.price_low
+        elif price_tier == 'high':
+            amount_cents = trip.price_high
+        else:
+            return json_error('Invalid trip price option')
 
         # Determine member type based on whether user exists and has active seasons
         user = User.get_by_email(email)
@@ -40,20 +64,22 @@ def create_payment():
 
         # Create a PaymentIntent with the order amount and currency
         intent = stripe.PaymentIntent.create(
-            amount=int(amount * 100),  # Convert to cents
+            amount=amount_cents,
             currency='usd',
             capture_method='manual',  # Always manual for trips (lottery system)
             receipt_email=email,
-            statement_descriptor=build_statement_descriptor('TRIP', trip.name if trip else 'UNKNOWN'),
-            description=f"TCSC Trip - {trip.name}" if trip else "TCSC Trip Registration",
+            statement_descriptor=build_statement_descriptor('TRIP', trip.name),
+            description=f"TCSC Trip - {trip.name}",
             metadata={
                 'name': name,
                 'email': email,
                 'payment_type': PaymentType.TRIP,
-                'trip_id': str(trip.id) if trip else None,
+                'trip_id': str(trip.id),
                 'trip_slug': trip_slug,
+                'price_tier': price_tier,
                 'member_type': member_type
-            }
+            },
+            **stripe_idempotency_options(),
         )
 
         return jsonify({
@@ -69,6 +95,7 @@ def create_payment():
         return json_error(str(e), 500)
 
 @payments.route('/webhook', methods=['POST'])
+@csrf.exempt
 def webhook_received():
     webhook_secret = os.getenv('STRIPE_WEBHOOK_SECRET')
     request_data = request.get_json()
@@ -520,7 +547,8 @@ def create_season_payment_intent():
                 'season_id': str(season_id),
                 'member_type': member_type,
                 'payment_type': PaymentType.SEASON
-            }
+            },
+            **stripe_idempotency_options(),
         )
         return jsonify({
             'clientSecret': intent.client_secret,
@@ -568,7 +596,8 @@ def create_social_event_payment_intent():
                 'payment_type': PaymentType.SOCIAL_EVENT,
                 'social_event_id': str(social_event.id),
                 'social_event_slug': social_event.slug
-            }
+            },
+            **stripe_idempotency_options(),
         )
 
         return jsonify({

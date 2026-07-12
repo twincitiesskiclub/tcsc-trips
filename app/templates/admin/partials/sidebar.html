@@ -159,7 +159,10 @@
     {% if session.user %}
     <div class="flex items-center justify-between text-sm">
       <span class="text-zinc-500 truncate max-w-[140px]" title="{{ session.user.email }}">{{ session.user.email }}</span>
-      <a href="{{ url_for('auth.logout') }}" class="text-tcsc-navy font-medium hover:underline">Logout</a>
+      <form method="post" action="{{ url_for('auth.logout') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <button type="submit" class="text-tcsc-navy font-medium hover:underline">Logout</button>
+      </form>
     </div>
     {% endif %}
   </div>

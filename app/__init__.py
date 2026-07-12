@@ -6,6 +6,7 @@ from flask_migrate import Migrate
 from .auth import init_oauth
 from .config import configure_database, load_stripe_config
 from .models import db, SocialEvent
+from .security import csrf, init_security
 from .newsletter.models import (
     Newsletter,
     NewsletterVersion,
@@ -35,11 +36,15 @@ def create_app(environment=None):
         environment = os.getenv('FLASK_ENV', 'development')
 
     app = Flask(__name__, static_folder='static', static_url_path='/static')
-    app.secret_key = os.getenv('FLASK_SECRET_KEY')
-
+    # This also loads the local .env file used by the development script.
     load_stripe_config()
+    app.secret_key = os.getenv('FLASK_SECRET_KEY')
+    if not app.secret_key:
+        raise ValueError('FLASK_SECRET_KEY environment variable is required')
+
     configure_database(app, environment)
     init_oauth(app)
+    init_security(app, environment)
 
     db.init_app(app)
     migrate = Migrate(app, db)
@@ -57,6 +62,10 @@ def create_app(environment=None):
     app.register_blueprint(conditions_bp)
     app.register_blueprint(registration)
     app.register_blueprint(slack_bp)
+
+    # Slack Bolt verifies its own request signatures. Browser CSRF tokens are
+    # neither available nor appropriate for Slack's server-to-server hooks.
+    csrf.exempt(slack_bp)
 
     # Register template filters
     register_template_filters(app)

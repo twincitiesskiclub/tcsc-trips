@@ -32,28 +32,6 @@ def is_finance_authorized():
     return user.get('email', '').lower() in [e.lower() for e in FINANCE_AUTHORIZED_EMAILS]
 
 
-def delete_entity(model, entity_id, entity_name, redirect_endpoint):
-    """Generic delete handler for admin CRUD operations.
-
-    Args:
-        model: SQLAlchemy model class
-        entity_id: ID of the entity to delete
-        entity_name: Human-readable name for flash messages (e.g., 'Trip', 'Season')
-        redirect_endpoint: Flask endpoint to redirect to after deletion
-
-    Returns:
-        Flask redirect response
-    """
-    entity = model.query.get_or_404(entity_id)
-    try:
-        db.session.delete(entity)
-        db.session.commit()
-        flash_success(f'{entity_name} deleted successfully!')
-    except Exception as e:
-        flash_error(f'Error deleting {entity_name.lower()}: {str(e)}')
-    return redirect(url_for(redirect_endpoint))
-
-
 def validate_season_form(form):
     """Validate and parse season form data.
 
@@ -283,12 +261,6 @@ def edit_trip(trip_id):
 
     return render_template('admin/trip_form.html', trip=trip)
 
-@admin.route('/admin/trips/<int:trip_id>/delete')
-@admin_required
-def delete_trip(trip_id):
-    return delete_entity(Trip, trip_id, 'Trip', 'admin.get_admin_trips')
-
-
 @admin.route('/admin/trips/data')
 @admin_required
 def trips_data():
@@ -371,12 +343,6 @@ def edit_season(season_id):
             flash_error(f'Error updating season: {str(e)}')
             return redirect(url_for('admin.edit_season', season_id=season_id))
     return render_template('admin/season_form.html', season=season)
-
-@admin.route('/admin/seasons/<int:season_id>/delete')
-@admin_required
-def delete_season(season_id):
-    return delete_entity(Season, season_id, 'Season', 'admin.get_admin_seasons')
-
 
 @admin.route('/admin/seasons/<int:season_id>/late-link', methods=['POST'])
 @admin_required
@@ -539,12 +505,6 @@ def edit_social_event(event_id):
             return redirect(url_for('admin.edit_social_event', event_id=event_id))
 
     return render_template('admin/social_event_form.html', social_event=social_event)
-
-
-@admin.route('/admin/social-events/<int:event_id>/delete')
-@admin_required
-def delete_social_event(event_id):
-    return delete_entity(SocialEvent, event_id, 'Social Event', 'admin.get_admin_social_events')
 
 
 @admin.route('/admin/social-events/data')

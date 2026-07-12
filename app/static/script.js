@@ -179,7 +179,7 @@ class PaymentForm {
       await this.processPayment();
     } catch (error) {
       console.error('Payment error:', error);
-      this.showError('Payment failed. Please try again.');
+      this.showError(error.message || 'Payment failed. Please try again.');
       // Reset submission state on error to allow retry
       this.isSubmitting = false;
       this.idempotencyKey = null;
@@ -220,7 +220,8 @@ class PaymentForm {
       },
       body: JSON.stringify({
         currency: 'usd',
-        amount: this.selectedAmount,
+        trip_slug: this.elements.form.dataset.tripSlug,
+        price_tier: this.getSelectedPriceTier(),
         email: this.elements.emailInput.value,
         name: this.elements.nameInput.value
       })
@@ -235,6 +236,11 @@ class PaymentForm {
     this.clientSecret = data.clientSecret;
     this.paymentIntent = data.paymentIntent;
     return this.paymentIntent;
+  }
+
+  getSelectedPriceTier() {
+    const checkedInput = document.querySelector('input[name="price-choice"]:checked');
+    return checkedInput ? checkedInput.dataset.tier : 'low';
   }
 
   showError(message) {
@@ -336,13 +342,21 @@ document.addEventListener('DOMContentLoaded', () => {
     let isSubmitting = false;
     let idempotencyKey = null;
 
-    // --- Form State Persistence with localStorage ---
+    // Persist only non-sensitive preferences for this browser tab. Personal,
+    // contact, birth-date, and emergency-contact data must not be retained in
+    // browser storage after someone leaves the registration page.
     const STORAGE_KEY = `tcsc-registration-${registrationForm.dataset.seasonId}`;
     const FIELDS_TO_SAVE = [
-      'email', 'status', 'firstName', 'lastName', 'pronouns', 'dob',
-      'phone', 'tshirtSize', 'technique', 'experience',
-      'emergencyName', 'emergencyRelation', 'emergencyPhone', 'emergencyEmail', 'name'
+      'tshirtSize', 'technique', 'experience'
     ];
+
+    try {
+      // Remove data written by versions that persisted the full registration
+      // form, including DOB and emergency contact details.
+      localStorage.removeItem(STORAGE_KEY);
+    } catch (e) {
+      // Storage may be unavailable; there is nothing else to clean up.
+    }
 
     function saveFormState() {
       const formData = {};
@@ -358,15 +372,15 @@ document.addEventListener('DOMContentLoaded', () => {
         }
       });
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
+        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
       } catch (e) {
-        // localStorage might be full or disabled - silently fail
+        // sessionStorage might be full or disabled - silently fail
       }
     }
 
     function restoreFormState() {
       try {
-        const saved = localStorage.getItem(STORAGE_KEY);
+        const saved = sessionStorage.getItem(STORAGE_KEY);
         if (!saved) return;
         const formData = JSON.parse(saved);
         FIELDS_TO_SAVE.forEach(fieldName => {
@@ -388,13 +402,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function clearFormState() {
       try {
-        localStorage.removeItem(STORAGE_KEY);
+        sessionStorage.removeItem(STORAGE_KEY);
       } catch (e) {
         // silently fail
       }
     }
 
-    // Debounce helper to avoid excessive localStorage writes
+    // Debounce helper to avoid excessive sessionStorage writes
     let saveTimeout = null;
     function debouncedSave() {
       if (saveTimeout) clearTimeout(saveTimeout);
@@ -572,4 +586,3 @@ document.addEventListener('DOMContentLoaded', () => {
     initStripe();
   }
 });
-
