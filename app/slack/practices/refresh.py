@@ -97,11 +97,26 @@ def refresh_practice_posts(
         and practice.slack_channel_id
     ):
         from app.slack.practices.rsvp import post_thread_reply
-        note_result = post_thread_reply(
-            practice,
-            announcement_notice,
-            user_mention=actor_slack_id,
-        )
+        try:
+            note_result = post_thread_reply(
+                practice,
+                announcement_notice,
+                user_mention=actor_slack_id,
+            )
+            if (
+                not isinstance(note_result, dict)
+                or not isinstance(note_result.get("success"), bool)
+            ):
+                raise ValueError(
+                    "Invalid result from announcement change note post"
+                )
+        except Exception as exc:
+            logger.warning(
+                "Practice #%s: announcement change note failed: %s",
+                practice.id,
+                exc,
+            )
+            note_result = {"success": False, "error": str(exc)}
         results["announcement_change_note"] = note_result
         safety_note_posted = note_result.get("success") is True
 

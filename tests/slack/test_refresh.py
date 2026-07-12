@@ -262,6 +262,85 @@ class TestTemporaryAnnouncementNotice:
             practice, "U123", skip_announcement=True
         )
 
+    def test_safety_note_exception_is_contained_and_edit_logs_continue(self):
+        from app.slack.practices.refresh import PracticeSurface
+
+        practice = FakePractice(
+            slack_message_ts="123",
+            slack_channel_id="C123",
+        )
+        announcement = PracticeSurface(
+            "announcement",
+            "slack_message_ts",
+            ["edit"],
+            lambda _practice, _change_type, **_context: {"success": True},
+        )
+
+        with patch(
+            "app.slack.practices.refresh.PRACTICE_SURFACES", [announcement]
+        ), patch(
+            "app.slack.practices.rsvp.post_thread_reply",
+            side_effect=RuntimeError("thread transport failed"),
+        ), patch(
+            "app.slack.practices.refresh._post_edit_logs",
+            return_value={"announcement_log": {"success": True}},
+        ) as mock_logs:
+            results = refresh_practice_posts(
+                practice,
+                change_type="edit",
+                actor_slack_id="U123",
+                notify=True,
+                announcement_notice="📍 Location updated, check Where below.",
+            )
+
+        assert results["announcement_change_note"] == {
+            "success": False,
+            "error": "thread transport failed",
+        }
+        assert results["edit_logs"] == {
+            "announcement_log": {"success": True}
+        }
+        mock_logs.assert_called_once_with(
+            practice, "U123", skip_announcement=False
+        )
+
+    @pytest.mark.parametrize(
+        "invalid_result", [None, "unexpected", {}, {"success": "yes"}]
+    )
+    def test_invalid_safety_note_result_is_contained(
+        self, invalid_result
+    ):
+        from app.slack.practices.refresh import PracticeSurface
+
+        practice = FakePractice(
+            slack_message_ts="123",
+            slack_channel_id="C123",
+        )
+        announcement = PracticeSurface(
+            "announcement",
+            "slack_message_ts",
+            ["edit"],
+            lambda _practice, _change_type, **_context: {"success": True},
+        )
+
+        with patch(
+            "app.slack.practices.refresh.PRACTICE_SURFACES", [announcement]
+        ), patch(
+            "app.slack.practices.rsvp.post_thread_reply",
+            return_value=invalid_result,
+        ):
+            results = refresh_practice_posts(
+                practice,
+                change_type="edit",
+                notify=False,
+                announcement_notice="📍 Location updated, check Where below.",
+            )
+
+        assert results["announcement_change_note"]["success"] is False
+        assert "invalid result" in results["announcement_change_note"][
+            "error"
+        ].lower()
+
     def test_full_slack_edit_passes_location_notice_and_previous_plan_snapshot(
         self,
     ):

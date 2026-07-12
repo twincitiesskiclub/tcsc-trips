@@ -32,6 +32,7 @@ def _make_practice(slack_message_ts="1234.5678", slack_channel_id="CTEST", slack
     p.practice_types = []
     # Location with coordinates so _gather_conditions can run (mocked out)
     loc = MagicMock()
+    loc.name = "Wirth Park"
     loc.latitude = 44.99
     loc.longitude = -93.32
     p.location = loc
@@ -49,33 +50,44 @@ def _make_practice_info():
 class TestGatherConditions:
     """Test _gather_conditions best-effort daylight + AQI fetch."""
 
+    @pytest.fixture(autouse=True)
+    def _stub_trail_lookup(self, monkeypatch):
+        monkeypatch.setattr(
+            "app.integrations.trail_conditions.get_trail_conditions",
+            lambda _location_name: None,
+        )
+
     def _practice_with_coords(self, lat=44.99, lon=-93.32):
         from datetime import datetime
         p = MagicMock()
         p.id = 7
         p.date = datetime(2026, 12, 29, 12, 0)
         loc = MagicMock()
+        loc.name = "Wirth Park"
         loc.latitude = lat
         loc.longitude = lon
         p.location = loc
         return p
 
-    def test_no_latlon_returns_none_none_none_without_calling_integrations(self, app_context):
+    def test_no_latlon_still_fetches_trails_by_location_name(self, app_context):
         from app.slack.practices.announcements import _gather_conditions
 
         p = self._practice_with_coords(lat=None, lon=None)
 
         with patch("app.integrations.daylight.get_daylight_info") as mock_day, \
              patch("app.integrations.air_quality.get_air_quality") as mock_aqi, \
-             patch("app.integrations.weather.get_weather_for_location") as mock_wx:
+             patch("app.integrations.weather.get_weather_for_location") as mock_wx, \
+             patch("app.integrations.trail_conditions.get_trail_conditions", return_value="TRAIL") as mock_trail:
             conditions = _gather_conditions(p)
 
         assert conditions.weather is None
         assert conditions.daylight is None
         assert conditions.air_quality is None
+        assert conditions.trail_conditions == "TRAIL"
         mock_wx.assert_not_called()
         mock_day.assert_not_called()
         mock_aqi.assert_not_called()
+        mock_trail.assert_called_once_with("Wirth Park")
 
     def test_no_location_returns_none_none_none(self, app_context):
         from app.slack.practices.announcements import _gather_conditions
@@ -207,6 +219,40 @@ class TestGatherConditions:
             _gather_conditions(practice, trail_conditions=supplied).trail_conditions
             is supplied
         )
+
+    def test_gather_conditions_does_not_refetch_explicit_none_trails(
+        self, monkeypatch, app_context
+    ):
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords(lat=None, lon=None)
+        monkeypatch.setattr(
+            "app.integrations.trail_conditions.get_trail_conditions",
+            lambda *_args, **_kwargs: pytest.fail(
+                "explicit None trails were refetched"
+            ),
+        )
+
+        assert (
+            _gather_conditions(practice, trail_conditions=None).trail_conditions
+            is None
+        )
+
+    def test_trail_fetch_failure_is_logged_and_fails_open(
+        self, caplog, app_context
+    ):
+        from app.slack.practices.announcements import _gather_conditions
+
+        practice = self._practice_with_coords(lat=None, lon=None)
+        with patch(
+            "app.integrations.trail_conditions.get_trail_conditions",
+            side_effect=Exception("skinny ski down"),
+        ), caplog.at_level("WARNING"):
+            conditions = _gather_conditions(practice)
+
+        assert conditions.trail_conditions is None
+        assert "trail conditions fetch failed for practice #7" in caplog.text
+        assert "skinny ski down" in caplog.text
 
     def test_gather_conditions_accepts_zero_coordinates(
         self, monkeypatch, app_context
@@ -374,6 +420,49 @@ class TestUpsertDetailsReply:
         mock_db.session.commit.assert_not_called()
         assert result["success"] is False
 
+    def test_details_commit_failure_rolls_back_before_restore_and_can_retry(
+        self, app_context
+    ):
+        from app.practices.interfaces import AnnouncementConditions
+        from app.slack.practices.announcements import _upsert_details_reply
+
+        client = MagicMock()
+        practice = _make_practice(slack_details_ts="222.333")
+        rollback_states = []
+
+        with patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=[],
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            mock_db.session.commit.side_effect = [
+                RuntimeError("database commit failed"),
+                None,
+            ]
+            mock_db.session.rollback.side_effect = lambda: rollback_states.append(
+                practice.slack_details_ts
+            )
+
+            first = _upsert_details_reply(
+                client,
+                practice,
+                _make_practice_info(),
+                AnnouncementConditions(),
+            )
+            second = _upsert_details_reply(
+                client,
+                practice,
+                _make_practice_info(),
+                AnnouncementConditions(),
+            )
+
+        assert first == {"success": False, "error": "database commit failed"}
+        assert rollback_states == [None]
+        assert second == {"success": True, "deleted": True}
+        assert practice.slack_details_ts is None
+        assert client.chat_delete.call_count == 2
+        assert mock_db.session.commit.call_count == 2
+        mock_db.session.rollback.assert_called_once_with()
+
     def test_slack_exception_is_swallowed(self, app_context):
         """A Slack API error must not propagate - best-effort only."""
         client = MagicMock()
@@ -453,6 +542,47 @@ class TestPostPracticeAnnouncementWiring:
         assert mock_client.chat_postMessage.call_args.kwargs["text"] == expected_fallback
         mock_db.session.commit.assert_called_once_with()
 
+    def test_root_identity_is_committed_before_all_secondary_work(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
+        events = []
+
+        def commit_root_identity():
+            assert practice.slack_channel_id == "CTEST"
+            assert practice.slack_message_ts == "1111.0001"
+            events.append("root_commit")
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements._gather_conditions"), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.slack.practices.announcements._upsert_details_reply", side_effect=lambda *_args: events.append("details")), \
+             patch("app.slack.practices.announcements._seed_plan_reactions", side_effect=lambda *_args: events.append("reactions")), \
+             patch("app.slack.practices.announcements.db") as mock_db, \
+             patch("app.slack.practices.coach_review.create_practice_log_thread", side_effect=lambda *_args: events.append("log"), create=True):
+            client = MagicMock()
+            client.chat_postMessage.side_effect = lambda **_kwargs: (
+                events.append("root_write") or {"ts": "1111.0001"}
+            )
+            mock_get_client.return_value = client
+            mock_db.session.commit.side_effect = commit_root_identity
+
+            result = post_practice_announcement(practice)
+
+        assert result["success"] is True
+        assert events == [
+            "root_write",
+            "root_commit",
+            "details",
+            "reactions",
+            "log",
+        ]
+
     def test_explicit_none_weather_is_not_refetched(self, app_context):
         from app.slack.practices.announcements import post_practice_announcement
 
@@ -467,6 +597,7 @@ class TestPostPracticeAnnouncementWiring:
              patch("app.slack.practices.announcements._upsert_details_reply"), \
              patch("app.slack.practices.announcements._seed_plan_reactions", create=True), \
              patch("app.integrations.weather.get_weather_for_location") as mock_weather, \
+             patch("app.integrations.trail_conditions.get_trail_conditions", return_value=None), \
              patch("app.integrations.daylight.get_daylight_info", return_value=None), \
              patch("app.integrations.air_quality.get_air_quality", return_value=None), \
              patch("app.slack.practices.announcements.db"), \
@@ -495,6 +626,7 @@ class TestPostPracticeAnnouncementWiring:
              patch("app.slack.practices.announcements._upsert_details_reply"), \
              patch("app.slack.practices.announcements._seed_plan_reactions", create=True), \
              patch("app.integrations.weather.get_weather_for_location", return_value=fetched) as mock_weather, \
+             patch("app.integrations.trail_conditions.get_trail_conditions", return_value=None), \
              patch("app.integrations.daylight.get_daylight_info", return_value=None), \
              patch("app.integrations.air_quality.get_air_quality", return_value=None), \
              patch("app.slack.practices.announcements.db"), \
@@ -507,6 +639,64 @@ class TestPostPracticeAnnouncementWiring:
 
         assert result.get("success") is True
         mock_weather.assert_called_once()
+
+    def test_explicit_none_trails_are_not_refetched(self, app_context):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.slack.practices.announcements._upsert_details_reply"), \
+             patch("app.slack.practices.announcements._seed_plan_reactions"), \
+             patch("app.integrations.trail_conditions.get_trail_conditions") as mock_trails, \
+             patch("app.integrations.daylight.get_daylight_info", return_value=None), \
+             patch("app.integrations.air_quality.get_air_quality", return_value=None), \
+             patch("app.slack.practices.announcements.db"), \
+             patch("app.slack.practices.coach_review.create_practice_log_thread", create=True):
+            client = MagicMock()
+            client.chat_postMessage.return_value = {"ts": "1111.0001"}
+            mock_get_client.return_value = client
+
+            result = post_practice_announcement(
+                practice, weather=None, trail_conditions=None
+            )
+
+        assert result["success"] is True
+        mock_trails.assert_not_called()
+
+    def test_omitted_trails_are_fetched_once_for_the_shared_snapshot(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
+        fetched = object()
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.slack.practices.announcements._upsert_details_reply") as mock_upsert, \
+             patch("app.slack.practices.announcements._seed_plan_reactions"), \
+             patch("app.integrations.trail_conditions.get_trail_conditions", return_value=fetched) as mock_trails, \
+             patch("app.integrations.daylight.get_daylight_info", return_value=None), \
+             patch("app.integrations.air_quality.get_air_quality", return_value=None), \
+             patch("app.slack.practices.announcements.db"), \
+             patch("app.slack.practices.coach_review.create_practice_log_thread", create=True):
+            client = MagicMock()
+            client.chat_postMessage.return_value = {"ts": "1111.0001"}
+            mock_get_client.return_value = client
+
+            result = post_practice_announcement(practice, weather=None)
+
+        assert result["success"] is True
+        mock_trails.assert_called_once_with("Wirth Park")
+        assert mock_upsert.call_args.args[3].trail_conditions is fetched
 
     def test_initial_post_seeds_checkmark_and_saved_plan_reactions(self, app_context):
         from app.slack.practices.announcements import post_practice_announcement
@@ -540,6 +730,39 @@ class TestPostPracticeAnnouncementWiring:
             call(channel="CTEST", timestamp="1111.0001", name="white_check_mark"),
             call(channel="CTEST", timestamp="1111.0001", name="snowflake"),
         ]
+
+    def test_malformed_legacy_plan_json_cannot_fail_a_successful_root_post(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
+        practice.plan_reactions = [
+            {"emoji": "white_check_mark", "label": "Legacy reserved value"}
+        ]
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements._gather_conditions"), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.slack.practices.announcements._upsert_details_reply", return_value={"success": True}) as mock_upsert, \
+             patch("app.slack.practices.announcements.db"), \
+             patch("app.slack.practices.coach_review.create_practice_log_thread", create=True):
+            client = MagicMock()
+            client.chat_postMessage.return_value = {"ts": "1111.0001"}
+            mock_get_client.return_value = client
+
+            result = post_practice_announcement(practice)
+
+        assert result["success"] is True
+        mock_upsert.assert_called_once()
+        client.reactions_add.assert_called_once_with(
+            channel="CTEST",
+            timestamp="1111.0001",
+            name="white_check_mark",
+        )
 
 
 class TestUpdatePracticeAnnouncementWiring:
@@ -617,6 +840,37 @@ class TestUpdatePracticeAnnouncementWiring:
         client.reactions_add.assert_called_once_with(
             channel="CTEST", timestamp="1234.5678", name="new_choice"
         )
+
+    def test_malformed_legacy_plan_json_cannot_fail_a_successful_root_update(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import update_practice_announcement
+
+        practice = _make_practice()
+        practice.plan_reactions = [
+            {"emoji": "white_check_mark", "label": "Legacy reserved value"}
+        ]
+
+        with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
+             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
+             patch("app.slack.practices.announcements._gather_conditions"), \
+             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.slack.practices.announcements._upsert_details_reply", return_value={"success": True}) as mock_upsert:
+            client = MagicMock()
+            mock_get_client.return_value = client
+
+            result = update_practice_announcement(
+                practice,
+                previous_plan_reactions=[
+                    {"emoji": "old_choice", "label": "Old choice"}
+                ],
+            )
+
+        assert result["success"] is True
+        mock_upsert.assert_called_once()
+        client.reactions_remove.assert_not_called()
+        client.reactions_add.assert_not_called()
 
     def test_backfill_path_new_thread_reply(self, app_context):
         """When slack_details_ts is None on an existing post, a new reply is created."""

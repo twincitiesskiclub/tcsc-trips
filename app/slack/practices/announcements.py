@@ -67,6 +67,20 @@ def _gather_conditions(practice, *, weather=_UNSET, trail_conditions=_UNSET):
             current_app.logger.warning(
                 "AQI fetch failed for practice #%s: %s", practice.id, exc
             )
+    if (
+        trail_conditions is _UNSET
+        and practice.location
+        and practice.location.name
+    ):
+        try:
+            from app.integrations.trail_conditions import get_trail_conditions
+            resolved_trails = get_trail_conditions(practice.location.name)
+        except Exception as exc:
+            current_app.logger.warning(
+                "trail conditions fetch failed for practice #%s: %s",
+                practice.id,
+                exc,
+            )
     return AnnouncementConditions(
         weather=resolved_weather,
         daylight=daylight,
@@ -111,9 +125,17 @@ def _reaction_error_name(exc):
 
 
 def _seed_plan_reactions(client, practice):
-    names = ["white_check_mark"] + plan_reaction_names(
-        practice.plan_reactions or []
-    )
+    try:
+        names = ["white_check_mark"] + plan_reaction_names(
+            practice.plan_reactions or []
+        )
+    except Exception as exc:
+        current_app.logger.warning(
+            "Could not read Plan reactions for practice #%s: %s",
+            practice.id,
+            exc,
+        )
+        names = ["white_check_mark"]
     for name in names:
         try:
             client.reactions_add(
@@ -137,8 +159,16 @@ def _reconcile_plan_reactions(
     *,
     previous_plan_reactions=None,
 ):
-    previous = set(plan_reaction_names(previous_plan_reactions or []))
-    current = set(plan_reaction_names(practice.plan_reactions or []))
+    try:
+        previous = set(plan_reaction_names(previous_plan_reactions or []))
+        current = set(plan_reaction_names(practice.plan_reactions or []))
+    except Exception as exc:
+        current_app.logger.warning(
+            "Could not read Plan reactions for practice #%s: %s",
+            practice.id,
+            exc,
+        )
+        return
     for name in sorted(previous - current):
         try:
             client.reactions_remove(
@@ -288,6 +318,14 @@ def _upsert_details_reply(
         db.session.commit()
         return {"success": True, "message_ts": details_ts}
     except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception as rollback_exc:
+            current_app.logger.warning(
+                "Could not roll back practice Details sync for #%s: %s",
+                practice.id,
+                rollback_exc,
+            )
         practice.slack_details_ts = original_ts
         current_app.logger.warning(
             "Could not sync practice Details reply for #%s: %s",
