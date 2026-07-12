@@ -10,9 +10,34 @@ from ..practices.models import (
     practice_types_junction
 )
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
+from ..practices.plan_reactions import (
+    PlanReactionValidationError,
+    normalize_plan_reactions,
+)
 from sqlalchemy.orm import joinedload
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
+
+
+def _activity_json(activity):
+    return {
+        'id': activity.id,
+        'name': activity.name,
+        'gear_required': activity.gear_required or [],
+        'default_plan_reactions': activity.default_plan_reactions or [],
+        'practice_count': len(activity.practices),
+    }
+
+
+def _type_json(practice_type):
+    return {
+        'id': practice_type.id,
+        'name': practice_type.name,
+        'fitness_goals': practice_type.fitness_goals or [],
+        'has_intervals': practice_type.has_intervals,
+        'default_plan_reactions': practice_type.default_plan_reactions or [],
+        'practice_count': len(practice_type.practices),
+    }
 
 
 def _week_coach_summary_ts(practice_date, exclude_id=None):
@@ -435,13 +460,7 @@ def types_data():
     types = PracticeType.query.order_by(PracticeType.name).all()
 
     return jsonify({
-        'types': [{
-            'id': t.id,
-            'name': t.name,
-            'fitness_goals': t.fitness_goals or [],
-            'has_intervals': t.has_intervals,
-            'practice_count': len(t.practices)
-        } for t in types]
+        'types': [_type_json(practice_type) for practice_type in types]
     })
 
 
@@ -452,12 +471,7 @@ def activities_data():
     activities = PracticeActivity.query.order_by(PracticeActivity.name).all()
 
     return jsonify({
-        'activities': [{
-            'id': a.id,
-            'name': a.name,
-            'gear_required': a.gear_required or [],
-            'practice_count': len(a.practices)
-        } for a in activities]
+        'activities': [_activity_json(activity) for activity in activities]
     })
 
 
@@ -758,6 +772,19 @@ def create_activity():
     if PracticeActivity.query.filter_by(name=name).first():
         return jsonify({'error': f'Activity "{name}" already exists'}), 400
 
+    try:
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+        else:
+            defaults = []
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
+
     # Handle gear_required - can be string (comma-separated) or array
     gear_required = request.json.get('gear_required')
     if isinstance(gear_required, str):
@@ -767,19 +794,15 @@ def create_activity():
 
     activity = PracticeActivity(
         name=name,
-        gear_required=gear_required or None
+        gear_required=gear_required or None,
+        default_plan_reactions=defaults,
     )
     db.session.add(activity)
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'activity': {
-            'id': activity.id,
-            'name': activity.name,
-            'gear_required': activity.gear_required or [],
-            'practice_count': 0
-        }
+        'activity': _activity_json(activity),
     })
 
 
@@ -791,6 +814,18 @@ def edit_activity(activity_id):
 
     if not request.json:
         return jsonify({'error': 'JSON body required'}), 400
+
+    try:
+        defaults = None
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
 
     # Update name with duplicate check
     if 'name' in request.json:
@@ -808,16 +843,14 @@ def edit_activity(activity_id):
             gear_required = None
         activity.gear_required = gear_required or None
 
+    if defaults is not None:
+        activity.default_plan_reactions = defaults
+
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'activity': {
-            'id': activity.id,
-            'name': activity.name,
-            'gear_required': activity.gear_required or [],
-            'practice_count': len(activity.practices)
-        }
+        'activity': _activity_json(activity),
     })
 
 
@@ -861,6 +894,19 @@ def create_type():
     if PracticeType.query.filter_by(name=name).first():
         return jsonify({'error': f'Type "{name}" already exists'}), 400
 
+    try:
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+        else:
+            defaults = []
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
+
     # Handle fitness_goals - can be string (comma-separated) or array
     fitness_goals = request.json.get('fitness_goals')
     if isinstance(fitness_goals, str):
@@ -871,20 +917,15 @@ def create_type():
     practice_type = PracticeType(
         name=name,
         fitness_goals=fitness_goals or None,
-        has_intervals=request.json.get('has_intervals', False)
+        has_intervals=request.json.get('has_intervals', False),
+        default_plan_reactions=defaults,
     )
     db.session.add(practice_type)
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'type': {
-            'id': practice_type.id,
-            'name': practice_type.name,
-            'fitness_goals': practice_type.fitness_goals or [],
-            'has_intervals': practice_type.has_intervals,
-            'practice_count': 0
-        }
+        'type': _type_json(practice_type),
     })
 
 
@@ -896,6 +937,18 @@ def edit_type(type_id):
 
     if not request.json:
         return jsonify({'error': 'JSON body required'}), 400
+
+    try:
+        defaults = None
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
 
     # Update name with duplicate check
     if 'name' in request.json:
@@ -916,17 +969,14 @@ def edit_type(type_id):
     if 'has_intervals' in request.json:
         practice_type.has_intervals = request.json['has_intervals']
 
+    if defaults is not None:
+        practice_type.default_plan_reactions = defaults
+
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'type': {
-            'id': practice_type.id,
-            'name': practice_type.name,
-            'fitness_goals': practice_type.fitness_goals or [],
-            'has_intervals': practice_type.has_intervals,
-            'practice_count': len(practice_type.practices)
-        }
+        'type': _type_json(practice_type),
     })
 
 
