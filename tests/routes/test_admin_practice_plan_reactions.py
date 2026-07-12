@@ -481,3 +481,20 @@ def test_remove_reaction_hands_focus_to_a_stable_control():
     assert "focusTarget.focus()" in remove_handler
     assert "onEmptyFocus()" in remove_handler
     assert "onEmptyFocus: () => addButton.focus()" in template
+
+
+def test_reaction_move_boundaries_do_not_signal_customization():
+    editor = PLAN_REACTION_EDITOR.read_text()
+    up_handler = editor.split("up.onclick = () => {", 1)[1].split(
+        "const down =", 1
+    )[0]
+    down_handler = editor.split("down.onclick = () => {", 1)[1].split(
+        "const remove =", 1
+    )[0]
+
+    assert "if (!wrap.previousElementSibling) return;" in up_handler
+    assert "if (!wrap.nextElementSibling) return;" in down_handler
+    assert up_handler.count("changed(true);") == 1
+    assert down_handler.count("changed(true);") == 1
+    assert up_handler.index("insertBefore(") < up_handler.index("changed(true);")
+    assert down_handler.index("insertBefore(") < down_handler.index("changed(true);")

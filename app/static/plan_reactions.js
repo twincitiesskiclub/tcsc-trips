@@ -33,9 +33,8 @@ window.PlanReactionEditor = (() => {
         up.textContent = 'Up';
         up.setAttribute('aria-label', 'Move reaction up');
         up.onclick = () => {
-            if (wrap.previousElementSibling) {
-                wrap.parentNode.insertBefore(wrap, wrap.previousElementSibling);
-            }
+            if (!wrap.previousElementSibling) return;
+            wrap.parentNode.insertBefore(wrap, wrap.previousElementSibling);
             changed(true);
         };
 
@@ -44,9 +43,8 @@ window.PlanReactionEditor = (() => {
         down.textContent = 'Down';
         down.setAttribute('aria-label', 'Move reaction down');
         down.onclick = () => {
-            if (wrap.nextElementSibling) {
-                wrap.parentNode.insertBefore(wrap.nextElementSibling, wrap);
-            }
+            if (!wrap.nextElementSibling) return;
+            wrap.parentNode.insertBefore(wrap.nextElementSibling, wrap);
             changed(true);
         };
 
