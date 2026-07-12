@@ -40,7 +40,12 @@ def _make_practice(slack_message_ts="1234.5678", slack_channel_id="CTEST", slack
 
 
 def _make_practice_info():
-    return SimpleNamespace(id=42)
+    return SimpleNamespace(
+        id=42,
+        date=datetime(2026, 7, 14, 18, 15),
+        location=None,
+        activities=[],
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -988,7 +993,7 @@ class TestUpsertCombinedDetailsReply:
         kw = client.chat_update.call_args[1]
         assert kw["ts"] == "OLD.TS"
         client.chat_postMessage.assert_not_called()
-        mock_db.session.commit.assert_not_called()
+        mock_db.session.commit.assert_called_once()
 
     def test_empty_blocks_skips_slack_call(self, app_context):
         """When build_practice_details_blocks returns empty, no Slack call is made."""
@@ -1006,6 +1011,88 @@ class TestUpsertCombinedDetailsReply:
 
         client.chat_postMessage.assert_not_called()
         client.chat_update.assert_not_called()
+
+    def test_existing_reply_is_deleted_when_details_become_empty(self, app_context):
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        practices = _make_group_practices(2, existing_details_ts="OLD.TS")
+
+        with patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=[],
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            result = _upsert_combined_details_reply(client, practices)
+
+        assert result == {"success": True, "deleted": True}
+        client.chat_delete.assert_called_once_with(
+            channel="CCOMBINED", ts="OLD.TS"
+        )
+        assert all(p.slack_details_ts is None for p in practices)
+        mock_db.session.commit.assert_called_once()
+
+    def test_delete_failure_retains_every_details_timestamp(self, app_context):
+        from app.slack.practices.announcements import _upsert_combined_details_reply
+
+        client = MagicMock()
+        client.chat_delete.side_effect = RuntimeError("delete failed")
+        practices = _make_group_practices(2, existing_details_ts="OLD.TS")
+
+        with patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=[],
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            result = _upsert_combined_details_reply(client, practices)
+
+        assert result["success"] is False
+        assert all(p.slack_details_ts == "OLD.TS" for p in practices)
+        mock_db.session.rollback.assert_called_once()
+
+    def test_divergent_details_are_labelled_with_saved_session_reactions(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import _combined_details_payload
+
+        practices = _make_group_practices(2)
+        practices[0].date = datetime(2026, 7, 14, 18, 15)
+        practices[0].slack_session_emoji = "six"
+        practices[1].date = datetime(2026, 7, 15, 19, 15)
+        practices[1].slack_session_emoji = "seven"
+        first = [{
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Practice Details"},
+        }, {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Parking A"},
+        }]
+        second = [{
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Practice Details"},
+        }, {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Parking B"},
+        }]
+
+        with patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            side_effect=lambda item: item,
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            side_effect=[first, second],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_fallback_text",
+            side_effect=["Details A", "Details B"],
+        ):
+            blocks, fallback = _combined_details_payload(practices)
+
+        text = "\n".join(
+            block.get("text", {}).get("text", "") for block in blocks
+        )
+        assert ":six: Tuesday at 6:15 PM" in text
+        assert ":seven: Wednesday at 7:15 PM" in text
+        assert "Parking A" in text and "Parking B" in text
+        assert ":six: Details A" in fallback
+        assert ":seven: Details B" in fallback
 
     def test_exception_is_swallowed(self, app_context):
         """Errors in _upsert_combined_details_reply must not propagate."""
@@ -1041,10 +1128,11 @@ class TestPostCombinedLiftAnnouncementWiring:
              patch("app.slack.practices.announcements._get_announcement_channel", return_value="CCOMBINED"), \
              patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
              patch("app.slack.practices.announcements.build_combined_lift_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_combined_fallback_text", return_value="Combined Strength"), \
+             patch("app.slack.practices.announcements.assign_combined_session_emojis", return_value={"success": True, "emojis": {100: "six", 101: "seven"}}), \
+             patch("app.slack.practices.announcements._seed_combined_reactions"), \
              patch("app.slack.practices.announcements._upsert_combined_details_reply") as mock_upsert, \
-             patch("app.slack.practices.announcements.db"), \
-             patch("app.slack.client.get_combined_practice_emojis",
-                   return_value=["white_check_mark", "ballot_box_with_check"]):
+             patch("app.slack.practices.announcements.db"):
 
             mock_client = MagicMock()
             mock_client.chat_postMessage.return_value = {"ts": "COMBINED.1234"}
@@ -1071,9 +1159,12 @@ class TestUpdateCombinedLiftPostWiring:
         practice.date = datetime(2026, 1, 21, 18, 0)
 
         with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
-             patch("app.practices.models.Practice.query") as mock_query, \
+             patch("app.slack.practices.announcements.get_announcement_siblings") as mock_siblings, \
              patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
              patch("app.slack.practices.announcements.build_combined_lift_blocks", return_value=[]), \
+             patch("app.slack.practices.announcements.build_combined_fallback_text", return_value="Combined Strength"), \
+             patch("app.slack.practices.announcements.assign_combined_session_emojis", return_value={"success": True, "emojis": {100: "six", 101: "seven"}}), \
+             patch("app.slack.practices.announcements._reconcile_combined_plan_reactions"), \
              patch("app.slack.practices.announcements._upsert_combined_details_reply") as mock_upsert, \
              patch("app.slack.practices.announcements.db"):
 
@@ -1085,7 +1176,7 @@ class TestUpdateCombinedLiftPostWiring:
             sibling.id = 101
             sibling.date = datetime(2026, 1, 23, 18, 0)
             all_practices = [practice, sibling]
-            mock_query.filter.return_value.order_by.return_value.all.return_value = all_practices
+            mock_siblings.return_value = all_practices
 
             update_combined_lift_post(practice)
 

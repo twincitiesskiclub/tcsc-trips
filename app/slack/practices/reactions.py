@@ -2,6 +2,7 @@
 
 import logging
 from datetime import datetime
+from types import SimpleNamespace
 
 from app.models import User, db
 from app.practices.interfaces import PracticeStatus, RSVPStatus
@@ -21,18 +22,7 @@ def _select_attendance_practice(siblings, reaction):
         for practice in siblings
         if practice.slack_session_emoji
     }
-    if persisted:
-        return persisted.get(reaction)
-
-    # Temporary compatibility for combined roots created before session emoji
-    # persistence. Task 11 replaces this with one-time persisted assignment.
-    if len(siblings) > 1:
-        from app.slack.client import get_combined_practice_emojis
-
-        inferred = get_combined_practice_emojis(siblings)
-        return dict(zip(inferred, siblings)).get(reaction)
-
-    return None
+    return persisted.get(reaction)
 
 
 def handle_attendance_reaction(
@@ -42,12 +32,32 @@ def handle_attendance_reaction(
     if not all((channel, message_ts, reaction, slack_user_id)):
         return {"success": True, "ignored": "invalid_event"}
 
-    siblings = Practice.query.filter_by(
+    from app.slack.practices.announcements import get_announcement_siblings
+
+    siblings = get_announcement_siblings(SimpleNamespace(
         slack_channel_id=channel,
         slack_message_ts=message_ts,
-    ).order_by(Practice.date, Practice.id).all()
+    ))
     if not siblings:
         return {"success": True, "ignored": "message_not_linked"}
+
+    if len(siblings) > 1:
+        saved = [
+            item.slack_session_emoji
+            for item in siblings
+            if item.slack_session_emoji
+        ]
+        if len(saved) != len(set(saved)):
+            return {"success": True, "ignored": "invalid_combined_mapping"}
+        if any(not item.slack_session_emoji for item in siblings):
+            from app.slack.client import assign_combined_session_emojis
+
+            assignment = assign_combined_session_emojis(siblings)
+            if not assignment["success"]:
+                return {
+                    "success": True,
+                    "ignored": "invalid_combined_mapping",
+                }
 
     practice = _select_attendance_practice(siblings, reaction)
     if practice is None:

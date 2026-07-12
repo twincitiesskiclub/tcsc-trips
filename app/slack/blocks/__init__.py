@@ -7,6 +7,7 @@ continue to work without change.
 
 from app.slack.blocks.announcements import (
     build_practice_announcement_blocks,
+    build_combined_fallback_text,
     build_combined_lift_blocks,
     build_practice_details_blocks,
     build_practice_fallback_text,
@@ -58,6 +59,7 @@ from app.slack.blocks.text import (
 __all__ = [
     # announcements
     "build_practice_announcement_blocks",
+    "build_combined_fallback_text",
     "build_combined_lift_blocks",
     "build_practice_details_blocks",
     "build_practice_fallback_text",

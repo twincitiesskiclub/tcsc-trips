@@ -266,7 +266,7 @@ def test_plan_reactions_do_not_route_combined_practices(
     assert PracticeRSVP.query.count() == 0
 
 
-def test_blank_multi_sibling_legacy_root_infers_session_emoji(
+def test_blank_multi_sibling_legacy_root_persists_session_emoji_once(
     db_session, linked_user
 ):
     _user, slack_user_id = linked_user
@@ -277,6 +277,10 @@ def test_blank_multi_sibling_legacy_root_infers_session_emoji(
 
     assert result["practice_id"] == seven.id
     assert PracticeRSVP.query.one().practice_id == seven.id
+    assert (six.slack_session_emoji, seven.slack_session_emoji) == (
+        "six",
+        "seven",
+    )
 
 
 def test_cancelled_practice_is_ignored(db_session, linked_user):

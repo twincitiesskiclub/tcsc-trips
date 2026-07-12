@@ -5,13 +5,20 @@ from flask import current_app
 from slack_sdk.errors import SlackApiError
 
 from app.models import db
-from app.slack.client import get_slack_client, get_channel_id_by_name
+from app.slack.client import (
+    assign_combined_session_emojis,
+    get_channel_id_by_name,
+    get_slack_client,
+)
 from app.slack.blocks import (
+    build_combined_fallback_text,
     build_practice_announcement_blocks,
     build_combined_lift_blocks,
     build_practice_details_blocks,
     build_practice_details_fallback_text,
     build_practice_fallback_text,
+    guard_fallback_text,
+    guard_slack_blocks,
 )
 from app.practices.plan_reactions import plan_reaction_names
 from app.practices.models import Practice
@@ -28,6 +35,13 @@ from app.slack.practices._config import (
 
 
 _UNSET = object()
+
+
+def convert_practice_to_info(practice):
+    """Late-bound model conversion keeps the Slack layer easy to isolate."""
+    from app.practices.service import convert_practice_to_info as convert
+
+    return convert(practice)
 
 
 def _gather_conditions(practice, *, weather=_UNSET, trail_conditions=_UNSET):
@@ -201,64 +215,159 @@ def _reconcile_plan_reactions(
                 )
 
 
-def _upsert_combined_details_reply(client, practices: list) -> None:
-    """Post or update the threaded 'Practice Details' reply for a combined-lift post.
+def _combined_details_payload(practices):
+    """Render shared Details once, or label divergent per-session content."""
+    conditions = AnnouncementConditions()
+    rendered = []
+    for practice in practices:
+        info = convert_practice_to_info(practice)
+        child_blocks = build_practice_details_blocks(info, conditions)
+        if not child_blocks:
+            continue
+        content_blocks = [
+            block for block in child_blocks if block.get("type") != "header"
+        ]
+        rendered.append((
+            practice,
+            content_blocks,
+            build_practice_details_fallback_text(info, conditions),
+        ))
+    if not rendered:
+        return [], ""
 
-    Combined-lift posts are indoor strength sessions (no weather/daylight/AQI).
-    The reply contains only the header + Parking/Gear sections from the first
-    (location-bearing) practice in the group.
-
-    Saves/updates slack_details_ts on ALL practices in the group so the ts stays
-    consistent regardless of which practice triggers the refresh.
-
-    Best-effort: any exception is caught and logged.
-    """
-    if not practices:
-        return
-    try:
-        from app.practices.service import convert_practice_to_info
-        # Use first practice as the representative (has location/gear data)
-        rep = practices[0]
-        practice_info = convert_practice_to_info(rep)
-        # No weather/daylight/AQI for indoor strength sessions
-        blocks = build_practice_details_blocks(practice_info)
-        if not blocks:
-            return
-
-        # All practices in the group share the same slack_message_ts / channel_id
-        channel_id = rep.slack_channel_id
-        thread_ts = rep.slack_message_ts
-
-        # Determine existing details_ts (any non-None value across the group is canonical)
-        existing_ts = next((p.slack_details_ts for p in practices if p.slack_details_ts), None)
-
-        if existing_ts:
-            client.chat_update(
-                channel=channel_id,
-                ts=existing_ts,
-                blocks=blocks,
-                text="Practice details",
-            )
-        else:
-            reply = client.chat_postMessage(
-                channel=channel_id,
-                thread_ts=thread_ts,
-                blocks=blocks,
-                text="Practice details",
-                reply_broadcast=False,
-                unfurl_links=False,
-                unfurl_media=False,
-            )
-            ts = reply.get("ts")
-            if ts:
-                for p in practices:
-                    p.slack_details_ts = ts
-                db.session.commit()
-    except Exception as e:
-        current_app.logger.warning(
-            f"Could not upsert combined details reply for practices "
-            f"{[p.id for p in practices]}: {e}"
+    common = (
+        len(rendered) == len(practices)
+        and all(item[1] == rendered[0][1] for item in rendered[1:])
+    )
+    if common:
+        practice, content, fallback = rendered[0]
+        blocks = [{
+            "type": "header",
+            "text": {
+                "type": "plain_text",
+                "text": "Practice Details",
+                "emoji": True,
+            },
+        }] + content
+        return (
+            guard_slack_blocks(
+                blocks,
+                surface="combined_practice_details",
+                practice_id=practice.id,
+            ),
+            fallback,
         )
+
+    groups = []
+    fallback_parts = ["Combined practice details."]
+    for practice, content, fallback in rendered:
+        groups.append([{
+            "type": "section",
+            "text": {
+                "type": "mrkdwn",
+                "text": (
+                    f"*:{practice.slack_session_emoji}: "
+                    f"{practice.date.strftime('%A at %-I:%M %p')}*"
+                ),
+            },
+        }] + content)
+        fallback_parts.append(f":{practice.slack_session_emoji}: {fallback}")
+    blocks = [{
+        "type": "header",
+        "text": {
+            "type": "plain_text",
+            "text": "Practice Details",
+            "emoji": True,
+        },
+    }]
+    for group in groups:
+        if len(blocks) > 1:
+            blocks.append({"type": "divider"})
+        blocks.extend(group)
+    return (
+        guard_slack_blocks(
+            blocks,
+            surface="combined_practice_details",
+            practice_id=practices[0].id,
+        ),
+        guard_fallback_text(
+            " ".join(fallback_parts),
+            surface="combined_practice_details",
+            practice_id=practices[0].id,
+        ),
+    )
+
+
+def _upsert_combined_details_reply(client, practices):
+    """Create, update, or delete the canonical combined Details reply."""
+    if not practices:
+        return {"success": True, "skipped": "no_practices"}
+    representative = practices[0]
+    original = {
+        practice.id: practice.slack_details_ts for practice in practices
+    }
+    existing = next((value for value in original.values() if value), None)
+    try:
+        blocks, fallback = _combined_details_payload(practices)
+        if not blocks:
+            if not existing:
+                return {"success": True, "skipped": "no_details"}
+            client.chat_delete(
+                channel=representative.slack_channel_id,
+                ts=existing,
+            )
+            for practice in practices:
+                practice.slack_details_ts = None
+            db.session.commit()
+            return {"success": True, "deleted": True}
+
+        if existing:
+            client.chat_update(
+                channel=representative.slack_channel_id,
+                ts=existing,
+                blocks=blocks,
+                text=fallback,
+            )
+            for practice in practices:
+                practice.slack_details_ts = existing
+            db.session.commit()
+            return {"success": True, "updated": True}
+
+        response = client.chat_postMessage(
+            channel=representative.slack_channel_id,
+            thread_ts=representative.slack_message_ts,
+            blocks=blocks,
+            text=fallback,
+            reply_broadcast=False,
+            unfurl_links=False,
+            unfurl_media=False,
+        )
+        details_ts = response.get("ts")
+        if not details_ts:
+            return {
+                "success": False,
+                "error": "Slack returned no Details timestamp",
+            }
+        for practice in practices:
+            practice.slack_details_ts = details_ts
+        db.session.commit()
+        return {"success": True, "message_ts": details_ts}
+    except Exception as exc:
+        for practice in practices:
+            practice.slack_details_ts = original[practice.id]
+        try:
+            db.session.rollback()
+        except Exception:
+            current_app.logger.warning(
+                "Could not roll back combined Details sync",
+                exc_info=True,
+            )
+        current_app.logger.warning(
+            "Could not sync combined Details reply for practices %s: %s",
+            [practice.id for practice in practices],
+            exc,
+        )
+        return {"success": False, "error": str(exc)}
 
 
 def _upsert_details_reply(
@@ -382,6 +491,10 @@ def post_practice_announcement(
     blocks = build_practice_announcement_blocks(practice_info, conditions)
     fallback = build_practice_fallback_text(practice_info, conditions)
 
+    clear_stale_session = not practice.slack_message_ts
+    if clear_stale_session:
+        practice.slack_session_emoji = None
+
     try:
         response = client.chat_postMessage(
             channel=channel_id,
@@ -417,107 +530,147 @@ def post_practice_announcement(
         }
 
     except SlackApiError as e:
+        db.session.rollback()
         error_msg = e.response.get('error', str(e))
         current_app.logger.error(f"Error posting practice announcement: {error_msg}")
         return {'success': False, 'error': error_msg}
 
 
-def post_combined_lift_announcement(
-    practices: list[Practice],
-    channel_override: Optional[str] = None
-) -> dict:
-    """Post combined lift announcement for multiple lift practices.
+def _combined_infos(practices):
+    return [convert_practice_to_info(item) for item in practices]
 
-    Used when 2-3 lift practices (e.g., Wed + Fri at Balance Fitness) should
-    be announced together in a single message with per-day RSVP emojis.
 
-    Args:
-        practices: List of Practice SQLAlchemy models (2-3 practices)
-        channel_override: Optional channel name to override default
+def _shared_plan_names(practices):
+    from app.slack.blocks.announcements import _shared_plan_reactions
 
-    Returns:
-        dict with keys:
-        - success: bool
-        - message_ts: str (only if success=True)
-        - channel_id: str (only if success=True)
-        - error: str (only if success=False)
-    """
-    if not practices:
-        return {'success': False, 'error': 'No practices provided'}
+    return plan_reaction_names(_shared_plan_reactions(_combined_infos(practices)))
 
-    client = get_slack_client()
 
-    # Determine channel
-    if channel_override:
-        channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
-    else:
-        channel_id = _get_announcement_channel()
+def _seed_combined_reactions(client, practices):
+    names = [item.slack_session_emoji for item in practices]
+    names.extend(_shared_plan_names(practices))
+    for name in dict.fromkeys(names):
+        try:
+            client.reactions_add(
+                channel=practices[0].slack_channel_id,
+                timestamp=practices[0].slack_message_ts,
+                name=name,
+            )
+        except Exception as exc:
+            if _reaction_error_name(exc) != "already_reacted":
+                current_app.logger.warning(
+                    "Could not seed :%s: on combined root %s: %s",
+                    name,
+                    practices[0].slack_message_ts,
+                    exc,
+                )
 
+
+def _remove_combined_seed(client, practices, name):
+    try:
+        client.reactions_remove(
+            channel=practices[0].slack_channel_id,
+            timestamp=practices[0].slack_message_ts,
+            name=name,
+        )
+    except Exception as exc:
+        if _reaction_error_name(exc) != "no_reaction":
+            current_app.logger.warning(
+                "Could not remove :%s: from combined root %s: %s",
+                name,
+                practices[0].slack_message_ts,
+                exc,
+            )
+
+
+def _reconcile_combined_plan_reactions(
+    client,
+    practices,
+    *,
+    previous_plan_reactions=None,
+):
+    desired = set(_shared_plan_names(practices))
+    known = set(plan_reaction_names(previous_plan_reactions or []))
+    for practice in practices:
+        known.update(plan_reaction_names(practice.plan_reactions or []))
+    for name in sorted(known - desired):
+        _remove_combined_seed(client, practices, name)
+    for name in sorted(desired):
+        try:
+            client.reactions_add(
+                channel=practices[0].slack_channel_id,
+                timestamp=practices[0].slack_message_ts,
+                name=name,
+            )
+        except Exception as exc:
+            if _reaction_error_name(exc) != "already_reacted":
+                current_app.logger.warning(
+                    "Could not add :%s: to combined root %s: %s",
+                    name,
+                    practices[0].slack_message_ts,
+                    exc,
+                )
+
+
+def post_combined_lift_announcement(practices, channel_override=None):
+    """Post one combined root after persisting its attendance mapping."""
+    if not 2 <= len(practices) <= 3:
+        return {
+            "success": False,
+            "error": "Combined posts require 2 or 3 practices",
+        }
+    ordered = sorted(practices, key=lambda item: (item.date, item.id))
+    assignment = assign_combined_session_emojis(ordered)
+    if not assignment["success"]:
+        return {**assignment, "safe_to_fallback": True}
+
+    channel_id = (
+        get_channel_id_by_name(channel_override.lstrip("#"))
+        if channel_override else _get_announcement_channel()
+    )
     if not channel_id:
-        return {'success': False, 'error': 'Could not find announcement channel'}
-
-    # Convert SQLAlchemy models to PracticeInfo dataclasses
-    from app.practices.service import convert_practice_to_info
-    practice_infos = [convert_practice_to_info(p) for p in practices]
-
-    # Build combined blocks
-    blocks = build_combined_lift_blocks(practice_infos)
-
-    # Sort practices by date for consistent emoji assignment
-    sorted_practices = sorted(practices, key=lambda p: p.date)
-
-    # Build fallback text with all days
-    days = [p.date.strftime('%A') for p in sorted_practices]
-    days_str = " & ".join(days)
-
+        return {"success": False, "error": "Could not find announcement channel"}
+    infos = _combined_infos(ordered)
+    blocks = build_combined_lift_blocks(infos)
+    fallback = build_combined_fallback_text(infos)
+    client = get_slack_client()
     try:
         response = client.chat_postMessage(
             channel=channel_id,
             blocks=blocks,
-            text=f"TCSC Lift - {days_str}",
+            text=fallback,
             unfurl_links=False,
-            unfurl_media=False
+            unfurl_media=False,
         )
-
-        message_ts = response.get('ts')
-        practice_ids = [p.id for p in sorted_practices]
-        current_app.logger.info(f"Posted combined lift announcement for practices {practice_ids} (ts: {message_ts})")
-
-        # Save slack info to all practices
-        for practice in sorted_practices:
-            practice.slack_message_ts = message_ts
+        message_ts = response.get("ts")
+        if not message_ts:
+            return {
+                "success": False,
+                "error": "Slack did not return a message timestamp",
+            }
+        for practice in ordered:
             practice.slack_channel_id = channel_id
+            practice.slack_message_ts = message_ts
         db.session.commit()
-
-        # Add RSVP emojis for each session — hour-based when possible
-        # (e.g. :six: for 6:10 PM, :seven: for 7:20 PM), matching the
-        # block builder's per-slot emoji.
-        from app.slack.client import get_combined_practice_emojis
-        rsvp_emojis = get_combined_practice_emojis(sorted_practices)
-        for i, practice in enumerate(sorted_practices):
-            emoji = rsvp_emojis[i] if i < len(rsvp_emojis) else "white_check_mark"
-            try:
-                client.reactions_add(
-                    channel=channel_id,
-                    timestamp=message_ts,
-                    name=emoji
-                )
-            except Exception as e:
-                current_app.logger.warning(f"Could not add {emoji} reaction: {e}")
-
-        # Post threaded "Practice Details" reply (parking + gear; no weather for indoor)
-        _upsert_combined_details_reply(client, sorted_practices)
-
+        details = _upsert_combined_details_reply(client, ordered)
+        _seed_combined_reactions(client, ordered)
+        current_app.logger.info(
+            "Posted combined Strength announcement for practices %s (ts: %s)",
+            [item.id for item in ordered],
+            message_ts,
+        )
         return {
-            'success': True,
-            'message_ts': message_ts,
-            'channel_id': channel_id
+            "success": True,
+            "message_ts": message_ts,
+            "channel_id": channel_id,
+            "details": details,
         }
-
-    except SlackApiError as e:
-        error_msg = e.response.get('error', str(e))
-        current_app.logger.error(f"Error posting combined lift announcement: {error_msg}")
-        return {'success': False, 'error': error_msg}
+    except SlackApiError as exc:
+        error = exc.response.get("error", str(exc))
+        current_app.logger.error(
+            "Error posting combined Strength announcement: %s", error
+        )
+        return {"success": False, "error": error}
 
 
 def update_practice_announcement(
@@ -614,87 +767,98 @@ def update_practice_post(
     )
 
 
+def get_announcement_siblings(practice, *, exclude_practice_id=None):
+    """Return only rows sharing this exact Slack channel and root timestamp."""
+    query = Practice.query.filter_by(
+        slack_channel_id=practice.slack_channel_id,
+        slack_message_ts=practice.slack_message_ts,
+    )
+    if exclude_practice_id is not None:
+        query = query.filter(Practice.id != exclude_practice_id)
+    return query.order_by(Practice.date, Practice.id).all()
+
+
 def is_combined_lift_practice(practice: Practice) -> bool:
-    """Check if practice is part of a combined lift post.
-
-    A practice is part of a combined lift if:
-    1. It has slack_message_ts set
-    2. Another practice shares the same slack_message_ts
-
-    Args:
-        practice: Practice SQLAlchemy model
-
-    Returns:
-        True if practice is part of a combined post with other practices.
-    """
-    if not practice.slack_message_ts:
-        return False
-
-    # Count how many practices share this message_ts
-    count = Practice.query.filter(
-        Practice.slack_message_ts == practice.slack_message_ts
-    ).count()
-
-    return count > 1
-
-
-def update_combined_lift_post(practice: Practice) -> dict:
-    """Update combined lift announcement when any practice in it changes.
-
-    Finds all practices sharing the same slack_message_ts and rebuilds
-    the combined block structure.
-
-    Args:
-        practice: Practice SQLAlchemy model (one of the combined practices)
-
-    Returns:
-        dict with keys:
-        - success: bool
-        - error: str (only if success=False)
-    """
+    """Recognize persisted and legacy combined roots, including one survivor."""
     if not practice.slack_message_ts or not practice.slack_channel_id:
-        return {'success': False, 'error': 'No Slack message to update'}
+        return False
+    if (practice.slack_session_emoji or "").strip():
+        return True
+    return len(get_announcement_siblings(practice)) > 1
 
+
+def update_combined_lift_post(
+    practice,
+    *,
+    exclude_practice_id=None,
+    previous_plan_reactions=None,
+    announcement_notice=None,
+):
+    """Rebuild an existing combined root without remapping saved reactions."""
+    if not practice.slack_message_ts or not practice.slack_channel_id:
+        return {"success": False, "error": "No Slack message to update"}
+    all_siblings = get_announcement_siblings(practice)
+    if not all_siblings:
+        return {"success": False, "error": "No practices found for this message"}
+    assignment = assign_combined_session_emojis(all_siblings)
+    if not assignment["success"]:
+        return assignment
+    removed = next(
+        (item for item in all_siblings if item.id == exclude_practice_id),
+        None,
+    )
+    siblings = [
+        item for item in all_siblings if item.id != exclude_practice_id
+    ]
+    if not siblings:
+        return {"success": False, "error": "No surviving practices for this message"}
+
+    infos = _combined_infos(siblings)
+    blocks = build_combined_lift_blocks(
+        infos, announcement_notice=announcement_notice
+    )
+    fallback = build_combined_fallback_text(
+        infos, announcement_notice=announcement_notice
+    )
     client = get_slack_client()
-
-    # Find all practices sharing this message_ts
-    practices = Practice.query.filter(
-        Practice.slack_message_ts == practice.slack_message_ts
-    ).order_by(Practice.date).all()
-
-    if not practices:
-        return {'success': False, 'error': 'No practices found for this message'}
-
-    # Convert to PracticeInfo dataclasses
-    from app.practices.service import convert_practice_to_info
-    practice_infos = [convert_practice_to_info(p) for p in practices]
-
-    # Build combined blocks
-    blocks = build_combined_lift_blocks(practice_infos)
-
-    # Build fallback text with all days
-    days = [p.date.strftime('%A') for p in practices]
-    days_str = " & ".join(days)
-
+    details = None
+    if exclude_practice_id is not None:
+        details = _upsert_combined_details_reply(client, siblings)
+        if not details.get("success"):
+            return {
+                "success": False,
+                "error": "Combined Details did not sync; root was not changed",
+                "details": details,
+            }
     try:
         client.chat_update(
             channel=practice.slack_channel_id,
             ts=practice.slack_message_ts,
             blocks=blocks,
-            text=f"TCSC Lift - {days_str}"
+            text=fallback,
         )
-
-        # Update (or backfill) the threaded "Practice Details" reply
-        _upsert_combined_details_reply(client, practices)
-
-        practice_ids = [p.id for p in practices]
-        current_app.logger.info(f"Updated combined lift post for practices {practice_ids}")
-        return {'success': True}
-
-    except SlackApiError as e:
-        error_msg = e.response.get('error', str(e))
-        current_app.logger.error(f"Error updating combined lift post: {error_msg}")
-        return {'success': False, 'error': error_msg}
+        if details is None:
+            details = _upsert_combined_details_reply(client, siblings)
+        _reconcile_combined_plan_reactions(
+            client,
+            siblings,
+            previous_plan_reactions=previous_plan_reactions,
+        )
+        if removed and removed.slack_session_emoji:
+            _remove_combined_seed(
+                client, siblings, removed.slack_session_emoji
+            )
+        current_app.logger.info(
+            "Updated combined Strength root for practices %s",
+            [item.id for item in siblings],
+        )
+        return {"success": True, "details": details}
+    except SlackApiError as exc:
+        error = exc.response.get("error", str(exc))
+        current_app.logger.error(
+            "Error updating combined Strength announcement: %s", error
+        )
+        return {"success": False, "error": error}
 
 
 def update_practice_slack_post(
@@ -720,10 +884,13 @@ def update_practice_slack_post(
         return {'success': False, 'error': 'No Slack post to update'}
 
     if is_combined_lift_practice(practice):
-        return update_combined_lift_post(practice)
-    else:
-        return update_practice_post(
+        return update_combined_lift_post(
             practice,
             announcement_notice=announcement_notice,
             previous_plan_reactions=previous_plan_reactions,
         )
+    return update_practice_post(
+        practice,
+        announcement_notice=announcement_notice,
+        previous_plan_reactions=previous_plan_reactions,
+    )

@@ -785,6 +785,7 @@ def test_fallback_builders_are_reexported():
 def test_combined_lift_header_uses_strength_and_no_warmup():
     p1 = _practice(
         date=datetime(2026, 12, 30, 18, 0),
+        slack_session_emoji="six",
         activities=[_act("Strength")],
         practice_types=[],
         has_social=False,
@@ -792,6 +793,7 @@ def test_combined_lift_header_uses_strength_and_no_warmup():
     )
     p2 = _practice(
         date=datetime(2027, 1, 1, 18, 0),
+        slack_session_emoji="seven",
         activities=[_act("Strength")],
         practice_types=[],
         has_social=False,
