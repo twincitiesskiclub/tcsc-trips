@@ -4,6 +4,7 @@ window.PlanReactionEditor = (() => {
     function row(option, callbacks = {}) {
         const onChange = callbacks.onChange || (() => {});
         const onCommit = callbacks.onCommit || (() => {});
+        const onEmptyFocus = callbacks.onEmptyFocus || (() => {});
         const changed = (commit = false) => {
             onChange();
             if (commit) onCommit();
@@ -54,8 +55,18 @@ window.PlanReactionEditor = (() => {
         remove.textContent = 'Remove';
         remove.setAttribute('aria-label', 'Remove reaction');
         remove.onclick = () => {
+            const nextRow = wrap.nextElementSibling;
+            const previousRow = wrap.previousElementSibling;
+            const focusTarget = (nextRow || previousRow)?.querySelector(
+                '.plan-reaction-emoji'
+            );
             wrap.remove();
             changed(true);
+            if (focusTarget) {
+                focusTarget.focus();
+            } else {
+                onEmptyFocus();
+            }
         };
 
         for (const button of [up, down, remove]) {

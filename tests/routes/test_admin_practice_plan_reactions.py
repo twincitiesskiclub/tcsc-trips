@@ -1,5 +1,8 @@
 """Route coverage for Activity and Workout Type Plan-reaction defaults."""
 
+import re
+from pathlib import Path
+
 import pytest
 
 from app import create_app
@@ -8,6 +11,9 @@ from app.practices.models import PracticeActivity, PracticeType
 
 
 TEST_RECORD_PREFIX = "Plan Reaction Test"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+CONFIG_TEMPLATE = REPO_ROOT / "app/templates/admin/practices/config.html"
+PLAN_REACTION_EDITOR = REPO_ROOT / "app/static/plan_reactions.js"
 
 
 @pytest.fixture
@@ -152,3 +158,55 @@ def test_interval_type_without_explicit_reactions_stays_empty(admin_client):
     )
     assert response.status_code == 200
     assert response.get_json()["type"]["default_plan_reactions"] == []
+
+
+def test_plan_reaction_inputs_have_44px_mobile_touch_targets():
+    template = CONFIG_TEMPLATE.read_text()
+
+    assert re.search(
+        r"@media\(max-width:\s*767px\)\s*\{.*?"
+        r"\.plan-reaction-emoji,\s*\.plan-reaction-label\s*\{"
+        r"(?=[^}]*min-height:\s*44px)[^}]*\}",
+        template,
+        re.DOTALL,
+    )
+
+
+def test_successful_plan_reaction_save_preserves_row_dom():
+    template = CONFIG_TEMPLATE.read_text()
+    save_function = template.split("function savePlanReactions()", 1)[1].split(
+        "const callbacks =", 1
+    )[0]
+    success_handler = save_function.split(".then(result => {", 1)[1].split(
+        "}).catch", 1
+    )[0]
+
+    assert "PlanReactionEditor.set(" not in success_handler
+
+
+def test_successful_plan_reaction_save_keeps_live_confirmation_visible():
+    template = CONFIG_TEMPLATE.read_text()
+    save_function = template.split("function savePlanReactions()", 1)[1].split(
+        "const callbacks =", 1
+    )[0]
+    success_handler = save_function.split(".then(result => {", 1)[1].split(
+        "}).catch", 1
+    )[0]
+
+    assert success_handler.index("updateAddState();") < success_handler.index(
+        "setStatus('Saved.', false);"
+    )
+
+
+def test_remove_reaction_hands_focus_to_a_stable_control():
+    editor = PLAN_REACTION_EDITOR.read_text()
+    remove_handler = editor.split("remove.onclick = () => {", 1)[1].split(
+        "for (const button", 1
+    )[0]
+    template = CONFIG_TEMPLATE.read_text()
+
+    assert "wrap.nextElementSibling" in remove_handler
+    assert "wrap.previousElementSibling" in remove_handler
+    assert "focusTarget.focus()" in remove_handler
+    assert "onEmptyFocus()" in remove_handler
+    assert "onEmptyFocus: () => addButton.focus()" in template

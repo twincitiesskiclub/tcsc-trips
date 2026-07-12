@@ -154,6 +154,7 @@
     .plan-reaction-label {
         grid-column: 1/-1;
         width: 100%;
+        min-height: 44px;
     }
     .plan-reaction-action {
         min-height: 44px;
@@ -1193,9 +1194,8 @@ function cfgBuildPlanReactionDefaults(record, entityKey, responseKey) {
         ).then(result => {
             record.default_plan_reactions =
                 result[responseKey].default_plan_reactions || [];
-            PlanReactionEditor.set(rows, record.default_plan_reactions, callbacks);
-            setStatus('Saved.', false);
             updateAddState();
+            setStatus('Saved.', false);
         }).catch(error => {
             setStatus(error.message, true);
         });
@@ -1203,7 +1203,8 @@ function cfgBuildPlanReactionDefaults(record, entityKey, responseKey) {
 
     const callbacks = {
         onChange: updateAddState,
-        onCommit: savePlanReactions
+        onCommit: savePlanReactions,
+        onEmptyFocus: () => addButton.focus()
     };
     PlanReactionEditor.set(rows, record.default_plan_reactions || [], callbacks);
 
