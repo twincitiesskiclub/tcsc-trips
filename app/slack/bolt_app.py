@@ -36,8 +36,11 @@ _flask_app = None  # Reference to Flask app for Socket Mode context
 # Only initialize Bolt if we have the required token
 # This allows the app to start without Slack credentials (e.g., for migrations)
 if _bot_token:
-    print(f"[BOLT] Initializing with bot token: {_bot_token[:20]}...")
-    print(f"[BOLT] Signing secret present: {bool(_signing_secret)}")
+    logger.info(
+        "Slack Bolt enabled: bot token configured=%s, signing secret configured=%s",
+        bool(_bot_token),
+        bool(_signing_secret),
+    )
 
     from slack_bolt import App
     from slack_bolt.adapter.flask import SlackRequestHandler
@@ -50,7 +53,6 @@ if _bot_token:
         process_before_response=True
     )
     handler = SlackRequestHandler(bolt_app)
-    print("[BOLT] Slack Bolt app initialized (HTTP mode)")
     logger.info("Slack Bolt app initialized (HTTP mode)")
 
     # If we have an app token, also set up Socket Mode
@@ -648,6 +650,11 @@ if _bot_token:
 
         with get_app_context():
             from app.models import AppConfig
+            from app.practices.models import PracticeActivity, PracticeType
+            from app.practices.plan_reactions import (
+                PlanReactionValidationError,
+                resolve_default_plan_reactions,
+            )
             from app.slack.modals import build_practice_create_modal
 
             # Parse button value: "2025-01-23|thursday|18:00" or legacy "2025-01-23"
@@ -693,6 +700,28 @@ if _bot_token:
             locations, all_activities, all_types = _load_modal_ref_data()
             eligible_coaches, eligible_leads = _load_eligible_people()
 
+            activity_ids = (slot_defaults or {}).get("activity_ids", [])
+            type_ids = (slot_defaults or {}).get("type_ids", [])
+            activities = (
+                PracticeActivity.query.filter(PracticeActivity.id.in_(activity_ids)).all()
+                if activity_ids else []
+            )
+            practice_types = (
+                PracticeType.query.filter(PracticeType.id.in_(type_ids)).all()
+                if type_ids else []
+            )
+            try:
+                initial_plan_reactions = resolve_default_plan_reactions(
+                    practice_types, activities
+                )
+            except PlanReactionValidationError as exc:
+                client.chat_postEphemeral(
+                    channel=body["channel"]["id"],
+                    user=user_id,
+                    text=f":warning: Plan reaction defaults need attention: {exc}",
+                )
+                return
+
             # Get channel and message_ts from the source message for updating
             channel_id = body.get("channel", {}).get("id")
             message_ts = body.get("message", {}).get("ts")
@@ -711,7 +740,8 @@ if _bot_token:
                 all_activities=all_activities, all_types=all_types,
                 slot_defaults=slot_defaults,
                 silent_defaults=silent_defaults if silent_defaults else None,
-                eligible_coaches=eligible_coaches, eligible_leads=eligible_leads
+                eligible_coaches=eligible_coaches, eligible_leads=eligible_leads,
+                initial_plan_reactions=initial_plan_reactions,
             )
             client.views_open(trigger_id=trigger_id, view=modal)
 
@@ -736,6 +766,12 @@ if _bot_token:
         user_id = body["user"]["id"]
         metadata_str = view.get("private_metadata", "{}")
         values = _safe_get(view, "state", "values", default={})
+        authoring, errors = _parse_practice_authoring_values(
+            values, include_plan_reactions=True
+        )
+        if errors:
+            ack(response_action="errors", errors=errors)
+            return
 
         with get_app_context():
             import json
@@ -759,7 +795,6 @@ if _bot_token:
             # Extract form values
             location_id = _safe_get(values, "location_block", "location_id", "selected_option", "value")
             time_str = _safe_get(values, "time_block", "practice_time", "selected_time", default="18:00")
-            workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
 
             # Extract checkbox flags
             selected_flags = _safe_get(values, "flags_block", "practice_flags", "selected_options", default=[])
@@ -798,9 +833,9 @@ if _bot_token:
                     status='scheduled',
                     location_id=int(location_id) if location_id else None,
                     social_location_id=social_location_id,
-                    workout_description=workout,
                     is_dark_practice=is_dark_practice,
-                    slack_coach_summary_ts=message_ts  # Link to summary for edit threading
+                    slack_coach_summary_ts=message_ts,  # Link to summary for edit threading
+                    **authoring,
                 )
                 db.session.add(practice)
                 db.session.flush()  # Get practice.id for M2M and PracticeLead
@@ -889,11 +924,16 @@ if _bot_token:
         Updates practice details, then updates both #practices and collab posts,
         and adds thread replies noting who updated.
         """
-        ack()
-
         user_id = body["user"]["id"]
         practice_id = int(view.get("private_metadata") or "0")
         values = _safe_get(view, "state", "values", default={})
+        authoring, errors = _parse_practice_authoring_values(
+            values, include_plan_reactions=False
+        )
+        if errors:
+            ack(response_action="errors", errors=errors)
+            return
+        ack()
 
         with get_app_context():
             from app.practices.models import Practice, PracticeLead, PracticeActivity, PracticeType
@@ -908,7 +948,6 @@ if _bot_token:
             # Extract form values
             # Location is a dropdown (static_select)
             location_id = _safe_get(values, "location_block", "location_id", "selected_option", "value")
-            workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
 
             # Extract checkbox flags
             selected_flags = _safe_get(values, "flags_block", "practice_flags", "selected_options", default=[])
@@ -937,7 +976,7 @@ if _bot_token:
             # Update database
             if location_id:
                 practice.location_id = int(location_id)
-            practice.workout_description = workout
+            practice.workout_description = authoring["workout_description"]
             practice.is_dark_practice = is_dark_practice
             # has_social is a computed property - clear social_location_id if unchecked
             if not has_social:
@@ -1407,8 +1446,11 @@ if _bot_token:
         pass
 
 else:
-    print("[BOLT] SLACK_BOT_TOKEN not set - Bolt disabled")
-    logger.warning("SLACK_BOT_TOKEN not set - Slack Bolt app disabled")
+    logger.info(
+        "Slack Bolt disabled: bot token configured=%s, signing secret configured=%s",
+        bool(_bot_token),
+        bool(_signing_secret),
+    )
 
 
 # =============================================================================
@@ -1433,6 +1475,36 @@ def _safe_get(d: dict, *keys, default=None):
         if d is None:
             return default
     return d if d is not None else default
+
+
+def _parse_practice_authoring_values(
+    values: dict,
+    *,
+    include_plan_reactions: bool,
+) -> tuple[dict, dict[str, str]]:
+    from app.practices.plan_reactions import (
+        PlanReactionValidationError,
+        parse_plan_reaction_lines,
+    )
+
+    fields = {
+        "workout_description": _safe_get(
+            values, "workout_block", "workout_description", "value", default=""
+        )
+    }
+    errors = {}
+    if len(fields["workout_description"]) > 2500:
+        errors["workout_block"] = "Workout must be 2,500 characters or fewer"
+
+    if include_plan_reactions:
+        plan_text = _safe_get(
+            values, "plan_reactions_block", "plan_reactions", "value", default=""
+        )
+        try:
+            fields["plan_reactions"] = parse_plan_reaction_lines(plan_text)
+        except PlanReactionValidationError as exc:
+            errors["plan_reactions_block"] = str(exc)
+    return fields, errors
 
 
 def _load_modal_ref_data():

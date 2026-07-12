@@ -2,6 +2,7 @@
 
 from typing import Optional
 from app.practices.interfaces import PracticeInfo, LeadRole
+from app.practices.plan_reactions import format_plan_reaction_lines
 
 
 def _build_practice_flags_element(practice=None, *, is_dark_practice=False, has_social=False) -> dict:
@@ -570,6 +571,7 @@ def build_practice_edit_full_modal(
                 "type": "plain_text_input",
                 "action_id": "workout_description",
                 "multiline": True,
+                "max_length": 2500,
                 "placeholder": {"type": "plain_text", "text": "e.g., 5 x 4min @ threshold (2min rest)"},
                 "initial_value": practice.workout_description or ""
             }
@@ -627,7 +629,8 @@ def build_practice_create_modal(
     channel_id: str = None, message_ts: str = None,
     all_activities: list = None, all_types: list = None,
     slot_defaults: dict = None, silent_defaults: dict = None,
-    eligible_coaches: list = None, eligible_leads: list = None
+    eligible_coaches: list = None, eligible_leads: list = None,
+    initial_plan_reactions: list[dict[str, str]] | None = None
 ) -> dict:
     """Build modal for creating a new practice from weekly summary.
 
@@ -644,6 +647,7 @@ def build_practice_create_modal(
         silent_defaults: Dict of defaults applied silently on submit (social_location_id)
         eligible_coaches: List of (user_id, name, slack_uid) tuples for the coach picker
         eligible_leads: List of (user_id, name, slack_uid) tuples for the lead picker
+        initial_plan_reactions: Resolved reaction defaults shown for practice-specific editing
 
     Returns:
         Slack modal view payload
@@ -731,6 +735,7 @@ def build_practice_create_modal(
         "type": "plain_text_input",
         "action_id": "workout_description",
         "multiline": True,
+        "max_length": 2500,
         "placeholder": {"type": "plain_text", "text": "e.g., 5 x 4min @ threshold (2min rest)"}
     }
     if workout_default:
@@ -768,6 +773,31 @@ def build_practice_create_modal(
                 "type_ids", "Select practice types", all_types, default_type_ids
             )
         })
+
+    plan_element = {
+        "type": "plain_text_input",
+        "action_id": "plan_reactions",
+        "multiline": True,
+        "max_length": 1000,
+        "placeholder": {"type": "plain_text", "text": ":emoji: What it means"},
+    }
+    formatted = format_plan_reaction_lines(initial_plan_reactions or [])
+    if formatted:
+        plan_element["initial_value"] = formatted
+    blocks.append({
+        "type": "input",
+        "block_id": "plan_reactions_block",
+        "optional": True,
+        "label": {"type": "plain_text", "text": "Plan reactions"},
+        "hint": {
+            "type": "plain_text",
+            "text": (
+                "Defaults loaded from Settings. Edit as needed for this practice, "
+                "one reaction per line."
+            ),
+        },
+        "element": plan_element,
+    })
 
     # Coaches multi-select, pre-selected from slot defaults (coach_ids)
     if eligible_coaches:

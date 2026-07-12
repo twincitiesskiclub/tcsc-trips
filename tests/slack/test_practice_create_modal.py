@@ -6,11 +6,19 @@ time from the weekly coach-summary 'Add Practice' button.
 
 from datetime import datetime
 
+from app.slack.bolt_app import _parse_practice_authoring_values
 from app.slack.modals import build_practice_create_modal
 
 
 def _blocks_by_id(modal):
     return {b.get("block_id"): b for b in modal["blocks"] if b.get("block_id")}
+
+
+def _authoring_values(workout="", plan_text=""):
+    return {
+        "workout_block": {"workout_description": {"value": workout}},
+        "plan_reactions_block": {"plan_reactions": {"value": plan_text}},
+    }
 
 
 def test_create_modal_has_coach_and_lead_pickers():
@@ -52,3 +60,68 @@ def test_create_modal_omits_pickers_when_no_people():
     blocks = _blocks_by_id(modal)
     assert "coaches_block" not in blocks
     assert "leads_block" not in blocks
+
+
+def test_create_modal_prefills_plan_reactions_and_limits_workout():
+    modal = build_practice_create_modal(
+        datetime(2026, 7, 14, 18, 15),
+        "18:15",
+        locations=[(10, "Theodore Wirth")],
+        initial_plan_reactions=[
+            {"emoji": "evergreen_tree", "label": "Endurance instead of intervals"}
+        ],
+    )
+    blocks = _blocks_by_id(modal)
+    field = blocks["plan_reactions_block"]
+    assert field["label"]["text"] == "Plan reactions"
+    assert field["element"]["initial_value"] == (
+        ":evergreen_tree: Endurance instead of intervals"
+    )
+    assert "Defaults loaded from Settings" in field["hint"]["text"]
+    assert blocks["workout_block"]["element"]["max_length"] == 2500
+
+
+def test_create_submission_uses_edited_visible_plan_value():
+    fields, errors = _parse_practice_authoring_values(
+        _authoring_values(
+            workout="5 x 4 minutes",
+            plan_text=":athletic_shoe: Run instead",
+        ),
+        include_plan_reactions=True,
+    )
+    assert errors == {}
+    assert fields == {
+        "workout_description": "5 x 4 minutes",
+        "plan_reactions": [{"emoji": "athletic_shoe", "label": "Run instead"}],
+    }
+
+
+def test_create_submission_can_clear_prefilled_plan_value():
+    fields, errors = _parse_practice_authoring_values(
+        _authoring_values(plan_text=""), include_plan_reactions=True
+    )
+    assert errors == {}
+    assert fields["plan_reactions"] == []
+
+
+def test_create_submission_maps_invalid_plan_to_its_slack_block():
+    fields, errors = _parse_practice_authoring_values(
+        _authoring_values(
+            plan_text=":evergreen_tree Endurance instead of intervals"
+        ),
+        include_plan_reactions=True,
+    )
+    assert "plan_reactions" not in fields
+    assert errors == {
+        "plan_reactions_block": "Line 1: use :emoji: Member-facing label"
+    }
+
+
+def test_authoring_rejects_tampered_oversized_workout():
+    fields, errors = _parse_practice_authoring_values(
+        _authoring_values(workout="x" * 2501), include_plan_reactions=False
+    )
+    assert len(fields["workout_description"]) == 2501
+    assert errors == {
+        "workout_block": "Workout must be 2,500 characters or fewer"
+    }
