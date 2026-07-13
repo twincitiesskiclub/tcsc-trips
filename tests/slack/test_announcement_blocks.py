@@ -185,7 +185,7 @@ def test_hero_has_where_workout_notes_and_social(practice_info, conditions):
     )
     assert "*Where:*" in text and "Theodore Wirth - Trailhead" in text
     assert "*Workout · Intervals*" in text
-    assert "*📌 Notes*" in text and "Meet at the flagpole." in text
+    assert "*📝 Notes*" in text and "Meet at the flagpole." in text
     assert "Social after at Utepils Brewing" in text
 
 
@@ -401,63 +401,120 @@ def test_missing_workout_uses_exact_placeholder_without_adjacent_dividers(
     _assert_no_adjacent_dividers(blocks)
 
 
-def test_saved_plan_reactions_use_exact_rsvp_and_plan_grammar(
-    practice_info, conditions
-):
-    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
-    text = rendered_text(
-        build_practice_announcement_blocks(practice_info, conditions)
-    )
-    assert "Bop ✅ if you're coming." in text
-    assert "Your Practice Plan:" in text
-    assert ":evergreen_tree: Endurance instead of intervals" in text
-    assert "Optional:" not in text
-    assert text.count(":evergreen_tree:") == 1
-
-
-def test_plan_heading_is_absent_without_saved_reactions(practice_info, conditions):
-    text = rendered_text(
-        build_practice_announcement_blocks(practice_info, conditions)
-    )
-    assert "Your Practice Plan:" not in text
-
-
-def test_rsvp_omits_root_channel_and_running_late_copy(practice_info, conditions):
-    text = rendered_text(
-        build_practice_announcement_blocks(practice_info, conditions)
-    )
-    assert "Bop ✅ if you're coming." in text
-    assert "Running late" not in text
-    assert "<!channel>" not in text
-
-
-def test_coach_and_lead_context_remains_after_contiguous_plan_legend(
-    practice_info, conditions
-):
-    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
-    practice_info.leads = [
-        SimpleNamespace(
-            role=SimpleNamespace(name="COACH"),
-            slack_user_id="U1",
-            display_name="Anders",
-        ),
-        SimpleNamespace(
-            role=SimpleNamespace(name="LEAD"),
-            slack_user_id="U2",
-            display_name="Bea",
-        ),
+def _rsvp_context(blocks):
+    matches = [
+        block for block in blocks
+        if block.get("type") == "context"
+        and block.get("elements")
+        and block["elements"][0].get("text", "").startswith("Bop ")
     ]
-    blocks = build_practice_announcement_blocks(practice_info, conditions)
-    rsvp_index = _block_index(blocks, "Bop ✅ if you're coming.")
-    plan_index = _block_index(blocks, "Your Practice Plan:")
-    coach_index = _block_index(blocks, "👨‍🏫 Coach <@U1>")
-    lead_index = _block_index(blocks, "🧑‍🤝‍🧑 Leads <@U2>")
-    assert rsvp_index == plan_index
-    assert rsvp_index < coach_index == lead_index
-    assert all(
-        block.get("type") != "divider"
-        for block in blocks[rsvp_index : coach_index + 1]
+    assert len(matches) == 1
+    return matches[0]
+
+
+@pytest.mark.parametrize(
+    ("reactions", "supplemental"),
+    [
+        ([], ""),
+        (
+            [{"emoji": "hatching_chick", "label": "new rollerskier"}],
+            " In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier.",
+        ),
+        (
+            [
+                {"emoji": "hatching_chick", "label": "new rollerskier"},
+                {"emoji": "athletic_shoe", "label": "runner"},
+            ],
+            " In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier and a :athletic_shoe: for runner.",
+        ),
+        (
+            [
+                {"emoji": "hatching_chick", "label": "new rollerskier"},
+                {
+                    "emoji": "older_adult::skin-tone-4",
+                    "label": "experienced rollerskier",
+                },
+                {"emoji": "athletic_shoe", "label": "runner"},
+            ],
+            " In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier, a :older_adult::skin-tone-4: for experienced "
+            "rollerskier, and a :athletic_shoe: for runner.",
+        ),
+        (
+            [
+                {"emoji": "hatching_chick", "label": "new rollerskier"},
+                {"emoji": "older_adult", "label": "experienced rollerskier"},
+                {"emoji": "athletic_shoe", "label": "runner"},
+                {"emoji": "evergreen_tree", "label": "endurance"},
+            ],
+            " In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier, a :older_adult: for experienced rollerskier, "
+            "a :athletic_shoe: for runner, and a :evergreen_tree: for endurance.",
+        ),
+    ],
+)
+def test_standalone_rsvp_is_one_two_line_context(
+    practice_info, conditions, reactions, supplemental
+):
+    practice_info.plan_reactions = reactions
+    block = _rsvp_context(
+        build_practice_announcement_blocks(practice_info, conditions)
     )
+    assert block["elements"] == [{
+        "type": "mrkdwn",
+        "text": (
+            "Bop :white_check_mark: so we'll know you'll be there."
+            f"{supplemental}\n"
+            "Running late? Reply in the thread. <!channel>"
+        ),
+    }]
+    assert block["elements"][0]["text"].count("\n") == 1
+
+
+def test_context_budget_preserves_attendance_and_complete_second_line(monkeypatch):
+    monkeypatch.setattr(
+        announcement_blocks,
+        "format_supplemental_reaction_sentence",
+        lambda reactions: "s" * 3_000,
+    )
+    block = announcement_blocks._rsvp_context_block(
+        "Bop :white_check_mark: so we'll know you'll be there.",
+        [],
+        surface="practice_announcement",
+        practice_id=42,
+    )
+    text = block["elements"][0]["text"]
+    assert len(text) <= 2_000
+    assert text.startswith(
+        "Bop :white_check_mark: so we'll know you'll be there. "
+    )
+    assert text.endswith("\nRunning late? Reply in the thread. <!channel>")
+    assert text.count("\n") == 1
+
+
+def test_coach_context_stays_separate_from_rsvp_context(practice_info, conditions):
+    blocks = build_practice_announcement_blocks(practice_info, conditions)
+    rsvp = _rsvp_context(blocks)
+    coach = next(
+        block for block in blocks
+        if block.get("type") == "context"
+        and "Coach <@U1>" in str(block.get("elements"))
+    )
+    assert rsvp is not coach
+    assert "Coach" not in rsvp["elements"][0]["text"]
+
+
+def test_member_facing_notes_heading_uses_memo_icon(practice_info, conditions):
+    blocks = build_practice_announcement_blocks(practice_info, conditions)
+    notes = next(
+        block["text"]["text"] for block in blocks
+        if block.get("type") == "section"
+        and "Meet at the flagpole" in block.get("text", {}).get("text", "")
+    )
+    assert notes.startswith("*📝 Notes*\n")
+    assert "📌" not in notes
 
 
 def test_plan_labels_are_escaped_for_slack_mrkdwn(practice_info, conditions):
@@ -608,6 +665,58 @@ def test_details_has_no_em_dash(practice_info, conditions):
     assert "—" not in blob and "–" not in blob
 
 
+def test_standalone_fallback_has_exact_plain_rsvp_tail(
+    practice_info, conditions
+):
+    practice_info.plan_reactions = [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {
+            "emoji": "older_adult::skin-tone-4",
+            "label": "experienced rollerskier",
+        },
+        {"emoji": "athletic_shoe", "label": "runner"},
+    ]
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info, conditions
+    )
+    assert fallback.endswith(
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Additional reactions: hatching chick for new rollerskier; "
+        "older adult, skin tone 4 for experienced rollerskier; "
+        "athletic shoe for runner. Running late? Reply in the thread."
+    )
+    assert "<!channel>" not in fallback
+    assert ":hatching_chick:" not in fallback
+
+
+def test_standalone_fallback_without_supplement_has_exact_plain_tail(
+    practice_info, conditions
+):
+    practice_info.plan_reactions = []
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info, conditions
+    )
+    assert fallback.endswith(
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Running late? Reply in the thread."
+    )
+
+
+def test_reserved_fallback_helper_never_truncates_required_tail():
+    tail = (
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Running late? Reply in the thread."
+    )
+    fallback = announcement_blocks._fallback_with_reserved_tail(
+        ["body " * 2_000],
+        tail,
+        surface="practice_announcement",
+        practice_id=42,
+    )
+    assert len(fallback) <= FALLBACK_TEXT_MAX
+    assert fallback.endswith(tail)
+
+
 def test_announcement_fallback_covers_hero_and_omits_routine_details(
     practice_info, conditions
 ):
@@ -623,10 +732,10 @@ def test_announcement_fallback_covers_hero_and_omits_routine_details(
     assert "Workout: 5 x 4min @ threshold, 2min easy between." in fallback
     assert "📍 Location changed" in fallback
     assert "Heat Advisory" in fallback
-    assert "RSVP with ✅." in fallback
-    assert (
-        "Your Practice Plan: :evergreen_tree: Endurance instead of intervals."
-        in fallback
+    assert fallback.endswith(
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Additional reaction: evergreen tree for Endurance instead of intervals. "
+        "Running late? Reply in the thread."
     )
     assert "Parking" not in fallback
     assert "Wind" not in fallback
@@ -649,8 +758,9 @@ def test_announcement_fallback_normal_copy_includes_root_only_member_content(
         "Workout: 5 x 4min @ threshold, 2min easy between. "
         "Notes: Meet at the flagpole. "
         "Social after at Utepils Brewing. "
-        "RSVP with ✅. "
-        "Your Practice Plan: :evergreen_tree: Endurance instead of intervals."
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Additional reaction: evergreen tree for Endurance instead of intervals. "
+        "Running late? Reply in the thread."
     )
 
 
@@ -667,7 +777,7 @@ def test_announcement_fallback_names_generic_social_when_destination_is_missing(
     assert "Social after practice." in fallback
 
 
-def test_long_root_content_cannot_remove_social_rsvp_or_plan(
+def test_long_root_content_cannot_remove_social_rsvp_or_supplement(
     practice_info, empty_conditions
 ):
     practice_info.workout_description = "Workout start " + ("w" * 2_500)
@@ -683,9 +793,11 @@ def test_long_root_content_cannot_remove_social_rsvp_or_plan(
     assert "Workout start" in fallback
     assert "Notes start" in fallback
     assert "Social after at Social destination" in fallback
-    assert "RSVP with ✅." in fallback
-    assert "Your Practice Plan:" in fallback
-    assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert fallback.endswith(
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Additional reaction: evergreen tree for Endurance instead of intervals. "
+        "Running late? Reply in the thread."
+    )
     assert len(fallback) <= FALLBACK_TEXT_MAX
 
 
@@ -716,9 +828,11 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
 
     assert "Notes:" in fallback
     assert "Social after at" in fallback
-    assert "RSVP with ✅." in fallback
-    assert "Your Practice Plan:" in fallback
-    assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert fallback.endswith(
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Additional reaction: evergreen tree for Endurance instead of intervals. "
+        "Running late? Reply in the thread."
+    )
     assert "+980 more active alerts" in fallback
     assert len(fallback) <= FALLBACK_TEXT_MAX
     assert len(blocks) <= BLOCKS_MAX
@@ -728,10 +842,11 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
         "Alert 0",
         "*Where:*",
         "*Workout",
-        "*📌 Notes*",
+        "*📝 Notes*",
         "Social after at",
-        "Bop ✅ if you're coming.",
-        "Your Practice Plan:",
+        "Bop :white_check_mark: so we'll know you'll be there.",
+        "In addition to your attendance emoji",
+        "Running late? Reply in the thread. <!channel>",
     ):
         assert required in text
 
@@ -793,28 +908,22 @@ def test_long_alerts_cannot_remove_later_hero_promotions(
     _assert_urgent_precedes_location_and_workout(blocks, "Headlamp required")
 
 
-def test_long_workout_and_alerts_cannot_remove_required_fallback_end(
+def test_long_standalone_content_preserves_complete_required_tail(
     practice_info, conditions
 ):
     practice_info.workout_description = "w" * 10_000
-    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
-    alerts = [
-        SimpleNamespace(headline=f"Alert {index} " + "a" * 4_000, event=None)
-        for index in range(2)
+    practice_info.logistics_notes = "n" * 10_000
+    practice_info.plan_reactions = [
+        {"emoji": "evergreen_tree", "label": "Endurance instead"}
     ]
-    conditions = replace(
-        conditions,
-        weather=_weather(alerts=alerts),
-        daylight=daylight_for(practice_info.date, 16, 53),
-        air_quality=121,
-    )
     fallback = announcement_blocks.build_practice_fallback_text(
         practice_info, conditions
     )
-    assert "Headlamp required" in fallback
-    assert "RSVP with ✅." in fallback
-    assert "Your Practice Plan:" in fallback
-    assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert fallback.endswith(
+        "RSVP with the white check mark reaction so we'll know you'll be there. "
+        "Additional reaction: evergreen tree for Endurance instead. "
+        "Running late? Reply in the thread."
+    )
     assert len(fallback) <= FALLBACK_TEXT_MAX
 
 

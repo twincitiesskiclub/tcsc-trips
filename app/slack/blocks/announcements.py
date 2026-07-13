@@ -11,8 +11,13 @@ from app.practices.interfaces import (
     TrailCondition,
     WeatherConditions,
 )
-from app.practices.plan_reactions import format_plan_reaction_legend
+from app.practices.plan_reactions import (
+    format_supplemental_reaction_fallback,
+    format_supplemental_reaction_sentence,
+)
 from app.slack.blocks.text import (
+    CONTEXT_TEXT_MAX,
+    FALLBACK_TEXT_MAX,
     HEADER_TEXT_MAX,
     SECTION_TEXT_MAX,
     guard_fallback_text,
@@ -31,7 +36,6 @@ _FALLBACK_NOTES_MAX = 600
 _FALLBACK_SOCIAL_MAX = 250
 _FALLBACK_NOTICE_MAX = 250
 _FALLBACK_ALERTS_MAX = 550
-_FALLBACK_PLAN_MAX = 600
 _DETAILS_FALLBACK_PARKING_MAX = 1000
 _DETAILS_FALLBACK_GEAR_MAX = 800
 _DETAILS_FALLBACK_CONDITIONS_MAX = 1700
@@ -45,8 +49,15 @@ _COMBINED_FALLBACK_SHARED_NOTES_MAX = 500
 _COMBINED_FALLBACK_SESSION_NOTES_MAX = 140
 _COMBINED_FALLBACK_SHARED_SOCIAL_MAX = 200
 _COMBINED_FALLBACK_SESSION_SOCIAL_MAX = 100
-_COMBINED_FALLBACK_PLAN_MAX = 500
 _ACTIVE_ALERTS_VISIBLE_MAX = 20
+_RUNNING_LATE_LINE = "Running late? Reply in the thread. <!channel>"
+_FALLBACK_RUNNING_LATE = "Running late? Reply in the thread."
+_STANDALONE_ATTENDANCE = (
+    "Bop :white_check_mark: so we'll know you'll be there."
+)
+_STANDALONE_FALLBACK_ATTENDANCE = (
+    "RSVP with the white check mark reaction so we'll know you'll be there."
+)
 
 
 def _activity_label(activities) -> str:
@@ -67,6 +78,70 @@ def _join_block_groups(groups):
             blocks.append({"type": "divider"})
         blocks.extend(group)
     return blocks
+
+
+def _rsvp_context_block(
+    attendance_sentence,
+    reactions,
+    *,
+    surface,
+    practice_id=None,
+):
+    supplemental = format_supplemental_reaction_sentence(reactions)
+    required = f"{attendance_sentence}\n{_RUNNING_LATE_LINE}"
+    if supplemental:
+        budget = CONTEXT_TEXT_MAX - len(required) - 1
+        supplemental = truncate_slack_text(
+            supplemental,
+            max(1, budget),
+            field="plan_reactions",
+            surface=surface,
+            practice_id=practice_id,
+        )
+    first_line = attendance_sentence
+    if supplemental:
+        first_line += " " + supplemental
+    return {
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": f"{first_line}\n{_RUNNING_LATE_LINE}",
+        }],
+    }
+
+
+def _fallback_with_reserved_tail(
+    parts,
+    tail,
+    *,
+    surface,
+    practice_id=None,
+):
+    body = " ".join(
+        str(part).strip() for part in parts
+        if part and str(part).strip()
+    )
+    tail = str(tail).strip()
+    separator_length = 1 if body and tail else 0
+    body_budget = max(0, FALLBACK_TEXT_MAX - len(tail) - separator_length)
+    if body and len(body) > body_budget:
+        body = (
+            truncate_slack_text(
+                body,
+                body_budget,
+                field="fallback_body",
+                surface=surface,
+                practice_id=practice_id,
+            )
+            if body_budget > 0
+            else ""
+        )
+    value = " ".join(part for part in (body, tail) if part)
+    return guard_fallback_text(
+        value,
+        surface=surface,
+        practice_id=practice_id,
+    )
 
 
 def _practice_end(practice, duration_minutes):
@@ -299,7 +374,7 @@ def build_practice_announcement_blocks(
     }]
 
     if getattr(practice, "logistics_notes", None):
-        notes_prefix = "*📌 Notes*\n"
+        notes_prefix = "*📝 Notes*\n"
         notes = truncate_slack_text(
             practice.logistics_notes,
             SECTION_TEXT_MAX - len(notes_prefix) - len(_SPACER),
@@ -327,17 +402,14 @@ def build_practice_announcement_blocks(
             "text": {"type": "mrkdwn", "text": social_text + _SPACER},
         })
 
-    rsvp_lines = ["Bop ✅ if you're coming."]
-    if getattr(practice, "plan_reactions", None):
-        rsvp_lines.extend([
-            "",
-            "*Your Practice Plan:*",
-            format_plan_reaction_legend(practice.plan_reactions),
-        ])
-    ending_group = [{
-        "type": "context",
-        "elements": [{"type": "mrkdwn", "text": "\n".join(rsvp_lines)}],
-    }]
+    ending_group = [
+        _rsvp_context_block(
+            _STANDALONE_ATTENDANCE,
+            getattr(practice, "plan_reactions", None) or [],
+            surface="practice_announcement",
+            practice_id=practice.id,
+        )
+    ]
 
     coaches, leads = [], []
     for lead in (practice.leads or []):
@@ -591,21 +663,16 @@ def build_practice_fallback_text(
                 surface="practice_fallback",
                 practice_id=practice.id,
             ))
-    parts.append("RSVP with ✅.")
-    if getattr(practice, "plan_reactions", None):
-        plan = truncate_slack_text(
-            format_plan_reaction_legend(practice.plan_reactions),
-            _FALLBACK_PLAN_MAX,
-            field="plan_reactions",
-            surface="practice_fallback",
-            practice_id=practice.id,
-        )
-        parts.append(
-            "Your Practice Plan: " + plan + "."
-        )
-    fallback = " ".join(parts)
-    return guard_fallback_text(
-        fallback,
+    tail_parts = [_STANDALONE_FALLBACK_ATTENDANCE]
+    supplemental = format_supplemental_reaction_fallback(
+        getattr(practice, "plan_reactions", None) or []
+    )
+    if supplemental:
+        tail_parts.append(supplemental)
+    tail_parts.append(_FALLBACK_RUNNING_LATE)
+    return _fallback_with_reserved_tail(
+        parts,
+        " ".join(tail_parts),
         surface="practice_announcement",
         practice_id=practice.id,
     )
