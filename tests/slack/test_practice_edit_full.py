@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -364,3 +365,119 @@ def test_full_edit_source_changes_preserve_submitted_plan_snapshot(
         source_records["replacement_type"].id
     }
     assert len(refresh_calls) == 1
+
+
+def test_posted_full_edit_returns_saved_but_unsynced_result_and_dms_user(
+    db_session, practice_record, monkeypatch
+):
+    practice_record.slack_channel_id = "C-POSTED"
+    practice_record.slack_message_ts = "root.1"
+    db.session.commit()
+    refresh_result = {
+        "announcement": {"success": False, "error": "Slack failed"},
+    }
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: refresh_result,
+    )
+    ack = AckRecorder()
+    client = MagicMock()
+
+    result = bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view={
+            "private_metadata": str(practice_record.id),
+            "state": {"values": _full_edit_values(workout="Saved workout")},
+        },
+        client=client,
+        logger=logging.getLogger(__name__),
+    )
+
+    db.session.refresh(practice_record)
+    assert ack.calls == [{}]
+    assert practice_record.workout_description == "Saved workout"
+    assert result == {
+        "success": False,
+        "practice_updated": True,
+        "error": (
+            "Practice changes were saved, but the Slack announcement was not "
+            "updated. Retry the edit or refresh the announcement."
+        ),
+        "refresh_results": refresh_result,
+    }
+    client.chat_postMessage.assert_called_once_with(
+        channel="U-FULL-EDIT-TEST",
+        text=(
+            ":warning: Your practice changes were saved, but the Slack "
+            "announcement was not updated. Retry the edit or refresh the "
+            "announcement."
+        ),
+    )
+
+
+def test_full_edit_dm_failure_does_not_undo_saved_database_edit(
+    db_session, practice_record, monkeypatch, caplog
+):
+    practice_record.slack_channel_id = "C-POSTED"
+    practice_record.slack_message_ts = "root.1"
+    db.session.commit()
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: {
+            "announcement": {"success": False, "error": "Slack failed"},
+        },
+    )
+    client = MagicMock()
+    client.chat_postMessage.side_effect = RuntimeError("DM failed")
+
+    with caplog.at_level(logging.WARNING):
+        result = bolt_module._handle_practice_edit_full_submission(
+            ack=AckRecorder(),
+            body={"user": {"id": "U-FULL-EDIT-TEST"}},
+            view={
+                "private_metadata": str(practice_record.id),
+                "state": {
+                    "values": _full_edit_values(workout="Still saved")
+                },
+            },
+            client=client,
+            logger=logging.getLogger(__name__),
+        )
+
+    db.session.refresh(practice_record)
+    assert result["practice_updated"] is True
+    assert result["success"] is False
+    assert practice_record.workout_description == "Still saved"
+    assert "Could not DM saved-but-unsynced practice edit" in caplog.text
+
+
+def test_unposted_full_edit_returns_structured_success_without_dm(
+    db_session, practice_record, monkeypatch
+):
+    refresh_result = {
+        "announcement": {"success": False, "error": "No root"},
+    }
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: refresh_result,
+    )
+    client = MagicMock()
+
+    result = bolt_module._handle_practice_edit_full_submission(
+        ack=AckRecorder(),
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view={
+            "private_metadata": str(practice_record.id),
+            "state": {"values": _full_edit_values()},
+        },
+        client=client,
+        logger=logging.getLogger(__name__),
+    )
+
+    assert result == {
+        "success": True,
+        "practice_updated": True,
+        "refresh_results": refresh_result,
+    }
+    client.chat_postMessage.assert_not_called()

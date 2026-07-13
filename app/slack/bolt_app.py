@@ -25,6 +25,10 @@ logger = logging.getLogger(__name__)
 _bot_token = os.environ.get("SLACK_BOT_TOKEN")
 _app_token = os.environ.get("SLACK_APP_TOKEN")  # For Socket Mode (xapp-...)
 _signing_secret = os.environ.get("SLACK_SIGNING_SECRET")
+_FULL_EDIT_UNSYNCED_ERROR = (
+    "Practice changes were saved, but the Slack announcement was not updated. "
+    "Retry the edit or refresh the announcement."
+)
 
 # Module-level variables
 bolt_app = None
@@ -269,25 +273,12 @@ if _bot_token:
     @bolt_app.action("cancellation_reject")
     def handle_cancellation_decision(ack, body, action, client, logger):
         """Handle cancellation approval/rejection buttons."""
-        ack()
-
-        user_id = body["user"]["id"]
-        user_name = body["user"].get("name", "Unknown")
-        action_id = action["action_id"]
-        proposal_id = int(action["value"])
-        approved = (action_id == "cancellation_approve")
-
-        with get_app_context():
-            result = _process_cancellation_decision(proposal_id, approved, user_id, user_name)
-
-        decision_text = "approved" if approved else "rejected"
-        channel_id = body.get("channel", {}).get("id")
-        if channel_id:
-            client.chat_postEphemeral(
-                channel=channel_id,
-                user=user_id,
-                text=f"Decision recorded. Cancellation {decision_text}."
-            )
+        return _handle_cancellation_decision_action(
+            ack=ack,
+            body=body,
+            action=action,
+            client=client,
+        )
 
     @bolt_app.action("lead_confirm")
     @bolt_app.action("lead_need_sub")
@@ -928,6 +919,7 @@ if _bot_token:
             ack=ack,
             body=body,
             view=view,
+            client=client,
             logger=logger,
         )
 
@@ -1241,26 +1233,12 @@ if _bot_token:
     @bolt_app.event("reaction_added")
     def handle_reaction_added(event, logger):
         """Delegate an added reaction event to attendance routing."""
-        _delegate_reaction(event, removed=False)
+        return _delegate_reaction_event(event, removed=False)
 
     @bolt_app.event("reaction_removed")
     def handle_reaction_removed(event, logger):
         """Delegate a removed reaction event to attendance routing."""
-        _delegate_reaction(event, removed=True)
-
-    def _delegate_reaction(event, *, removed):
-        item = event.get("item", {})
-        if item.get("type") != "message":
-            return
-        from app.slack.practices.reactions import handle_attendance_reaction
-        with get_app_context():
-            handle_attendance_reaction(
-                channel=item.get("channel"),
-                message_ts=item.get("ts"),
-                reaction=event.get("reaction"),
-                slack_user_id=event.get("user"),
-                removed=removed,
-            )
+        return _handle_reaction_removed(event)
 
     # =========================================================================
     # Custom Functions (Workflow Builder Custom Steps)
@@ -1418,7 +1396,9 @@ def _parse_practice_authoring_values(
     return fields, errors
 
 
-def _handle_practice_edit_full_submission(ack, body, view, logger):
+def _handle_practice_edit_full_submission(
+    ack, body, view, logger, client=None
+):
     """Validate and persist the active full-edit modal submission."""
     user_id = body["user"]["id"]
     practice_id = int(view.get("private_metadata") or "0")
@@ -1448,6 +1428,7 @@ def _handle_practice_edit_full_submission(ack, body, view, logger):
             logger.error(f"Practice {practice_id} not found")
             return
 
+        had_root = bool(practice.slack_message_ts)
         previous_date = practice.date
         previous_location_id = practice.location_id
         previous_plan_reactions = [
@@ -1587,14 +1568,53 @@ def _handle_practice_edit_full_submission(ack, body, view, logger):
             previous_location_id=previous_location_id,
             practice=practice,
         )
-        refresh_practice_posts(
-            practice,
-            change_type="edit",
-            actor_slack_id=user_id,
-            notify=should_notify,
-            announcement_notice=announcement_notice,
-            previous_plan_reactions=previous_plan_reactions,
-        )
+        try:
+            refresh_results = refresh_practice_posts(
+                practice,
+                change_type="edit",
+                actor_slack_id=user_id,
+                notify=should_notify,
+                announcement_notice=announcement_notice,
+                previous_plan_reactions=previous_plan_reactions,
+            )
+        except Exception as exc:
+            logger.exception(
+                "Practice %s was saved but refresh raised", practice_id
+            )
+            refresh_results = {
+                "announcement": {"success": False, "error": str(exc)},
+            }
+
+        announcement = (refresh_results or {}).get("announcement") or {}
+        if had_root and announcement.get("success") is not True:
+            if client is not None:
+                try:
+                    client.chat_postMessage(
+                        channel=user_id,
+                        text=(
+                            ":warning: Your "
+                            + _FULL_EDIT_UNSYNCED_ERROR[0].lower()
+                            + _FULL_EDIT_UNSYNCED_ERROR[1:]
+                        ),
+                    )
+                except Exception:
+                    logger.warning(
+                        "Could not DM saved-but-unsynced practice edit to %s",
+                        user_id,
+                        exc_info=True,
+                    )
+            return {
+                "success": False,
+                "practice_updated": True,
+                "error": _FULL_EDIT_UNSYNCED_ERROR,
+                "refresh_results": refresh_results,
+            }
+
+        return {
+            "success": True,
+            "practice_updated": True,
+            "refresh_results": refresh_results,
+        }
 
 
 def _load_modal_ref_data():
@@ -1693,6 +1713,27 @@ def _post_practice_create_updates(client, channel_id, message_ts, practice_date,
                 client.chat_postEphemeral(channel=channel_id, user=user_id, text=confirm_text)
             except Exception as e:
                 logger.warning(f"Could not send ephemeral confirmation: {e}")
+
+
+def _delegate_reaction_event(event, *, removed):
+    """Validate one Bolt reaction envelope and delegate attendance routing."""
+    item = event.get("item", {})
+    if item.get("type") != "message":
+        return
+    from app.slack.practices.reactions import handle_attendance_reaction
+
+    with get_app_context():
+        return handle_attendance_reaction(
+            channel=item.get("channel"),
+            message_ts=item.get("ts"),
+            reaction=event.get("reaction"),
+            slack_user_id=event.get("user"),
+            removed=removed,
+        )
+
+
+def _handle_reaction_removed(event):
+    return _delegate_reaction_event(event, removed=True)
 
 
 def _process_rsvp(practice_id: int, status: str, user_id: str, user_name: str) -> dict:
@@ -1825,6 +1866,57 @@ def _process_rsvp_with_notes(practice_id: int, status: str, user_id: str, notes:
     return {"success": True}
 
 
+def _cancellation_decision_feedback(result, approved):
+    if result.get("success") is True:
+        decision = "approved" if approved else "rejected"
+        return f"Decision recorded. Cancellation {decision}."
+    if result.get("practice_cancelled") is True:
+        return (
+            ":warning: Cancellation was saved, but the Slack announcement "
+            "was not updated. Retry the announcement refresh."
+        )
+    known_errors = {
+        "Proposal not found": (
+            "Cancellation proposal not found. No decision was recorded."
+        ),
+        "Already decided": (
+            "Cancellation proposal was already decided. No new decision was "
+            "recorded."
+        ),
+    }
+    return known_errors.get(
+        result.get("error"),
+        "Cancellation decision was not recorded: "
+        f"{result.get('error') or 'Unknown error'}",
+    )
+
+
+def _handle_cancellation_decision_action(ack, body, action, client):
+    """Process one cancellation action and report its actual outcome."""
+    ack()
+    user_id = body["user"]["id"]
+    user_name = body["user"].get("name", "Unknown")
+    approved = action["action_id"] == "cancellation_approve"
+    proposal_id = int(action["value"])
+
+    with get_app_context():
+        result = _process_cancellation_decision(
+            proposal_id,
+            approved,
+            user_id,
+            user_name,
+        )
+
+    channel_id = body.get("channel", {}).get("id")
+    if channel_id:
+        client.chat_postEphemeral(
+            channel=channel_id,
+            user=user_id,
+            text=_cancellation_decision_feedback(result, approved),
+        )
+    return result
+
+
 def _process_cancellation_decision(
     proposal_id: int,
     approved: bool,
@@ -1851,19 +1943,43 @@ def _process_cancellation_decision(
         proposal.decided_by_user_id = user.id
 
     practice = proposal.practice
+    had_root = bool(practice.slack_message_ts)
     if approved:
         practice.status = PracticeStatus.CANCELLED.value
         practice.cancellation_reason = proposal.reason_summary
 
     db.session.commit()
 
-    decided_by_name = f"<@{user_id}>"
-
     if approved:
         from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='cancel', actor_slack_id=user_id)
+        try:
+            refresh_results = refresh_practice_posts(
+                practice,
+                change_type='cancel',
+                actor_slack_id=user_id,
+            )
+        except Exception as exc:
+            refresh_results = {
+                "announcement": {"success": False, "error": str(exc)},
+            }
+        announcement = (refresh_results or {}).get("announcement") or {}
+        if had_root and announcement.get("success") is not True:
+            return {
+                "success": False,
+                "practice_cancelled": True,
+                "error": (
+                    "Practice was cancelled, but its Slack announcement did "
+                    "not update"
+                ),
+                "refresh_results": refresh_results,
+            }
+        return {
+            "success": True,
+            "practice_cancelled": True,
+            "refresh_results": refresh_results,
+        }
 
-    return {"success": True}
+    return {"success": True, "practice_cancelled": False}
 
 
 def _process_lead_confirmation(practice_id: int, confirmed: bool, slack_user_id: str) -> dict:

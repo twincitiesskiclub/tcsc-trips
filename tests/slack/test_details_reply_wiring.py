@@ -1478,6 +1478,80 @@ class TestUpsertCombinedDetailsReply:
         assert ":six: Details A" in fallback
         assert ":seven: Details B" in fallback
 
+    def test_common_details_fallback_names_every_session_and_shared_content(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import _combined_details_payload
+
+        practices = _make_group_practices(2)
+        practices[0].date = datetime(2026, 7, 14, 18, 15)
+        practices[0].slack_session_emoji = "six"
+        practices[1].date = datetime(2026, 7, 15, 19, 15)
+        practices[1].slack_session_emoji = "seven"
+        common = [{
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Practice Details"},
+        }, {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Parking: Main lot"},
+        }]
+
+        with patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            side_effect=lambda item: item,
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            side_effect=[common, common],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_fallback_text",
+            side_effect=[
+                "Practice details for Tuesday, July 14. Parking: Main lot.",
+                "Practice details for Wednesday, July 15. Parking: Main lot.",
+            ],
+        ):
+            _blocks, fallback = _combined_details_payload(practices)
+
+        assert fallback == (
+            "Combined practice details shared by :six: Tuesday at 6:15 PM "
+            "and :seven: Wednesday at 7:15 PM. Parking: Main lot."
+        )
+
+    def test_common_details_fallback_is_guarded_without_losing_session_names(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import _combined_details_payload
+
+        practices = _make_group_practices(2)
+        practices[0].date = datetime(2026, 7, 14, 18, 15)
+        practices[0].slack_session_emoji = "six"
+        practices[1].date = datetime(2026, 7, 15, 19, 15)
+        practices[1].slack_session_emoji = "seven"
+        common = [{
+            "type": "header",
+            "text": {"type": "plain_text", "text": "Practice Details"},
+        }, {
+            "type": "section",
+            "text": {"type": "mrkdwn", "text": "Parking"},
+        }]
+        oversized = "Practice details for Tuesday, July 14. " + ("d" * 5_000)
+
+        with patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            side_effect=lambda item: item,
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            side_effect=[common, common],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_fallback_text",
+            return_value=oversized,
+        ):
+            _blocks, fallback = _combined_details_payload(practices)
+
+        assert ":six: Tuesday at 6:15 PM" in fallback
+        assert ":seven: Wednesday at 7:15 PM" in fallback
+        assert "shared" in fallback
+        assert len(fallback) <= 4_000
+
     def test_exception_is_swallowed(self, app_context):
         """Errors in _upsert_combined_details_reply must not propagate."""
         from app.slack.practices.announcements import _upsert_combined_details_reply

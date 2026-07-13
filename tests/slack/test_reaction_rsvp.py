@@ -10,6 +10,7 @@ from app.models import SlackUser, User, db
 from app.practices.interfaces import PracticeStatus, RSVPStatus
 from app.practices.models import Practice, PracticeRSVP
 from app.slack.practices.reactions import handle_attendance_reaction
+import app.slack.bolt_app as bolt_module
 
 
 TEST_PREFIX = "rrt-"
@@ -113,6 +114,13 @@ def _react(practice, slack_user_id, reaction, *, removed=False):
     )
 
 
+def _rsvps_for(practice, user=None):
+    query = PracticeRSVP.query.filter_by(practice_id=practice.id)
+    if user is not None:
+        query = query.filter_by(user_id=user.id)
+    return query
+
+
 def test_standalone_checkmark_creates_going_rsvp(db_session, linked_user):
     user, slack_user_id = linked_user
     practice = _practice(db_session)
@@ -124,7 +132,7 @@ def test_standalone_checkmark_creates_going_rsvp(db_session, linked_user):
         "action": "upserted",
         "practice_id": practice.id,
     }
-    rsvp = PracticeRSVP.query.one()
+    rsvp = _rsvps_for(practice, user).one()
     assert (rsvp.practice_id, rsvp.user_id, rsvp.status) == (
         practice.id,
         user.id,
@@ -149,7 +157,7 @@ def test_standalone_checkmark_upserts_existing_rsvp_to_going(
     result = _react(practice, slack_user_id, "white_check_mark")
 
     assert result["action"] == "upserted"
-    assert PracticeRSVP.query.one().status == RSVPStatus.GOING.value
+    assert _rsvps_for(practice, user).one().status == RSVPStatus.GOING.value
 
 
 def test_removing_checkmark_deletes_only_matching_going_rsvp(
@@ -176,7 +184,7 @@ def test_removing_checkmark_deletes_only_matching_going_rsvp(
         "action": "removed",
         "practice_id": practice.id,
     }
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(practice, user).count() == 0
 
 
 def test_removing_checkmark_leaves_non_going_rsvp_untouched(
@@ -201,7 +209,7 @@ def test_removing_checkmark_leaves_non_going_rsvp_untouched(
         "success": True,
         "ignored": "no_matching_going_rsvp",
     }
-    assert PracticeRSVP.query.one().status == RSVPStatus.MAYBE.value
+    assert _rsvps_for(practice, user).one().status == RSVPStatus.MAYBE.value
 
 
 @pytest.mark.parametrize(
@@ -223,7 +231,7 @@ def test_non_attendance_reactions_are_ignored(
     result = _react(practice, slack_user_id, reaction)
 
     assert result == {"success": True, "ignored": "not_attendance"}
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(practice).count() == 0
 
 
 def test_persisted_combined_emoji_routes_only_to_exact_sibling(
@@ -253,7 +261,7 @@ def test_plan_reactions_do_not_route_combined_practices(
         session_emoji="six",
         plan_reactions=[{"emoji": reaction, "label": "Plan choice"}],
     )
-    _practice(
+    seven = _practice(
         db_session,
         hour=19,
         session_emoji="seven",
@@ -263,7 +271,8 @@ def test_plan_reactions_do_not_route_combined_practices(
     result = _react(six, slack_user_id, reaction)
 
     assert result == {"success": True, "ignored": "not_attendance"}
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(six).count() == 0
+    assert _rsvps_for(seven).count() == 0
 
 
 def test_blank_multi_sibling_legacy_root_persists_session_emoji_once(
@@ -276,11 +285,26 @@ def test_blank_multi_sibling_legacy_root_persists_session_emoji_once(
     result = _react(six, slack_user_id, "seven")
 
     assert result["practice_id"] == seven.id
-    assert PracticeRSVP.query.one().practice_id == seven.id
+    assert _rsvps_for(seven).one().practice_id == seven.id
     assert (six.slack_session_emoji, seven.slack_session_emoji) == (
         "six",
         "seven",
     )
+
+
+def test_partial_legacy_mapping_preserves_saved_and_assigns_only_blank(
+    db_session, linked_user
+):
+    user, slack_user_id = linked_user
+    six = _practice(db_session, hour=18, session_emoji="six")
+    seven = _practice(db_session, hour=19)
+
+    result = _react(six, slack_user_id, "seven")
+
+    assert result["practice_id"] == seven.id
+    assert six.slack_session_emoji == "six"
+    assert seven.slack_session_emoji == "seven"
+    assert _rsvps_for(seven, user).one().status == RSVPStatus.GOING.value
 
 
 def test_cancelled_practice_is_ignored(db_session, linked_user):
@@ -292,7 +316,7 @@ def test_cancelled_practice_is_ignored(db_session, linked_user):
     result = _react(practice, slack_user_id, "white_check_mark")
 
     assert result == {"success": True, "ignored": "cancelled"}
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(practice).count() == 0
 
 
 def test_same_timestamp_in_another_channel_is_not_linked(
@@ -309,7 +333,7 @@ def test_same_timestamp_in_another_channel_is_not_linked(
     )
 
     assert result == {"success": True, "ignored": "message_not_linked"}
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(other_channel_practice).count() == 0
 
 
 def test_unlinked_slack_user_is_ignored(db_session):
@@ -320,7 +344,7 @@ def test_unlinked_slack_user_is_ignored(db_session):
     )
 
     assert result == {"success": True, "ignored": "unlinked_user"}
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(practice).count() == 0
 
 
 @pytest.mark.parametrize(
@@ -348,4 +372,22 @@ def test_invalid_reaction_event_is_ignored(
     result = handle_attendance_reaction(**event)
 
     assert result == {"success": True, "ignored": "invalid_event"}
-    assert PracticeRSVP.query.count() == 0
+    assert _rsvps_for(practice).count() == 0
+
+
+def test_bolt_reaction_removed_delegates_with_removed_true(monkeypatch):
+    calls = []
+    event = {
+        "item": {"type": "message", "channel": "C-ROOT", "ts": "root.1"},
+        "reaction": "white_check_mark",
+        "user": "U-MEMBER",
+    }
+    monkeypatch.setattr(
+        bolt_module,
+        "_delegate_reaction_event",
+        lambda delegated, *, removed: calls.append((delegated, removed)),
+    )
+
+    bolt_module._handle_reaction_removed(event)
+
+    assert calls == [(event, True)]

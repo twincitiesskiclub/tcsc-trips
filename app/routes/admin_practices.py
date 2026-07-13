@@ -18,6 +18,10 @@ from ..practices.plan_reactions import (
 from sqlalchemy.orm import joinedload
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
+_EDIT_UNSYNCED_ERROR = (
+    'Practice was updated, but its Slack announcement did not update. '
+    'Retry the edit to refresh the announcement.'
+)
 
 
 def _activity_json(activity):
@@ -297,6 +301,8 @@ def create_practice():
 def edit_practice(practice_id):
     """Update an existing practice."""
     practice = Practice.query.get_or_404(practice_id)
+    had_root = bool(practice.slack_message_ts)
+    practice_updated = False
 
     try:
         data = request.get_json()
@@ -414,6 +420,7 @@ def edit_practice(practice_id):
                     db.session.add(assist)
 
         db.session.commit()
+        practice_updated = True
 
         # Update all Slack posts
         from app.slack.practices import refresh_practice_posts
@@ -425,12 +432,19 @@ def edit_practice(practice_id):
             previous_location_id=previous_location_id,
             practice=practice,
         )
-        refresh_practice_posts(
+        results = refresh_practice_posts(
             practice,
             change_type='edit',
             announcement_notice=announcement_notice,
             previous_plan_reactions=previous_plan_reactions,
         )
+        announcement = (results or {}).get('announcement') or {}
+        if had_root and announcement.get('success') is not True:
+            return jsonify({
+                'success': False,
+                'practice_updated': True,
+                'error': _EDIT_UNSYNCED_ERROR,
+            }), 502
 
         return jsonify({
             'success': True,
@@ -439,6 +453,17 @@ def edit_practice(practice_id):
 
     except Exception as e:
         db.session.rollback()
+        if practice_updated:
+            if had_root:
+                return jsonify({
+                    'success': False,
+                    'practice_updated': True,
+                    'error': _EDIT_UNSYNCED_ERROR,
+                }), 502
+            return jsonify({
+                'success': True,
+                'message': 'Practice updated successfully',
+            })
         return jsonify({'error': str(e)}), 500
 
 

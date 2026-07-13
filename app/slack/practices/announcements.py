@@ -335,13 +335,39 @@ def _combined_details_payload(practices):
                 "emoji": True,
             },
         }] + content
+        session_labels = [
+            f":{item.slack_session_emoji}: "
+            f"{item.date.strftime('%A at %-I:%M %p')}"
+            for item in practices
+        ]
+        if len(session_labels) == 1:
+            named_sessions = session_labels[0]
+        else:
+            named_sessions = (
+                ", ".join(session_labels[:-1])
+                + f" and {session_labels[-1]}"
+            )
+        first_date_prefix = (
+            "Practice details for "
+            f"{practice.date.strftime('%A, %B %-d')}."
+        )
+        shared_content = fallback.removeprefix(first_date_prefix).strip()
+        shared_fallback = (
+            f"Combined practice details shared by {named_sessions}."
+        )
+        if shared_content:
+            shared_fallback += f" {shared_content}"
         return (
             guard_slack_blocks(
                 blocks,
                 surface="combined_practice_details",
                 practice_id=practice.id,
             ),
-            fallback,
+            guard_fallback_text(
+                shared_fallback,
+                surface="combined_practice_details",
+                practice_id=practice.id,
+            ),
         )
 
     groups = []

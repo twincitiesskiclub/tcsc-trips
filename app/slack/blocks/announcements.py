@@ -25,15 +25,27 @@ from app.utils import utc_naive_to_central_naive
 _SPACER = "\n\u200b"
 _WORKOUT_PLACEHOLDER = "Workout details coming soon."
 _FALLBACK_STATUS_MAX = 80
-_FALLBACK_LOCATION_MAX = 300
-_FALLBACK_WORKOUT_MAX = 1200
-_FALLBACK_NOTICE_MAX = 300
-_FALLBACK_ALERTS_MAX = 800
+_FALLBACK_LOCATION_MAX = 250
+_FALLBACK_WORKOUT_MAX = 1000
+_FALLBACK_NOTES_MAX = 600
+_FALLBACK_SOCIAL_MAX = 250
+_FALLBACK_NOTICE_MAX = 250
+_FALLBACK_ALERTS_MAX = 550
 _FALLBACK_PLAN_MAX = 600
 _DETAILS_FALLBACK_PARKING_MAX = 1000
 _DETAILS_FALLBACK_GEAR_MAX = 800
 _DETAILS_FALLBACK_CONDITIONS_MAX = 1700
 _COMBINED_CANCELLATION_REASON_MAX = 600
+_COMBINED_FALLBACK_NOTICE_MAX = 150
+_COMBINED_FALLBACK_LOCATION_MAX = 160
+_COMBINED_FALLBACK_REASON_MAX = 150
+_COMBINED_FALLBACK_SHARED_WORKOUT_MAX = 700
+_COMBINED_FALLBACK_SESSION_WORKOUT_MAX = 220
+_COMBINED_FALLBACK_SHARED_NOTES_MAX = 500
+_COMBINED_FALLBACK_SESSION_NOTES_MAX = 140
+_COMBINED_FALLBACK_SHARED_SOCIAL_MAX = 200
+_COMBINED_FALLBACK_SESSION_SOCIAL_MAX = 100
+_COMBINED_FALLBACK_PLAN_MAX = 500
 
 
 def _activity_label(activities) -> str:
@@ -484,6 +496,32 @@ def build_practice_fallback_text(
         ),
         f"Workout: {workout}",
     ]
+    notes = str(getattr(practice, "logistics_notes", None) or "").strip()
+    if notes:
+        parts.append(
+            "Notes: "
+            + truncate_slack_text(
+                notes,
+                _FALLBACK_NOTES_MAX,
+                field="logistics_notes",
+                surface="practice_fallback",
+                practice_id=practice.id,
+            )
+        )
+    if getattr(practice, "has_social", False):
+        social = getattr(practice, "social_location", None)
+        social_name = str(getattr(social, "name", None) or "").strip()
+        if social_name:
+            bounded_name = truncate_slack_text(
+                social_name,
+                _FALLBACK_SOCIAL_MAX,
+                field="social_location_name",
+                surface="practice_fallback",
+                practice_id=practice.id,
+            )
+            parts.append(f"Social after at {bounded_name}.")
+        else:
+            parts.append("Social after practice.")
     urgent_categories = _urgent_exception_categories(
         practice, conditions, announcement_notice=announcement_notice
     )
@@ -493,19 +531,13 @@ def build_practice_fallback_text(
     }
     for field, lines in urgent_categories:
         budget = urgent_budgets.get(field, 100)
-        separator_chars = max(0, len(lines) - 1)
-        item_budget = max(1, (budget - separator_chars) // len(lines))
-        bounded_lines = [
-            truncate_slack_text(
-                line,
-                item_budget,
-                field=field,
-                surface="practice_fallback",
-                practice_id=practice.id,
-            )
-            for line in lines
-        ]
-        parts.append(" ".join(bounded_lines))
+        parts.append(truncate_slack_text(
+            " ".join(lines),
+            budget,
+            field=field,
+            surface="practice_fallback",
+            practice_id=practice.id,
+        ))
     parts.append("RSVP with ✅.")
     if getattr(practice, "plan_reactions", None):
         plan = truncate_slack_text(
@@ -887,13 +919,25 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
         raise ValueError("Combined builders require persisted session reactions")
     lines = [f"Strength practices · {_combined_date_label(ordered)}."]
     if announcement_notice:
-        lines.append(announcement_notice)
+        lines.append(truncate_slack_text(
+            announcement_notice,
+            _COMBINED_FALLBACK_NOTICE_MAX,
+            field="announcement_notice",
+            surface="combined_practice_fallback",
+            practice_id=ordered[0].id,
+        ))
     for practice in ordered:
-        location = practice.location.name if practice.location else "TBD"
+        location = truncate_slack_text(
+            practice.location.name if practice.location else "TBD",
+            _COMBINED_FALLBACK_LOCATION_MAX,
+            field="location_name",
+            surface="combined_practice_fallback",
+            practice_id=practice.id,
+        )
         if _is_cancelled(practice):
             reason = truncate_slack_text(
                 practice.cancellation_reason or "Cancelled",
-                _COMBINED_CANCELLATION_REASON_MAX,
+                _COMBINED_FALLBACK_REASON_MAX,
                 field="cancellation_reason",
                 surface="combined_practice_fallback",
                 practice_id=practice.id,
@@ -903,7 +947,7 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
             status = "Active"
         lines.append(
             f"{practice.date.strftime('%A, %B %-d at %-I:%M %p')}; "
-            f"{status}; {location}; attend with "
+            f"{status}; {location}; session "
             f":{practice.slack_session_emoji}:."
         )
     representative = ordered[0]
@@ -913,30 +957,100 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
         or _WORKOUT_PLACEHOLDER,
     )
     if same_workout:
-        lines.append(f"Workout: {shared_workout}")
-    else:
-        lines.extend(
-            f"{practice.date.strftime('%A at %-I:%M %p')} workout: "
-            f"{str(practice.workout_description or '').strip() or _WORKOUT_PLACEHOLDER}"
-            for practice in ordered
+        workout = truncate_slack_text(
+            shared_workout,
+            _COMBINED_FALLBACK_SHARED_WORKOUT_MAX,
+            field="workout_description",
+            surface="combined_practice_fallback",
+            practice_id=representative.id,
         )
+        lines.append(f"Workout: {workout}")
+    else:
+        for practice in ordered:
+            workout = truncate_slack_text(
+                str(practice.workout_description or "").strip()
+                or _WORKOUT_PLACEHOLDER,
+                _COMBINED_FALLBACK_SESSION_WORKOUT_MAX,
+                field="workout_description",
+                surface="combined_practice_fallback",
+                practice_id=practice.id,
+            )
+            lines.append(
+                f"{practice.date.strftime('%A at %-I:%M %p')} workout: "
+                f"{workout}"
+            )
     same_notes, shared_notes = _same_normalized_text(
         ordered, lambda item: str(item.logistics_notes or "").strip()
     )
     if same_notes and shared_notes:
-        lines.append(f"Notes: {shared_notes}")
-    elif not same_notes:
-        lines.extend(
-            f"{practice.date.strftime('%A at %-I:%M %p')} notes: "
-            f"{practice.logistics_notes}"
-            for practice in ordered if practice.logistics_notes
+        notes = truncate_slack_text(
+            shared_notes,
+            _COMBINED_FALLBACK_SHARED_NOTES_MAX,
+            field="logistics_notes",
+            surface="combined_practice_fallback",
+            practice_id=representative.id,
         )
+        lines.append(f"Notes: {notes}")
+    elif not same_notes:
+        for practice in ordered:
+            notes = str(practice.logistics_notes or "").strip()
+            if not notes:
+                continue
+            notes = truncate_slack_text(
+                notes,
+                _COMBINED_FALLBACK_SESSION_NOTES_MAX,
+                field="logistics_notes",
+                surface="combined_practice_fallback",
+                practice_id=practice.id,
+            )
+            lines.append(
+                f"{practice.date.strftime('%A at %-I:%M %p')} notes: {notes}"
+            )
+    same_social, _shared_social = _same_value(ordered, _social_value)
+    social_rows = [representative] if same_social else ordered
+    for practice in social_rows:
+        if not practice.has_social:
+            continue
+        social = getattr(practice, "social_location", None)
+        social_name = str(getattr(social, "name", None) or "").strip()
+        social_limit = (
+            _COMBINED_FALLBACK_SHARED_SOCIAL_MAX
+            if same_social else _COMBINED_FALLBACK_SESSION_SOCIAL_MAX
+        )
+        if social_name:
+            social_name = truncate_slack_text(
+                social_name,
+                social_limit,
+                field="social_location_name",
+                surface="combined_practice_fallback",
+                practice_id=practice.id,
+            )
+            social_text = f"Social after at {social_name}."
+        else:
+            social_text = "Social after practice."
+        if same_social:
+            lines.append(social_text)
+        else:
+            lines.append(
+                f"{practice.date.strftime('%A at %-I:%M %p')} {social_text}"
+            )
+    mappings = "; ".join(
+        f":{practice.slack_session_emoji}: for "
+        f"{practice.date.strftime('%A at %-I:%M %p')}"
+        for practice in ordered
+    )
+    lines.append(f"RSVP: bop {mappings}.")
     shared_plan = _shared_plan_reactions(ordered)
     if shared_plan:
+        plan = truncate_slack_text(
+            format_plan_reaction_legend(shared_plan),
+            _COMBINED_FALLBACK_PLAN_MAX,
+            field="plan_reactions",
+            surface="combined_practice_fallback",
+            practice_id=representative.id,
+        )
         lines.append(
-            "Your Practice Plan: "
-            + format_plan_reaction_legend(shared_plan)
-            + "."
+            "Your Practice Plan: " + plan + "."
         )
     return guard_fallback_text(
         " ".join(lines),

@@ -605,6 +605,89 @@ def test_announcement_fallback_covers_hero_and_omits_routine_details(
     assert "Trails" not in fallback
 
 
+def test_announcement_fallback_normal_copy_includes_root_only_member_content(
+    practice_info, empty_conditions
+):
+    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
+
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info,
+        empty_conditions,
+    )
+
+    assert fallback == (
+        "Status: Scheduled. "
+        "Monday, July 13 at 6:00 PM at Theodore Wirth. "
+        "Workout: 5 x 4min @ threshold, 2min easy between. "
+        "Notes: Meet at the flagpole. "
+        "Social after at Utepils Brewing. "
+        "RSVP with ✅. "
+        "Your Practice Plan: :evergreen_tree: Endurance instead of intervals."
+    )
+
+
+def test_announcement_fallback_names_generic_social_when_destination_is_missing(
+    practice_info, empty_conditions
+):
+    practice_info.social_location = None
+
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info,
+        empty_conditions,
+    )
+
+    assert "Social after practice." in fallback
+
+
+def test_long_root_content_cannot_remove_social_rsvp_or_plan(
+    practice_info, empty_conditions
+):
+    practice_info.workout_description = "Workout start " + ("w" * 2_500)
+    practice_info.logistics_notes = "Notes start " + ("n" * 2_500)
+    practice_info.social_location.name = "Social destination " + ("s" * 2_500)
+    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
+
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info,
+        empty_conditions,
+    )
+
+    assert "Workout start" in fallback
+    assert "Notes start" in fallback
+    assert "Social after at Social destination" in fallback
+    assert "RSVP with ✅." in fallback
+    assert "Your Practice Plan:" in fallback
+    assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert len(fallback) <= FALLBACK_TEXT_MAX
+
+
+def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
+    practice_info, empty_conditions
+):
+    practice_info.workout_description = "w" * 2_500
+    practice_info.logistics_notes = "n" * 2_500
+    practice_info.social_location.name = "s" * 2_500
+    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
+    alerts = [
+        SimpleNamespace(headline=f"Alert {index} " + ("a" * 100), event=None)
+        for index in range(1_000)
+    ]
+    conditions = replace(empty_conditions, weather=_weather(alerts=alerts))
+
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info,
+        conditions,
+        announcement_notice="m" * 2_500,
+    )
+
+    assert "Notes:" in fallback
+    assert "Social after at" in fallback
+    assert "RSVP with ✅." in fallback
+    assert "Your Practice Plan:" in fallback
+    assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert len(fallback) <= FALLBACK_TEXT_MAX
+
+
 def test_announcement_fallback_includes_plain_practice_status(
     practice_info, conditions
 ):

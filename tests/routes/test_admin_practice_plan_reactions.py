@@ -298,6 +298,82 @@ def test_workout_only_edit_passes_no_temporary_notice(
     assert refresh_calls[0][1]["announcement_notice"] is None
 
 
+def test_posted_web_edit_returns_saved_but_unsynced_feedback(
+    admin_client, db_session, practice_with_plan_reactions, monkeypatch
+):
+    practice_with_plan_reactions.slack_channel_id = "C-POSTED"
+    practice_with_plan_reactions.slack_message_ts = "root.1"
+    db.session.commit()
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: {
+            "announcement": {"success": False, "error": "Slack failed"},
+        },
+    )
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={"workout_description": "Saved workout"},
+    )
+
+    assert response.status_code == 502
+    assert response.get_json() == {
+        "success": False,
+        "practice_updated": True,
+        "error": (
+            "Practice was updated, but its Slack announcement did not update. "
+            "Retry the edit to refresh the announcement."
+        ),
+    }
+    db.session.refresh(practice_with_plan_reactions)
+    assert practice_with_plan_reactions.workout_description == "Saved workout"
+
+
+def test_unposted_web_edit_remains_successful_when_refresh_has_no_announcement(
+    admin_client, db_session, practice_with_plan_reactions, monkeypatch
+):
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: {
+            "announcement": {"success": False, "error": "No root"},
+        },
+    )
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={"workout_description": "No-root workout"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+    db.session.refresh(practice_with_plan_reactions)
+    assert practice_with_plan_reactions.workout_description == "No-root workout"
+
+
+def test_web_edit_ignores_later_refresh_failures_after_announcement_success(
+    admin_client, db_session, practice_with_plan_reactions, monkeypatch
+):
+    practice_with_plan_reactions.slack_channel_id = "C-POSTED"
+    practice_with_plan_reactions.slack_message_ts = "root.1"
+    db.session.commit()
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: {
+            "announcement": {"success": True},
+            "collab": {"success": False, "error": "Collab failed"},
+            "weekly_summary": {"success": False, "error": "Summary failed"},
+        },
+    )
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={"workout_description": "Root-synced workout"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json()["success"] is True
+
+
 def test_restore_defaults_resolves_current_selected_sources(
     admin_client,
     db_session,

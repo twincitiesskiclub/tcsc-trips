@@ -17,6 +17,7 @@ from app.slack.client import (
     assign_combined_session_emojis,
     get_lead_confirmation_emoji_for_practice,
 )
+from app.slack.blocks.text import FALLBACK_TEXT_MAX
 
 
 @pytest.fixture
@@ -248,6 +249,96 @@ def test_whitespace_only_shared_content_differences_stay_compact():
     assert "Social after at Cafe  A" in text
     assert "Wednesday at 7:15 PM workout" not in fallback
     assert "Workout: 3 x 8   strength circuit" in fallback
+
+
+def test_combined_fallback_normal_shared_copy_is_exact():
+    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
+    practices = [
+        combined_practice(1, 14, 18, "six", social="Cafe A", plan=plan),
+        combined_practice(2, 15, 19, "seven", social="Cafe A", plan=plan),
+    ]
+
+    fallback = build_combined_fallback_text(practices)
+
+    assert fallback == (
+        "Strength practices · July 14–15. "
+        "Tuesday, July 14 at 6:15 PM; Active; Balance Fitness; session :six:. "
+        "Wednesday, July 15 at 7:15 PM; Active; Balance Fitness; session :seven:. "
+        "Workout: 3 x 8 strength circuit "
+        "Notes: Bring indoor shoes "
+        "Social after at Cafe A. "
+        "RSVP: bop :six: for Tuesday at 6:15 PM; "
+        ":seven: for Wednesday at 7:15 PM. "
+        "Your Practice Plan: :evergreen_tree: Endurance instead."
+    )
+
+
+def _assert_combined_fallback_tail_is_accessible(fallback, practices):
+    for practice in practices:
+        assert practice.date.strftime("%A, %B %-d at %-I:%M %p") in fallback
+        assert f"session :{practice.slack_session_emoji}:" in fallback
+        assert f":{practice.slack_session_emoji}: for " in fallback
+    assert "Social after" in fallback
+    assert "RSVP:" in fallback
+    assert "Your Practice Plan:" in fallback
+    assert ":evergreen_tree: Endurance instead" in fallback
+    assert len(fallback) <= FALLBACK_TEXT_MAX
+
+
+def test_long_shared_combined_content_preserves_sessions_social_and_tail():
+    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
+    workout = "Shared workout " + ("w" * 2_500)
+    notes = "Shared notes " + ("n" * 2_500)
+    practices = [
+        combined_practice(
+            index,
+            13 + index,
+            17 + index,
+            emoji,
+            workout=workout,
+            notes=notes,
+            social="Shared Cafe",
+            plan=plan,
+        )
+        for index, emoji in enumerate(("six", "seven", "eight"), start=1)
+    ]
+
+    fallback = build_combined_fallback_text(practices)
+
+    assert "Shared workout" in fallback
+    assert "Shared notes" in fallback
+    assert "Social after at Shared Cafe." in fallback
+    _assert_combined_fallback_tail_is_accessible(fallback, practices)
+
+
+@pytest.mark.parametrize("long_index", [0, 1])
+def test_long_first_or_middle_divergent_content_preserves_every_session_and_tail(
+    long_index,
+):
+    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
+    practices = []
+    for index, emoji in enumerate(("six", "seven", "eight")):
+        marker = " target" if index == long_index else ""
+        suffix = str(index) * 2_500
+        practices.append(combined_practice(
+            index + 1,
+            14 + index,
+            18 + index,
+            emoji,
+            workout=f"Workout {index}{marker} {suffix}",
+            notes=f"Notes {index}{marker} {suffix}",
+            social=f"Cafe {index}",
+            plan=plan,
+        ))
+
+    fallback = build_combined_fallback_text(practices)
+
+    for index in range(3):
+        assert f"Workout {index}" in fallback
+        assert f"Notes {index}" in fallback
+        assert f"Cafe {index}" in fallback
+    assert "target" in fallback
+    _assert_combined_fallback_tail_is_accessible(fallback, practices)
 
 
 def test_different_plan_snapshots_hide_shared_plan_legend():
