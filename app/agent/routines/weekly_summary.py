@@ -151,14 +151,31 @@ def run_weekly_summary(
                 "slack_message_ts": message_ts,
                 "refresh_linked": False,
             }
+        if not practices:
+            return {
+                **result,
+                "slack_posted": True,
+                "slack_message_ts": message_ts,
+                "refresh_linked": False,
+            }
 
         original_timestamps = {
             practice.id: practice.slack_weekly_summary_ts
             for practice in practices
         }
-        try:
+
+        def apply_links():
             for practice in practices:
                 practice.slack_weekly_summary_ts = message_ts
+
+        def restore_originals():
+            for practice in practices:
+                practice.slack_weekly_summary_ts = original_timestamps[
+                    practice.id
+                ]
+
+        try:
+            apply_links()
             db.session.commit()
         except Exception as exc:
             try:
@@ -168,10 +185,7 @@ def run_weekly_summary(
                     "Could not roll back weekly summary timestamp links",
                     exc_info=True,
                 )
-            for practice in practices:
-                practice.slack_weekly_summary_ts = original_timestamps[
-                    practice.id
-                ]
+            restore_originals()
             cleanup = _delete_slack_message(
                 client,
                 channel=channel_id,
@@ -184,12 +198,46 @@ def run_weekly_summary(
                 "refresh_linked": False,
                 "cleanup": cleanup,
             }
-            if not cleanup["success"]:
+            if cleanup.get("success"):
+                return failure
+
+            try:
+                apply_links()
+                db.session.commit()
+            except Exception as recovery_error:
+                try:
+                    db.session.rollback()
+                except Exception:
+                    logger.warning(
+                        "Could not roll back weekly summary recovery link",
+                        exc_info=True,
+                    )
+                restore_originals()
+                logger.critical(
+                    "Ambiguous Slack orphan after weekly summary links: "
+                    "channel=%s ts=%s; initial_error=%s recovery_error=%s",
+                    channel_id,
+                    message_ts,
+                    exc,
+                    recovery_error,
+                )
+                failure["slack_error"] = (
+                    f"{exc}; recovery commit failed: {recovery_error}"
+                )
                 failure["ambiguous_orphan"] = {
                     "channel_id": channel_id,
                     "message_ts": message_ts,
                 }
-            return failure
+                return failure
+
+            return {
+                **result,
+                "slack_posted": True,
+                "slack_message_ts": message_ts,
+                "refresh_linked": True,
+                "recovered": True,
+                "cleanup": cleanup,
+            }
         return {
             **result,
             "slack_posted": True,

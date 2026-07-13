@@ -376,9 +376,30 @@ def test_channel_override_posts_preview_without_persisting_refresh_links():
     outcome.db.session.commit.assert_not_called()
 
 
-@pytest.mark.parametrize("cleanup_fails", [False, True])
-def test_production_link_commit_failure_restores_rows_and_compensates(
+@pytest.mark.parametrize(
+    ("cleanup_fails", "commit_effects", "expected_outcome"),
+    [
+        (False, [RuntimeError("database commit failed")], "cleaned"),
+        (
+            True,
+            [RuntimeError("database commit failed"), None],
+            "recovered",
+        ),
+        (
+            True,
+            [
+                RuntimeError("database commit failed"),
+                RuntimeError("recovery commit failed"),
+            ],
+            "ambiguous",
+        ),
+    ],
+)
+def test_production_link_commit_failure_compensates_or_recovers_once(
+    caplog,
     cleanup_fails,
+    commit_effects,
+    expected_outcome,
 ):
     sessions = [
         practice(1, datetime(2026, 7, 14, 18, 15)),
@@ -392,26 +413,49 @@ def test_production_link_commit_failure_restores_rows_and_compensates(
         FakeQuery(sessions),
         week_start=date(2026, 7, 13),
         dry_run=False,
-        commit_error=RuntimeError("database commit failed"),
+        commit_error=commit_effects,
         cleanup_error=cleanup_error,
     )
 
-    assert outcome.result["slack_posted"] is False
-    assert "database commit failed" in outcome.result["slack_error"]
-    assert outcome.result["cleanup"]["success"] is not cleanup_fails
-    assert outcome.result["refresh_linked"] is False
-    if cleanup_fails:
+    recovered = expected_outcome == "recovered"
+    assert outcome.result["slack_posted"] is recovered
+    assert outcome.result["refresh_linked"] is recovered
+    if recovered:
+        assert outcome.result["recovered"] is True
+        assert [item.slack_weekly_summary_ts for item in sessions] == [
+            "1783980000.000100",
+            "1783980000.000100",
+        ]
+    else:
+        assert "database commit failed" in outcome.result["slack_error"]
+        assert [item.slack_weekly_summary_ts for item in sessions] == [None, None]
+    if expected_outcome == "ambiguous":
         assert outcome.result["ambiguous_orphan"] == {
             "channel_id": "C-WEEK",
             "message_ts": "1783980000.000100",
         }
+        assert "channel=C-WEEK ts=1783980000.000100" in caplog.text
     else:
         assert "ambiguous_orphan" not in outcome.result
-    assert [item.slack_weekly_summary_ts for item in sessions] == [None, None]
-    outcome.db.session.rollback.assert_called_once_with()
+    assert outcome.db.session.commit.call_count == (2 if cleanup_fails else 1)
+    assert outcome.db.session.rollback.call_count == (
+        2 if expected_outcome == "ambiguous" else 1
+    )
     outcome.client.chat_delete.assert_called_once_with(
         channel="C-WEEK", ts="1783980000.000100"
     )
+
+
+def test_empty_production_week_posts_without_claiming_refresh_linkage():
+    outcome = run_with_query(
+        FakeQuery([]),
+        week_start=date(2026, 7, 13),
+        dry_run=False,
+    )
+
+    assert outcome.result["slack_posted"] is True
+    assert outcome.result["refresh_linked"] is False
+    outcome.db.session.commit.assert_not_called()
 
 
 def test_dry_run_builds_full_preview_but_writes_nothing():

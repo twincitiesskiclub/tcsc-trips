@@ -157,6 +157,62 @@ def _link_failure_result(*, error, cleanup, channel_id, message_ts):
     return result
 
 
+def _recover_ambiguous_link(
+    *,
+    initial_error,
+    cleanup,
+    channel_id,
+    message_ts,
+    apply_link,
+    restore_originals,
+    commit,
+    rollback,
+    logger,
+    context,
+):
+    """Link a known Slack message once when compensating deletion failed."""
+    if cleanup.get("success"):
+        return _link_failure_result(
+            error=initial_error,
+            cleanup=cleanup,
+            channel_id=channel_id,
+            message_ts=message_ts,
+        )
+
+    try:
+        apply_link()
+        commit()
+    except Exception as recovery_error:
+        try:
+            rollback()
+        except Exception:
+            logger.warning(
+                "Could not roll back %s recovery link",
+                context,
+                exc_info=True,
+            )
+        restore_originals()
+        logger.critical(
+            "Ambiguous Slack orphan after %s: channel=%s ts=%s; "
+            "initial_error=%s recovery_error=%s",
+            context,
+            channel_id,
+            message_ts,
+            initial_error,
+            recovery_error,
+        )
+        return _link_failure_result(
+            error=(
+                f"{initial_error}; recovery commit failed: {recovery_error}"
+            ),
+            cleanup=cleanup,
+            channel_id=channel_id,
+            message_ts=message_ts,
+        )
+
+    return {"success": True, "recovered": True, "cleanup": cleanup}
+
+
 def _rollback_session(context):
     try:
         db.session.rollback()
@@ -421,15 +477,21 @@ def _upsert_combined_details_reply(client, practices):
             "success": False,
             "error": "Slack returned no Details timestamp",
         }
-    try:
+    def apply_link():
         for practice in practices:
             practice.slack_details_ts = details_ts
+
+    def restore_originals():
+        for practice in practices:
+            practice.slack_details_ts = original[practice.id]
+
+    try:
+        apply_link()
         db.session.commit()
         return {"success": True, "message_ts": details_ts}
     except Exception as exc:
         _rollback_session("new combined Details timestamp link")
-        for practice in practices:
-            practice.slack_details_ts = original[practice.id]
+        restore_originals()
         cleanup = _delete_slack_message(
             client,
             channel=representative.slack_channel_id,
@@ -440,12 +502,21 @@ def _upsert_combined_details_reply(client, practices):
             [practice.id for practice in practices],
             exc,
         )
-        return _link_failure_result(
-            error=exc,
+        recovery = _recover_ambiguous_link(
+            initial_error=exc,
             cleanup=cleanup,
             channel_id=representative.slack_channel_id,
             message_ts=details_ts,
+            apply_link=apply_link,
+            restore_originals=restore_originals,
+            commit=db.session.commit,
+            rollback=db.session.rollback,
+            logger=current_app.logger,
+            context="combined Details link",
         )
+        if recovery.get("success"):
+            return {**recovery, "message_ts": details_ts}
+        return recovery
 
 
 def _upsert_details_reply(
@@ -544,13 +615,19 @@ def _upsert_details_reply(
             "success": False,
             "error": "Slack did not return a Details timestamp",
         }
-    try:
+    def apply_link():
         practice.slack_details_ts = details_ts
+
+    def restore_originals():
+        practice.slack_details_ts = original_ts
+
+    try:
+        apply_link()
         db.session.commit()
         return {"success": True, "message_ts": details_ts}
     except Exception as exc:
         _rollback_session("new practice Details timestamp link")
-        practice.slack_details_ts = original_ts
+        restore_originals()
         cleanup = _delete_slack_message(
             client,
             channel=practice.slack_channel_id,
@@ -561,12 +638,21 @@ def _upsert_details_reply(
             practice.id,
             exc,
         )
-        return _link_failure_result(
-            error=exc,
+        recovery = _recover_ambiguous_link(
+            initial_error=exc,
             cleanup=cleanup,
             channel_id=practice.slack_channel_id,
             message_ts=details_ts,
+            apply_link=apply_link,
+            restore_originals=restore_originals,
+            commit=db.session.commit,
+            rollback=db.session.rollback,
+            logger=current_app.logger,
+            context=f"practice Details link for #{practice.id}",
         )
+        if recovery.get("success"):
+            return {**recovery, "message_ts": details_ts}
+        return recovery
 
 
 def post_practice_announcement(
@@ -619,6 +705,18 @@ def post_practice_announcement(
     original_channel_id = practice.slack_channel_id
     original_message_ts = practice.slack_message_ts
     original_session_emoji = practice.slack_session_emoji
+
+    def apply_link():
+        practice.slack_message_ts = message_ts
+        practice.slack_channel_id = channel_id
+        if not original_message_ts:
+            practice.slack_session_emoji = None
+
+    def restore_originals():
+        practice.slack_channel_id = original_channel_id
+        practice.slack_message_ts = original_message_ts
+        practice.slack_session_emoji = original_session_emoji
+
     try:
         response = client.chat_postMessage(
             channel=channel_id,
@@ -646,17 +744,13 @@ def post_practice_announcement(
         message_ts,
     )
 
-    practice.slack_message_ts = message_ts
-    practice.slack_channel_id = channel_id
-    if not original_message_ts:
-        practice.slack_session_emoji = None
+    link_metadata = {}
     try:
+        apply_link()
         db.session.commit()
     except Exception as exc:
         _rollback_session(f"failed practice Slack link for #{practice.id}")
-        practice.slack_channel_id = original_channel_id
-        practice.slack_message_ts = original_message_ts
-        practice.slack_session_emoji = original_session_emoji
+        restore_originals()
         cleanup = _delete_slack_message(
             client,
             channel=channel_id,
@@ -667,15 +761,35 @@ def post_practice_announcement(
             practice.id,
             exc,
         )
-        return _link_failure_result(
-            error=exc,
+        recovery = _recover_ambiguous_link(
+            initial_error=exc,
             cleanup=cleanup,
             channel_id=channel_id,
             message_ts=message_ts,
+            apply_link=apply_link,
+            restore_originals=restore_originals,
+            commit=db.session.commit,
+            rollback=db.session.rollback,
+            logger=current_app.logger,
+            context=f"practice announcement link for #{practice.id}",
         )
+        if not recovery.get("success"):
+            return recovery
+        link_metadata = {
+            "recovered": True,
+            "cleanup": recovery["cleanup"],
+        }
 
     # Post the threaded "Practice Details" reply (sunset/wind/AQI/parking/gear)
-    _upsert_details_reply(client, practice, practice_info, conditions)
+    details_result = _upsert_details_reply(
+        client, practice, practice_info, conditions
+    )
+    if not details_result.get("success"):
+        current_app.logger.warning(
+            "Practice #%s root linked but Details sync failed: %s",
+            practice.id,
+            details_result,
+        )
     _seed_plan_reactions(client, practice)
 
     # Create logging thread in #tcsc-logging
@@ -689,6 +803,8 @@ def post_practice_announcement(
         'success': True,
         'message_ts': message_ts,
         'channel_id': channel_id,
+        'details': details_result,
+        **link_metadata,
     }
 
 
@@ -797,6 +913,19 @@ def post_combined_lift_announcement(practices, channel_override=None):
         )
         for practice in ordered
     }
+
+    def apply_links():
+        for practice in ordered:
+            practice.slack_channel_id = channel_id
+            practice.slack_message_ts = message_ts
+
+    def restore_originals():
+        for practice in ordered:
+            (
+                practice.slack_channel_id,
+                practice.slack_message_ts,
+            ) = original_links[practice.id]
+
     try:
         response = client.chat_postMessage(
             channel=channel_id,
@@ -818,18 +947,13 @@ def post_combined_lift_announcement(practices, channel_override=None):
             "success": False,
             "error": "Slack did not return a message timestamp",
         }
-    for practice in ordered:
-        practice.slack_channel_id = channel_id
-        practice.slack_message_ts = message_ts
+    link_metadata = {}
     try:
+        apply_links()
         db.session.commit()
     except Exception as exc:
         _rollback_session("failed combined Slack links")
-        for practice in ordered:
-            (
-                practice.slack_channel_id,
-                practice.slack_message_ts,
-            ) = original_links[practice.id]
+        restore_originals()
         cleanup = _delete_slack_message(
             client,
             channel=channel_id,
@@ -839,12 +963,24 @@ def post_combined_lift_announcement(practices, channel_override=None):
             "Could not persist combined Strength announcement links: %s",
             exc,
         )
-        return _link_failure_result(
-            error=exc,
+        recovery = _recover_ambiguous_link(
+            initial_error=exc,
             cleanup=cleanup,
             channel_id=channel_id,
             message_ts=message_ts,
+            apply_link=apply_links,
+            restore_originals=restore_originals,
+            commit=db.session.commit,
+            rollback=db.session.rollback,
+            logger=current_app.logger,
+            context="combined Strength announcement links",
         )
+        if not recovery.get("success"):
+            return recovery
+        link_metadata = {
+            "recovered": True,
+            "cleanup": recovery["cleanup"],
+        }
 
     details = _upsert_combined_details_reply(client, ordered)
     _seed_combined_reactions(client, ordered)
@@ -858,6 +994,7 @@ def post_combined_lift_announcement(practices, channel_override=None):
         "message_ts": message_ts,
         "channel_id": channel_id,
         "details": details,
+        **link_metadata,
     }
 
 

@@ -527,7 +527,9 @@ def test_combined_link_commit_failure_restores_links_and_compensates(
         "C-OLD-2",
     ]
     assert [item.slack_message_ts for item in practices] == [None, None]
-    mock_db.session.rollback.assert_called_once_with()
+    assert mock_db.session.rollback.call_count == (
+        2 if cleanup_error else 1
+    )
     client.chat_delete.assert_called_once_with(
         channel="C-STRENGTH", ts="123.456"
     )
