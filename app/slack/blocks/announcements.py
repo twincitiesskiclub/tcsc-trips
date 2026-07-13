@@ -33,6 +33,7 @@ _FALLBACK_PLAN_MAX = 600
 _DETAILS_FALLBACK_PARKING_MAX = 1000
 _DETAILS_FALLBACK_GEAR_MAX = 800
 _DETAILS_FALLBACK_CONDITIONS_MAX = 1700
+_COMBINED_CANCELLATION_REASON_MAX = 600
 
 
 def _activity_label(activities) -> str:
@@ -638,12 +639,32 @@ def _same_value(practices, getter):
     return all(value == values[0] for value in values[1:]), values[0]
 
 
+def _normalized_shared_text(value):
+    return " ".join(str(value or "").split())
+
+
+def _same_normalized_text(practices, getter):
+    display_values = [
+        str(getter(practice) or "").strip() for practice in practices
+    ]
+    comparison_values = [
+        _normalized_shared_text(value) for value in display_values
+    ]
+    return (
+        all(
+            value == comparison_values[0]
+            for value in comparison_values[1:]
+        ),
+        display_values[0],
+    )
+
+
 def _social_value(practice):
     social = getattr(practice, "social_location", None)
     return (
         bool(practice.has_social),
         getattr(social, "id", None),
-        getattr(social, "name", None),
+        _normalized_shared_text(getattr(social, "name", None)),
     )
 
 
@@ -693,11 +714,27 @@ def _combined_session_text(practice):
         if practice.location and practice.location.spot else None
     )
     lines = [first_line, location + (f" - {spot}" if spot else "")]
-    if _is_cancelled(practice):
-        lines.append(f"Reason: {practice.cancellation_reason or 'Cancelled'}")
     lead_line = _combined_lead_line(practice)
     if lead_line:
         lines.append(lead_line)
+    if _is_cancelled(practice):
+        reason_prefix = "Reason: "
+        available = max(
+            0,
+            SECTION_TEXT_MAX
+            - len("\n".join(lines))
+            - len("\n" + reason_prefix),
+        )
+        reason_limit = min(_COMBINED_CANCELLATION_REASON_MAX, available)
+        if reason_limit > 1:
+            reason = truncate_slack_text(
+                practice.cancellation_reason or "Cancelled",
+                reason_limit,
+                field="cancellation_reason",
+                surface="combined_practice_announcement",
+                practice_id=practice.id,
+            )
+            lines.append(reason_prefix + reason)
     return "\n".join(lines)
 
 
@@ -732,10 +769,10 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
     } for practice in ordered)
 
     representative = ordered[0]
-    same_workout, shared_workout = _same_value(
+    same_workout, shared_workout = _same_normalized_text(
         ordered, lambda item: str(item.workout_description or "").strip()
     )
-    same_notes, shared_notes = _same_value(
+    same_notes, shared_notes = _same_normalized_text(
         ordered, lambda item: str(item.logistics_notes or "").strip()
     )
     same_social, _ = _same_value(ordered, _social_value)
@@ -853,17 +890,24 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
         lines.append(announcement_notice)
     for practice in ordered:
         location = practice.location.name if practice.location else "TBD"
-        status = (
-            f"CANCELLED: {practice.cancellation_reason or 'Cancelled'}"
-            if _is_cancelled(practice) else "Active"
-        )
+        if _is_cancelled(practice):
+            reason = truncate_slack_text(
+                practice.cancellation_reason or "Cancelled",
+                _COMBINED_CANCELLATION_REASON_MAX,
+                field="cancellation_reason",
+                surface="combined_practice_fallback",
+                practice_id=practice.id,
+            )
+            status = f"CANCELLED: {reason}"
+        else:
+            status = "Active"
         lines.append(
             f"{practice.date.strftime('%A, %B %-d at %-I:%M %p')}; "
             f"{status}; {location}; attend with "
             f":{practice.slack_session_emoji}:."
         )
     representative = ordered[0]
-    same_workout, shared_workout = _same_value(
+    same_workout, shared_workout = _same_normalized_text(
         ordered,
         lambda item: str(item.workout_description or "").strip()
         or _WORKOUT_PLACEHOLDER,
@@ -876,7 +920,7 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
             f"{str(practice.workout_description or '').strip() or _WORKOUT_PLACEHOLDER}"
             for practice in ordered
         )
-    same_notes, shared_notes = _same_value(
+    same_notes, shared_notes = _same_normalized_text(
         ordered, lambda item: str(item.logistics_notes or "").strip()
     )
     if same_notes and shared_notes:

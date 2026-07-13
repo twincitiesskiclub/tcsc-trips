@@ -130,6 +130,45 @@ def test_cancelled_slot_and_fallback_keep_every_session_distinct():
         assert value in fallback
 
 
+def test_long_cancellation_reason_preserves_lead_and_every_fallback_session():
+    cancelled = combined_practice(
+        1,
+        14,
+        18,
+        "six",
+        status=PracticeStatus.CANCELLED,
+        reason="Facility issue " + ("x" * 5_000),
+    )
+    cancelled.leads = [SimpleNamespace(
+        role=SimpleNamespace(name="COACH"),
+        slack_user_id="UCOACH",
+        display_name="Coach",
+    )]
+    practices = [
+        cancelled,
+        combined_practice(2, 15, 19, "seven"),
+        combined_practice(3, 16, 20, "eight"),
+    ]
+
+    text = rendered_text(build_combined_lift_blocks(practices))
+    fallback = build_combined_fallback_text(practices)
+
+    assert "CANCELLED" in text
+    assert "Coach <@UCOACH>" in text
+    for value in (
+        "Tuesday, July 14 at 6:15 PM",
+        "CANCELLED",
+        "Balance Fitness",
+        ":six:",
+        "Wednesday, July 15 at 7:15 PM",
+        "Active",
+        ":seven:",
+        "Thursday, July 16 at 8:15 PM",
+        ":eight:",
+    ):
+        assert value in fallback
+
+
 def test_one_survivor_keeps_combined_grammar_and_saved_reaction():
     text = rendered_text(
         build_combined_lift_blocks([combined_practice(2, 15, 19, "seven")])
@@ -175,6 +214,39 @@ def test_post_creation_divergence_keeps_each_sessions_content_visible():
         ":seven:",
     ):
         assert value in text
+
+
+def test_whitespace_only_shared_content_differences_stay_compact():
+    first = combined_practice(
+        1,
+        14,
+        18,
+        "six",
+        workout="3 x 8   strength circuit",
+        notes="Bring   indoor shoes",
+        social="Cafe  A",
+    )
+    second = combined_practice(
+        2,
+        15,
+        19,
+        "seven",
+        workout="  3 x 8 strength circuit  ",
+        notes=" Bring indoor   shoes ",
+        social=" Cafe A ",
+    )
+
+    text = rendered_text(build_combined_lift_blocks([first, second]))
+    fallback = build_combined_fallback_text([first, second])
+
+    assert text.count("Workout · Strength") == 1
+    assert "3 x 8   strength circuit" in text
+    assert text.count("Notes*") == 1
+    assert "Bring   indoor shoes" in text
+    assert text.count("Social after at") == 1
+    assert "Social after at Cafe  A" in text
+    assert "Wednesday at 7:15 PM workout" not in fallback
+    assert "Workout: 3 x 8   strength circuit" in fallback
 
 
 def test_different_plan_snapshots_hide_shared_plan_legend():
