@@ -24,6 +24,7 @@ from app.practices.plan_reactions import plan_reaction_names
 from app.practices.models import Practice
 from app.practices.interfaces import (
     AnnouncementConditions,
+    PracticeStatus,
     TrailCondition,
     WeatherConditions,
 )
@@ -879,8 +880,13 @@ def _shared_plan_names(practices):
 
 
 def _seed_combined_reactions(client, practices):
-    names = [item.slack_session_emoji for item in practices]
-    names.extend(_shared_plan_names(practices))
+    active = [
+        item for item in practices
+        if getattr(item.status, "value", item.status) != PracticeStatus.CANCELLED.value
+    ]
+    names = [item.slack_session_emoji for item in active]
+    if active:
+        names.extend(_shared_plan_names(practices))
     for name in dict.fromkeys(names):
         try:
             client.reactions_add(

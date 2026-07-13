@@ -34,6 +34,7 @@ def combined_practice(
     hour,
     emoji,
     *,
+    minute=15,
     status=PracticeStatus.SCHEDULED,
     reason=None,
     workout="3 x 8 strength circuit",
@@ -43,7 +44,7 @@ def combined_practice(
 ):
     return SimpleNamespace(
         id=practice_id,
-        date=datetime(2026, 7, day, hour, 15),
+        date=datetime(2026, 7, day, hour, minute),
         status=status,
         slack_session_emoji=emoji,
         location=SimpleNamespace(id=10, name="Balance Fitness", spot=None),
@@ -82,26 +83,103 @@ def rendered_text(blocks):
     return "\n".join(parts)
 
 
-def test_combined_uses_saved_session_map_and_shared_plan_grammar():
-    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
+def _combined_rsvp_text(blocks):
+    matches = [
+        item["text"]
+        for block in blocks
+        if block.get("type") == "context"
+        for item in block.get("elements", [])
+        if item.get("text", "").startswith("Bop ")
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
+def test_cross_day_mapping_is_only_in_bottom_context():
+    practices = [
+        combined_practice(1, 14, 18, "six"),
+        combined_practice(2, 15, 19, "seven"),
+    ]
+    blocks = build_combined_lift_blocks(practices)
+    text = rendered_text(blocks)
+    assert "Choose a session:" not in text
+    assert ":six: *Tuesday" not in text
+    assert ":seven: *Wednesday" not in text
+    assert _combined_rsvp_text(blocks) == (
+        "Bop :six: for Tue at 6:15 PM or :seven: for Wed at 7:15 PM "
+        "so we'll know you'll be there.\n"
+        "Running late? Reply in the thread. <!channel>"
+    )
+
+
+def test_combined_shared_plan_is_appended_to_attendance_line():
+    plan = [{
+        "emoji": "hatching_chick",
+        "label": "first strength practice support",
+    }]
     practices = [
         combined_practice(1, 14, 18, "six", plan=plan),
         combined_practice(2, 15, 19, "seven", plan=plan),
     ]
-
-    text = rendered_text(build_combined_lift_blocks(practices))
-
-    assert "Strength practices · July 14–15" in text
-    assert "Choose a session:" in text
-    assert ":six: *Tuesday" in text
-    assert ":seven: *Wednesday" in text
-    assert "Your Practice Plan:" in text
-    assert ":evergreen_tree: Endurance instead" in text
-    assert "Optional:" not in text
-    assert " | " not in text
+    assert _combined_rsvp_text(build_combined_lift_blocks(practices)) == (
+        "Bop :six: for Tue at 6:15 PM or :seven: for Wed at 7:15 PM "
+        "so we'll know you'll be there. In addition to your attendance emoji, "
+        "hit a :hatching_chick: for first strength practice support.\n"
+        "Running late? Reply in the thread. <!channel>"
+    )
 
 
-def test_cancelled_slot_and_fallback_keep_every_session_distinct():
+def test_same_day_rows_and_mapping_use_times_only():
+    practices = [
+        combined_practice(1, 14, 18, "six", minute=5),
+        combined_practice(2, 14, 19, "seven", minute=20),
+    ]
+    blocks = build_combined_lift_blocks(practices)
+    text = rendered_text(blocks)
+    assert "*6:05 PM*" in text
+    assert "*7:20 PM*" in text
+    assert "Tuesday, July 14 · 6:05 PM" not in text
+    assert _combined_rsvp_text(blocks) == (
+        "Bop :six: for 6:05 PM or :seven: for 7:20 PM "
+        "so we'll know you'll be there.\n"
+        "Running late? Reply in the thread. <!channel>"
+    )
+
+
+def test_same_day_cancelled_sibling_keeps_time_only_active_mapping():
+    practices = [
+        combined_practice(1, 14, 18, "six", minute=5),
+        combined_practice(
+            2,
+            14,
+            19,
+            "seven",
+            minute=20,
+            status=PracticeStatus.CANCELLED,
+            reason="Facility closed",
+        ),
+    ]
+    rsvp = _combined_rsvp_text(build_combined_lift_blocks(practices))
+    assert rsvp.startswith(
+        "Bop :six: for 6:05 PM so we'll know you'll be there."
+    )
+    assert "Tue at" not in rsvp
+    assert ":seven: for" not in rsvp
+
+
+def test_three_active_sessions_use_oxford_or_mapping():
+    practices = [
+        combined_practice(1, 14, 18, "six"),
+        combined_practice(2, 15, 19, "seven"),
+        combined_practice(3, 16, 20, "eight"),
+    ]
+    assert _combined_rsvp_text(build_combined_lift_blocks(practices)).startswith(
+        "Bop :six: for Tue at 6:15 PM, :seven: for Wed at 7:15 PM, "
+        "or :eight: for Thu at 8:15 PM so we'll know you'll be there."
+    )
+
+
+def test_cancelled_sibling_stays_visible_but_leaves_cross_day_mapping():
     practices = [
         combined_practice(1, 14, 18, "six"),
         combined_practice(
@@ -113,23 +191,12 @@ def test_cancelled_slot_and_fallback_keep_every_session_distinct():
             reason="Facility closed",
         ),
     ]
-
-    text = rendered_text(build_combined_lift_blocks(practices))
-    fallback = build_combined_fallback_text(practices)
-
-    assert "CANCELLED" in text and "Facility closed" in text
-    for value in (
-        "Tuesday",
-        "6:15 PM",
-        "Balance Fitness",
-        ":six:",
-        "Wednesday",
-        "7:15 PM",
-        "CANCELLED",
-        "Facility closed",
-        ":seven:",
-    ):
-        assert value in fallback
+    blocks = build_combined_lift_blocks(practices)
+    assert "Facility closed" in rendered_text(blocks)
+    assert _combined_rsvp_text(blocks).startswith(
+        "Bop :six: for Tue at 6:15 PM so we'll know you'll be there."
+    )
+    assert ":seven: for" not in _combined_rsvp_text(blocks)
 
 
 def test_long_cancellation_reason_preserves_lead_and_every_fallback_session():
@@ -161,27 +228,102 @@ def test_long_cancellation_reason_preserves_lead_and_every_fallback_session():
         "Tuesday, July 14 at 6:15 PM",
         "CANCELLED",
         "Balance Fitness",
-        ":six:",
         "Wednesday, July 15 at 7:15 PM",
         "Active",
-        ":seven:",
         "Thursday, July 16 at 8:15 PM",
-        ":eight:",
+        "seven for Wed at 7:15 PM",
+        "eight for Thu at 8:15 PM",
     ):
         assert value in fallback
 
 
-def test_one_survivor_keeps_combined_grammar_and_saved_reaction():
-    text = rendered_text(
-        build_combined_lift_blocks([combined_practice(2, 15, 19, "seven")])
+def test_one_displayed_session_keeps_combined_reaction_grammar():
+    blocks = build_combined_lift_blocks([
+        combined_practice(2, 15, 19, "seven")
+    ])
+    rsvp = _combined_rsvp_text(blocks)
+    assert rsvp.startswith(
+        "Bop :seven: for 7:15 PM so we'll know you'll be there."
+    )
+    assert ":white_check_mark:" not in rsvp
+
+
+def test_all_cancelled_combined_root_has_no_rsvp_context_or_fallback_tail():
+    plan = [{"emoji": "hatching_chick", "label": "new rollerskier"}]
+    practices = [
+        combined_practice(
+            1,
+            14,
+            18,
+            "six",
+            status=PracticeStatus.CANCELLED,
+            reason="Closed",
+            plan=plan,
+        ),
+        combined_practice(
+            2,
+            15,
+            19,
+            "seven",
+            status=PracticeStatus.CANCELLED,
+            reason="Closed",
+            plan=plan,
+        ),
+    ]
+    blocks = build_combined_lift_blocks(practices)
+    fallback = build_combined_fallback_text(practices)
+    assert not any(
+        item.get("text", "").startswith("Bop ")
+        for block in blocks if block.get("type") == "context"
+        for item in block.get("elements", [])
+    )
+    for forbidden in ("RSVP", "Additional reaction", "Running late"):
+        assert forbidden not in fallback
+
+
+def test_cancelled_sibling_with_different_plan_suppresses_supplemental_copy():
+    active = combined_practice(
+        1,
+        14,
+        18,
+        "six",
+        plan=[{"emoji": "hatching_chick", "label": "new rollerskier"}],
+    )
+    cancelled = combined_practice(
+        2,
+        15,
+        19,
+        "seven",
+        status=PracticeStatus.CANCELLED,
+        reason="Closed",
+        plan=[{"emoji": "athletic_shoe", "label": "runner"}],
+    )
+    assert "In addition" not in _combined_rsvp_text(
+        build_combined_lift_blocks([active, cancelled])
     )
 
-    assert "Choose a session:" in text
-    assert ":seven: *Wednesday" in text
-    assert "✅" not in text
+
+def test_different_notes_keep_exact_heading_and_text_owner():
+    practices = [
+        combined_practice(1, 14, 18, "six", notes="Shoes A"),
+        combined_practice(2, 15, 19, "seven", notes="Shoes B"),
+    ]
+    notes_sections = [
+        block["text"]["text"] for block in build_combined_lift_blocks(practices)
+        if block.get("type") == "section"
+        and block.get("text", {}).get("text", "").startswith("*📝 Notes*")
+    ]
+    assert notes_sections == [
+        "*📝 Notes*\n*Tuesday at 6:15 PM*\nShoes A",
+        "*📝 Notes*\n*Wednesday at 7:15 PM*\nShoes B",
+    ]
+    assert all(
+        ":six:" not in text and ":seven:" not in text
+        for text in notes_sections
+    )
 
 
-def test_post_creation_divergence_keeps_each_sessions_content_visible():
+def test_divergent_workout_and_social_use_text_owners_not_reactions():
     practices = [
         combined_practice(
             1,
@@ -202,20 +344,23 @@ def test_post_creation_divergence_keeps_each_sessions_content_visible():
             social="Cafe B",
         ),
     ]
-
-    text = rendered_text(build_combined_lift_blocks(practices))
-
-    for value in (
-        "Session A circuit",
-        "Session B circuit",
-        "Shoes A",
-        "Shoes B",
-        "Cafe A",
-        "Cafe B",
-        ":six:",
-        ":seven:",
-    ):
-        assert value in text
+    sections = [
+        block["text"]["text"] for block in build_combined_lift_blocks(practices)
+        if block.get("type") == "section"
+    ]
+    owned = "\n".join(
+        text for text in sections
+        if (
+            "Session A" in text
+            or "Session B" in text
+            or "Cafe A" in text
+            or "Cafe B" in text
+        )
+    )
+    assert "Tuesday at 6:15 PM" in owned
+    assert "Wednesday at 7:15 PM" in owned
+    assert ":six:" not in owned
+    assert ":seven:" not in owned
 
 
 def test_whitespace_only_shared_content_differences_stay_compact():
@@ -251,94 +396,69 @@ def test_whitespace_only_shared_content_differences_stay_compact():
     assert "Workout: 3 x 8   strength circuit" in fallback
 
 
-def test_combined_fallback_normal_shared_copy_is_exact():
-    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
+def test_combined_fallback_uses_plain_active_mapping_and_complete_tail():
+    plan = [{"emoji": "hatching_chick", "label": "first strength support"}]
     practices = [
-        combined_practice(1, 14, 18, "six", social="Cafe A", plan=plan),
-        combined_practice(2, 15, 19, "seven", social="Cafe A", plan=plan),
+        combined_practice(1, 14, 18, "six", plan=plan),
+        combined_practice(2, 15, 19, "seven", plan=plan),
     ]
-
     fallback = build_combined_fallback_text(practices)
-
-    assert fallback == (
-        "Strength practices · July 14–15. "
-        "Tuesday, July 14 at 6:15 PM; Active; Balance Fitness; session :six:. "
-        "Wednesday, July 15 at 7:15 PM; Active; Balance Fitness; session :seven:. "
-        "Workout: 3 x 8 strength circuit "
-        "Notes: Bring indoor shoes "
-        "Social after at Cafe A. "
-        "RSVP: bop :six: for Tuesday at 6:15 PM; "
-        ":seven: for Wednesday at 7:15 PM. "
-        "Your Practice Plan: :evergreen_tree: Endurance instead."
+    assert fallback.endswith(
+        "RSVP with six for Tue at 6:15 PM or seven for Wed at 7:15 PM "
+        "so we'll know you'll be there. Additional reaction: hatching chick "
+        "for first strength support. Running late? Reply in the thread."
     )
+    assert "session :six:" not in fallback
+    assert "<!channel>" not in fallback
 
 
-def _assert_combined_fallback_tail_is_accessible(fallback, practices):
-    for practice in practices:
-        assert practice.date.strftime("%A, %B %-d at %-I:%M %p") in fallback
-        assert f"session :{practice.slack_session_emoji}:" in fallback
-        assert f":{practice.slack_session_emoji}: for " in fallback
-    assert "Social after" in fallback
-    assert "RSVP:" in fallback
-    assert "Your Practice Plan:" in fallback
-    assert ":evergreen_tree: Endurance instead" in fallback
-    assert len(fallback) <= FALLBACK_TEXT_MAX
-
-
-def test_long_shared_combined_content_preserves_sessions_social_and_tail():
-    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
-    workout = "Shared workout " + ("w" * 2_500)
-    notes = "Shared notes " + ("n" * 2_500)
+def test_same_day_combined_fallback_uses_time_only_mapping():
     practices = [
-        combined_practice(
-            index,
-            13 + index,
-            17 + index,
-            emoji,
-            workout=workout,
-            notes=notes,
-            social="Shared Cafe",
-            plan=plan,
-        )
-        for index, emoji in enumerate(("six", "seven", "eight"), start=1)
+        combined_practice(1, 14, 18, "six", minute=5),
+        combined_practice(2, 14, 19, "seven", minute=20),
     ]
-
     fallback = build_combined_fallback_text(practices)
+    assert fallback.endswith(
+        "RSVP with six for 6:05 PM or seven for 7:20 PM "
+        "so we'll know you'll be there. Running late? Reply in the thread."
+    )
+    assert "six for Tue" not in fallback
 
-    assert "Shared workout" in fallback
-    assert "Shared notes" in fallback
-    assert "Social after at Shared Cafe." in fallback
-    _assert_combined_fallback_tail_is_accessible(fallback, practices)
 
-
-@pytest.mark.parametrize("long_index", [0, 1])
-def test_long_first_or_middle_divergent_content_preserves_every_session_and_tail(
-    long_index,
-):
-    plan = [{"emoji": "evergreen_tree", "label": "Endurance instead"}]
-    practices = []
-    for index, emoji in enumerate(("six", "seven", "eight")):
-        marker = " target" if index == long_index else ""
-        suffix = str(index) * 2_500
-        practices.append(combined_practice(
-            index + 1,
-            14 + index,
-            18 + index,
-            emoji,
-            workout=f"Workout {index}{marker} {suffix}",
-            notes=f"Notes {index}{marker} {suffix}",
-            social=f"Cafe {index}",
-            plan=plan,
-        ))
-
+def test_mixed_cancelled_fallback_maps_only_active_session():
+    practices = [
+        combined_practice(1, 14, 18, "six"),
+        combined_practice(
+            2,
+            15,
+            19,
+            "seven",
+            status=PracticeStatus.CANCELLED,
+            reason="Facility closed",
+        ),
+    ]
     fallback = build_combined_fallback_text(practices)
+    assert "CANCELLED: Facility closed" in fallback
+    assert fallback.endswith(
+        "RSVP with six for Tue at 6:15 PM so we'll know you'll be there. "
+        "Running late? Reply in the thread."
+    )
+    assert "seven for" not in fallback
 
-    for index in range(3):
-        assert f"Workout {index}" in fallback
-        assert f"Notes {index}" in fallback
-        assert f"Cafe {index}" in fallback
-    assert "target" in fallback
-    _assert_combined_fallback_tail_is_accessible(fallback, practices)
+
+def test_long_combined_content_preserves_complete_required_tail():
+    plan = [{"emoji": "evergreen_tree", "label": "endurance"}]
+    practices = [
+        combined_practice(1, 14, 18, "six", workout="w" * 10_000, plan=plan),
+        combined_practice(2, 15, 19, "seven", notes="n" * 10_000, plan=plan),
+    ]
+    fallback = build_combined_fallback_text(practices)
+    assert fallback.endswith(
+        "RSVP with six for Tue at 6:15 PM or seven for Wed at 7:15 PM "
+        "so we'll know you'll be there. Additional reaction: evergreen tree "
+        "for endurance. Running late? Reply in the thread."
+    )
+    assert len(fallback) <= FALLBACK_TEXT_MAX
 
 
 def test_different_plan_snapshots_hide_shared_plan_legend():
@@ -361,7 +481,7 @@ def test_different_plan_snapshots_hide_shared_plan_legend():
 
     text = rendered_text(build_combined_lift_blocks(practices))
 
-    assert "Your Practice Plan:" not in text
+    assert "In addition to your attendance emoji" not in text
     assert ":evergreen_tree:" not in text
     assert ":athletic_shoe:" not in text
 
@@ -461,6 +581,50 @@ def test_initial_post_assigns_before_slack_and_seeds_sessions_plus_shared_plan(
     ] == ["six", "seven", "evergreen_tree"]
     assert all(item.slack_message_ts == "123.456" for item in practices)
     assert all(item.slack_channel_id == "C-STRENGTH" for item in practices)
+
+
+def test_combined_seed_uses_active_attendance_and_full_shared_plan_name(
+    app_context,
+):
+    from app.slack.practices.announcements import _seed_combined_reactions
+
+    plan = [{
+        "emoji": "older_adult::skin-tone-4",
+        "label": "experienced rollerskier",
+    }]
+    active = model_practice(1, 14, 18, "six", plan=plan)
+    cancelled = model_practice(
+        2,
+        15,
+        19,
+        "seven",
+        status=PracticeStatus.CANCELLED,
+        reason="Facility closed",
+        plan=plan,
+    )
+    for practice in (active, cancelled):
+        practice.slack_channel_id = "C-STRENGTH"
+        practice.slack_message_ts = "123.456"
+    client = MagicMock()
+
+    with patch(
+        "app.slack.practices.announcements._shared_plan_names",
+        return_value=["older_adult::skin-tone-4"],
+    ):
+        _seed_combined_reactions(client, [active, cancelled])
+
+    assert [
+        item.kwargs["name"] for item in client.reactions_add.call_args_list
+    ] == ["six", "older_adult::skin-tone-4"]
+
+    client.reset_mock()
+    active.status = PracticeStatus.CANCELLED
+    with patch(
+        "app.slack.practices.announcements._shared_plan_names"
+    ) as shared_plan_names:
+        _seed_combined_reactions(client, [active, cancelled])
+    shared_plan_names.assert_not_called()
+    client.reactions_add.assert_not_called()
 
 
 def test_unposted_assignment_failure_is_explicitly_safe_to_fallback(app_context):
@@ -836,8 +1000,9 @@ def test_exclusion_assigns_every_legacy_sibling_before_one_survivor_rebuild(
         ("root", None),
     ]
     root_text = rendered_text(client.chat_update.call_args.kwargs["blocks"])
-    assert "Choose a session:" in root_text
-    assert ":seven: *Wednesday" in root_text
+    assert "Choose a session:" not in root_text
+    assert "*7:15 PM*" in root_text
+    assert "Bop :seven: for 7:15 PM" in root_text
     client.reactions_remove.assert_called_once_with(
         channel="C-STRENGTH", timestamp="root.1", name="six"
     )
@@ -964,8 +1129,9 @@ def test_combined_cancellation_rebuild_keeps_active_sibling_in_root(
 
     assert result['success'] is True
     text = rendered_text(client.chat_update.call_args.kwargs['blocks'])
-    assert ':six:' in text and 'CANCELLED' in text
-    assert ':seven: *Wednesday' in text
+    assert 'CANCELLED' in text and 'Facility closed' in text
+    assert ':six:' not in text
+    assert 'Bop :seven: for Wed at 7:15 PM' in text
 
 
 def test_delete_survivor_uses_direct_exclusion_api(app_context):

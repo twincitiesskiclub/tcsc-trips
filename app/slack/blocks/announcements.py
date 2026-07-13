@@ -12,7 +12,7 @@ from app.practices.interfaces import (
     WeatherConditions,
 )
 from app.practices.plan_reactions import (
-    format_plan_reaction_legend,
+    format_reaction_name_for_fallback,
     format_supplemental_reaction_fallback,
     format_supplemental_reaction_sentence,
 )
@@ -50,7 +50,6 @@ _COMBINED_FALLBACK_SHARED_NOTES_MAX = 500
 _COMBINED_FALLBACK_SESSION_NOTES_MAX = 140
 _COMBINED_FALLBACK_SHARED_SOCIAL_MAX = 200
 _COMBINED_FALLBACK_SESSION_SOCIAL_MAX = 100
-_COMBINED_FALLBACK_PLAN_MAX = 500
 _ACTIVE_ALERTS_VISIBLE_MAX = 20
 _RUNNING_LATE_LINE = "Running late? Reply in the thread. <!channel>"
 _FALLBACK_RUNNING_LATE = "Running late? Reply in the thread."
@@ -775,6 +774,63 @@ def _combined_date_label(practices):
     )
 
 
+def _all_sessions_same_date(practices):
+    dates = {practice.date.date() for practice in practices}
+    return len(dates) == 1
+
+
+def _combined_session_when(practice, *, same_day):
+    if same_day:
+        return practice.date.strftime("%-I:%M %p")
+    return (
+        f"{practice.date.strftime('%A, %B %-d')} · "
+        f"{practice.date.strftime('%-I:%M %p')}"
+    )
+
+
+def _combined_owner_label(practice, *, same_day):
+    if same_day:
+        return practice.date.strftime("%-I:%M %p")
+    return practice.date.strftime("%A at %-I:%M %p")
+
+
+def _join_with_or(items):
+    if len(items) == 1:
+        return items[0]
+    if len(items) == 2:
+        return f"{items[0]} or {items[1]}"
+    return f"{', '.join(items[:-1])}, or {items[-1]}"
+
+
+def _combined_mapping(practices, *, plain):
+    same_day = _all_sessions_same_date(practices)
+    active = [practice for practice in practices if not _is_cancelled(practice)]
+    if not active:
+        return None
+    pairs = []
+    for practice in active:
+        reaction = (
+            format_reaction_name_for_fallback(practice.slack_session_emoji)
+            if plain
+            else f":{practice.slack_session_emoji}:"
+        )
+        when = (
+            practice.date.strftime("%-I:%M %p")
+            if same_day
+            else practice.date.strftime("%a at %-I:%M %p")
+        )
+        pairs.append(f"{reaction} for {when}")
+    return _join_with_or(pairs)
+
+
+def _combined_attendance_sentence(practices, *, plain):
+    mapping = _combined_mapping(practices, plain=plain)
+    if not mapping:
+        return None
+    prefix = "RSVP with" if plain else "Bop"
+    return f"{prefix} {mapping} so we'll know you'll be there."
+
+
 def _shared_plan_reactions(practices):
     snapshots = [
         tuple((item["emoji"], item["label"]) for item in (p.plan_reactions or []))
@@ -852,15 +908,10 @@ def _combined_lead_line(practice):
     return " · ".join(parts)
 
 
-def _combined_session_text(practice):
-    emoji = f":{practice.slack_session_emoji}:"
-    when = (
-        f"{practice.date.strftime('%A, %B %-d')} · "
-        f"{practice.date.strftime('%-I:%M %p')}"
-    )
+def _combined_session_text(practice, *, same_day):
+    when = _combined_session_when(practice, same_day=same_day)
     first_line = (
-        f"{emoji} *CANCELLED · {when}*"
-        if _is_cancelled(practice) else f"{emoji} *{when}*"
+        f"*CANCELLED · {when}*" if _is_cancelled(practice) else f"*{when}*"
     )
     location = practice.location.name if practice.location else "TBD"
     spot = (
@@ -899,6 +950,9 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
         return []
     if any(not item.slack_session_emoji for item in ordered):
         raise ValueError("Combined builders require persisted session reactions")
+    same_day = _all_sessions_same_date(ordered)
+    active = [practice for practice in ordered if not _is_cancelled(practice)]
+    shared_plan = _shared_plan_reactions(ordered)
 
     header_group = [{
         "type": "header",
@@ -915,12 +969,11 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
         })
     session_group = [{
         "type": "section",
-        "text": {"type": "mrkdwn", "text": "*Choose a session:*"},
-    }]
-    session_group.extend({
-        "type": "section",
-        "text": {"type": "mrkdwn", "text": _combined_session_text(practice)},
-    } for practice in ordered)
+        "text": {
+            "type": "mrkdwn",
+            "text": _combined_session_text(practice, same_day=same_day),
+        },
+    } for practice in ordered]
 
     representative = ordered[0]
     same_workout, shared_workout = _same_normalized_text(
@@ -939,8 +992,7 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
     for owner, value in workout_rows:
         type_names = ", ".join(item.name for item in (owner.practice_types or []))
         owner_label = "" if same_workout else (
-            f":{owner.slack_session_emoji}: "
-            f"{owner.date.strftime('%A at %-I:%M %p')} · "
+            f"{_combined_owner_label(owner, same_day=same_day)} · "
         )
         workout_label = (
             f"*{owner_label}Workout · {type_names}*"
@@ -966,11 +1018,11 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
     for owner, value in notes_rows:
         if not value:
             continue
-        owner_label = "" if same_notes else (
-            f":{owner.slack_session_emoji}: "
-            f"{owner.date.strftime('%A at %-I:%M %p')} · "
-        )
-        notes_prefix = f"*📌 {owner_label}Notes*\n"
+        notes_prefix = "*📝 Notes*\n"
+        if not same_notes:
+            notes_prefix += (
+                f"*{_combined_owner_label(owner, same_day=same_day)}*\n"
+            )
         notes = truncate_slack_text(
             value,
             SECTION_TEXT_MAX - len(notes_prefix),
@@ -989,36 +1041,24 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
         if not social_text:
             continue
         prefix = "" if same_social else (
-            f":{owner.slack_session_emoji}: "
-            f"{owner.date.strftime('%A at %-I:%M %p')} · "
+            f"{_combined_owner_label(owner, same_day=same_day)} · "
         )
         workout_group.append({
             "type": "section",
             "text": {"type": "mrkdwn", "text": prefix + social_text},
         })
 
-    mappings = []
-    for practice in ordered:
-        status = " · CANCELLED" if _is_cancelled(practice) else ""
-        mappings.append(
-            f":{practice.slack_session_emoji}: "
-            f"{practice.date.strftime('%A at %-I:%M %p')}{status}"
-        )
-    ending_lines = [
-        "Bop the reaction for your session if you're coming.",
-        " · ".join(mappings),
-    ]
-    shared_plan = _shared_plan_reactions(ordered)
-    if shared_plan:
-        ending_lines.extend([
-            "",
-            "*Your Practice Plan:*",
-            format_plan_reaction_legend(shared_plan),
-        ])
-    ending_group = [{
-        "type": "context",
-        "elements": [{"type": "mrkdwn", "text": "\n".join(ending_lines)}],
-    }]
+    ending_group = []
+    attendance = (
+        _combined_attendance_sentence(ordered, plain=False) if active else None
+    )
+    if attendance:
+        ending_group.append(_rsvp_context_block(
+            attendance,
+            shared_plan,
+            surface="combined_practice_announcement",
+            practice_id=representative.id,
+        ))
 
     return guard_slack_blocks(
         _join_block_groups([
@@ -1069,8 +1109,7 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
             status = "Active"
         lines.append(
             f"{practice.date.strftime('%A, %B %-d at %-I:%M %p')}; "
-            f"{status}; {location}; session "
-            f":{practice.slack_session_emoji}:."
+            f"{status}; {location}."
         )
     representative = ordered[0]
     same_workout, shared_workout = _same_normalized_text(
@@ -1156,26 +1195,24 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
             lines.append(
                 f"{practice.date.strftime('%A at %-I:%M %p')} {social_text}"
             )
-    mappings = "; ".join(
-        f":{practice.slack_session_emoji}: for "
-        f"{practice.date.strftime('%A at %-I:%M %p')}"
-        for practice in ordered
-    )
-    lines.append(f"RSVP: bop {mappings}.")
-    shared_plan = _shared_plan_reactions(ordered)
-    if shared_plan:
-        plan = truncate_slack_text(
-            format_plan_reaction_legend(shared_plan),
-            _COMBINED_FALLBACK_PLAN_MAX,
-            field="plan_reactions",
-            surface="combined_practice_fallback",
+    attendance = _combined_attendance_sentence(ordered, plain=True)
+    if not attendance:
+        return guard_fallback_text(
+            " ".join(lines),
+            surface="combined_practice_announcement",
             practice_id=representative.id,
         )
-        lines.append(
-            "Your Practice Plan: " + plan + "."
-        )
-    return guard_fallback_text(
-        " ".join(lines),
+
+    tail_parts = [attendance]
+    supplemental = format_supplemental_reaction_fallback(
+        _shared_plan_reactions(ordered)
+    )
+    if supplemental:
+        tail_parts.append(supplemental)
+    tail_parts.append(_FALLBACK_RUNNING_LATE)
+    return _fallback_with_reserved_tail(
+        lines,
+        " ".join(tail_parts),
         surface="combined_practice_announcement",
         practice_id=representative.id,
     )
