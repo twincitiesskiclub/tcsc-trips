@@ -83,10 +83,22 @@ def refresh_practice_posts(
         "announcement_notice": announcement_notice,
         "previous_plan_reactions": previous_plan_reactions,
     }
-    results = {
-        surface.name: surface.refresh(practice, change_type, **context)
-        for surface in PRACTICE_SURFACES
-    }
+    results = {}
+    had_announcement = bool(practice.slack_message_ts)
+    for index, surface in enumerate(PRACTICE_SURFACES):
+        result = surface.refresh(practice, change_type, **context)
+        results[surface.name] = result
+        if (
+            change_type == "delete"
+            and surface.name == "announcement"
+            and had_announcement
+            and result.get("success") is not True
+        ):
+            for blocked in PRACTICE_SURFACES[index + 1:]:
+                results[blocked.name] = {
+                    "skipped": "blocked_by_announcement"
+                }
+            break
 
     safety_note_posted = False
     announcement_result = results.get("announcement", {})
@@ -181,22 +193,40 @@ def _refresh_announcement(
     **_context,
 ):
     """Update the main practice announcement post."""
-    if not practice.slack_message_ts or not practice.slack_channel_id:
-        return {'skipped': True}
+    if not practice.slack_message_ts:
+        return {"success": True, "skipped": "absent"}
+    if not practice.slack_channel_id:
+        return {"success": False, "error": "Slack message has no channel"}
 
     try:
         if change_type == 'cancel':
-            from app.slack.practices.cancellations import update_practice_as_cancelled
+            from app.slack.practices.announcements import (
+                is_combined_lift_practice,
+                update_combined_lift_post,
+            )
+            from app.slack.practices.cancellations import (
+                post_combined_cancellation_thread_notice,
+                update_practice_as_cancelled,
+            )
+            if is_combined_lift_practice(practice):
+                result = update_combined_lift_post(practice)
+                if result.get("success"):
+                    notice = post_combined_cancellation_thread_notice(practice)
+                    if not notice.get("success"):
+                        logger.warning(
+                            "Combined cancellation root updated but thread note "
+                            "failed for #%s: %s",
+                            practice.id,
+                            notice,
+                        )
+                return result
             return update_practice_as_cancelled(practice, 'Admin')
 
         if change_type == 'delete':
-            from app.slack.client import get_slack_client
-            client = get_slack_client()
-            client.chat_delete(
-                channel=practice.slack_channel_id,
-                ts=practice.slack_message_ts
+            from app.slack.practices.announcements import (
+                remove_practice_from_announcement,
             )
-            return {'success': True}
+            return remove_practice_from_announcement(practice)
 
         if change_type == 'rsvp':
             from app.slack.practices.rsvp import update_practice_rsvp_counts

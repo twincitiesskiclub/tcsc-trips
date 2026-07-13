@@ -861,6 +861,66 @@ def update_combined_lift_post(
         return {"success": False, "error": error}
 
 
+def _delete_slack_message(client, *, channel, ts):
+    """Delete one Slack message, treating an already-absent row as success."""
+    try:
+        client.chat_delete(channel=channel, ts=ts)
+        return {"success": True}
+    except SlackApiError as exc:
+        error = exc.response.get("error", str(exc))
+        if error == "message_not_found":
+            return {"success": True, "skipped": "already_absent"}
+        return {"success": False, "error": error}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+
+def remove_practice_from_announcement(practice):
+    """Remove one practice while preserving any shared announcement root."""
+    if not practice.slack_message_ts:
+        return {"success": True, "skipped": "absent"}
+    if not practice.slack_channel_id:
+        return {"success": False, "error": "Slack message has no channel"}
+
+    survivors = get_announcement_siblings(
+        practice,
+        exclude_practice_id=practice.id,
+    )
+    if survivors:
+        try:
+            return update_combined_lift_post(
+                practice,
+                exclude_practice_id=practice.id,
+                previous_plan_reactions=practice.plan_reactions or [],
+            )
+        except Exception as exc:
+            return {"success": False, "error": str(exc)}
+
+    client = get_slack_client()
+    if practice.slack_details_ts:
+        details_result = _delete_slack_message(
+            client,
+            channel=practice.slack_channel_id,
+            ts=practice.slack_details_ts,
+        )
+        if not details_result["success"]:
+            return details_result
+        practice.slack_details_ts = None
+        db.session.commit()
+
+    root_result = _delete_slack_message(
+        client,
+        channel=practice.slack_channel_id,
+        ts=practice.slack_message_ts,
+    )
+    if not root_result["success"]:
+        return root_result
+    practice.slack_message_ts = None
+    practice.slack_channel_id = None
+    db.session.commit()
+    return {"success": True}
+
+
 def update_practice_slack_post(
     practice: Practice,
     *,

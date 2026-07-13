@@ -10,6 +10,10 @@ from app.slack.blocks import (
     build_cancellation_decision_update,
     build_practice_cancelled_notice,
 )
+from app.slack.blocks.cancellations import (
+    build_cancelled_practice_fallback_text,
+)
+from app.slack.blocks.text import guard_fallback_text
 from app.practices.models import Practice, CancellationRequest
 from app.practices.interfaces import PracticeEvaluation
 
@@ -137,12 +141,13 @@ def post_cancellation_notice(practice: Practice) -> dict:
 
     # Build blocks
     blocks = build_practice_cancelled_notice(practice_info)
+    fallback = build_cancelled_practice_fallback_text(practice_info)
 
     try:
         response = client.chat_postMessage(
             channel=channel_id,
             blocks=blocks,
-            text=f"Practice cancelled: {practice.date.strftime('%A, %B %d')}"
+            text=fallback,
         )
 
         message_ts = response.get('ts')
@@ -155,7 +160,7 @@ def post_cancellation_notice(practice: Practice) -> dict:
                     channel=practice.slack_channel_id,
                     ts=practice.slack_message_ts,
                     blocks=blocks,
-                    text=f"CANCELLED: Practice on {practice.date.strftime('%A, %B %d')}"
+                    text=fallback,
                 )
             except SlackApiError as e:
                 current_app.logger.warning(f"Could not update original announcement: {e}")
@@ -192,33 +197,10 @@ def update_practice_as_cancelled(practice: Practice, decided_by_name: str) -> di
         return {'success': False, 'error': 'No original practice post to update'}
 
     client = get_slack_client()
-
-    # Build cancelled header block
-    cancelled_header = {
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": ":x: *CANCELLED* :x:"
-        }
-    }
-
-    # Build info about the cancelled practice
-    date_str = practice.date.strftime('%A, %B %-d at %-I:%M %p')
-    location = practice.location.name if practice.location else "TBD"
-
-    cancelled_info = f"~{date_str} at {location}~"
-    if practice.cancellation_reason:
-        cancelled_info += f"\n\n*Reason:* {practice.cancellation_reason}"
-
-    cancelled_details = {
-        "type": "section",
-        "text": {
-            "type": "mrkdwn",
-            "text": cancelled_info
-        }
-    }
-
-    blocks = [cancelled_header, {"type": "divider"}, cancelled_details]
+    from app.practices.service import convert_practice_to_info
+    practice_info = convert_practice_to_info(practice)
+    blocks = build_practice_cancelled_notice(practice_info)
+    fallback = build_cancelled_practice_fallback_text(practice_info)
 
     try:
         # Update the original practice post
@@ -226,14 +208,15 @@ def update_practice_as_cancelled(practice: Practice, decided_by_name: str) -> di
             channel=practice.slack_channel_id,
             ts=practice.slack_message_ts,
             blocks=blocks,
-            text=f"CANCELLED: Practice on {practice.date.strftime('%A, %B %d')}"
+            text=fallback,
         )
 
         # Post a thread reply with cancellation notice
-        thread_text = f":x: This practice has been cancelled"
-        if practice.cancellation_reason:
-            thread_text += f": {practice.cancellation_reason}"
-        thread_text += f"\n\nDecision by {decided_by_name}"
+        thread_text = guard_fallback_text(
+            f"{fallback}\nDecision by {decided_by_name}",
+            surface="practice_cancellation_thread",
+            practice_id=practice.id,
+        )
 
         client.chat_postMessage(
             channel=practice.slack_channel_id,
@@ -248,3 +231,26 @@ def update_practice_as_cancelled(practice: Practice, decided_by_name: str) -> di
         error_msg = e.response.get('error', str(e))
         current_app.logger.error(f"Error updating practice as cancelled: {error_msg}")
         return {'success': False, 'error': error_msg}
+
+
+def post_combined_cancellation_thread_notice(practice: Practice) -> dict:
+    """Post a best-effort note after a shared root was safely rebuilt."""
+    text = (
+        f":x: {practice.date.strftime('%A at %-I:%M %p')} was cancelled: "
+        "Other sessions in this announcement are unchanged. "
+        f"Reason: {practice.cancellation_reason or 'Cancelled'}."
+    )
+    try:
+        get_slack_client().chat_postMessage(
+            channel=practice.slack_channel_id,
+            thread_ts=practice.slack_message_ts,
+            text=guard_fallback_text(
+                text,
+                surface="combined_cancellation_thread",
+                practice_id=practice.id,
+            ),
+            reply_broadcast=False,
+        )
+        return {"success": True}
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}

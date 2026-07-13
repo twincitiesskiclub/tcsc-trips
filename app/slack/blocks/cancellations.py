@@ -6,6 +6,7 @@ from app.practices.interfaces import (
     CancellationProposal,
     PracticeEvaluation,
 )
+from app.slack.blocks.text import guard_fallback_text, guard_slack_blocks
 
 
 def build_cancellation_proposal_blocks(
@@ -194,33 +195,53 @@ def build_practice_cancelled_notice(practice: PracticeInfo) -> list[dict]:
     Returns:
         List of Slack Block Kit blocks
     """
-    blocks = []
-
-    date_str = practice.date.strftime('%A, %B %d at %I:%M %p')
-    location = practice.location.name if practice.location else ""
-
-    blocks.append({
-        "type": "header",
-        "text": {
-            "type": "plain_text",
-            "text": ":x: Practice Cancelled"
-        }
-    })
-
-    cancel_text = f"The practice scheduled for *{date_str}*"
-    if location:
-        cancel_text += f" at *{location}*"
-    cancel_text += " has been cancelled."
-
+    date_str = practice.date.strftime('%A, %B %-d at %-I:%M %p')
+    location = practice.location.name if practice.location else "TBD"
+    details = f"~{date_str} at {location}~"
     if practice.cancellation_reason:
-        cancel_text += f"\n\n*Reason:* {practice.cancellation_reason}"
+        details += f"\n\n*Reason:* {practice.cancellation_reason}"
 
-    blocks.append({
+    blocks = [{
         "type": "section",
         "text": {
             "type": "mrkdwn",
-            "text": cancel_text
+            "text": ":x: *CANCELLED* :x:"
         }
-    })
+    }, {
+        "type": "divider",
+    }, {
+        "type": "section",
+        "text": {
+            "type": "mrkdwn",
+            "text": details,
+        }
+    }, {
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": "Please adjust your plans; no RSVP action is needed."
+        }]
+    }]
 
-    return blocks
+    return guard_slack_blocks(
+        blocks,
+        surface="practice_cancellation",
+        practice_id=practice.id,
+    )
+
+
+def build_cancelled_practice_fallback_text(practice: PracticeInfo) -> str:
+    """Build complete screen-reader and notification text for cancellation."""
+    date_str = practice.date.strftime('%A, %B %-d at %-I:%M %p')
+    location = practice.location.name if practice.location else "Location TBD"
+    reason = practice.cancellation_reason or "Cancelled"
+    text = (
+        f"Practice cancelled: {date_str} at {location}. "
+        "Please adjust your plans; no RSVP action is needed. "
+        f"Reason: {reason}."
+    )
+    return guard_fallback_text(
+        text,
+        surface="practice_cancellation",
+        practice_id=practice.id,
+    )

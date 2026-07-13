@@ -447,11 +447,24 @@ def edit_practice(practice_id):
 def delete_practice(practice_id):
     """Delete a practice."""
     practice = Practice.query.get_or_404(practice_id)
+    had_root = bool(practice.slack_message_ts)
 
     try:
         # Clean up Slack posts before deleting DB record
         from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='delete')
+        results = refresh_practice_posts(practice, change_type='delete')
+        announcement = results.get('announcement') or {}
+        safe = announcement.get('success') is True
+        if not had_root:
+            safe = safe or announcement.get('skipped') in {True, 'absent'}
+        if not safe:
+            return jsonify({
+                'success': False,
+                'error': (
+                    'Slack announcement could not be updated; '
+                    'practice was not deleted'
+                ),
+            }), 502
 
         db.session.delete(practice)
         db.session.commit()
@@ -463,7 +476,7 @@ def delete_practice(practice_id):
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @admin_practices_bp.route('/<int:practice_id>/cancel', methods=['POST'])
@@ -471,18 +484,30 @@ def delete_practice(practice_id):
 def cancel_practice(practice_id):
     """Cancel a practice with a reason."""
     practice = Practice.query.get_or_404(practice_id)
+    data = request.get_json() or {}
+    had_root = bool(practice.slack_message_ts)
 
     try:
-        data = request.get_json() or {}
-
         practice.status = PracticeStatus.CANCELLED.value
-        practice.cancellation_reason = data.get('reason', 'Cancelled by admin')
+        practice.cancellation_reason = (
+            data.get('reason') or 'Cancelled by admin'
+        )
 
         db.session.commit()
 
         # Update all Slack posts to show cancelled status
         from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='cancel')
+        results = refresh_practice_posts(practice, change_type='cancel')
+        announcement = results.get('announcement') or {}
+        if had_root and announcement.get('success') is not True:
+            return jsonify({
+                'success': False,
+                'practice_cancelled': True,
+                'error': (
+                    'Practice was cancelled, but its Slack announcement '
+                    'did not update'
+                ),
+            }), 502
 
         return jsonify({
             'success': True,
@@ -491,7 +516,7 @@ def cancel_practice(practice_id):
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @admin_practices_bp.route('/config')

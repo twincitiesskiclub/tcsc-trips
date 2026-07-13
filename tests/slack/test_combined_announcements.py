@@ -12,6 +12,7 @@ from app.slack.blocks import (
     build_combined_fallback_text,
     build_combined_lift_blocks,
 )
+from app.slack.blocks.cancellations import build_practice_cancelled_notice
 from app.slack.client import (
     assign_combined_session_emojis,
     get_lead_confirmation_emoji_for_practice,
@@ -679,3 +680,239 @@ def test_exclusion_details_failure_leaves_root_and_removed_seed_untouched(
     assert result["error"] == "Combined Details did not sync; root was not changed"
     client.chat_update.assert_not_called()
     client.reactions_remove.assert_not_called()
+
+
+def linked_practice(*args, details=None, **kwargs):
+    practice = model_practice(*args, **kwargs)
+    practice.slack_channel_id = 'C-STRENGTH'
+    practice.slack_message_ts = 'root.1'
+    practice.slack_details_ts = details
+    return practice
+
+
+def call_remove(practice, client, *, survivors=()):
+    from app.slack.practices.announcements import (
+        remove_practice_from_announcement,
+    )
+
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        return_value=list(survivors),
+    ), patch(
+        'app.slack.practices.announcements.get_slack_client',
+        return_value=client,
+    ), patch('app.slack.practices.announcements.db') as mock_db:
+        result = remove_practice_from_announcement(practice)
+    return result, mock_db
+
+
+def test_cancelled_standalone_blocks_and_fallback_are_complete_and_guarded():
+    from app.slack.blocks.cancellations import (
+        build_cancelled_practice_fallback_text,
+    )
+
+    practice = model_practice(
+        1, 14, 18, None, status=PracticeStatus.CANCELLED,
+        reason='Facility closed ' + ('x' * 5_000),
+    )
+    blocks = build_practice_cancelled_notice(practice)
+    fallback = build_cancelled_practice_fallback_text(practice)
+
+    assert ':x: *CANCELLED* :x:' in rendered_text(blocks)
+    assert '~Tuesday, July 14 at 6:15 PM at Balance Fitness~' in rendered_text(
+        blocks
+    )
+    assert max(
+        len(block['text']['text']) for block in blocks
+        if block['type'] in {'header', 'section'}
+    ) <= 3_000
+    assert len(fallback) <= 4_000
+    assert all(value.lower() in fallback.lower() for value in (
+        'Tuesday, July 14', '6:15 PM', 'Balance Fitness', 'cancelled',
+        'Facility closed', 'adjust your plans',
+    ))
+
+
+def test_combined_cancellation_rebuild_keeps_active_sibling_in_root(
+    app_context,
+):
+    from app.slack.practices.announcements import update_combined_lift_post
+
+    cancelled = linked_practice(
+        1, 14, 18, 'six', status=PracticeStatus.CANCELLED,
+        reason='Facility closed',
+    )
+    survivor = linked_practice(2, 15, 19, 'seven')
+    practices = [cancelled, survivor]
+    client = MagicMock()
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        return_value=practices,
+    ), patch(
+        'app.slack.practices.announcements.assign_combined_session_emojis',
+        return_value={'success': True, 'emojis': {1: 'six', 2: 'seven'}},
+    ), patch(
+        'app.slack.practices.announcements.get_slack_client',
+        return_value=client,
+    ), patch(
+        'app.slack.practices.announcements.convert_practice_to_info',
+        side_effect=lambda item: item,
+    ), patch(
+        'app.slack.practices.announcements._upsert_combined_details_reply',
+        return_value={'success': True},
+    ):
+        result = update_combined_lift_post(cancelled)
+
+    assert result['success'] is True
+    text = rendered_text(client.chat_update.call_args.kwargs['blocks'])
+    assert ':six:' in text and 'CANCELLED' in text
+    assert ':seven: *Wednesday' in text
+
+
+def test_delete_survivor_uses_direct_exclusion_api(app_context):
+    from app.slack.practices.announcements import (
+        remove_practice_from_announcement,
+    )
+
+    removed = linked_practice(
+        1, 14, 18, 'six',
+        plan=[{'emoji': 'evergreen_tree', 'label': 'Endurance'}],
+    )
+    survivor = linked_practice(2, 15, 19, 'seven')
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        return_value=[survivor],
+    ) as mock_siblings, patch(
+        'app.slack.practices.announcements.update_combined_lift_post',
+        return_value={'success': True},
+    ) as mock_update:
+        assert remove_practice_from_announcement(removed) == {'success': True}
+
+    mock_siblings.assert_called_once_with(
+        removed, exclude_practice_id=removed.id
+    )
+    mock_update.assert_called_once_with(
+        removed, exclude_practice_id=removed.id,
+        previous_plan_reactions=removed.plan_reactions,
+    )
+
+
+@pytest.mark.parametrize(
+    ('mode', 'details', 'expected', 'calls', 'saved', 'commits'),
+    [
+        ('success', 'details.1', {'success': True},
+         ['details.1', 'root.1'], (None, None, None), 2),
+        ('details_error', 'details.1',
+         {'success': False, 'error': 'details failed'},
+         ['details.1'], ('details.1', 'root.1', 'C-STRENGTH'), 0),
+        ('root_error', None, {'success': False, 'error': 'root failed'},
+         ['root.1'], (None, 'root.1', 'C-STRENGTH'), 0),
+        ('missing', None, {'success': True},
+         ['root.1'], (None, None, None), 1),
+    ],
+)
+def test_final_session_delete_order_idempotency_and_retry_state(
+    app_context, mode, details, expected, calls, saved, commits,
+):
+    from slack_sdk.errors import SlackApiError
+
+    practice = linked_practice(1, 14, 18, 'six', details=details)
+    client = MagicMock()
+    if mode == 'details_error':
+        client.chat_delete.side_effect = RuntimeError('details failed')
+    elif mode == 'root_error':
+        client.chat_delete.side_effect = RuntimeError('root failed')
+    elif mode == 'missing':
+        client.chat_delete.side_effect = SlackApiError(
+            'missing', {'error': 'message_not_found'}
+        )
+
+    result, mock_db = call_remove(practice, client)
+
+    assert result == expected
+    assert [call.kwargs['ts'] for call in client.chat_delete.call_args_list] == calls
+    assert (
+        practice.slack_details_ts,
+        practice.slack_message_ts,
+        practice.slack_channel_id,
+    ) == saved
+    assert mock_db.session.commit.call_count == commits
+
+
+def test_combined_cancellation_thread_notice_is_complete_and_guarded(
+    app_context,
+):
+    from app.slack.practices.cancellations import (
+        post_combined_cancellation_thread_notice,
+    )
+
+    practice = linked_practice(
+        1, 14, 18, 'six', status=PracticeStatus.CANCELLED,
+        reason='Facility closed ' + ('x' * 5_000),
+    )
+    client = MagicMock()
+    with patch(
+        'app.slack.practices.cancellations.get_slack_client',
+        return_value=client,
+    ):
+        assert post_combined_cancellation_thread_notice(practice) == {
+            'success': True
+        }
+
+    kwargs = client.chat_postMessage.call_args.kwargs
+    assert (kwargs['channel'], kwargs['thread_ts'], kwargs['reply_broadcast']) == (
+        'C-STRENGTH', 'root.1', False,
+    )
+    assert len(kwargs['text']) <= 4_000
+    assert all(value in kwargs['text'] for value in (
+        'Tuesday at 6:15 PM', 'Facility closed', 'unchanged',
+    ))
+
+
+@pytest.mark.parametrize('operation', ['update', 'post'])
+def test_standalone_cancellation_writes_complete_builder_fallback(
+    app_context, operation,
+):
+    from app.slack.practices import cancellations
+
+    practice = linked_practice(
+        1, 14, 18, None, status=PracticeStatus.CANCELLED,
+        reason='Facility closed',
+    )
+    if operation == 'post':
+        practice.slack_message_ts = None
+        practice.slack_channel_id = None
+    client = MagicMock()
+    client.chat_postMessage.return_value = {'ts': 'notice.1'}
+    blocks = [{'type': 'section', 'text': {'type': 'mrkdwn', 'text': 'safe'}}]
+    with patch(
+        'app.slack.practices.cancellations.get_slack_client',
+        return_value=client,
+    ), patch(
+        'app.slack.practices.cancellations._get_announcement_channel',
+        return_value='C-STRENGTH',
+    ), patch(
+        'app.practices.service.convert_practice_to_info',
+        return_value=practice,
+    ), patch(
+        'app.slack.practices.cancellations.build_practice_cancelled_notice',
+        return_value=blocks,
+    ), patch(
+        'app.slack.practices.cancellations.build_cancelled_practice_fallback_text',
+        return_value='complete fallback',
+    ):
+        if operation == 'update':
+            result = cancellations.update_practice_as_cancelled(
+                practice, 'Admin'
+            )
+            kwargs = client.chat_update.call_args.kwargs
+            assert client.chat_postMessage.call_args.kwargs['text'].startswith(
+                'complete fallback'
+            )
+        else:
+            result = cancellations.post_cancellation_notice(practice)
+            kwargs = client.chat_postMessage.call_args.kwargs
+
+    assert result['success'] is True
+    assert kwargs['blocks'] == blocks
+    assert kwargs['text'] == 'complete fallback'

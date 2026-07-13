@@ -23,6 +23,10 @@ class FakePractice:
 
     def __init__(self, **kwargs):
         self.id = kwargs.get('id', 1)
+        self.date = kwargs.get('date', datetime(2026, 7, 14, 18, 15))
+        self.cancellation_reason = kwargs.get('cancellation_reason')
+        self.plan_reactions = kwargs.get('plan_reactions', [])
+        self.slack_session_emoji = kwargs.get('slack_session_emoji')
         self.slack_message_ts = kwargs.get('slack_message_ts')
         self.slack_channel_id = kwargs.get('slack_channel_id')
         self.slack_collab_message_ts = kwargs.get('slack_collab_message_ts')
@@ -58,7 +62,18 @@ class TestRefreshAnnouncement:
 
     def test_skips_when_no_ts(self):
         practice = FakePractice()
-        assert _refresh_announcement(practice, 'edit')['skipped'] is True
+        assert _refresh_announcement(practice, 'edit') == {
+            'success': True,
+            'skipped': 'absent',
+        }
+
+    def test_timestamp_without_channel_is_an_error(self):
+        practice = FakePractice(slack_message_ts='123')
+
+        assert _refresh_announcement(practice, 'delete') == {
+            'success': False,
+            'error': 'Slack message has no channel',
+        }
 
     @patch('app.slack.practices.announcements.update_practice_slack_post')
     def test_edit_calls_update_practice_slack_post(self, mock_update):
@@ -95,8 +110,82 @@ class TestRefreshAnnouncement:
     def test_cancel_calls_update_as_cancelled(self, mock_cancel):
         mock_cancel.return_value = {'success': True}
         practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
-        result = _refresh_announcement(practice, 'cancel')
+        with patch(
+            'app.slack.practices.announcements.is_combined_lift_practice',
+            return_value=False,
+        ):
+            result = _refresh_announcement(practice, 'cancel')
         mock_cancel.assert_called_once_with(practice, 'Admin')
+
+    @pytest.mark.parametrize(
+        'notice_result',
+        [
+            {'success': True},
+            {'success': False, 'error': 'thread failed'},
+        ],
+    )
+    def test_cancel_combined_rebuilds_root_then_posts_best_effort_notice(
+        self, notice_result,
+    ):
+        practice = FakePractice(
+            slack_message_ts='123',
+            slack_channel_id='C123',
+            slack_session_emoji='six',
+            cancellation_reason='Facility closed',
+        )
+        with patch(
+            'app.slack.practices.announcements.is_combined_lift_practice',
+            return_value=True,
+        ), patch(
+            'app.slack.practices.announcements.update_combined_lift_post',
+            return_value={'success': True},
+        ) as mock_rebuild, patch(
+            'app.slack.practices.cancellations.post_combined_cancellation_thread_notice',
+            return_value=notice_result,
+        ) as mock_notice, patch(
+            'app.slack.practices.cancellations.update_practice_as_cancelled',
+        ) as mock_standalone:
+            result = _refresh_announcement(practice, 'cancel')
+
+        assert result == {'success': True}
+        mock_rebuild.assert_called_once_with(practice)
+        mock_notice.assert_called_once_with(practice)
+        mock_standalone.assert_not_called()
+
+    def test_failed_combined_rebuild_does_not_post_cancellation_notice(self):
+        practice = FakePractice(
+            slack_message_ts='123',
+            slack_channel_id='C123',
+            slack_session_emoji='six',
+        )
+        with patch(
+            'app.slack.practices.announcements.is_combined_lift_practice',
+            return_value=True,
+        ), patch(
+            'app.slack.practices.announcements.update_combined_lift_post',
+            return_value={'success': False, 'error': 'root failed'},
+        ), patch(
+            'app.slack.practices.cancellations.post_combined_cancellation_thread_notice',
+        ) as mock_notice:
+            result = _refresh_announcement(practice, 'cancel')
+
+        assert result == {'success': False, 'error': 'root failed'}
+        mock_notice.assert_not_called()
+
+    def test_delete_routes_through_safe_announcement_removal(self):
+        practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
+        with patch(
+            'app.slack.practices.announcements.remove_practice_from_announcement',
+            return_value={'success': True},
+            create=True,
+        ) as mock_remove, patch(
+            'app.slack.client.get_slack_client',
+        ) as mock_client:
+            result = _refresh_announcement(practice, 'delete')
+
+        assert result == {'success': True}
+        mock_remove.assert_called_once_with(practice)
+        mock_client.assert_not_called()
 
     @patch('app.slack.practices.rsvp.update_practice_rsvp_counts')
     def test_rsvp_calls_update_counts(self, mock_rsvp):
@@ -241,6 +330,67 @@ class TestErrorIsolation:
             result = _refresh_announcement(practice, 'edit')
         assert result['success'] is False
         assert 'boom' in result['error']
+
+    def test_failed_delete_announcement_blocks_later_surfaces(self):
+        from app.slack.practices.refresh import PracticeSurface
+
+        calls = []
+        practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
+        surfaces = [
+            PracticeSurface(
+                'announcement', 'slack_message_ts', ['delete'],
+                lambda *_args, **_kwargs: calls.append('announcement') or {
+                    'success': False, 'error': 'root failed'
+                },
+            ),
+            PracticeSurface(
+                'collab', 'slack_message_ts', ['delete'],
+                lambda *_args, **_kwargs: calls.append('collab') or {
+                    'success': True
+                },
+            ),
+            PracticeSurface(
+                'weekly_summary', 'slack_message_ts', ['delete'],
+                lambda *_args, **_kwargs: calls.append('weekly') or {
+                    'success': True
+                },
+            ),
+        ]
+
+        with patch('app.slack.practices.refresh.PRACTICE_SURFACES', surfaces):
+            results = refresh_practice_posts(practice, change_type='delete')
+
+        assert calls == ['announcement']
+        assert results['collab'] == {'skipped': 'blocked_by_announcement'}
+        assert results['weekly_summary'] == {
+            'skipped': 'blocked_by_announcement'
+        }
+
+    def test_successful_delete_announcement_does_not_block_later_failures(self):
+        from app.slack.practices.refresh import PracticeSurface
+
+        calls = []
+        practice = FakePractice(slack_message_ts='123', slack_channel_id='C123')
+        surfaces = [
+            PracticeSurface(
+                'announcement', 'slack_message_ts', ['delete'],
+                lambda *_args, **_kwargs: calls.append('announcement') or {
+                    'success': True
+                },
+            ),
+            PracticeSurface(
+                'weekly_summary', 'slack_message_ts', ['delete'],
+                lambda *_args, **_kwargs: calls.append('weekly') or {
+                    'success': False, 'error': 'weekly failed'
+                },
+            ),
+        ]
+
+        with patch('app.slack.practices.refresh.PRACTICE_SURFACES', surfaces):
+            results = refresh_practice_posts(practice, change_type='delete')
+
+        assert calls == ['announcement', 'weekly']
+        assert results['weekly_summary']['success'] is False
 
     def test_collab_error_returns_error_dict(self):
         practice = FakePractice(slack_collab_message_ts='456')
