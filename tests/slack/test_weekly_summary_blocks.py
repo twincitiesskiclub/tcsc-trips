@@ -62,22 +62,27 @@ def section_texts(blocks):
 @pytest.mark.parametrize(
     ("week_start", "expected"),
     [
-        (date(2026, 7, 13), "Practices this week · July 13–19"),
-        (date(2026, 7, 27), "Practices this week · July 27–August 2"),
+        (date(2026, 7, 13), "📅 Practices this week · July 13–19"),
+        (date(2026, 7, 27), "📅 Practices this week · July 27–August 2"),
         (
             date(2026, 12, 28),
-            "Practices this week · December 28, 2026–January 3, 2027",
+            "📅 Practices this week · December 28, 2026–January 3, 2027",
         ),
     ],
 )
-def test_heading_uses_the_explicit_full_calendar_week(week_start, expected):
-    sessions = [
-        practice(1, datetime.combine(week_start, datetime.min.time()).replace(hour=18))
-    ]
-
-    blocks = build_weekly_summary_blocks(sessions, week_start=week_start)
-
-    assert header_text(blocks) == expected
+def test_heading_uses_one_calendar_emoji_and_explicit_full_week(
+    week_start, expected
+):
+    blocks = build_weekly_summary_blocks(
+        [practice(1, datetime.combine(week_start, datetime.min.time()).replace(hour=18))],
+        week_start=week_start,
+    )
+    assert blocks[0]["text"]["text"] == expected
+    day_text = "\n".join(
+        block["text"]["text"] for block in blocks
+        if block.get("type") == "section"
+    )
+    assert "📅" not in day_text
 
 
 def test_one_semantic_section_per_date_has_exact_copy_and_chronological_rows():
@@ -118,54 +123,81 @@ def test_one_semantic_section_per_date_has_exact_copy_and_chronological_rows():
     assert "|" not in "\n".join(section_texts(blocks))
 
 
-def test_cancelled_session_stays_visible_without_weather():
+def test_cancelled_row_uses_stop_sign_and_suppresses_forecast():
     cancelled = practice(
-        9,
-        datetime(2026, 7, 16, 18, 5),
-        activity="Strength",
-        location="Balance Fitness",
+        2,
+        datetime(2026, 8, 2, 9, 0),
         status=PracticeStatus.CANCELLED,
         reason="Heat warning",
     )
-
     blocks = build_weekly_summary_blocks(
         [cancelled],
-        week_start=date(2026, 7, 13),
-        weather_data={9: {"temp_f": 101, "conditions": "dangerously hot"}},
+        week_start=date(2026, 7, 27),
+        weather_data={2: {"temp_f": 92, "conditions": "hot"}},
     )
-    rendered = "\n".join(section_texts(blocks))
+    text = "\n".join(
+        block["text"]["text"] for block in blocks
+        if block.get("type") == "section"
+    )
+    assert "🚫 CANCELLED · Heat warning" in text
+    assert text.count("🚫") == 1
+    assert "Forecast:" not in text
 
-    assert "CANCELLED · Heat warning" in rendered
-    assert "Strength · Balance Fitness" in rendered
-    assert "Forecast" not in rendered
-    assert "101" not in rendered
+
+def test_active_week_uses_fixed_non_day_specific_footer():
+    practices = [
+        practice(1, datetime(2026, 7, 27, 6, 0)),
+        practice(2, datetime(2026, 7, 27, 18, 0)),
+        practice(3, datetime(2026, 7, 30, 18, 0)),
+    ]
+    contexts = [
+        block for block in build_weekly_summary_blocks(
+            practices, week_start=date(2026, 7, 27)
+        )
+        if block.get("type") == "context"
+    ]
+    assert contexts == [{
+        "type": "context",
+        "elements": [{
+            "type": "mrkdwn",
+            "text": (
+                "📝 Full practice details will be posted before each practice. "
+                "· <!channel>"
+            ),
+        }],
+    }]
 
 
-def test_footer_uses_unique_active_weekdays_and_natural_language():
-    sessions = [
-        practice(1, datetime(2026, 7, 14, 18, 15)),
-        practice(2, datetime(2026, 7, 16, 18, 5), activity="Strength"),
-        practice(3, datetime(2026, 7, 16, 19, 20), activity="Strength"),
-        practice(4, datetime(2026, 7, 18, 9, 0)),
+def test_all_cancelled_week_omits_footer():
+    cancelled = practice(
+        1,
+        datetime(2026, 7, 27, 18, 0),
+        status=PracticeStatus.CANCELLED,
+        reason="Heat warning",
+    )
+    blocks = build_weekly_summary_blocks(
+        [cancelled], week_start=date(2026, 7, 27)
+    )
+    assert not any(block.get("type") == "context" for block in blocks)
+
+
+def test_weekly_fallback_remains_plain_and_has_no_broadcast_token():
+    practices = [
+        practice(1, datetime(2026, 7, 27, 18, 0)),
         practice(
-            5,
-            datetime(2026, 7, 17, 18, 0),
+            2,
+            datetime(2026, 8, 2, 9, 0),
             status=PracticeStatus.CANCELLED,
-            reason="Rest day",
+            reason="Heat warning",
         ),
     ]
-
-    blocks = build_weekly_summary_blocks(sessions, week_start=date(2026, 7, 13))
-    contexts = [
-        element["text"]
-        for block in blocks
-        if block["type"] == "context"
-        for element in block["elements"]
-    ]
-
-    assert contexts == ["Daily details posted Tue, Thu, and Sat. · <!channel>"]
-    assert "Tue–Thu" not in " ".join(contexts)
-    assert "Tue-Thu" not in " ".join(contexts)
+    fallback = build_weekly_summary_fallback_text(
+        practices, week_start=date(2026, 7, 27)
+    )
+    for forbidden in ("📅", "🚫", "📝", "<!channel>"):
+        assert forbidden not in fallback
+    assert "Practices this week · July 27–August 2." in fallback
+    assert "CANCELLED: Heat warning" in fallback
 
 
 def test_fallback_has_full_range_and_every_active_or_cancelled_row():
@@ -207,7 +239,7 @@ def test_empty_week_has_heading_and_clear_copy_without_footer():
         [], week_start=date(2026, 7, 13)
     )
 
-    assert header_text(blocks) == "Practices this week · July 13–19"
+    assert header_text(blocks) == "📅 Practices this week · July 13–19"
     assert section_texts(blocks) == ["No practices scheduled this week."]
     assert not [block for block in blocks if block["type"] == "context"]
     assert fallback == (
@@ -282,7 +314,7 @@ def test_oversized_first_and_middle_rows_preserve_later_block_essentials():
     [day_text] = section_texts(blocks)
 
     assert len(day_text) <= 3000
-    assert "5:00 PM · CANCELLED ·" in day_text
+    assert "5:00 PM · 🚫 CANCELLED ·" in day_text
     assert "Cancelled Strength · First Park" in day_text
     assert "6:00 PM ·" in day_text
     assert "Forecast: 80°F" in day_text

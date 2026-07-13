@@ -123,14 +123,6 @@ def _forecast_line(practice, weather_data):
     return "Forecast: " + ", ".join(values) if values else None
 
 
-def _natural_days(values):
-    if len(values) == 1:
-        return values[0]
-    if len(values) == 2:
-        return f"{values[0]} and {values[1]}"
-    return ", ".join(values[:-1]) + f", and {values[-1]}"
-
-
 def _weekly_day_text(day_practices, weather_data):
     first = day_practices[0]
     if len(day_practices) == 1:
@@ -139,10 +131,16 @@ def _weekly_day_text(day_practices, weather_data):
             f"{first.date.strftime('%-I:%M %p')}*"
         ]
         if _is_cancelled(first):
-            lines.append(f"CANCELLED · {_cancellation_reason(first)}")
-            lines.append(f"{_practice_kind(first)} · {_location_name(first)}")
+            lines.append(
+                f"🚫 CANCELLED · {_cancellation_reason(first)}"
+            )
+            lines.append(
+                f"{_practice_kind(first)} · {_location_name(first)}"
+            )
         else:
-            lines.append(f"{_practice_kind(first)} · {_location_name(first)}")
+            lines.append(
+                f"{_practice_kind(first)} · {_location_name(first)}"
+            )
             forecast = _forecast_line(first, weather_data)
             if forecast:
                 lines.append(forecast)
@@ -152,7 +150,7 @@ def _weekly_day_text(day_practices, weather_data):
     for practice in day_practices:
         if _is_cancelled(practice):
             lines.append(
-                f"{practice.date.strftime('%-I:%M %p')} · CANCELLED · "
+                f"{practice.date.strftime('%-I:%M %p')} · 🚫 CANCELLED · "
                 f"{_cancellation_reason(practice)} · "
                 f"{_practice_kind(practice)} · {_location_name(practice)}"
             )
@@ -171,7 +169,7 @@ def build_weekly_summary_blocks(practices, *, week_start, weather_data=None):
     """Build one guarded Slack section for each represented calendar date."""
     start = _week_date(week_start)
     ordered = sorted(practices, key=lambda item: (item.date, item.id))
-    heading = f"Practices this week · {_format_week_range(start)}"
+    heading = f"📅 Practices this week · {_format_week_range(start)}"
     blocks = [
         {
             "type": "header",
@@ -202,26 +200,17 @@ def build_weekly_summary_blocks(practices, *, week_start, weather_data=None):
             }
         )
 
-    active_days = []
-    for practice in ordered:
-        abbreviation = practice.date.strftime("%a")
-        if not _is_cancelled(practice) and abbreviation not in active_days:
-            active_days.append(abbreviation)
-    if active_days:
-        blocks.append(
-            {
-                "type": "context",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": (
-                            f"Daily details posted {_natural_days(active_days)}. "
-                            "· <!channel>"
-                        ),
-                    }
-                ],
-            }
-        )
+    if any(not _is_cancelled(practice) for practice in ordered):
+        blocks.append({
+            "type": "context",
+            "elements": [{
+                "type": "mrkdwn",
+                "text": (
+                    "📝 Full practice details will be posted before each practice. "
+                    "· <!channel>"
+                ),
+            }],
+        })
 
     return guard_slack_blocks(blocks, surface="weekly_summary")
 
