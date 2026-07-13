@@ -942,7 +942,10 @@ def test_plan_divergence_removes_only_obsolete_bot_seed(app_context):
     assert result["success"] is True
     removed = [item.kwargs["name"] for item in client.reactions_remove.call_args_list]
     assert removed == ["athletic_shoe", "evergreen_tree"]
-    client.reactions_add.assert_not_called()
+    assert [
+        item.kwargs["name"]
+        for item in client.reactions_add.call_args_list
+    ] == ["six", "seven"]
 
 
 def test_exclusion_assigns_every_legacy_sibling_before_one_survivor_rebuild(
@@ -1136,6 +1139,10 @@ def test_combined_cancellation_rebuild_keeps_active_sibling_in_root(
         item.kwargs['name']
         for item in client.reactions_remove.call_args_list
     ] == ['six']
+    assert [
+        item.kwargs['name']
+        for item in client.reactions_add.call_args_list
+    ] == ['seven']
 
 
 def test_all_cancelled_rebuild_removes_attendance_and_shared_plan_seeds(
@@ -1225,7 +1232,69 @@ def test_mixed_cancelled_rebuild_keeps_visible_shared_plan_seed(app_context):
     assert [
         item.kwargs['name']
         for item in client.reactions_add.call_args_list
-    ] == ['evergreen_tree']
+    ] == ['evergreen_tree', 'six']
+
+
+@pytest.mark.parametrize(
+    'restored_status',
+    [PracticeStatus.SCHEDULED, PracticeStatus.CONFIRMED],
+)
+def test_cancelled_session_restoration_readds_active_attendance_seed(
+    app_context,
+    restored_status,
+):
+    from app.slack.practices.announcements import update_combined_lift_post
+
+    restored = linked_practice(
+        1, 14, 18, 'six', status=PracticeStatus.CANCELLED,
+        reason='Facility closed',
+    )
+    survivor = linked_practice(2, 15, 19, 'seven')
+    practices = [restored, survivor]
+    client = MagicMock()
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        return_value=practices,
+    ), patch(
+        'app.slack.practices.announcements.assign_combined_session_emojis',
+        return_value={'success': True, 'emojis': {1: 'six', 2: 'seven'}},
+    ), patch(
+        'app.slack.practices.announcements.get_slack_client',
+        return_value=client,
+    ), patch(
+        'app.slack.practices.announcements.convert_practice_to_info',
+        side_effect=lambda item: item,
+    ), patch(
+        'app.slack.practices.announcements._upsert_combined_details_reply',
+        return_value={'success': True},
+    ):
+        cancelled_result = update_combined_lift_post(restored)
+        cancelled_removed = [
+            item.kwargs['name']
+            for item in client.reactions_remove.call_args_list
+        ]
+        cancelled_added = [
+            item.kwargs['name']
+            for item in client.reactions_add.call_args_list
+        ]
+
+        restored.status = restored_status
+        client.reset_mock()
+        restored_result = update_combined_lift_post(restored)
+
+    assert cancelled_result['success'] is True
+    assert cancelled_removed == ['six']
+    assert cancelled_added == ['seven']
+    assert restored_result['success'] is True
+    restored_text = rendered_text(client.chat_update.call_args.kwargs['blocks'])
+    assert 'Bop :six: for Tue at 6:15 PM or :seven: for Wed at 7:15 PM' in (
+        restored_text
+    )
+    assert [
+        item.kwargs['name']
+        for item in client.reactions_add.call_args_list
+    ] == ['six', 'seven']
+    client.reactions_remove.assert_not_called()
 
 
 def test_delete_survivor_uses_direct_exclusion_api(app_context):

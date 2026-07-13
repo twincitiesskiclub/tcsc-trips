@@ -879,6 +879,23 @@ def _shared_plan_names(practices):
     return plan_reaction_names(_shared_plan_reactions(_combined_infos(practices)))
 
 
+def _add_combined_seed(client, practices, name):
+    try:
+        client.reactions_add(
+            channel=practices[0].slack_channel_id,
+            timestamp=practices[0].slack_message_ts,
+            name=name,
+        )
+    except Exception as exc:
+        if _reaction_error_name(exc) != "already_reacted":
+            current_app.logger.warning(
+                "Could not add :%s: on combined root %s: %s",
+                name,
+                practices[0].slack_message_ts,
+                exc,
+            )
+
+
 def _seed_combined_reactions(client, practices):
     active = [
         item for item in practices
@@ -888,20 +905,7 @@ def _seed_combined_reactions(client, practices):
     if active:
         names.extend(_shared_plan_names(practices))
     for name in dict.fromkeys(names):
-        try:
-            client.reactions_add(
-                channel=practices[0].slack_channel_id,
-                timestamp=practices[0].slack_message_ts,
-                name=name,
-            )
-        except Exception as exc:
-            if _reaction_error_name(exc) != "already_reacted":
-                current_app.logger.warning(
-                    "Could not seed :%s: on combined root %s: %s",
-                    name,
-                    practices[0].slack_message_ts,
-                    exc,
-                )
+        _add_combined_seed(client, practices, name)
 
 
 def _remove_combined_seed(client, practices, name):
@@ -939,20 +943,7 @@ def _reconcile_combined_plan_reactions(
     for name in sorted(known - desired):
         _remove_combined_seed(client, practices, name)
     for name in sorted(desired):
-        try:
-            client.reactions_add(
-                channel=practices[0].slack_channel_id,
-                timestamp=practices[0].slack_message_ts,
-                name=name,
-            )
-        except Exception as exc:
-            if _reaction_error_name(exc) != "already_reacted":
-                current_app.logger.warning(
-                    "Could not add :%s: to combined root %s: %s",
-                    name,
-                    practices[0].slack_message_ts,
-                    exc,
-                )
+        _add_combined_seed(client, practices, name)
 
 
 def post_combined_lift_announcement(practices, channel_override=None):
@@ -1240,6 +1231,17 @@ def update_combined_lift_post(
             siblings,
             previous_plan_reactions=previous_plan_reactions,
         )
+        attendance_seed_names_to_add = [
+            item.slack_session_emoji
+            for item in siblings
+            if (
+                item.slack_session_emoji
+                and getattr(item.status, "value", item.status)
+                != PracticeStatus.CANCELLED.value
+            )
+        ]
+        for name in dict.fromkeys(attendance_seed_names_to_add):
+            _add_combined_seed(client, siblings, name)
         attendance_seed_names_to_remove = [
             item.slack_session_emoji
             for item in siblings
