@@ -236,6 +236,20 @@ def test_full_edit_modal_prefills_saved_notes_and_plan_snapshot():
     )
 
 
+def test_full_edit_modal_wraps_skin_tone_name_once():
+    practice = _practice_info()
+    practice.plan_reactions = [{
+        "emoji": "older_adult::skin-tone-4",
+        "label": "experienced rollerskier",
+    }]
+    field = _blocks_by_id(
+        build_practice_edit_full_modal(practice)
+    )["plan_reactions_block"]
+    assert field["element"]["initial_value"] == (
+        ":older_adult::skin-tone-4: experienced rollerskier"
+    )
+
+
 @pytest.mark.parametrize(
     ("plan_text", "expected"),
     [

@@ -1,13 +1,19 @@
+from copy import deepcopy
 from types import SimpleNamespace
 
 import pytest
 
 from app.practices.plan_reactions import (
+    MAX_PLAN_REACTION_NAME,
     PlanReactionValidationError,
     format_plan_reaction_legend,
     format_plan_reaction_lines,
+    format_reaction_name_for_fallback,
+    format_supplemental_reaction_fallback,
+    format_supplemental_reaction_sentence,
     normalize_plan_reactions,
     parse_plan_reaction_lines,
+    plan_reaction_names,
     resolve_default_plan_reactions,
 )
 
@@ -113,3 +119,164 @@ def test_resolver_sorts_sources_and_rejects_effective_overflow():
                 for index in range(2)
             ])],
         )
+
+
+def test_skin_tone_bare_and_wrapped_names_normalize_and_round_trip():
+    expected = [{
+        "emoji": "older_adult::skin-tone-4",
+        "label": "experienced rollerskier",
+    }]
+    assert parse_plan_reaction_lines(
+        "older_adult::skin-tone-4 experienced rollerskier"
+    ) == expected
+    assert parse_plan_reaction_lines(
+        ":older_adult::skin-tone-4: experienced rollerskier"
+    ) == expected
+    assert format_plan_reaction_lines(expected) == (
+        ":older_adult::skin-tone-4: experienced rollerskier"
+    )
+    assert plan_reaction_names(expected) == ["older_adult::skin-tone-4"]
+
+
+def test_different_skin_tones_on_one_base_remain_distinct_names():
+    reactions = normalize_plan_reactions([
+        {"emoji": "older_adult::skin-tone-3", "label": "Group three"},
+        {"emoji": "older_adult::skin-tone-4", "label": "Group four"},
+    ])
+    assert plan_reaction_names(reactions) == [
+        "older_adult::skin-tone-3",
+        "older_adult::skin-tone-4",
+    ]
+
+
+@pytest.mark.parametrize(
+    "emoji",
+    [
+        "older_adult::skin-tone-1",
+        "older_adult::skin-tone-7",
+        "older_adult::skin-tone-4::skin-tone-5",
+        "older_adult:skin-tone-4",
+        "::skin-tone-4",
+        "older_adult::skin_tone_4",
+    ],
+)
+def test_malformed_skin_tone_names_are_rejected(emoji):
+    with pytest.raises(PlanReactionValidationError, match="Slack emoji shortcode"):
+        normalize_plan_reactions([{"emoji": emoji, "label": "Choice"}])
+
+
+def test_modifier_cannot_bypass_reserved_attendance_base():
+    with pytest.raises(PlanReactionValidationError, match="reserved"):
+        normalize_plan_reactions([{
+            "emoji": "white_check_mark::skin-tone-4",
+            "label": "Not allowed",
+        }])
+
+
+def test_normalized_reaction_name_length_boundary():
+    suffix = "::skin-tone-4"
+    allowed = "x" * (MAX_PLAN_REACTION_NAME - len(suffix)) + suffix
+    assert normalize_plan_reactions([{
+        "emoji": allowed,
+        "label": "Allowed",
+    }])[0]["emoji"] == allowed
+    with pytest.raises(PlanReactionValidationError, match="80 characters"):
+        normalize_plan_reactions([{
+            "emoji": "x" * (MAX_PLAN_REACTION_NAME - len(suffix) + 1) + suffix,
+            "label": "Too long",
+        }])
+
+
+@pytest.mark.parametrize(
+    ("reactions", "expected"),
+    [
+        ([], ""),
+        (
+            [{"emoji": "hatching_chick", "label": "new rollerskier"}],
+            "In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier.",
+        ),
+        (
+            [
+                {"emoji": "hatching_chick", "label": "new rollerskier"},
+                {"emoji": "athletic_shoe", "label": "runner"},
+            ],
+            "In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier and a :athletic_shoe: for runner.",
+        ),
+        (
+            [
+                {"emoji": "hatching_chick", "label": "new rollerskier"},
+                {
+                    "emoji": "older_adult::skin-tone-4",
+                    "label": "experienced rollerskier",
+                },
+                {"emoji": "athletic_shoe", "label": "runner"},
+            ],
+            "In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier, a :older_adult::skin-tone-4: for experienced "
+            "rollerskier, and a :athletic_shoe: for runner.",
+        ),
+        (
+            [
+                {"emoji": "hatching_chick", "label": "new rollerskier"},
+                {"emoji": "older_adult", "label": "experienced rollerskier"},
+                {"emoji": "athletic_shoe", "label": "runner"},
+                {"emoji": "evergreen_tree", "label": "endurance"},
+            ],
+            "In addition to your attendance emoji, hit a :hatching_chick: "
+            "for new rollerskier, a :older_adult: for experienced rollerskier, "
+            "a :athletic_shoe: for runner, and a :evergreen_tree: for endurance.",
+        ),
+    ],
+)
+def test_supplemental_instruction_has_exact_zero_to_four_choice_grammar(
+    reactions, expected
+):
+    assert format_supplemental_reaction_sentence(reactions) == expected
+
+
+def test_supplemental_fallback_uses_plain_names_and_semicolon_grammar():
+    reactions = [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {
+            "emoji": "older_adult::skin-tone-4",
+            "label": "experienced rollerskier",
+        },
+        {"emoji": "athletic_shoe", "label": "runner"},
+    ]
+    assert format_reaction_name_for_fallback(
+        "older_adult::skin-tone-4"
+    ) == "older adult, skin tone 4"
+    assert format_reaction_name_for_fallback("six") == "six"
+    assert format_supplemental_reaction_fallback(reactions) == (
+        "Additional reactions: hatching chick for new rollerskier; "
+        "older adult, skin tone 4 for experienced rollerskier; "
+        "athletic shoe for runner."
+    )
+    assert format_supplemental_reaction_fallback(reactions[:1]) == (
+        "Additional reaction: hatching chick for new rollerskier."
+    )
+
+
+def test_display_labels_normalize_punctuation_without_mutating_saved_values():
+    reactions = [
+        {"emoji": "hatching_chick", "label": "New <skier>?!  "},
+        {"emoji": "athletic_shoe", "label": "Runner."},
+    ]
+    original = deepcopy(reactions)
+    assert format_supplemental_reaction_sentence(reactions) == (
+        "In addition to your attendance emoji, hit a :hatching_chick: "
+        "for New &lt;skier&gt; and a :athletic_shoe: for Runner."
+    )
+    assert format_supplemental_reaction_fallback(reactions) == (
+        "Additional reactions: hatching chick for New <skier>; "
+        "athletic shoe for Runner."
+    )
+    assert reactions == original
+
+
+@pytest.mark.parametrize("label", [".", "?!", "...   "])
+def test_punctuation_only_label_is_rejected(label):
+    with pytest.raises(PlanReactionValidationError, match="label is required"):
+        normalize_plan_reactions([{"emoji": "snowflake", "label": label}])

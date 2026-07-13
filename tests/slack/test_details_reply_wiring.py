@@ -1086,7 +1086,10 @@ class TestPostPracticeAnnouncementWiring:
 
         practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
         practice.plan_reactions = [
-            {"emoji": "snowflake", "label": "Short route"}
+            {
+                "emoji": "older_adult::skin-tone-4",
+                "label": "experienced rollerskier",
+            }
         ]
 
         with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
@@ -1111,7 +1114,11 @@ class TestPostPracticeAnnouncementWiring:
         mock_upsert.assert_called_once()
         assert mock_client.reactions_add.call_args_list == [
             call(channel="CTEST", timestamp="1111.0001", name="white_check_mark"),
-            call(channel="CTEST", timestamp="1111.0001", name="snowflake"),
+            call(
+                channel="CTEST",
+                timestamp="1111.0001",
+                name="older_adult::skin-tone-4",
+            ),
         ]
 
     def test_malformed_legacy_plan_json_cannot_fail_a_successful_root_post(
@@ -1198,9 +1205,10 @@ class TestUpdatePracticeAnnouncementWiring:
         from app.slack.practices.announcements import update_practice_announcement
 
         practice = _make_practice()
-        practice.plan_reactions = [
-            {"emoji": "new_choice", "label": "New choice"}
-        ]
+        practice.plan_reactions = [{
+            "emoji": "older_adult::skin-tone-4",
+            "label": "experienced rollerskier",
+        }]
         previous = [{"emoji": "old_choice", "label": "Old choice"}]
 
         with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
@@ -1221,7 +1229,9 @@ class TestUpdatePracticeAnnouncementWiring:
             channel="CTEST", timestamp="1234.5678", name="old_choice"
         )
         client.reactions_add.assert_called_once_with(
-            channel="CTEST", timestamp="1234.5678", name="new_choice"
+            channel="CTEST",
+            timestamp="1234.5678",
+            name="older_adult::skin-tone-4",
         )
 
     def test_malformed_legacy_plan_json_cannot_fail_a_successful_root_update(

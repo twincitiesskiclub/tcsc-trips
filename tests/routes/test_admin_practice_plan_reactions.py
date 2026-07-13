@@ -17,6 +17,7 @@ from app.practices.models import (
 
 
 TEST_RECORD_PREFIX = "Plan Reaction Test"
+MODIFIER_RECORD_PREFIX = "Plan Reaction Modifier"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_TEMPLATE = REPO_ROOT / "app/templates/admin/practices/config.html"
 DETAIL_TEMPLATE = REPO_ROOT / "app/templates/admin/practices/detail.html"
@@ -76,9 +77,10 @@ def cleanup_plan_reaction_test_records(db_session):
         for location in locations:
             db.session.delete(location)
     for model in (PracticeActivity, PracticeType):
-        model.query.filter(model.name.startswith(TEST_RECORD_PREFIX)).delete(
-            synchronize_session=False
-        )
+        model.query.filter(
+            model.name.startswith(TEST_RECORD_PREFIX)
+            | model.name.startswith(MODIFIER_RECORD_PREFIX)
+        ).delete(synchronize_session=False)
     db.session.commit()
 
     yield
@@ -97,9 +99,10 @@ def cleanup_plan_reaction_test_records(db_session):
         for location in locations:
             db.session.delete(location)
     for model in (PracticeActivity, PracticeType):
-        model.query.filter(model.name.startswith(TEST_RECORD_PREFIX)).delete(
-            synchronize_session=False
-        )
+        model.query.filter(
+            model.name.startswith(TEST_RECORD_PREFIX)
+            | model.name.startswith(MODIFIER_RECORD_PREFIX)
+        ).delete(synchronize_session=False)
     db.session.commit()
 
 
@@ -522,6 +525,25 @@ def test_create_activity_persists_default_plan_reactions(admin_client, db_sessio
     ]
 
 
+def test_settings_normalizes_wrapped_skin_tone_name(admin_client, db_session):
+    response = admin_client.post(
+        "/admin/practices/activities/create",
+        json={
+            "name": "Plan Reaction Modifier Rollerski",
+            "gear_required": [],
+            "default_plan_reactions": [{
+                "emoji": ":older_adult::skin-tone-4:",
+                "label": "experienced rollerskier",
+            }],
+        },
+    )
+    assert response.status_code == 200
+    assert response.get_json()["activity"]["default_plan_reactions"] == [{
+        "emoji": "older_adult::skin-tone-4",
+        "label": "experienced rollerskier",
+    }]
+
+
 def test_create_interval_type_uses_explicit_reactions(admin_client, db_session):
     response = admin_client.post(
         "/admin/practices/types/create",
@@ -552,6 +574,21 @@ def test_settings_reject_reserved_emoji(admin_client, db_session):
             "default_plan_reactions": [
                 {"emoji": "white_check_mark", "label": "Wrong"}
             ],
+        },
+    )
+    assert response.status_code == 400
+    assert response.get_json()["field"] == "default_plan_reactions"
+
+
+def test_settings_rejects_reserved_base_with_modifier(admin_client, db_session):
+    response = admin_client.post(
+        "/admin/practices/types/create",
+        json={
+            "name": "Plan Reaction Modifier Invalid",
+            "default_plan_reactions": [{
+                "emoji": "white_check_mark::skin-tone-4",
+                "label": "Wrong",
+            }],
         },
     )
     assert response.status_code == 400

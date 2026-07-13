@@ -214,7 +214,14 @@ def test_removing_checkmark_leaves_non_going_rsvp_untouched(
 
 @pytest.mark.parametrize(
     "reaction",
-    ["evergreen_tree", "athletic_shoe", "question", "thumbsup", "x"],
+    [
+        "evergreen_tree",
+        "athletic_shoe",
+        "older_adult::skin-tone-4",
+        "question",
+        "thumbsup",
+        "x",
+    ],
 )
 def test_non_attendance_reactions_are_ignored(
     db_session, linked_user, reaction

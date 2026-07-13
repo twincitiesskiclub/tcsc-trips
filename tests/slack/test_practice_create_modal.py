@@ -96,6 +96,20 @@ def test_create_submission_uses_edited_visible_plan_value():
     }
 
 
+def test_create_submission_preserves_full_skin_tone_reaction_name():
+    fields, errors = _parse_practice_authoring_values(
+        _authoring_values(
+            plan_text=":older_adult::skin-tone-4: experienced rollerskier"
+        ),
+        include_plan_reactions=True,
+    )
+    assert errors == {}
+    assert fields["plan_reactions"] == [{
+        "emoji": "older_adult::skin-tone-4",
+        "label": "experienced rollerskier",
+    }]
+
+
 def test_create_submission_can_clear_prefilled_plan_value():
     fields, errors = _parse_practice_authoring_values(
         _authoring_values(plan_text=""), include_plan_reactions=True
