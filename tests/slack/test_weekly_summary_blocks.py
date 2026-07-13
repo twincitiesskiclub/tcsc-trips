@@ -1,6 +1,6 @@
 """Exact-copy contracts for the member-facing calendar-week summary."""
 
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -200,6 +200,33 @@ def test_weekly_fallback_remains_plain_and_has_no_broadcast_token():
     assert "CANCELLED: Heat warning" in fallback
 
 
+def test_weekly_fallback_plainifies_authored_slack_control_tokens():
+    authored = "support <!channel> :wave:"
+    active = practice(
+        1,
+        datetime(2026, 7, 27, 18, 0),
+        activity=authored,
+        location=authored,
+    )
+    cancelled = practice(
+        2,
+        datetime(2026, 8, 2, 9, 0),
+        status=PracticeStatus.CANCELLED,
+        reason=authored,
+    )
+
+    fallback = build_weekly_summary_fallback_text(
+        [active, cancelled],
+        week_start=date(2026, 7, 27),
+        weather_data={1: {"temp_f": 78, "conditions": authored}},
+    )
+
+    assert "<!channel>" not in fallback
+    assert ":wave:" not in fallback
+    assert active.activities[0].name == authored
+    assert cancelled.cancellation_reason == authored
+
+
 def test_fallback_has_full_range_and_every_active_or_cancelled_row():
     active = practice(
         1,
@@ -339,3 +366,47 @@ def test_oversized_first_and_middle_rows_preserve_later_fallback_essentials():
         "Tuesday, July 14 at 7:00 PM — Late Run at Final Trailhead"
         in fallback
     )
+
+
+def test_high_count_weekly_fallback_preserves_every_practice_row():
+    week_start = date(2026, 7, 13)
+    sessions = []
+    weather_data = {}
+    for index in range(21):
+        when = datetime.combine(
+            week_start + timedelta(days=index // 3),
+            datetime.min.time(),
+        ).replace(hour=6 + (index % 3), minute=index)
+        cancelled = index % 2 == 0
+        sessions.append(practice(
+            index + 1,
+            when,
+            activity=f"ROW-{index:02d}-" + ("a" * 70),
+            location=f"SITE-{index:02d}-" + ("l" * 90),
+            status=(
+                PracticeStatus.CANCELLED
+                if cancelled else PracticeStatus.SCHEDULED
+            ),
+            reason=(f"REASON-{index:02d}-" + ("r" * 150) if cancelled else None),
+        ))
+        if not cancelled:
+            weather_data[index + 1] = {
+                "temp_f": 70 + index,
+                "conditions": f"WEATHER-{index:02d}-" + ("w" * 120),
+            }
+
+    fallback = build_weekly_summary_fallback_text(
+        sessions,
+        week_start=week_start,
+        weather_data=weather_data,
+    )
+
+    assert len(fallback) <= 4_000
+    for index, session in enumerate(sessions):
+        assert session.date.strftime("%A, %B %-d at %-I:%M %p") in fallback
+        assert f"ROW-{index:02d}" in fallback
+        assert f"SITE-{index:02d}" in fallback
+        if session.status == PracticeStatus.CANCELLED:
+            assert f"CANCELLED: REASON-{index:02d}" in fallback
+        else:
+            assert f"Forecast: {70 + index}°F, WEATHER-{index:02d}" in fallback

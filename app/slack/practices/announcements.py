@@ -1,5 +1,6 @@
 """Practice posting and update operations."""
 
+from copy import copy
 from typing import Optional
 from flask import current_app
 from slack_sdk.errors import SlackApiError
@@ -20,7 +21,12 @@ from app.slack.blocks import (
     guard_fallback_text,
     guard_slack_blocks,
 )
-from app.practices.plan_reactions import plan_reaction_names
+from app.practices.plan_reactions import (
+    format_reaction_name_for_fallback,
+    normalize_plan_reactions,
+)
+from app.slack.blocks.fallback import plainify_fallback_fragment
+from app.slack.blocks.text import FALLBACK_TEXT_MAX
 from app.practices.models import Practice
 from app.practices.interfaces import (
     AnnouncementConditions,
@@ -42,7 +48,16 @@ def convert_practice_to_info(practice):
     """Late-bound model conversion keeps the Slack layer easy to isolate."""
     from app.practices.service import convert_practice_to_info as convert
 
-    return convert(practice)
+    info = convert(practice)
+    valid_reactions = _valid_plan_reactions(
+        getattr(info, "plan_reactions", None) or [],
+        context=f"practice #{getattr(info, 'id', practice.id)} render snapshot",
+    )
+    if valid_reactions == getattr(info, "plan_reactions", None):
+        return info
+    render_info = copy(info)
+    render_info.plan_reactions = valid_reactions
+    return render_info
 
 
 def _gather_conditions(practice, *, weather=_UNSET, trail_conditions=_UNSET):
@@ -225,18 +240,40 @@ def _rollback_session(context):
         )
 
 
-def _seed_plan_reactions(client, practice):
-    try:
-        names = ["white_check_mark"] + plan_reaction_names(
-            practice.plan_reactions or []
-        )
-    except Exception as exc:
+def _valid_plan_reactions(reactions, *, context):
+    """Keep valid legacy reaction rows while containing malformed siblings."""
+    if not isinstance(reactions, list):
         current_app.logger.warning(
-            "Could not read Plan reactions for practice #%s: %s",
-            practice.id,
-            exc,
+            "Could not read Plan reactions for %s: expected a list",
+            context,
         )
-        names = ["white_check_mark"]
+        return []
+
+    valid = []
+    for index, row in enumerate(reactions, start=1):
+        try:
+            valid = normalize_plan_reactions(
+                valid + [row],
+                source=f"{context} Plan reactions",
+            )
+        except Exception as exc:
+            current_app.logger.warning(
+                "Could not read Plan reaction row %s for %s: %s",
+                index,
+                context,
+                exc,
+            )
+    return valid
+
+
+def _seed_plan_reactions(client, practice):
+    names = ["white_check_mark"] + [
+        item["emoji"]
+        for item in _valid_plan_reactions(
+            practice.plan_reactions or [],
+            context=f"practice #{practice.id} current snapshot",
+        )
+    ]
     for name in names:
         try:
             client.reactions_add(
@@ -260,16 +297,20 @@ def _reconcile_plan_reactions(
     *,
     previous_plan_reactions=None,
 ):
-    try:
-        previous = set(plan_reaction_names(previous_plan_reactions or []))
-        current = set(plan_reaction_names(practice.plan_reactions or []))
-    except Exception as exc:
-        current_app.logger.warning(
-            "Could not read Plan reactions for practice #%s: %s",
-            practice.id,
-            exc,
+    previous = {
+        item["emoji"]
+        for item in _valid_plan_reactions(
+            previous_plan_reactions or [],
+            context=f"practice #{practice.id} previous snapshot",
         )
-        return
+    }
+    current = {
+        item["emoji"]
+        for item in _valid_plan_reactions(
+            practice.plan_reactions or [],
+            context=f"practice #{practice.id} current snapshot",
+        )
+    }
     for name in sorted(previous - current):
         try:
             client.reactions_remove(
@@ -314,20 +355,17 @@ def _combined_details_payload(practices):
         content_blocks = [
             block for block in child_blocks if block.get("type") != "header"
         ]
-        rendered.append((
-            practice,
-            content_blocks,
-            build_practice_details_fallback_text(info, conditions),
-        ))
+        rendered.append((practice, info, content_blocks))
     if not rendered:
         return [], ""
 
     common = (
         len(rendered) == len(practices)
-        and all(item[1] == rendered[0][1] for item in rendered[1:])
+        and all(item[2] == rendered[0][2] for item in rendered[1:])
     )
     if common:
-        practice, content, fallback = rendered[0]
+        practice, info, content = rendered[0]
+        fallback = build_practice_details_fallback_text(info, conditions)
         blocks = [{
             "type": "header",
             "text": {
@@ -337,7 +375,7 @@ def _combined_details_payload(practices):
             },
         }] + content
         session_labels = [
-            f":{item.slack_session_emoji}: "
+            f"{format_reaction_name_for_fallback(item.slack_session_emoji)} "
             f"{item.date.strftime('%A at %-I:%M %p')}"
             for item in practices
         ]
@@ -365,7 +403,7 @@ def _combined_details_payload(practices):
                 practice_id=practice.id,
             ),
             guard_fallback_text(
-                shared_fallback,
+                plainify_fallback_fragment(shared_fallback),
                 surface="combined_practice_details",
                 practice_id=practice.id,
             ),
@@ -373,7 +411,27 @@ def _combined_details_payload(practices):
 
     groups = []
     fallback_parts = ["Combined practice details."]
-    for practice, content, fallback in rendered:
+    session_names = [
+        format_reaction_name_for_fallback(practice.slack_session_emoji)
+        for practice, _info, _content in rendered
+    ]
+    fixed_length = (
+        len(fallback_parts[0])
+        + len(rendered)
+        + sum(len(name) + 1 for name in session_names)
+    )
+    per_session_budget = max(
+        1,
+        (FALLBACK_TEXT_MAX - fixed_length) // len(rendered),
+    )
+    for (practice, info, content), session_name in zip(
+        rendered, session_names
+    ):
+        fallback = build_practice_details_fallback_text(
+            info,
+            conditions,
+            max_chars=per_session_budget,
+        )
         groups.append([{
             "type": "section",
             "text": {
@@ -384,7 +442,10 @@ def _combined_details_payload(practices):
                 ),
             },
         }] + content)
-        fallback_parts.append(f":{practice.slack_session_emoji}: {fallback}")
+        fallback_parts.append(
+            f"{session_name} "
+            f"{plainify_fallback_fragment(fallback)}"
+        )
     blocks = [{
         "type": "header",
         "text": {
@@ -404,7 +465,7 @@ def _combined_details_payload(practices):
             practice_id=practices[0].id,
         ),
         guard_fallback_text(
-            " ".join(fallback_parts),
+            plainify_fallback_fragment(" ".join(fallback_parts)),
             surface="combined_practice_details",
             practice_id=practices[0].id,
         ),
@@ -756,8 +817,7 @@ def post_practice_announcement(
         trail_conditions=trail_conditions,
     )
 
-    # Convert SQLAlchemy model to PracticeInfo dataclass
-    from app.practices.service import convert_practice_to_info
+    # Convert SQLAlchemy model to a render-safe PracticeInfo snapshot.
     practice_info = convert_practice_to_info(practice)
 
     blocks = build_practice_announcement_blocks(practice_info, conditions)
@@ -874,9 +934,18 @@ def _combined_infos(practices):
 
 
 def _shared_plan_names(practices):
-    from app.slack.blocks.announcements import _shared_plan_reactions
-
-    return plan_reaction_names(_shared_plan_reactions(_combined_infos(practices)))
+    snapshots = [
+        _valid_plan_reactions(
+            item.plan_reactions or [],
+            context=f"practice #{item.id} shared snapshot",
+        )
+        for item in practices
+    ]
+    if not snapshots or any(
+        snapshot != snapshots[0] for snapshot in snapshots[1:]
+    ):
+        return []
+    return [item["emoji"] for item in snapshots[0]]
 
 
 def _add_combined_seed(client, practices, name):
@@ -937,9 +1006,22 @@ def _reconcile_combined_plan_reactions(
         for item in practices
     )
     desired = set(_shared_plan_names(practices)) if has_active else set()
-    known = set(plan_reaction_names(previous_plan_reactions or []))
+    root = practices[0].slack_message_ts if practices else "unknown"
+    known = {
+        item["emoji"]
+        for item in _valid_plan_reactions(
+            previous_plan_reactions or [],
+            context=f"combined root {root} previous snapshot",
+        )
+    }
     for practice in practices:
-        known.update(plan_reaction_names(practice.plan_reactions or []))
+        known.update(
+            item["emoji"]
+            for item in _valid_plan_reactions(
+                practice.plan_reactions or [],
+                context=f"practice #{practice.id} current snapshot",
+            )
+        )
     for name in sorted(known - desired):
         _remove_combined_seed(client, practices, name)
     for name in sorted(desired):
@@ -1090,8 +1172,7 @@ def update_practice_announcement(
         trail_conditions=trail_conditions,
     )
 
-    # Convert to dataclass
-    from app.practices.service import convert_practice_to_info
+    # Convert to a render-safe dataclass snapshot.
     practice_info = convert_practice_to_info(practice)
 
     blocks = build_practice_announcement_blocks(

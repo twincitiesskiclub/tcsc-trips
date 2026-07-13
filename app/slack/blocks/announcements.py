@@ -16,6 +16,10 @@ from app.practices.plan_reactions import (
     format_supplemental_reaction_fallback,
     format_supplemental_reaction_sentence,
 )
+from app.slack.blocks.fallback import (
+    allocate_fallback_component_limits,
+    plainify_fallback_fragment,
+)
 from app.slack.blocks.text import (
     CONTEXT_TEXT_MAX,
     FALLBACK_TEXT_MAX,
@@ -119,10 +123,10 @@ def _fallback_with_reserved_tail(
     practice_id=None,
 ):
     body = " ".join(
-        str(part).strip() for part in parts
+        plainify_fallback_fragment(str(part).strip()) for part in parts
         if part and str(part).strip()
     )
-    tail = str(tail).strip()
+    tail = plainify_fallback_fragment(str(tail).strip())
     separator_length = 1 if body and tail else 0
     body_budget = max(0, FALLBACK_TEXT_MAX - len(tail) - separator_length)
     if body and len(body) > body_budget:
@@ -680,40 +684,63 @@ def build_practice_fallback_text(
 
 
 def build_practice_details_fallback_text(
-    practice, conditions: AnnouncementConditions
+    practice,
+    conditions: AnnouncementConditions,
+    *,
+    max_chars=FALLBACK_TEXT_MAX,
 ):
     """Build notification fallback text from the normalized Details content."""
     content = _details_content(practice, conditions)
-    parts = [
-        f"Practice details for {practice.date.strftime('%A, %B %-d')}."
-    ]
+    prefix = f"Practice details for {practice.date.strftime('%A, %B %-d')}."
+    components = []
     if content["parking"]:
         parking = truncate_slack_text(
-            content["parking"],
+            plainify_fallback_fragment(content["parking"]),
             _DETAILS_FALLBACK_PARKING_MAX,
             field="parking_notes",
             surface="practice_details_fallback",
             practice_id=practice.id,
         )
-        parts.append(_sentence("Parking: ", parking))
+        components.append(("Parking: ", parking, "parking_notes"))
     if content["gear"]:
         gear = truncate_slack_text(
-            ", ".join(content["gear"]),
+            plainify_fallback_fragment(", ".join(content["gear"])),
             _DETAILS_FALLBACK_GEAR_MAX,
             field="gear_required",
             surface="practice_details_fallback",
             practice_id=practice.id,
         )
-        parts.append(_sentence("Gear: ", gear))
+        components.append(("Gear: ", gear, "gear_required"))
     if content["plain_conditions"]:
         conditions_text = truncate_slack_text(
-            " ".join(content["plain_conditions"]),
+            plainify_fallback_fragment(" ".join(content["plain_conditions"])),
             _DETAILS_FALLBACK_CONDITIONS_MAX,
             field="conditions",
             surface="practice_details_fallback",
             practice_id=practice.id,
         )
-        parts.append(_sentence("Conditions: ", conditions_text))
+        components.append(("Conditions: ", conditions_text, "conditions"))
+
+    fixed_length = len(prefix) + sum(
+        1 + len(label) + 1 for label, _value, _field in components
+    )
+    limits = allocate_fallback_component_limits(
+        [value for _label, value, _field in components],
+        budget=max_chars - fixed_length,
+    )
+    parts = [prefix]
+    for (label, value, field), limit in zip(components, limits):
+        bounded = (
+            truncate_slack_text(
+                value,
+                limit,
+                field=field,
+                surface="practice_details_fallback",
+                practice_id=practice.id,
+            )
+            if limit > 0 else ""
+        )
+        parts.append(_sentence(label, bounded))
     return guard_fallback_text(
         " ".join(parts),
         surface="practice_details",
@@ -1198,7 +1225,7 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
     attendance = _combined_attendance_sentence(ordered, plain=True)
     if not attendance:
         return guard_fallback_text(
-            " ".join(lines),
+            plainify_fallback_fragment(" ".join(lines)),
             surface="combined_practice_announcement",
             practice_id=representative.id,
         )

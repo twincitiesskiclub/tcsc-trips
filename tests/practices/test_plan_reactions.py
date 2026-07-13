@@ -77,6 +77,26 @@ def test_more_than_four_and_multiline_label_are_rejected():
         normalize_plan_reactions([{"emoji": "evergreen_tree", "label": "One\nTwo"}])
 
 
+@pytest.mark.parametrize(
+    "line_break",
+    ["\n", "\r", "\v", "\f", "\x1c", "\x1d", "\x1e", "\x85", "\u2028", "\u2029"],
+)
+@pytest.mark.parametrize("position", ["leading", "embedded", "trailing"])
+def test_every_unicode_line_break_is_rejected_in_plan_labels(
+    line_break, position
+):
+    labels = {
+        "leading": f"{line_break}First",
+        "embedded": f"First{line_break}Second",
+        "trailing": f"First{line_break}",
+    }
+    with pytest.raises(PlanReactionValidationError, match="single line"):
+        normalize_plan_reactions([{
+            "emoji": "evergreen_tree",
+            "label": labels[position],
+        }])
+
+
 def test_bare_shortcode_empty_and_four_value_boundaries():
     assert parse_plan_reaction_lines("evergreen_tree Endurance") == [
         {"emoji": "evergreen_tree", "label": "Endurance"}

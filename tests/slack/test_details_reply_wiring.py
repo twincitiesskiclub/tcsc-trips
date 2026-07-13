@@ -40,11 +40,13 @@ def _make_practice(slack_message_ts="1234.5678", slack_channel_id="CTEST", slack
 
 
 def _make_practice_info():
-    return SimpleNamespace(
+    from app.practices.interfaces import PracticeInfo, PracticeStatus
+
+    return PracticeInfo(
         id=42,
         date=datetime(2026, 7, 14, 18, 15),
-        location=None,
-        activities=[],
+        day_of_week="Tuesday",
+        status=PracticeStatus.SCHEDULED,
     )
 
 
@@ -1124,19 +1126,21 @@ class TestPostPracticeAnnouncementWiring:
     def test_malformed_legacy_plan_json_cannot_fail_a_successful_root_post(
         self, app_context
     ):
+        from app.practices.interfaces import AnnouncementConditions
         from app.slack.practices.announcements import post_practice_announcement
 
         practice = _make_practice(slack_message_ts=None, slack_details_ts=None)
         practice.plan_reactions = [
+            {"emoji": "evergreen_tree", "label": "Endurance"},
             {"emoji": "white_check_mark", "label": "Legacy reserved value"}
         ]
+        practice_info = _make_practice_info()
+        practice_info.plan_reactions = list(practice.plan_reactions)
 
         with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
              patch("app.slack.practices.announcements._get_announcement_channel", return_value="CTEST"), \
-             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
-             patch("app.slack.practices.announcements._gather_conditions"), \
-             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
-             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=practice_info), \
+             patch("app.slack.practices.announcements._gather_conditions", return_value=AnnouncementConditions()), \
              patch("app.slack.practices.announcements._upsert_details_reply", return_value={"success": True}) as mock_upsert, \
              patch("app.slack.practices.announcements.db"), \
              patch("app.slack.practices.coach_review.create_practice_log_thread", create=True):
@@ -1148,11 +1152,14 @@ class TestPostPracticeAnnouncementWiring:
 
         assert result["success"] is True
         mock_upsert.assert_called_once()
-        client.reactions_add.assert_called_once_with(
-            channel="CTEST",
-            timestamp="1111.0001",
-            name="white_check_mark",
-        )
+        assert client.reactions_add.call_args_list == [
+            call(channel="CTEST", timestamp="1111.0001", name="white_check_mark"),
+            call(channel="CTEST", timestamp="1111.0001", name="evergreen_tree"),
+        ]
+        posted = client.chat_postMessage.call_args.kwargs
+        assert "evergreen tree for Endurance" in posted["text"]
+        assert "Legacy reserved value" not in str(posted)
+        assert practice_info.plan_reactions == practice.plan_reactions
 
 
 class TestUpdatePracticeAnnouncementWiring:
@@ -1234,21 +1241,23 @@ class TestUpdatePracticeAnnouncementWiring:
             name="older_adult::skin-tone-4",
         )
 
-    def test_malformed_legacy_plan_json_cannot_fail_a_successful_root_update(
+    def test_malformed_previous_and_current_rows_preserve_valid_root_diff(
         self, app_context
     ):
+        from app.practices.interfaces import AnnouncementConditions
         from app.slack.practices.announcements import update_practice_announcement
 
         practice = _make_practice()
         practice.plan_reactions = [
+            {"emoji": "evergreen_tree", "label": "Endurance"},
             {"emoji": "white_check_mark", "label": "Legacy reserved value"}
         ]
+        practice_info = _make_practice_info()
+        practice_info.plan_reactions = list(practice.plan_reactions)
 
         with patch("app.slack.practices.announcements.get_slack_client") as mock_get_client, \
-             patch("app.practices.service.convert_practice_to_info", return_value=_make_practice_info()), \
-             patch("app.slack.practices.announcements._gather_conditions"), \
-             patch("app.slack.practices.announcements.build_practice_announcement_blocks", return_value=[]), \
-             patch("app.slack.practices.announcements.build_practice_fallback_text", return_value="complete fallback"), \
+             patch("app.practices.service.convert_practice_to_info", return_value=practice_info), \
+             patch("app.slack.practices.announcements._gather_conditions", return_value=AnnouncementConditions()), \
              patch("app.slack.practices.announcements._upsert_details_reply", return_value={"success": True}) as mock_upsert:
             client = MagicMock()
             mock_get_client.return_value = client
@@ -1256,14 +1265,23 @@ class TestUpdatePracticeAnnouncementWiring:
             result = update_practice_announcement(
                 practice,
                 previous_plan_reactions=[
-                    {"emoji": "old_choice", "label": "Old choice"}
+                    {"emoji": "old_choice", "label": "Old choice"},
+                    {"emoji": "six", "label": "Legacy reserved value"},
                 ],
             )
 
         assert result["success"] is True
         mock_upsert.assert_called_once()
-        client.reactions_remove.assert_not_called()
-        client.reactions_add.assert_not_called()
+        client.reactions_remove.assert_called_once_with(
+            channel="CTEST", timestamp="1234.5678", name="old_choice"
+        )
+        client.reactions_add.assert_called_once_with(
+            channel="CTEST", timestamp="1234.5678", name="evergreen_tree"
+        )
+        updated = client.chat_update.call_args.kwargs
+        assert "evergreen tree for Endurance" in updated["text"]
+        assert "Legacy reserved value" not in str(updated)
+        assert practice_info.plan_reactions == practice.plan_reactions
 
     def test_backfill_path_new_thread_reply(self, app_context):
         """When slack_details_ts is None on an existing post, a new reply is created."""
@@ -1304,6 +1322,7 @@ def _make_group_practices(n=2, existing_details_ts=None):
     for i in range(n):
         p = MagicMock()
         p.id = 100 + i
+        p.slack_session_emoji = ("six", "seven", "eight")[i]
         p.slack_message_ts = shared_ts
         p.slack_channel_id = channel_id
         p.slack_details_ts = existing_details_ts
@@ -1574,7 +1593,7 @@ class TestUpsertCombinedDetailsReply:
         assert all(p.slack_details_ts == "OLD.TS" for p in practices)
         mock_db.session.rollback.assert_called_once()
 
-    def test_divergent_details_are_labelled_with_saved_session_reactions(
+    def test_divergent_details_plainify_session_names_and_authored_content(
         self, app_context
     ):
         from app.slack.practices.announcements import _combined_details_payload
@@ -1607,7 +1626,7 @@ class TestUpsertCombinedDetailsReply:
             side_effect=[first, second],
         ), patch(
             "app.slack.practices.announcements.build_practice_details_fallback_text",
-            side_effect=["Details A", "Details B"],
+            side_effect=["Details A support <!channel> :wave:", "Details B"],
         ):
             blocks, fallback = _combined_details_payload(practices)
 
@@ -1617,8 +1636,39 @@ class TestUpsertCombinedDetailsReply:
         assert ":six: Tuesday at 6:15 PM" in text
         assert ":seven: Wednesday at 7:15 PM" in text
         assert "Parking A" in text and "Parking B" in text
-        assert ":six: Details A" in fallback
-        assert ":seven: Details B" in fallback
+        assert "six Details A" in fallback
+        assert "seven Details B" in fallback
+        assert "<!channel>" not in fallback
+        assert ":wave:" not in fallback
+        assert ":six:" not in fallback
+        assert ":seven:" not in fallback
+
+    def test_three_divergent_details_preserve_every_sessions_gear_in_fallback(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import _combined_details_payload
+
+        practices = _make_group_practices(3)
+        markers = ("FIRST-GEAR", "SECOND-GEAR", "THIRD-GEAR")
+        for index, (practice, marker) in enumerate(zip(practices, markers)):
+            practice.date = datetime(2026, 7, 14 + index, 18 + index, 15)
+            practice.location.parking_notes = (
+                f"PARKING-{index}-" + ("p" * 1_000)
+            )
+            practice.activities = [SimpleNamespace(
+                gear_required=[marker + ("g" * 800)]
+            )]
+
+        with patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            side_effect=lambda item: item,
+        ):
+            _blocks, fallback = _combined_details_payload(practices)
+
+        assert len(fallback) <= 4_000
+        for session, marker in zip(("six", "seven", "eight"), markers):
+            assert session in fallback
+            assert marker in fallback
 
     def test_common_details_fallback_names_every_session_and_shared_content(
         self, app_context
@@ -1654,8 +1704,8 @@ class TestUpsertCombinedDetailsReply:
             _blocks, fallback = _combined_details_payload(practices)
 
         assert fallback == (
-            "Combined practice details shared by :six: Tuesday at 6:15 PM "
-            "and :seven: Wednesday at 7:15 PM. Parking: Main lot."
+            "Combined practice details shared by six Tuesday at 6:15 PM "
+            "and seven Wednesday at 7:15 PM. Parking: Main lot."
         )
 
     def test_common_details_fallback_is_guarded_without_losing_session_names(
@@ -1689,8 +1739,10 @@ class TestUpsertCombinedDetailsReply:
         ):
             _blocks, fallback = _combined_details_payload(practices)
 
-        assert ":six: Tuesday at 6:15 PM" in fallback
-        assert ":seven: Wednesday at 7:15 PM" in fallback
+        assert "six Tuesday at 6:15 PM" in fallback
+        assert "seven Wednesday at 7:15 PM" in fallback
+        assert ":six:" not in fallback
+        assert ":seven:" not in fallback
         assert "shared" in fallback
         assert len(fallback) <= 4_000
 

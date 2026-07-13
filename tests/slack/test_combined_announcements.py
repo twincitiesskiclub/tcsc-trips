@@ -425,6 +425,45 @@ def test_same_day_combined_fallback_uses_time_only_mapping():
     assert "six for Tue" not in fallback
 
 
+def test_combined_fallback_plainifies_authored_slack_control_tokens():
+    authored = "support <!channel> :wave:"
+    plan = [{"emoji": "evergreen_tree", "label": authored}]
+    active = combined_practice(
+        1,
+        14,
+        18,
+        "six",
+        workout=authored,
+        notes=authored,
+        social=authored,
+        plan=plan,
+    )
+    cancelled = combined_practice(
+        2,
+        15,
+        19,
+        "seven",
+        status=PracticeStatus.CANCELLED,
+        reason=authored,
+        workout=authored,
+        notes=authored,
+        social=authored,
+        plan=plan,
+    )
+    active.location.name = authored
+    cancelled.location.name = authored
+
+    fallback = build_combined_fallback_text(
+        [active, cancelled], announcement_notice=authored
+    )
+
+    assert "<!channel>" not in fallback
+    assert ":wave:" not in fallback
+    assert "support" in fallback
+    assert active.plan_reactions[0]["label"] == authored
+    assert cancelled.cancellation_reason == authored
+
+
 def test_mixed_cancelled_fallback_maps_only_active_session():
     practices = [
         combined_practice(1, 14, 18, "six"),
@@ -1233,6 +1272,149 @@ def test_mixed_cancelled_rebuild_keeps_visible_shared_plan_seed(app_context):
         item.kwargs['name']
         for item in client.reactions_add.call_args_list
     ] == ['evergreen_tree', 'six']
+
+
+@pytest.mark.parametrize(
+    (
+        "case",
+        "statuses",
+        "delete_first",
+        "expected_added",
+        "expected_removed",
+    ),
+    [
+        (
+            "mixed_cancelled",
+            [PracticeStatus.SCHEDULED, PracticeStatus.CANCELLED],
+            False,
+            {"evergreen_tree", "six"},
+            {"old_choice", "seven"},
+        ),
+        (
+            "all_cancelled",
+            [PracticeStatus.CANCELLED, PracticeStatus.CANCELLED],
+            False,
+            set(),
+            {"old_choice", "evergreen_tree", "six", "seven"},
+        ),
+        (
+            "restoration",
+            [PracticeStatus.SCHEDULED, PracticeStatus.CONFIRMED],
+            False,
+            {"evergreen_tree", "six", "seven"},
+            {"old_choice"},
+        ),
+        (
+            "deletion_rebuild",
+            [PracticeStatus.SCHEDULED, PracticeStatus.SCHEDULED],
+            True,
+            {"evergreen_tree", "seven"},
+            {"old_choice", "six"},
+        ),
+    ],
+    ids=["mixed_cancelled", "all_cancelled", "restoration", "deletion_rebuild"],
+)
+def test_malformed_plan_rows_do_not_block_combined_reaction_lifecycle(
+    app_context,
+    case,
+    statuses,
+    delete_first,
+    expected_added,
+    expected_removed,
+    caplog,
+):
+    from app.slack.practices.announcements import (
+        remove_practice_from_announcement,
+        update_combined_lift_post,
+    )
+
+    malformed = {
+        "emoji": "white_check_mark",
+        "label": "Legacy reserved value",
+    }
+    current = [
+        {"emoji": "evergreen_tree", "label": "Endurance"},
+        malformed,
+    ]
+    previous = [
+        {"emoji": "old_choice", "label": "Old choice"},
+        malformed,
+    ]
+    practices = [
+        linked_practice(
+            1,
+            14,
+            18,
+            "six",
+            status=statuses[0],
+            reason=(
+                "Facility closed"
+                if statuses[0] == PracticeStatus.CANCELLED
+                else None
+            ),
+            plan=current,
+        ),
+        linked_practice(
+            2,
+            15,
+            19,
+            "seven",
+            status=statuses[1],
+            reason=(
+                "Facility closed"
+                if statuses[1] == PracticeStatus.CANCELLED
+                else None
+            ),
+            plan=current,
+        ),
+    ]
+    practices[1].plan_reactions = [
+        current[0],
+        {"emoji": "six", "label": "Different malformed legacy value"},
+    ]
+    if delete_first:
+        practices[0].plan_reactions = list(previous)
+        siblings = MagicMock(side_effect=[[practices[1]], practices])
+    else:
+        siblings = MagicMock(return_value=practices)
+
+    client = MagicMock()
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        new=siblings,
+    ), patch(
+        'app.slack.practices.announcements.assign_combined_session_emojis',
+        return_value={'success': True, 'emojis': {1: 'six', 2: 'seven'}},
+    ), patch(
+        'app.slack.practices.announcements.get_slack_client',
+        return_value=client,
+    ), patch(
+        'app.practices.service.convert_practice_to_info',
+        side_effect=lambda item: item,
+    ), patch(
+        'app.slack.practices.announcements._upsert_combined_details_reply',
+        return_value={'success': True},
+    ):
+        result = (
+            remove_practice_from_announcement(practices[0])
+            if delete_first
+            else update_combined_lift_post(
+                practices[0], previous_plan_reactions=previous
+            )
+        )
+
+    assert result['success'] is True, case
+    assert {
+        item.kwargs['name'] for item in client.reactions_add.call_args_list
+    } == expected_added
+    assert {
+        item.kwargs['name'] for item in client.reactions_remove.call_args_list
+    } == expected_removed
+    rendered = client.chat_update.call_args.kwargs
+    if any(status != PracticeStatus.CANCELLED for status in statuses):
+        assert "evergreen tree for Endurance" in rendered["text"]
+    assert "Legacy reserved value" not in str(rendered)
+    assert "reserved for attendance" in caplog.text
 
 
 @pytest.mark.parametrize(

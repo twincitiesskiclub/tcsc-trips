@@ -470,7 +470,7 @@ def test_standalone_rsvp_is_one_two_line_context(
             "Running late? Reply in the thread. <!channel>"
         ),
     }]
-    assert block["elements"][0]["text"].count("\n") == 1
+    assert len(block["elements"][0]["text"].splitlines()) == 2
 
 
 def test_context_budget_preserves_attendance_and_complete_second_line(monkeypatch):
@@ -491,7 +491,7 @@ def test_context_budget_preserves_attendance_and_complete_second_line(monkeypatc
         "Bop :white_check_mark: so we'll know you'll be there. "
     )
     assert text.endswith("\nRunning late? Reply in the thread. <!channel>")
-    assert text.count("\n") == 1
+    assert len(text.splitlines()) == 2
 
 
 def test_coach_context_stays_separate_from_rsvp_context(practice_info, conditions):
@@ -700,6 +700,32 @@ def test_standalone_fallback_without_supplement_has_exact_plain_tail(
         "RSVP with the white check mark reaction so we'll know you'll be there. "
         "Running late? Reply in the thread."
     )
+
+
+def test_standalone_fallback_plainifies_authored_slack_control_tokens(
+    practice_info, conditions
+):
+    authored = "support <!channel> :wave:"
+    practice_info.location.name = authored
+    practice_info.workout_description = authored
+    practice_info.logistics_notes = authored
+    practice_info.social_location.name = authored
+    practice_info.plan_reactions = [{
+        "emoji": "evergreen_tree",
+        "label": authored,
+    }]
+
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info,
+        conditions,
+        announcement_notice=authored,
+    )
+
+    assert "<!channel>" not in fallback
+    assert ":wave:" not in fallback
+    assert "support" in fallback
+    assert practice_info.plan_reactions[0]["label"] == authored
+    assert practice_info.workout_description == authored
 
 
 def test_reserved_fallback_helper_never_truncates_required_tail():

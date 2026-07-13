@@ -18,6 +18,7 @@ EMOJI_RE = re.compile(
     rf"^(?P<base>{_BASE_EMOJI_PATTERN})"
     rf"(?:::(?P<modifier>{_SKIN_TONE_PATTERN}))?$"
 )
+_LINE_BREAK_RE = re.compile(r"[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]")
 LINE_RE = re.compile(
     rf"^\s*(?P<emoji>"
     rf":(?:{_NORMALIZED_EMOJI_PATTERN}):|"
@@ -74,11 +75,12 @@ def normalize_plan_reactions(value: object, *, source: str = "Plan reactions") -
         if not isinstance(item, Mapping):
             raise PlanReactionValidationError(f"{item_source}: expected emoji and label")
         emoji = _normalize_emoji(item.get("emoji"), item_source)
-        label = str(item.get("label") or "").strip()
+        raw_label = str(item.get("label") or "")
+        if _LINE_BREAK_RE.search(raw_label):
+            raise PlanReactionValidationError(f"{item_source}: label must be a single line")
+        label = raw_label.strip()
         if not label:
             raise PlanReactionValidationError(f"{item_source}: label is required")
-        if "\n" in label or "\r" in label:
-            raise PlanReactionValidationError(f"{item_source}: label must be a single line")
         _display_label(label, item_source)
         if len(label) > MAX_PLAN_REACTION_LABEL:
             raise PlanReactionValidationError(
