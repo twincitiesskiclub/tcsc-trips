@@ -17,6 +17,7 @@ from app.slack.blocks.announcements import (
     build_practice_details_blocks,
 )
 from app.slack.blocks.text import (
+    BLOCKS_MAX,
     FALLBACK_TEXT_MAX,
     HEADER_TEXT_MAX,
     SECTION_TEXT_MAX,
@@ -260,6 +261,33 @@ def test_active_alert_is_promoted_before_location_and_workout(
     conditions = replace(conditions, weather=_weather(alerts=[alert]))
     blocks = build_practice_announcement_blocks(practice_info, conditions)
     _assert_urgent_precedes_location_and_workout(blocks, "Heat Advisory")
+
+
+def test_multiple_ordinary_alerts_share_one_section_without_copy_changes(
+    practice_info, conditions
+):
+    alerts = [
+        SimpleNamespace(headline="Heat Advisory", event=None),
+        SimpleNamespace(headline="Air Quality Alert", event=None),
+    ]
+    conditions = replace(conditions, weather=_weather(alerts=alerts))
+
+    blocks = build_practice_announcement_blocks(practice_info, conditions)
+    alert_sections = [
+        block for block in blocks
+        if block.get("type") == "section"
+        and "⚠️" in block.get("text", {}).get("text", "")
+    ]
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info, conditions
+    )
+
+    assert len(alert_sections) == 1
+    assert "⚠️ Heat Advisory\n⚠️ Air Quality Alert" in (
+        alert_sections[0]["text"]["text"]
+    )
+    assert "⚠️ Heat Advisory ⚠️ Air Quality Alert" in fallback
+    assert "more active alerts" not in rendered_text(blocks)
 
 
 def test_unhealthy_air_quality_is_promoted_before_location_and_workout(
@@ -679,13 +707,33 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
         conditions,
         announcement_notice="m" * 2_500,
     )
+    blocks = build_practice_announcement_blocks(
+        practice_info,
+        conditions,
+        announcement_notice="m" * 2_500,
+    )
+    text = rendered_text(blocks)
 
     assert "Notes:" in fallback
     assert "Social after at" in fallback
     assert "RSVP with ✅." in fallback
     assert "Your Practice Plan:" in fallback
     assert ":evergreen_tree: Endurance instead of intervals" in fallback
+    assert "+980 more active alerts" in fallback
     assert len(fallback) <= FALLBACK_TEXT_MAX
+    assert len(blocks) <= BLOCKS_MAX
+    assert "+980 more active alerts" in text
+    for required in (
+        "Monday · Classic Ski at 6:00 PM",
+        "Alert 0",
+        "*Where:*",
+        "*Workout",
+        "*📌 Notes*",
+        "Social after at",
+        "Bop ✅ if you're coming.",
+        "Your Practice Plan:",
+    ):
+        assert required in text
 
 
 def test_announcement_fallback_includes_plain_practice_status(

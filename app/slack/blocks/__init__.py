@@ -47,6 +47,7 @@ from app.slack.blocks.dispatch import (
     build_dispatch_submission_section,
 )
 from app.slack.blocks.text import (
+    BLOCKS_MAX,
     CONTEXT_TEXT_MAX,
     FALLBACK_TEXT_MAX,
     HEADER_TEXT_MAX,
@@ -91,6 +92,7 @@ __all__ = [
     # dispatch
     "build_dispatch_submission_section",
     # text
+    "BLOCKS_MAX",
     "CONTEXT_TEXT_MAX",
     "FALLBACK_TEXT_MAX",
     "HEADER_TEXT_MAX",

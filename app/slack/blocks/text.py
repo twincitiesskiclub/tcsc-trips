@@ -8,6 +8,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+BLOCKS_MAX = 50
 HEADER_TEXT_MAX = 150
 SECTION_TEXT_MAX = 3000
 SECTION_FIELD_TEXT_MAX = 2000

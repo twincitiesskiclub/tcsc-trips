@@ -46,6 +46,7 @@ _COMBINED_FALLBACK_SESSION_NOTES_MAX = 140
 _COMBINED_FALLBACK_SHARED_SOCIAL_MAX = 200
 _COMBINED_FALLBACK_SESSION_SOCIAL_MAX = 100
 _COMBINED_FALLBACK_PLAN_MAX = 500
+_ACTIVE_ALERTS_VISIBLE_MAX = 20
 
 
 def _activity_label(activities) -> str:
@@ -137,6 +138,43 @@ def _urgent_exception_lines(practice, conditions, announcement_notice=None):
     ]
 
 
+def _bounded_active_alerts(
+    lines,
+    max_chars,
+    *,
+    separator,
+    surface,
+    practice_id,
+):
+    """Bound active alerts as one semantic group with an honest overflow count."""
+    visible = list(lines[:_ACTIVE_ALERTS_VISIBLE_MAX])
+    hidden_count = max(0, len(lines) - len(visible))
+    overflow = (
+        f"+{hidden_count} more active alerts" if hidden_count else None
+    )
+    full_text = separator.join(visible + ([overflow] if overflow else []))
+    if len(full_text) <= max_chars:
+        return full_text
+
+    reserved = len(overflow or "")
+    item_count = len(visible) + (1 if overflow else 0)
+    reserved += len(separator) * max(0, item_count - 1)
+    item_budget = max(1, (max_chars - reserved) // max(1, len(visible)))
+    bounded = [
+        truncate_slack_text(
+            line,
+            item_budget,
+            field="weather_alert_headlines",
+            surface=surface,
+            practice_id=practice_id,
+        )
+        for line in visible
+    ]
+    if overflow:
+        bounded.append(overflow)
+    return separator.join(bounded)
+
+
 def _workout_text(practice):
     return str(getattr(practice, "workout_description", None) or "").strip() or (
         _WORKOUT_PLACEHOLDER
@@ -182,9 +220,15 @@ def build_practice_announcement_blocks(
         practice, conditions, announcement_notice=announcement_notice
     )
     for field, lines in urgent_categories:
-        category_texts = (
-            lines if field == "weather_alert_headlines" else ["\n".join(lines)]
-        )
+        category_texts = [
+            _bounded_active_alerts(
+                lines,
+                SECTION_TEXT_MAX - len(_SPACER),
+                separator="\n",
+                surface="practice_announcement",
+                practice_id=practice.id,
+            )
+        ] if field == "weather_alert_headlines" else ["\n".join(lines)]
         for category_text in category_texts:
             urgent_text = truncate_slack_text(
                 category_text,
@@ -531,13 +575,22 @@ def build_practice_fallback_text(
     }
     for field, lines in urgent_categories:
         budget = urgent_budgets.get(field, 100)
-        parts.append(truncate_slack_text(
-            " ".join(lines),
-            budget,
-            field=field,
-            surface="practice_fallback",
-            practice_id=practice.id,
-        ))
+        if field == "weather_alert_headlines":
+            parts.append(_bounded_active_alerts(
+                lines,
+                budget,
+                separator=" ",
+                surface="practice_fallback",
+                practice_id=practice.id,
+            ))
+        else:
+            parts.append(truncate_slack_text(
+                " ".join(lines),
+                budget,
+                field=field,
+                surface="practice_fallback",
+                practice_id=practice.id,
+            ))
     parts.append("RSVP with ✅.")
     if getattr(practice, "plan_reactions", None):
         plan = truncate_slack_text(
