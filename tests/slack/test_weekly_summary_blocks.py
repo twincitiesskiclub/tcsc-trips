@@ -243,3 +243,67 @@ def test_weekly_outputs_apply_slack_length_guards():
 
     assert max(len(text) for text in section_texts(blocks)) <= 3000
     assert len(fallback) <= 4000
+
+
+def oversized_same_day_sessions():
+    return [
+        practice(
+            1,
+            datetime(2026, 7, 14, 17, 0),
+            activity="Cancelled Strength",
+            location="First Park",
+            status=PracticeStatus.CANCELLED,
+            reason="R" * 5000,
+        ),
+        practice(
+            2,
+            datetime(2026, 7, 14, 18, 0),
+            activity="A" * 5000,
+            practice_type="T" * 5000,
+            location="L" * 5000,
+        ),
+        practice(
+            3,
+            datetime(2026, 7, 14, 19, 0),
+            activity="Late Run",
+            location="Final Trailhead",
+        ),
+    ]
+
+
+def test_oversized_first_and_middle_rows_preserve_later_block_essentials():
+    sessions = oversized_same_day_sessions()
+
+    blocks = build_weekly_summary_blocks(
+        sessions,
+        week_start=date(2026, 7, 13),
+        weather_data={2: {"temp_f": 80, "conditions": "C" * 5000}},
+    )
+    [day_text] = section_texts(blocks)
+
+    assert len(day_text) <= 3000
+    assert "5:00 PM · CANCELLED ·" in day_text
+    assert "Cancelled Strength · First Park" in day_text
+    assert "6:00 PM ·" in day_text
+    assert "Forecast: 80°F" in day_text
+    assert "7:00 PM · Late Run · Final Trailhead" in day_text
+
+
+def test_oversized_first_and_middle_rows_preserve_later_fallback_essentials():
+    sessions = oversized_same_day_sessions()
+
+    fallback = build_weekly_summary_fallback_text(
+        sessions,
+        week_start=date(2026, 7, 13),
+        weather_data={2: {"temp_f": 80, "conditions": "C" * 5000}},
+    )
+
+    assert len(fallback) <= 4000
+    assert "Tuesday, July 14 at 5:00 PM" in fallback
+    assert "Cancelled Strength at First Park — CANCELLED:" in fallback
+    assert "Tuesday, July 14 at 6:00 PM" in fallback
+    assert "Forecast: 80°F" in fallback
+    assert (
+        "Tuesday, July 14 at 7:00 PM — Late Run at Final Trailhead"
+        in fallback
+    )

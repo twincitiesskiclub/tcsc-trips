@@ -7,6 +7,21 @@ from app.practices.interfaces import PracticeStatus
 from app.slack.blocks.text import guard_fallback_text, guard_slack_blocks
 
 
+ACTIVITY_TYPE_NAME_MAX = 48
+PRACTICE_KIND_MAX = 72
+LOCATION_NAME_MAX = 72
+CANCELLATION_REASON_MAX = 120
+FORECAST_TEMPERATURE_MAX = 16
+FORECAST_CONDITIONS_MAX = 96
+
+
+def _limited_component(value, max_chars):
+    text = str(value or "")
+    if len(text) <= max_chars:
+        return text
+    return text[: max_chars - 1].rstrip() + "…"
+
+
 def _week_date(value):
     result = value.date() if isinstance(value, datetime) else value
     if not isinstance(result, date) or result.weekday() != 0:
@@ -36,25 +51,53 @@ def _is_cancelled(practice):
 
 
 def _practice_kind(practice):
-    activities = [item.name for item in (practice.activities or [])]
-    types = [item.name for item in (practice.practice_types or [])]
+    raw_activities = [
+        str(item.name or "") for item in (practice.activities or [])
+    ]
+    raw_types = [
+        str(item.name or "") for item in (practice.practice_types or [])
+    ]
+    activities = [
+        _limited_component(name, ACTIVITY_TYPE_NAME_MAX)
+        for name in raw_activities
+    ]
+    types = [
+        _limited_component(name, ACTIVITY_TYPE_NAME_MAX)
+        for name in raw_types
+    ]
     if len(activities) == 1 and len(types) == 1:
-        if activities[0].casefold() == types[0].casefold():
+        if raw_activities[0].casefold() == raw_types[0].casefold():
             return activities[0]
-        return f"{activities[0]} {types[0].lower()}"
+        return _limited_component(
+            f"{activities[0]} {types[0].lower()}",
+            PRACTICE_KIND_MAX,
+        )
 
     names = []
     seen = set()
-    for name in activities + types:
-        folded = name.casefold()
+    for raw_name in raw_activities + raw_types:
+        folded = raw_name.casefold()
         if folded not in seen:
-            names.append(name)
+            names.append(
+                _limited_component(raw_name, ACTIVITY_TYPE_NAME_MAX)
+            )
             seen.add(folded)
-    return " · ".join(names) or "Practice"
+    return _limited_component(
+        " · ".join(names) or "Practice",
+        PRACTICE_KIND_MAX,
+    )
 
 
 def _location_name(practice):
-    return practice.location.name if practice.location else "TBD"
+    name = practice.location.name if practice.location else "TBD"
+    return _limited_component(name, LOCATION_NAME_MAX)
+
+
+def _cancellation_reason(practice):
+    return _limited_component(
+        practice.cancellation_reason or "Cancelled",
+        CANCELLATION_REASON_MAX,
+    )
 
 
 def _forecast_line(practice, weather_data):
@@ -67,9 +110,16 @@ def _forecast_line(practice, weather_data):
     conditions = weather.get("conditions", weather.get("conditions_summary"))
     values = []
     if temperature is not None:
-        values.append(f"{round(temperature):.0f}°F")
+        values.append(
+            _limited_component(
+                f"{round(temperature):.0f}°F",
+                FORECAST_TEMPERATURE_MAX,
+            )
+        )
     if conditions:
-        values.append(str(conditions))
+        values.append(
+            _limited_component(conditions, FORECAST_CONDITIONS_MAX)
+        )
     return "Forecast: " + ", ".join(values) if values else None
 
 
@@ -89,9 +139,7 @@ def _weekly_day_text(day_practices, weather_data):
             f"{first.date.strftime('%-I:%M %p')}*"
         ]
         if _is_cancelled(first):
-            lines.append(
-                f"CANCELLED · {first.cancellation_reason or 'Cancelled'}"
-            )
+            lines.append(f"CANCELLED · {_cancellation_reason(first)}")
             lines.append(f"{_practice_kind(first)} · {_location_name(first)}")
         else:
             lines.append(f"{_practice_kind(first)} · {_location_name(first)}")
@@ -105,7 +153,7 @@ def _weekly_day_text(day_practices, weather_data):
         if _is_cancelled(practice):
             lines.append(
                 f"{practice.date.strftime('%-I:%M %p')} · CANCELLED · "
-                f"{practice.cancellation_reason or 'Cancelled'} · "
+                f"{_cancellation_reason(practice)} · "
                 f"{_practice_kind(practice)} · {_location_name(practice)}"
             )
         else:
@@ -199,7 +247,7 @@ def build_weekly_summary_fallback_text(
         if _is_cancelled(practice):
             lines.append(
                 f"{prefix} — CANCELLED: "
-                f"{practice.cancellation_reason or 'Cancelled'}."
+                f"{_cancellation_reason(practice)}."
             )
         else:
             forecast = _forecast_line(practice, weather_data)

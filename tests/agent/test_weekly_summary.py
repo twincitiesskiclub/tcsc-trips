@@ -7,7 +7,9 @@ from unittest.mock import MagicMock, call, patch
 import pytest
 from sqlalchemy.sql import operators
 
+from app import create_app
 from app.agent.routines import weekly_summary as routine
+from app.models import db
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
 
@@ -28,6 +30,16 @@ class FakeQuery:
 
     def all(self):
         return self.practices
+
+
+@pytest.fixture
+def app():
+    app = create_app()
+    app.config["TESTING"] = True
+    app.config["SQLALCHEMY_DATABASE_URI"] = (
+        "postgresql://tcsc:tcsc@localhost:5432/tcsc_trips"
+    )
+    return app
 
 
 def model_for(query):
@@ -62,13 +74,25 @@ def criterion_value(criteria, operator):
     return matches[0].right.value
 
 
-def run_with_query(query, *, now=None, week_start=None, dry_run=True):
+def run_with_query(
+    query,
+    *,
+    now=None,
+    week_start=None,
+    dry_run=True,
+    channel_override=None,
+    channel_error=None,
+):
     now = now or datetime(2026, 7, 12, 20, 0)
     client = MagicMock()
     client.chat_postMessage.return_value = {"ts": "1783980000.000100"}
     fake_db = SimpleNamespace(session=MagicMock())
     blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "week"}}]
     fallback = "Complete calendar-week fallback"
+    channel_lookup = MagicMock(
+        return_value="C-OVERRIDE",
+        side_effect=channel_error,
+    )
 
     with patch.object(routine, "Practice", model_for(query)), patch.object(
         routine, "load_skipper_config", return_value={"agent": {"dry_run": dry_run}}
@@ -84,11 +108,16 @@ def run_with_query(query, *, now=None, week_start=None, dry_run=True):
     ) as build_fallback, patch.object(
         routine, "get_slack_client", return_value=client
     ), patch.object(
+        routine, "get_channel_id_by_name", channel_lookup
+    ), patch.object(
         routine, "_get_announcement_channel", return_value="C-WEEK", create=True
     ), patch.object(
         routine, "db", fake_db, create=True
     ):
-        result = routine.run_weekly_summary(week_start=week_start)
+        result = routine.run_weekly_summary(
+            channel_override=channel_override,
+            week_start=week_start,
+        )
 
     return SimpleNamespace(
         result=result,
@@ -98,6 +127,7 @@ def run_with_query(query, *, now=None, week_start=None, dry_run=True):
         build_fallback=build_fallback,
         blocks=blocks,
         fallback=fallback,
+        channel_lookup=channel_lookup,
     )
 
 
@@ -145,6 +175,89 @@ def test_query_includes_only_weekly_surface_statuses():
     }
     assert PracticeStatus.COMPLETED.value not in status_criteria[0].right.value
     assert len(query.order_columns) == 2
+
+
+def test_database_query_filters_week_statuses_and_orders_included_rows(app):
+    start = date(2197, 7, 3)
+    rows = [
+        Practice(
+            date=datetime(2197, 7, 2, 18, 0),
+            day_of_week="Sunday",
+            status=PracticeStatus.SCHEDULED.value,
+        ),
+        Practice(
+            date=datetime(2197, 7, 3, 18, 0),
+            day_of_week="Monday",
+            status=PracticeStatus.CANCELLED.value,
+        ),
+        Practice(
+            date=datetime(2197, 7, 4, 18, 0),
+            day_of_week="Tuesday",
+            status=PracticeStatus.CONFIRMED.value,
+        ),
+        Practice(
+            date=datetime(2197, 7, 5, 18, 0),
+            day_of_week="Wednesday",
+            status=PracticeStatus.COMPLETED.value,
+        ),
+        Practice(
+            date=datetime(2197, 7, 6, 18, 0),
+            day_of_week="Thursday",
+            status=PracticeStatus.SCHEDULED.value,
+        ),
+        Practice(
+            date=datetime(2197, 7, 6, 18, 0),
+            day_of_week="Thursday",
+            status=PracticeStatus.SCHEDULED.value,
+        ),
+        Practice(
+            date=datetime(2197, 7, 10, 9, 0),
+            day_of_week="Monday",
+            status=PracticeStatus.SCHEDULED.value,
+        ),
+    ]
+
+    with app.app_context():
+        db.session.add_all(rows)
+        db.session.commit()
+        created_ids = {row.id for row in rows}
+        expected_ids = [rows[index].id for index in (1, 2, 4, 5)]
+        captured = {}
+
+        def capture_blocks(practices, **_kwargs):
+            captured["ids"] = [
+                item.id for item in practices if item.id in created_ids
+            ]
+            return []
+
+        try:
+            with patch.object(
+                routine,
+                "load_skipper_config",
+                return_value={"agent": {"dry_run": True}},
+            ), patch.object(
+                routine,
+                "convert_practice_to_info",
+                side_effect=lambda item: item,
+            ), patch.object(
+                routine,
+                "build_weekly_summary_blocks",
+                side_effect=capture_blocks,
+            ), patch.object(
+                routine,
+                "build_weekly_summary_fallback_text",
+                return_value="Complete calendar-week fallback",
+            ):
+                result = routine.run_weekly_summary(week_start=start)
+
+            assert captured["ids"] == expected_ids
+            assert result["practice_count"] >= len(expected_ids)
+        finally:
+            for row in rows:
+                persisted = db.session.get(Practice, row.id)
+                if persisted:
+                    db.session.delete(persisted)
+            db.session.commit()
 
 
 def test_active_weather_uses_non_none_coordinates_and_cancelled_skips_weather():
@@ -239,3 +352,19 @@ def test_dry_run_builds_full_preview_but_writes_nothing():
     outcome.client.chat_postMessage.assert_not_called()
     outcome.db.session.commit.assert_not_called()
     assert session.slack_weekly_summary_ts is None
+
+
+def test_channel_override_resolution_failure_is_contained_without_writes():
+    outcome = run_with_query(
+        FakeQuery([]),
+        week_start=date(2026, 7, 13),
+        dry_run=False,
+        channel_override="#weekly-preview",
+        channel_error=RuntimeError("channel lookup failed"),
+    )
+
+    assert outcome.result["slack_posted"] is False
+    assert outcome.result["slack_error"] == "channel lookup failed"
+    outcome.channel_lookup.assert_called_once_with("weekly-preview")
+    outcome.client.chat_postMessage.assert_not_called()
+    outcome.db.session.commit.assert_not_called()

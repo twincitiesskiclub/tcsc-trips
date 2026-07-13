@@ -116,19 +116,18 @@ def run_weekly_summary(
     if dry_run:
         return result
 
-    channel_id = (
-        get_channel_id_by_name(channel_override.lstrip("#"))
-        if channel_override
-        else _get_announcement_channel()
-    )
-    if not channel_id:
-        return {
-            **result,
-            "slack_posted": False,
-            "slack_error": "Channel not found",
-        }
-
     try:
+        channel_id = (
+            get_channel_id_by_name(channel_override.lstrip("#"))
+            if channel_override
+            else _get_announcement_channel()
+        )
+        if not channel_id:
+            return {
+                **result,
+                "slack_posted": False,
+                "slack_error": "Channel not found",
+            }
         response = get_slack_client().chat_postMessage(
             channel=channel_id,
             blocks=blocks,
