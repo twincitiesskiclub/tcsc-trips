@@ -227,6 +227,25 @@ def test_weekly_fallback_plainifies_authored_slack_control_tokens():
     assert cancelled.cancellation_reason == authored
 
 
+def test_weekly_fallback_plainification_is_total_for_long_colon_tokens():
+    token = ":" + ("a" * 81) + ":"
+    cancelled = practice(
+        1,
+        datetime(2026, 7, 27, 18, 0),
+        status=PracticeStatus.CANCELLED,
+        reason=f"Reason {token}",
+    )
+
+    fallback = build_weekly_summary_fallback_text(
+        [cancelled],
+        week_start=date(2026, 7, 27),
+    )
+
+    assert token not in fallback
+    assert "a" * 81 in fallback
+    assert cancelled.cancellation_reason == f"Reason {token}"
+
+
 def test_fallback_has_full_range_and_every_active_or_cancelled_row():
     active = practice(
         1,

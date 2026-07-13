@@ -728,6 +728,22 @@ def test_standalone_fallback_plainifies_authored_slack_control_tokens(
     assert practice_info.workout_description == authored
 
 
+def test_standalone_fallback_plainification_is_total_for_long_colon_tokens(
+    practice_info, conditions
+):
+    token = ":" + ("a" * 81) + ":"
+    practice_info.workout_description = f"Workout {token}"
+
+    fallback = announcement_blocks.build_practice_fallback_text(
+        practice_info,
+        conditions,
+    )
+
+    assert token not in fallback
+    assert "a" * 81 in fallback
+    assert practice_info.workout_description == f"Workout {token}"
+
+
 def test_reserved_fallback_helper_never_truncates_required_tail():
     tail = (
         "RSVP with the white check mark reaction so we'll know you'll be there. "
@@ -996,6 +1012,22 @@ def test_details_fallback_uses_same_plain_normalized_content(
     assert "🌫️ AQI 78" in fallback
     assert "Trail report: https://trails.example/report" in fallback
     assert "<https://trails.example/report|Trail report>" not in fallback
+
+
+def test_details_fallback_plainification_is_total_for_long_colon_tokens(
+    practice_info, conditions
+):
+    token = ":" + ("a" * 81) + ":"
+    practice_info.location.parking_notes = f"Parking {token}"
+
+    fallback = announcement_blocks.build_practice_details_fallback_text(
+        practice_info,
+        conditions,
+    )
+
+    assert token not in fallback
+    assert "a" * 81 in fallback
+    assert practice_info.location.parking_notes == f"Parking {token}"
 
 
 def test_long_parking_cannot_remove_details_fallback_gear_or_conditions(

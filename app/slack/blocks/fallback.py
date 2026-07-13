@@ -2,12 +2,10 @@
 
 import re
 
-from app.practices.plan_reactions import format_reaction_name_for_fallback
-
-
 _BROADCAST_TOKEN_RE = re.compile(r"<!(channel|here|everyone)>", re.IGNORECASE)
 _SHORTCODE_TOKEN_RE = re.compile(
-    r":([a-z0-9_+\-]+(?:::(?:skin-tone-[2-6]))?):",
+    r":(?P<base>[a-z0-9_+\-]+)"
+    r"(?:::(?P<modifier>skin-tone-[2-6]))?:",
     re.IGNORECASE,
 )
 
@@ -17,7 +15,14 @@ def plainify_fallback_fragment(value) -> str:
     text = str(value or "")
     text = _BROADCAST_TOKEN_RE.sub(lambda match: match.group(1).lower(), text)
     return _SHORTCODE_TOKEN_RE.sub(
-        lambda match: format_reaction_name_for_fallback(match.group(1)),
+        lambda match: (
+            match.group("base").lower().replace("_", " ")
+            + (
+                ", "
+                + match.group("modifier").lower().replace("-", " ")
+                if match.group("modifier") else ""
+            )
+        ),
         text,
     )
 

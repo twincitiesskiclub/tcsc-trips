@@ -1643,6 +1643,28 @@ class TestUpsertCombinedDetailsReply:
         assert ":six:" not in fallback
         assert ":seven:" not in fallback
 
+    def test_combined_details_plainification_is_total_for_long_colon_tokens(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import _combined_details_payload
+
+        token = ":" + ("a" * 81) + ":"
+        practices = _make_group_practices(2)
+        for index, practice in enumerate(practices):
+            practice.date = datetime(2026, 7, 14 + index, 18 + index, 15)
+            practice.location.parking_notes = f"Parking {index} {token}"
+            practice.activities = []
+
+        with patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            side_effect=lambda item: item,
+        ):
+            _blocks, fallback = _combined_details_payload(practices)
+
+        assert token not in fallback
+        assert "a" * 81 in fallback
+        assert practices[0].location.parking_notes == f"Parking 0 {token}"
+
     def test_three_divergent_details_preserve_every_sessions_gear_in_fallback(
         self, app_context
     ):

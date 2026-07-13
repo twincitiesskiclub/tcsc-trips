@@ -464,6 +464,20 @@ def test_combined_fallback_plainifies_authored_slack_control_tokens():
     assert cancelled.cancellation_reason == authored
 
 
+def test_combined_fallback_plainification_is_total_for_long_colon_tokens():
+    token = ":" + ("a" * 81) + ":"
+    practices = [
+        combined_practice(1, 14, 18, "six", workout=f"Workout {token}"),
+        combined_practice(2, 15, 19, "seven", workout=f"Workout {token}"),
+    ]
+
+    fallback = build_combined_fallback_text(practices)
+
+    assert token not in fallback
+    assert "a" * 81 in fallback
+    assert practices[0].workout_description == f"Workout {token}"
+
+
 def test_mixed_cancelled_fallback_maps_only_active_session():
     practices = [
         combined_practice(1, 14, 18, "six"),
