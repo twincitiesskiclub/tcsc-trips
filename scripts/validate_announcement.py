@@ -185,7 +185,7 @@ def _combined(*practices):
 
 _routine = _practice(1, datetime(2026, 7, 13, 18, 0))
 _july_daylight = _practice(2, datetime(2026, 7, 14, 18, 0))
-_after_sunset = _practice(3, datetime(2026, 7, 15, 21, 0))
+_after_sunset = _practice(3, datetime(2026, 7, 15, 20, 0))
 _weather_alert = _practice(4, datetime(2026, 7, 16, 18, 0))
 _aqi_101 = _practice(5, datetime(2026, 7, 17, 18, 0))
 _missing_workout = _practice(
@@ -408,6 +408,20 @@ def _sanitize_for_test(value):
     return value
 
 
+def _with_run_marker(blocks, run_id, scenario_name, *, details=False):
+    suffix = " · Details" if details else ""
+    marker = _sanitize_for_test(
+        f"🧪 Harness · {run_id} · {scenario_name}{suffix}"
+    )
+    return [
+        *blocks,
+        {
+            "type": "context",
+            "elements": [{"type": "plain_text", "text": marker}],
+        },
+    ]
+
+
 def _assert_test_channel(channel):
     if channel != TEST_CHANNEL:
         raise RuntimeError(
@@ -526,25 +540,36 @@ def post(*, state_path=STATE_FILE):
     client = get_slack_client()
     for name, scenario in SCENARIOS.items():
         root_blocks, root_fallback, details = build_scenario(name, scenario)
+        marked_root_blocks = _with_run_marker(
+            root_blocks,
+            state["run_id"],
+            name,
+        )
         root = _post_recorded(
             client,
             state,
             state_path=state_path,
             channel=TEST_CHANNEL,
-            blocks=root_blocks,
+            blocks=marked_root_blocks,
             text=f"[{state['run_id']}] {root_fallback}",
             unfurl_links=False,
             unfurl_media=False,
         )
         if details:
             details_blocks, details_fallback = details
+            marked_details_blocks = _with_run_marker(
+                details_blocks,
+                state["run_id"],
+                name,
+                details=True,
+            )
             _post_recorded(
                 client,
                 state,
                 state_path=state_path,
                 channel=TEST_CHANNEL,
                 thread_ts=root["ts"],
-                blocks=details_blocks,
+                blocks=marked_details_blocks,
                 text=f"[{state['run_id']}] {details_fallback}",
                 reply_broadcast=False,
             )

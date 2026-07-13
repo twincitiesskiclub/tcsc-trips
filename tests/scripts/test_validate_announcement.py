@@ -6,12 +6,14 @@ import inspect
 import json
 import re
 from contextlib import nullcontext
+from datetime import timedelta
 from types import SimpleNamespace
 
 import pytest
 from slack_sdk.errors import SlackApiError
 
 from app.practices.interfaces import AnnouncementConditions
+from app.utils import utc_naive_to_central_naive
 from scripts import validate_announcement as validate
 
 
@@ -142,6 +144,39 @@ def test_registry_is_synthetic_complete_and_uses_final_builders():
     ] is None
 
 
+def test_july_scenario_ends_before_859_sunset_without_headlamp_warning():
+    scenario = validate.SCENARIOS["july_no_false_headlamp"]
+    practice = scenario.practices[0]
+    conditions = scenario.conditions
+    sunset = utc_naive_to_central_naive(conditions.daylight.sunset)
+    practice_end = practice.date + timedelta(
+        minutes=conditions.duration_minutes
+    )
+
+    assert (sunset.hour, sunset.minute) == (20, 59)
+    assert practice.date < practice_end < sunset
+    blocks, fallback, _ = validate.build_scenario(
+        "july_no_false_headlamp", scenario
+    )
+    assert "Headlamp required" not in str(blocks)
+    assert "Headlamp required" not in fallback
+
+
+def test_after_sunset_scenario_starts_before_but_ends_after_sunset():
+    scenario = validate.SCENARIOS["after_sunset"]
+    practice = scenario.practices[0]
+    conditions = scenario.conditions
+    sunset = utc_naive_to_central_naive(conditions.daylight.sunset)
+    practice_end = practice.date + timedelta(
+        minutes=conditions.duration_minutes
+    )
+
+    assert practice.date < sunset < practice_end
+    blocks, fallback, _ = validate.build_scenario("after_sunset", scenario)
+    assert "Headlamp required" in str(blocks)
+    assert "Headlamp required" in fallback
+
+
 @pytest.mark.parametrize("boundary", ["post", "reaction", "permalink", "delete"])
 def test_wrong_channel_is_rejected_before_every_slack_boundary(
     boundary, tmp_path
@@ -256,6 +291,58 @@ def test_post_persists_empty_state_and_shows_run_id_on_every_message(
         _record("100.1"),
         _record("100.2", thread_ts="100.1"),
     ]
+
+
+def test_every_root_and_details_post_has_visible_marker_on_copied_blocks(
+    tmp_path, monkeypatch
+):
+    state_path = tmp_path / "state.json"
+    sent = []
+    builder_owned = {}
+    build_scenario = validate.build_scenario
+
+    def tracked_build(name, scenario):
+        root, fallback, details = build_scenario(name, scenario)
+        details_blocks = details[0] if details else None
+        builder_owned[name] = (root, details_blocks)
+        return root, fallback, details
+
+    def chat_post_message(**kwargs):
+        sent.append(kwargs)
+        return {"ts": f"100.{len(sent)}"}
+
+    monkeypatch.setattr(validate, "build_scenario", tracked_build)
+    monkeypatch.setattr(
+        validate,
+        "get_slack_client",
+        lambda: _client(chat_postMessage=chat_post_message),
+    )
+
+    validate.post(state_path=state_path)
+
+    run_id = json.loads(state_path.read_text())["run_id"]
+    message_index = 0
+    for name in validate.SCENARIOS:
+        root_message = sent[message_index]
+        message_index += 1
+        marker = f"🧪 Harness · {run_id} · {name}"
+        assert root_message["blocks"][-1] == {
+            "type": "context",
+            "elements": [{"type": "plain_text", "text": marker}],
+        }
+
+        root_blocks, details_blocks = builder_owned[name]
+        if details_blocks is not None:
+            details_message = sent[message_index]
+            message_index += 1
+            assert details_message["blocks"][-1]["elements"][0]["text"] == (
+                f"{marker} · Details"
+            )
+
+        assert "🧪 Harness" not in str(root_blocks)
+        assert "🧪 Harness" not in str(details_blocks)
+
+    assert message_index == len(sent)
 
 
 def test_interrupted_post_keeps_the_last_successful_cleanup_record(
