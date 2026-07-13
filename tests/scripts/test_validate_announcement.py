@@ -31,6 +31,7 @@ REQUIRED_SCENARIOS = {
     "long_boundaries",
     "weekly_cross_month_cancelled",
     "combined_strength",
+    "combined_strength_same_day",
     "combined_mixed_cancelled",
 }
 
@@ -124,11 +125,32 @@ def test_registry_is_synthetic_complete_and_uses_final_builders():
                 *(item["emoji"] for item in scenario.practices[0].plan_reactions),
             )
         elif scenario.kind == "combined":
-            expected_reactions = tuple(
-                practice.slack_session_emoji for practice in scenario.practices
-            ) + tuple(
-                item["emoji"] for item in scenario.practices[0].plan_reactions
+            active = tuple(
+                practice
+                for practice in scenario.practices
+                if getattr(practice.status, "value", practice.status)
+                != validate.PracticeStatus.CANCELLED.value
             )
+            snapshots = [
+                tuple(
+                    (item["emoji"], item["label"])
+                    for item in practice.plan_reactions
+                )
+                for practice in scenario.practices
+            ]
+            shared_plan = (
+                tuple(item[0] for item in snapshots[0])
+                if active
+                and snapshots
+                and all(
+                    snapshot == snapshots[0]
+                    for snapshot in snapshots[1:]
+                )
+                else ()
+            )
+            expected_reactions = tuple(
+                practice.slack_session_emoji for practice in active
+            ) + shared_plan
         else:
             expected_reactions = ()
         assert scenario.reaction_names == expected_reactions, name
@@ -141,6 +163,51 @@ def test_registry_is_synthetic_complete_and_uses_final_builders():
     assert validate.build_scenario("no_details", validate.SCENARIOS["no_details"])[
         2
     ] is None
+
+
+def test_approved_review_scenarios_render_exact_copy_and_icons():
+    standalone = validate.SCENARIOS["multiple_plan_reactions"]
+    assert standalone.practices[0].plan_reactions == [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {
+            "emoji": "older_adult::skin-tone-4",
+            "label": "experienced rollerskier",
+        },
+        {"emoji": "athletic_shoe", "label": "runner"},
+    ]
+    standalone_blocks, _, _ = validate.build_scenario(
+        "multiple_plan_reactions", standalone
+    )
+    assert (
+        "In addition to your attendance emoji, hit a :hatching_chick: for "
+        "new rollerskier, a :older_adult::skin-tone-4: for experienced "
+        "rollerskier, and a :athletic_shoe: for runner."
+    ) in str(standalone_blocks)
+
+    cross_day = validate.SCENARIOS["combined_strength"]
+    assert len({item.date.date() for item in cross_day.practices}) == 2
+    cross_blocks, _, _ = validate.build_scenario("combined_strength", cross_day)
+    assert "Tue at 6:15 PM" in str(cross_blocks)
+    assert "Wed at 7:15 PM" in str(cross_blocks)
+
+    same_day = validate.SCENARIOS["combined_strength_same_day"]
+    assert len({item.date.date() for item in same_day.practices}) == 1
+    same_blocks, _, _ = validate.build_scenario(
+        "combined_strength_same_day", same_day
+    )
+    assert ":six: for 6:05 PM or :seven: for 7:20 PM" in str(same_blocks)
+
+    weekly = validate.SCENARIOS["weekly_cross_month_cancelled"]
+    weekly_blocks, weekly_fallback, _ = validate.build_scenario(
+        "weekly_cross_month_cancelled", weekly
+    )
+    assert "📅 Practices this week · July 27–August 2" in str(weekly_blocks)
+    assert "🚫 CANCELLED · Heat warning" in str(weekly_blocks)
+    assert (
+        "📝 Full practice details will be posted before each practice."
+        in str(weekly_blocks)
+    )
+    assert "<!channel>" not in weekly_fallback
 
 
 def test_july_scenario_ends_before_859_sunset_without_headlamp_warning():
@@ -412,6 +479,17 @@ def test_reaction_seeds_use_only_displayed_names_and_allow_existing_reactions():
     ]
     assert [item["name"] for item in calls] == ["six", "evergreen_tree"]
     assert all(item["channel"] == validate.TEST_CHANNEL for item in calls)
+
+
+def test_harness_passes_full_skin_tone_name_to_reactions_add():
+    calls = []
+    validate.seed_scenario_reactions(
+        _client(reactions_add=lambda **kwargs: calls.append(kwargs)),
+        SimpleNamespace(reaction_names=("older_adult::skin-tone-4",)),
+        "100.1",
+        state=_state(),
+    )
+    assert [item["name"] for item in calls] == ["older_adult::skin-tone-4"]
 
 
 def test_reaction_failure_is_recorded_without_losing_cleanup_state(

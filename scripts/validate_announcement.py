@@ -169,15 +169,28 @@ def _standalone(practice, conditions):
 
 
 def _combined(*practices):
-    plan_names = tuple(
-        item["emoji"] for item in practices[0].plan_reactions
+    active = tuple(
+        practice for practice in practices
+        if getattr(practice.status, "value", practice.status)
+        != PracticeStatus.CANCELLED.value
+    )
+    snapshots = [
+        tuple((item["emoji"], item["label"]) for item in practice.plan_reactions)
+        for practice in practices
+    ]
+    shared_plan = (
+        tuple(item[0] for item in snapshots[0])
+        if active
+        and snapshots
+        and all(snapshot == snapshots[0] for snapshot in snapshots[1:])
+        else ()
     )
     return Scenario(
         kind="combined",
         practices=tuple(practices),
         reaction_names=(
-            *(practice.slack_session_emoji for practice in practices),
-            *plan_names,
+            *(practice.slack_session_emoji for practice in active),
+            *shared_plan,
         ),
     )
 
@@ -209,9 +222,14 @@ _interval_evergreen = _practice(
 _multiple_plan = _practice(
     9,
     datetime(2026, 7, 21, 18, 0),
+    activities=[_activity("Rollerski"), _activity("Run")],
     plan_reactions=[
-        {"emoji": "evergreen_tree", "label": "Endurance instead"},
-        {"emoji": "athletic_shoe", "label": "Run option"},
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {
+            "emoji": "older_adult::skin-tone-4",
+            "label": "experienced rollerskier",
+        },
+        {"emoji": "athletic_shoe", "label": "runner"},
     ],
 )
 _overridden_plan = _practice(
@@ -260,6 +278,26 @@ _combined_tuesday = _practice(
 _combined_wednesday = _practice(
     16,
     datetime(2026, 7, 15, 19, 15),
+    activities=[_activity("Strength")],
+    practice_types=[SimpleNamespace(id=2, name="Strength")],
+    workout_description="3 x 8 strength circuit",
+    logistics_notes="Bring indoor shoes.",
+    plan_reactions=_combined_plan,
+    slack_session_emoji="seven",
+)
+_combined_same_day_early = _practice(
+    19,
+    datetime(2026, 7, 16, 18, 5),
+    activities=[_activity("Strength")],
+    practice_types=[SimpleNamespace(id=2, name="Strength")],
+    workout_description="3 x 8 strength circuit",
+    logistics_notes="Bring indoor shoes.",
+    plan_reactions=_combined_plan,
+    slack_session_emoji="six",
+)
+_combined_same_day_late = _practice(
+    20,
+    datetime(2026, 7, 16, 19, 20),
     activities=[_activity("Strength")],
     practice_types=[SimpleNamespace(id=2, name="Strength")],
     workout_description="3 x 8 strength circuit",
@@ -350,6 +388,10 @@ SCENARIOS = {
     ),
     "combined_strength": _combined(
         _combined_tuesday, _combined_wednesday
+    ),
+    "combined_strength_same_day": _combined(
+        _combined_same_day_early,
+        _combined_same_day_late,
     ),
     "combined_mixed_cancelled": _combined(
         _mixed_active, _mixed_cancelled
