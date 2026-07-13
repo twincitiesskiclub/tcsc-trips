@@ -480,6 +480,69 @@ class TestUpsertDetailsReply:
 
         mock_db.session.commit.assert_not_called()
 
+    def test_missing_saved_details_is_recreated_under_known_root(self, app_context):
+        client = MagicMock()
+        client.chat_update.side_effect = SlackApiError(
+            "missing", {"error": "message_not_found"}
+        )
+        client.chat_postMessage.return_value = {"ts": "REPLACEMENT.TS"}
+        practice = _make_practice(slack_details_ts="STALE.TS")
+
+        mock_db, result = self._call(client, practice)
+
+        assert result == {
+            "success": True,
+            "message_ts": "REPLACEMENT.TS",
+            "recreated": True,
+        }
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args.kwargs["thread_ts"] == (
+            practice.slack_message_ts
+        )
+        assert practice.slack_details_ts == "REPLACEMENT.TS"
+        mock_db.session.commit.assert_called_once_with()
+
+    def test_other_details_update_error_does_not_post_replacement(
+        self, app_context
+    ):
+        client = MagicMock()
+        client.chat_update.side_effect = SlackApiError(
+            "forbidden", {"error": "cant_update_message"}
+        )
+        practice = _make_practice(slack_details_ts="SAVED.TS")
+
+        mock_db, result = self._call(client, practice)
+
+        assert result["success"] is False
+        assert "cant_update_message" in result["error"]
+        client.chat_postMessage.assert_not_called()
+        assert practice.slack_details_ts == "SAVED.TS"
+        mock_db.session.commit.assert_not_called()
+
+    def test_replacement_commit_failure_compensates_and_restores_stale_link(
+        self, app_context
+    ):
+        client = MagicMock()
+        client.chat_update.side_effect = SlackApiError(
+            "missing", {"error": "message_not_found"}
+        )
+        client.chat_postMessage.return_value = {"ts": "REPLACEMENT.TS"}
+        practice = _make_practice(slack_details_ts="STALE.TS")
+
+        mock_db, result = self._call(
+            client,
+            practice,
+            commit_error=RuntimeError("database commit failed"),
+        )
+
+        assert result["success"] is False
+        assert result["cleanup"] == {"success": True}
+        assert practice.slack_details_ts == "STALE.TS"
+        client.chat_delete.assert_called_once_with(
+            channel="CTEST", ts="REPLACEMENT.TS"
+        )
+        mock_db.session.rollback.assert_called_once_with()
+
     def test_empty_blocks_skips_slack_call(self):
         """When build_practice_details_blocks returns empty list, nothing is posted."""
         client = MagicMock()
@@ -1355,6 +1418,75 @@ class TestUpsertCombinedDetailsReply:
         assert kw["ts"] == "OLD.TS"
         client.chat_postMessage.assert_not_called()
         mock_db.session.commit.assert_called_once()
+
+    def test_missing_saved_combined_details_recreates_one_shared_reply(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import (
+            _upsert_combined_details_reply,
+        )
+
+        client = MagicMock()
+        client.chat_update.side_effect = SlackApiError(
+            "missing", {"error": "message_not_found"}
+        )
+        client.chat_postMessage.return_value = {"ts": "REPLACEMENT.TS"}
+        practices = _make_group_practices(3, existing_details_ts="STALE.TS")
+
+        with patch(
+            "app.practices.service.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=self._blocks(),
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            result = _upsert_combined_details_reply(client, practices)
+
+        assert result == {
+            "success": True,
+            "message_ts": "REPLACEMENT.TS",
+            "recreated": True,
+        }
+        client.chat_postMessage.assert_called_once()
+        assert client.chat_postMessage.call_args.kwargs["thread_ts"] == (
+            "COMBINED.1234"
+        )
+        assert all(
+            practice.slack_details_ts == "REPLACEMENT.TS"
+            for practice in practices
+        )
+        mock_db.session.commit.assert_called_once_with()
+
+    def test_other_combined_update_error_does_not_post_replacement(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import (
+            _upsert_combined_details_reply,
+        )
+
+        client = MagicMock()
+        client.chat_update.side_effect = SlackApiError(
+            "forbidden", {"error": "cant_update_message"}
+        )
+        practices = _make_group_practices(2, existing_details_ts="SAVED.TS")
+
+        with patch(
+            "app.practices.service.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=self._blocks(),
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            result = _upsert_combined_details_reply(client, practices)
+
+        assert result["success"] is False
+        assert "cant_update_message" in result["error"]
+        client.chat_postMessage.assert_not_called()
+        assert all(
+            practice.slack_details_ts == "SAVED.TS"
+            for practice in practices
+        )
+        mock_db.session.commit.assert_not_called()
 
     def test_empty_blocks_skips_slack_call(self, app_context):
         """When build_practice_details_blocks returns empty, no Slack call is made."""

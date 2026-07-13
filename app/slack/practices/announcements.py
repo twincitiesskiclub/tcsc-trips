@@ -456,6 +456,7 @@ def _upsert_combined_details_reply(client, practices):
             )
             return {"success": False, "error": str(exc)}
 
+    recreated = False
     if existing:
         try:
             client.chat_update(
@@ -469,15 +470,25 @@ def _upsert_combined_details_reply(client, practices):
             db.session.commit()
             return {"success": True, "updated": True}
         except Exception as exc:
-            _rollback_session("combined Details timestamp update")
-            for practice in practices:
-                practice.slack_details_ts = original[practice.id]
-            current_app.logger.warning(
-                "Could not update combined Details reply for practices %s: %s",
-                [practice.id for practice in practices],
-                exc,
-            )
-            return {"success": False, "error": str(exc)}
+            if (
+                isinstance(exc, SlackApiError)
+                and _reaction_error_name(exc) == "message_not_found"
+            ):
+                recreated = True
+                current_app.logger.info(
+                    "Recreating missing combined Details reply for practices %s",
+                    [practice.id for practice in practices],
+                )
+            else:
+                _rollback_session("combined Details timestamp update")
+                for practice in practices:
+                    practice.slack_details_ts = original[practice.id]
+                current_app.logger.warning(
+                    "Could not update combined Details reply for practices %s: %s",
+                    [practice.id for practice in practices],
+                    exc,
+                )
+                return {"success": False, "error": str(exc)}
 
     try:
         response = client.chat_postMessage(
@@ -514,7 +525,10 @@ def _upsert_combined_details_reply(client, practices):
     try:
         apply_link()
         db.session.commit()
-        return {"success": True, "message_ts": details_ts}
+        result = {"success": True, "message_ts": details_ts}
+        if recreated:
+            result["recreated"] = True
+        return result
     except Exception as exc:
         _rollback_session("new combined Details timestamp link")
         restore_originals()
@@ -541,7 +555,10 @@ def _upsert_combined_details_reply(client, practices):
             context="combined Details link",
         )
         if recovery.get("success"):
-            return {**recovery, "message_ts": details_ts}
+            result = {**recovery, "message_ts": details_ts}
+            if recreated:
+                result["recreated"] = True
+            return result
         return recovery
 
 
@@ -600,6 +617,7 @@ def _upsert_details_reply(
     except Exception as exc:
         return {"success": False, "error": str(exc)}
 
+    recreated = False
     if original_ts:
         try:
             client.chat_update(
@@ -610,12 +628,22 @@ def _upsert_details_reply(
             )
             return {"success": True, "updated": True}
         except Exception as exc:
-            current_app.logger.warning(
-                "Could not update practice Details reply for #%s: %s",
-                practice.id,
-                exc,
-            )
-            return {"success": False, "error": str(exc)}
+            if (
+                isinstance(exc, SlackApiError)
+                and _reaction_error_name(exc) == "message_not_found"
+            ):
+                recreated = True
+                current_app.logger.info(
+                    "Recreating missing practice Details reply for #%s",
+                    practice.id,
+                )
+            else:
+                current_app.logger.warning(
+                    "Could not update practice Details reply for #%s: %s",
+                    practice.id,
+                    exc,
+                )
+                return {"success": False, "error": str(exc)}
 
     try:
         reply = client.chat_postMessage(
@@ -650,7 +678,10 @@ def _upsert_details_reply(
     try:
         apply_link()
         db.session.commit()
-        return {"success": True, "message_ts": details_ts}
+        result = {"success": True, "message_ts": details_ts}
+        if recreated:
+            result["recreated"] = True
+        return result
     except Exception as exc:
         _rollback_session("new practice Details timestamp link")
         restore_originals()
@@ -677,7 +708,10 @@ def _upsert_details_reply(
             context=f"practice Details link for #{practice.id}",
         )
         if recovery.get("success"):
-            return {**recovery, "message_ts": details_ts}
+            result = {**recovery, "message_ts": details_ts}
+            if recreated:
+                result["recreated"] = True
+            return result
         return recovery
 
 
