@@ -1132,6 +1132,100 @@ def test_combined_cancellation_rebuild_keeps_active_sibling_in_root(
     assert 'CANCELLED' in text and 'Facility closed' in text
     assert ':six:' not in text
     assert 'Bop :seven: for Wed at 7:15 PM' in text
+    assert [
+        item.kwargs['name']
+        for item in client.reactions_remove.call_args_list
+    ] == ['six']
+
+
+def test_all_cancelled_rebuild_removes_attendance_and_shared_plan_seeds(
+    app_context,
+):
+    from app.slack.practices.announcements import update_combined_lift_post
+
+    plan = [{'emoji': 'evergreen_tree', 'label': 'Endurance'}]
+    practices = [
+        linked_practice(
+            1, 14, 18, 'six', status=PracticeStatus.CANCELLED,
+            reason='Facility closed', plan=plan,
+        ),
+        linked_practice(
+            2, 15, 19, 'seven', status=PracticeStatus.CANCELLED,
+            reason='Facility closed', plan=plan,
+        ),
+    ]
+    client = MagicMock()
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        return_value=practices,
+    ), patch(
+        'app.slack.practices.announcements.assign_combined_session_emojis',
+        return_value={'success': True, 'emojis': {1: 'six', 2: 'seven'}},
+    ), patch(
+        'app.slack.practices.announcements.get_slack_client',
+        return_value=client,
+    ), patch(
+        'app.slack.practices.announcements.convert_practice_to_info',
+        side_effect=lambda item: item,
+    ), patch(
+        'app.slack.practices.announcements._upsert_combined_details_reply',
+        return_value={'success': True},
+    ):
+        result = update_combined_lift_post(practices[0])
+
+    assert result['success'] is True
+    removed = [
+        item.kwargs['name']
+        for item in client.reactions_remove.call_args_list
+    ]
+    assert len(removed) == 3
+    assert set(removed) == {'six', 'seven', 'evergreen_tree'}
+    client.reactions_add.assert_not_called()
+
+
+def test_mixed_cancelled_rebuild_keeps_visible_shared_plan_seed(app_context):
+    from app.slack.practices.announcements import update_combined_lift_post
+
+    plan = [{'emoji': 'evergreen_tree', 'label': 'Endurance'}]
+    practices = [
+        linked_practice(1, 14, 18, 'six', plan=plan),
+        linked_practice(
+            2, 15, 19, 'seven', status=PracticeStatus.CANCELLED,
+            reason='Facility closed', plan=plan,
+        ),
+    ]
+    client = MagicMock()
+    with patch(
+        'app.slack.practices.announcements.get_announcement_siblings',
+        return_value=practices,
+    ), patch(
+        'app.slack.practices.announcements.assign_combined_session_emojis',
+        return_value={'success': True, 'emojis': {1: 'six', 2: 'seven'}},
+    ), patch(
+        'app.slack.practices.announcements.get_slack_client',
+        return_value=client,
+    ), patch(
+        'app.slack.practices.announcements.convert_practice_to_info',
+        side_effect=lambda item: item,
+    ), patch(
+        'app.slack.practices.announcements._upsert_combined_details_reply',
+        return_value={'success': True},
+    ):
+        result = update_combined_lift_post(practices[0])
+
+    assert result['success'] is True
+    text = rendered_text(client.chat_update.call_args.kwargs['blocks'])
+    assert 'Bop :six: for Tue at 6:15 PM' in text
+    assert 'In addition to your attendance emoji' in text
+    assert ':evergreen_tree:' in text
+    assert [
+        item.kwargs['name']
+        for item in client.reactions_remove.call_args_list
+    ] == ['seven']
+    assert [
+        item.kwargs['name']
+        for item in client.reactions_add.call_args_list
+    ] == ['evergreen_tree']
 
 
 def test_delete_survivor_uses_direct_exclusion_api(app_context):

@@ -927,7 +927,12 @@ def _reconcile_combined_plan_reactions(
     *,
     previous_plan_reactions=None,
 ):
-    desired = set(_shared_plan_names(practices))
+    has_active = any(
+        getattr(item.status, "value", item.status)
+        != PracticeStatus.CANCELLED.value
+        for item in practices
+    )
+    desired = set(_shared_plan_names(practices)) if has_active else set()
     known = set(plan_reaction_names(previous_plan_reactions or []))
     for practice in practices:
         known.update(plan_reaction_names(practice.plan_reactions or []))
@@ -1235,10 +1240,19 @@ def update_combined_lift_post(
             siblings,
             previous_plan_reactions=previous_plan_reactions,
         )
-        if removed and removed.slack_session_emoji:
-            _remove_combined_seed(
-                client, siblings, removed.slack_session_emoji
+        attendance_seed_names_to_remove = [
+            item.slack_session_emoji
+            for item in siblings
+            if (
+                item.slack_session_emoji
+                and getattr(item.status, "value", item.status)
+                == PracticeStatus.CANCELLED.value
             )
+        ]
+        if removed and removed.slack_session_emoji:
+            attendance_seed_names_to_remove.append(removed.slack_session_emoji)
+        for name in dict.fromkeys(attendance_seed_names_to_remove):
+            _remove_combined_seed(client, siblings, name)
         current_app.logger.info(
             "Updated combined Strength root for practices %s",
             [item.id for item in siblings],
