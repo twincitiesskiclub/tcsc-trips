@@ -395,12 +395,15 @@ def _refresh_weekly_summary(practice, change_type, **_context):
             weather_data=weather_data,
         )
 
-        # Find the channel — use the practice's slack_channel_id if available,
-        # otherwise fall back to the announcement channel
-        channel_id = practice.slack_channel_id
+        # Weekly timestamps belong to the configured weekly announcement
+        # surface, not necessarily the practice root's persisted channel.
+        from app.slack.practices._config import _get_announcement_channel
+        channel_id = _get_announcement_channel()
         if not channel_id:
-            from app.slack.practices._config import _get_announcement_channel
-            channel_id = _get_announcement_channel()
+            return {
+                'success': False,
+                'error': 'Announcement channel is not configured',
+            }
 
         client = get_slack_client()
         client.chat_update(

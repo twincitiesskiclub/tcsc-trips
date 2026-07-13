@@ -70,6 +70,10 @@ def _capture_ids(builder_path, target, change_type):
 
     with patch(builder_path, side_effect=fake_build), \
             patch('app.slack.client.get_slack_client', return_value=MagicMock()), \
+            patch(
+                'app.slack.practices._config._get_announcement_channel',
+                return_value='C-WEEKLY-ANNOUNCEMENTS',
+            ), \
             patch('app.integrations.weather.get_weather_for_location',
                   side_effect=Exception("skip weather")):
         target(change_type)
@@ -160,6 +164,9 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
             create=True,
         ), patch(
             'app.slack.client.get_slack_client', return_value=client,
+        ), patch(
+            'app.slack.practices._config._get_announcement_channel',
+            return_value='C-WEEKLY-ANNOUNCEMENTS',
         ):
             result = refreshmod._refresh_weekly_summary(keep_obj, 'edit')
 
@@ -170,7 +177,7 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
         assert captured['fallback_week_start'] == captured['block_week_start']
         assert captured['block_weather'] == captured['fallback_weather'] == {}
         client.chat_update.assert_called_once_with(
-            channel='C1',
+            channel='C-WEEKLY-ANNOUNCEMENTS',
             ts=keep_obj.slack_weekly_summary_ts,
             blocks=blocks,
             text=fallback,
@@ -178,3 +185,24 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
 
         db.session.delete(db.session.get(Practice, cancelled_id))
         db.session.commit()
+
+
+def test_weekly_summary_refresh_fails_without_configured_channel(app, week):
+    keep, _dup = week
+    with app.app_context():
+        keep_obj = db.session.get(Practice, keep.id)
+        client = MagicMock()
+
+        with patch(
+            'app.slack.practices._config._get_announcement_channel',
+            return_value=None,
+        ), patch(
+            'app.slack.client.get_slack_client', return_value=client,
+        ):
+            result = refreshmod._refresh_weekly_summary(keep_obj, 'edit')
+
+        assert result == {
+            'success': False,
+            'error': 'Announcement channel is not configured',
+        }
+        client.chat_update.assert_not_called()

@@ -5,7 +5,6 @@ from __future__ import annotations
 import inspect
 import json
 import re
-from contextlib import nullcontext
 from datetime import timedelta
 from types import SimpleNamespace
 
@@ -542,11 +541,6 @@ def test_teardown_is_idempotent_for_missing_state_or_message(
 def test_invalid_cli_returns_two_without_dispatch(args, monkeypatch):
     monkeypatch.setattr(
         validate,
-        "create_app",
-        lambda: (_ for _ in ()).throw(AssertionError("app created")),
-    )
-    monkeypatch.setattr(
-        validate,
         "post",
         lambda: (_ for _ in ()).throw(AssertionError("post called")),
     )
@@ -560,15 +554,39 @@ def test_invalid_cli_returns_two_without_dispatch(args, monkeypatch):
 
 
 @pytest.mark.parametrize("command", ["post", "teardown"])
-def test_valid_cli_dispatches_exactly_one_command(command, monkeypatch):
+def test_valid_cli_dispatches_exactly_one_command_without_flask_app(
+    command, monkeypatch
+):
     called = []
+    source = inspect.getsource(validate)
+    assert "create_app" not in source
+    assert not hasattr(validate, "create_app")
     monkeypatch.setattr(
         validate,
-        "create_app",
-        lambda: SimpleNamespace(app_context=nullcontext),
+        "post",
+        lambda: called.append("post") or {"success": True},
     )
-    monkeypatch.setattr(validate, "post", lambda: called.append("post"))
-    monkeypatch.setattr(validate, "teardown", lambda: called.append("teardown"))
+    monkeypatch.setattr(
+        validate,
+        "teardown",
+        lambda: called.append("teardown") or {"success": True},
+    )
 
     assert validate.main([command]) == 0
     assert called == [command]
+
+
+def test_failed_teardown_returns_one_and_reports_error(monkeypatch, capsys):
+    monkeypatch.setattr(
+        validate,
+        "post",
+        lambda: (_ for _ in ()).throw(AssertionError("post called")),
+    )
+    monkeypatch.setattr(
+        validate,
+        "teardown",
+        lambda: {"success": False, "error": "ratelimited"},
+    )
+
+    assert validate.main(["teardown"]) == 1
+    assert capsys.readouterr().err.strip() == "teardown failed: ratelimited"

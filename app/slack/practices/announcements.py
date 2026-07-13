@@ -138,6 +138,36 @@ def _reaction_error_name(exc):
     return response.get("error") if response else None
 
 
+def _exception_message(exc):
+    response = getattr(exc, "response", None)
+    return response.get("error", str(exc)) if response else str(exc)
+
+
+def _link_failure_result(*, error, cleanup, channel_id, message_ts):
+    result = {
+        "success": False,
+        "error": f"Could not persist Slack message link: {error}",
+        "cleanup": cleanup,
+    }
+    if not cleanup.get("success"):
+        result["ambiguous_orphan"] = {
+            "channel_id": channel_id,
+            "message_ts": message_ts,
+        }
+    return result
+
+
+def _rollback_session(context):
+    try:
+        db.session.rollback()
+    except Exception:
+        current_app.logger.warning(
+            "Could not roll back %s",
+            context,
+            exc_info=True,
+        )
+
+
 def _seed_plan_reactions(client, practice):
     try:
         names = ["white_check_mark"] + plan_reaction_names(
@@ -309,19 +339,43 @@ def _upsert_combined_details_reply(client, practices):
     existing = next((value for value in original.values() if value), None)
     try:
         blocks, fallback = _combined_details_payload(practices)
-        if not blocks:
-            if not existing:
-                return {"success": True, "skipped": "no_details"}
-            client.chat_delete(
-                channel=representative.slack_channel_id,
-                ts=existing,
-            )
+    except Exception as exc:
+        current_app.logger.warning(
+            "Could not build combined Details reply for practices %s: %s",
+            [practice.id for practice in practices],
+            exc,
+        )
+        return {"success": False, "error": str(exc)}
+
+    if not blocks:
+        if not existing:
+            return {"success": True, "skipped": "no_details"}
+        delete_result = _delete_slack_message(
+            client,
+            channel=representative.slack_channel_id,
+            ts=existing,
+        )
+        if not delete_result["success"]:
+            _rollback_session("failed combined Details delete")
+            return delete_result
+        try:
             for practice in practices:
                 practice.slack_details_ts = None
             db.session.commit()
             return {"success": True, "deleted": True}
+        except Exception as exc:
+            _rollback_session("combined Details timestamp clear")
+            for practice in practices:
+                practice.slack_details_ts = original[practice.id]
+            current_app.logger.warning(
+                "Could not clear combined Details links for practices %s: %s",
+                [practice.id for practice in practices],
+                exc,
+            )
+            return {"success": False, "error": str(exc)}
 
-        if existing:
+    if existing:
+        try:
             client.chat_update(
                 channel=representative.slack_channel_id,
                 ts=existing,
@@ -332,7 +386,18 @@ def _upsert_combined_details_reply(client, practices):
                 practice.slack_details_ts = existing
             db.session.commit()
             return {"success": True, "updated": True}
+        except Exception as exc:
+            _rollback_session("combined Details timestamp update")
+            for practice in practices:
+                practice.slack_details_ts = original[practice.id]
+            current_app.logger.warning(
+                "Could not update combined Details reply for practices %s: %s",
+                [practice.id for practice in practices],
+                exc,
+            )
+            return {"success": False, "error": str(exc)}
 
+    try:
         response = client.chat_postMessage(
             channel=representative.slack_channel_id,
             thread_ts=representative.slack_message_ts,
@@ -342,32 +407,45 @@ def _upsert_combined_details_reply(client, practices):
             unfurl_links=False,
             unfurl_media=False,
         )
-        details_ts = response.get("ts")
-        if not details_ts:
-            return {
-                "success": False,
-                "error": "Slack returned no Details timestamp",
-            }
+    except Exception as exc:
+        current_app.logger.warning(
+            "Could not post combined Details reply for practices %s: %s",
+            [practice.id for practice in practices],
+            exc,
+        )
+        return {"success": False, "error": str(exc)}
+
+    details_ts = response.get("ts")
+    if not details_ts:
+        return {
+            "success": False,
+            "error": "Slack returned no Details timestamp",
+        }
+    try:
         for practice in practices:
             practice.slack_details_ts = details_ts
         db.session.commit()
         return {"success": True, "message_ts": details_ts}
     except Exception as exc:
+        _rollback_session("new combined Details timestamp link")
         for practice in practices:
             practice.slack_details_ts = original[practice.id]
-        try:
-            db.session.rollback()
-        except Exception:
-            current_app.logger.warning(
-                "Could not roll back combined Details sync",
-                exc_info=True,
-            )
+        cleanup = _delete_slack_message(
+            client,
+            channel=representative.slack_channel_id,
+            ts=details_ts,
+        )
         current_app.logger.warning(
-            "Could not sync combined Details reply for practices %s: %s",
+            "Could not persist combined Details links for practices %s: %s",
             [practice.id for practice in practices],
             exc,
         )
-        return {"success": False, "error": str(exc)}
+        return _link_failure_result(
+            error=exc,
+            cleanup=cleanup,
+            channel_id=representative.slack_channel_id,
+            message_ts=details_ts,
+        )
 
 
 def _upsert_details_reply(
@@ -385,21 +463,48 @@ def _upsert_details_reply(
     original_ts = practice.slack_details_ts
     try:
         blocks = build_practice_details_blocks(practice_info, conditions)
-        if not blocks:
-            if not original_ts:
-                return {"success": True, "skipped": "no_details"}
-            client.chat_delete(
-                channel=practice.slack_channel_id,
-                ts=original_ts,
-            )
+    except Exception as exc:
+        current_app.logger.warning(
+            "Could not build practice Details reply for #%s: %s",
+            practice.id,
+            exc,
+        )
+        return {"success": False, "error": str(exc)}
+
+    if not blocks:
+        if not original_ts:
+            return {"success": True, "skipped": "no_details"}
+        delete_result = _delete_slack_message(
+            client,
+            channel=practice.slack_channel_id,
+            ts=original_ts,
+        )
+        if not delete_result["success"]:
+            _rollback_session("failed practice Details delete")
+            return delete_result
+        try:
             practice.slack_details_ts = None
             db.session.commit()
             return {"success": True, "deleted": True}
+        except Exception as exc:
+            _rollback_session("practice Details timestamp clear")
+            practice.slack_details_ts = original_ts
+            current_app.logger.warning(
+                "Could not clear practice Details link for #%s: %s",
+                practice.id,
+                exc,
+            )
+            return {"success": False, "error": str(exc)}
 
+    try:
         fallback = build_practice_details_fallback_text(
             practice_info, conditions
         )
-        if original_ts:
+    except Exception as exc:
+        return {"success": False, "error": str(exc)}
+
+    if original_ts:
+        try:
             client.chat_update(
                 channel=practice.slack_channel_id,
                 ts=original_ts,
@@ -407,7 +512,15 @@ def _upsert_details_reply(
                 text=fallback,
             )
             return {"success": True, "updated": True}
+        except Exception as exc:
+            current_app.logger.warning(
+                "Could not update practice Details reply for #%s: %s",
+                practice.id,
+                exc,
+            )
+            return {"success": False, "error": str(exc)}
 
+    try:
         reply = client.chat_postMessage(
             channel=practice.slack_channel_id,
             thread_ts=practice.slack_message_ts,
@@ -417,31 +530,43 @@ def _upsert_details_reply(
             unfurl_links=False,
             unfurl_media=False,
         )
-        details_ts = reply.get("ts")
-        if not details_ts:
-            return {
-                "success": False,
-                "error": "Slack did not return a Details timestamp",
-            }
-        practice.slack_details_ts = details_ts
-        db.session.commit()
-        return {"success": True, "message_ts": details_ts}
     except Exception as exc:
-        try:
-            db.session.rollback()
-        except Exception as rollback_exc:
-            current_app.logger.warning(
-                "Could not roll back practice Details sync for #%s: %s",
-                practice.id,
-                rollback_exc,
-            )
-        practice.slack_details_ts = original_ts
         current_app.logger.warning(
-            "Could not sync practice Details reply for #%s: %s",
+            "Could not post practice Details reply for #%s: %s",
             practice.id,
             exc,
         )
         return {"success": False, "error": str(exc)}
+
+    details_ts = reply.get("ts")
+    if not details_ts:
+        return {
+            "success": False,
+            "error": "Slack did not return a Details timestamp",
+        }
+    try:
+        practice.slack_details_ts = details_ts
+        db.session.commit()
+        return {"success": True, "message_ts": details_ts}
+    except Exception as exc:
+        _rollback_session("new practice Details timestamp link")
+        practice.slack_details_ts = original_ts
+        cleanup = _delete_slack_message(
+            client,
+            channel=practice.slack_channel_id,
+            ts=details_ts,
+        )
+        current_app.logger.warning(
+            "Could not persist practice Details link for #%s: %s",
+            practice.id,
+            exc,
+        )
+        return _link_failure_result(
+            error=exc,
+            cleanup=cleanup,
+            channel_id=practice.slack_channel_id,
+            message_ts=details_ts,
+        )
 
 
 def post_practice_announcement(
@@ -491,10 +616,9 @@ def post_practice_announcement(
     blocks = build_practice_announcement_blocks(practice_info, conditions)
     fallback = build_practice_fallback_text(practice_info, conditions)
 
-    clear_stale_session = not practice.slack_message_ts
-    if clear_stale_session:
-        practice.slack_session_emoji = None
-
+    original_channel_id = practice.slack_channel_id
+    original_message_ts = practice.slack_message_ts
+    original_session_emoji = practice.slack_session_emoji
     try:
         response = client.chat_postMessage(
             channel=channel_id,
@@ -503,37 +627,69 @@ def post_practice_announcement(
             unfurl_links=False,
             unfurl_media=False
         )
+    except Exception as exc:
+        error_msg = _exception_message(exc)
+        current_app.logger.error(
+            "Error posting practice announcement: %s", error_msg
+        )
+        return {"success": False, "error": error_msg}
 
-        message_ts = response.get('ts')
-        current_app.logger.info(f"Posted practice announcement for practice #{practice.id} (ts: {message_ts})")
-
-        # Save slack info to practice
-        practice.slack_message_ts = message_ts
-        practice.slack_channel_id = channel_id
-        db.session.commit()
-
-        # Post the threaded "Practice Details" reply (sunset/wind/AQI/parking/gear)
-        _upsert_details_reply(client, practice, practice_info, conditions)
-        _seed_plan_reactions(client, practice)
-
-        # Create logging thread in #tcsc-logging
-        try:
-            from app.slack.practices.coach_review import create_practice_log_thread
-            create_practice_log_thread(practice)
-        except Exception as e:
-            current_app.logger.warning(f"Could not create practice log thread: {e}")
-
+    message_ts = response.get('ts')
+    if not message_ts:
         return {
-            'success': True,
-            'message_ts': message_ts,
-            'channel_id': channel_id,
+            "success": False,
+            "error": "Slack did not return a message timestamp",
         }
+    current_app.logger.info(
+        "Posted practice announcement for practice #%s (ts: %s)",
+        practice.id,
+        message_ts,
+    )
 
-    except SlackApiError as e:
-        db.session.rollback()
-        error_msg = e.response.get('error', str(e))
-        current_app.logger.error(f"Error posting practice announcement: {error_msg}")
-        return {'success': False, 'error': error_msg}
+    practice.slack_message_ts = message_ts
+    practice.slack_channel_id = channel_id
+    if not original_message_ts:
+        practice.slack_session_emoji = None
+    try:
+        db.session.commit()
+    except Exception as exc:
+        _rollback_session(f"failed practice Slack link for #{practice.id}")
+        practice.slack_channel_id = original_channel_id
+        practice.slack_message_ts = original_message_ts
+        practice.slack_session_emoji = original_session_emoji
+        cleanup = _delete_slack_message(
+            client,
+            channel=channel_id,
+            ts=message_ts,
+        )
+        current_app.logger.error(
+            "Could not persist practice announcement link for #%s: %s",
+            practice.id,
+            exc,
+        )
+        return _link_failure_result(
+            error=exc,
+            cleanup=cleanup,
+            channel_id=channel_id,
+            message_ts=message_ts,
+        )
+
+    # Post the threaded "Practice Details" reply (sunset/wind/AQI/parking/gear)
+    _upsert_details_reply(client, practice, practice_info, conditions)
+    _seed_plan_reactions(client, practice)
+
+    # Create logging thread in #tcsc-logging
+    try:
+        from app.slack.practices.coach_review import create_practice_log_thread
+        create_practice_log_thread(practice)
+    except Exception as e:
+        current_app.logger.warning(f"Could not create practice log thread: {e}")
+
+    return {
+        'success': True,
+        'message_ts': message_ts,
+        'channel_id': channel_id,
+    }
 
 
 def _combined_infos(practices):
@@ -634,6 +790,13 @@ def post_combined_lift_announcement(practices, channel_override=None):
     blocks = build_combined_lift_blocks(infos)
     fallback = build_combined_fallback_text(infos)
     client = get_slack_client()
+    original_links = {
+        practice.id: (
+            practice.slack_channel_id,
+            practice.slack_message_ts,
+        )
+        for practice in ordered
+    }
     try:
         response = client.chat_postMessage(
             channel=channel_id,
@@ -642,35 +805,60 @@ def post_combined_lift_announcement(practices, channel_override=None):
             unfurl_links=False,
             unfurl_media=False,
         )
-        message_ts = response.get("ts")
-        if not message_ts:
-            return {
-                "success": False,
-                "error": "Slack did not return a message timestamp",
-            }
-        for practice in ordered:
-            practice.slack_channel_id = channel_id
-            practice.slack_message_ts = message_ts
-        db.session.commit()
-        details = _upsert_combined_details_reply(client, ordered)
-        _seed_combined_reactions(client, ordered)
-        current_app.logger.info(
-            "Posted combined Strength announcement for practices %s (ts: %s)",
-            [item.id for item in ordered],
-            message_ts,
-        )
-        return {
-            "success": True,
-            "message_ts": message_ts,
-            "channel_id": channel_id,
-            "details": details,
-        }
-    except SlackApiError as exc:
-        error = exc.response.get("error", str(exc))
+    except Exception as exc:
+        error = _exception_message(exc)
         current_app.logger.error(
             "Error posting combined Strength announcement: %s", error
         )
         return {"success": False, "error": error}
+
+    message_ts = response.get("ts")
+    if not message_ts:
+        return {
+            "success": False,
+            "error": "Slack did not return a message timestamp",
+        }
+    for practice in ordered:
+        practice.slack_channel_id = channel_id
+        practice.slack_message_ts = message_ts
+    try:
+        db.session.commit()
+    except Exception as exc:
+        _rollback_session("failed combined Slack links")
+        for practice in ordered:
+            (
+                practice.slack_channel_id,
+                practice.slack_message_ts,
+            ) = original_links[practice.id]
+        cleanup = _delete_slack_message(
+            client,
+            channel=channel_id,
+            ts=message_ts,
+        )
+        current_app.logger.error(
+            "Could not persist combined Strength announcement links: %s",
+            exc,
+        )
+        return _link_failure_result(
+            error=exc,
+            cleanup=cleanup,
+            channel_id=channel_id,
+            message_ts=message_ts,
+        )
+
+    details = _upsert_combined_details_reply(client, ordered)
+    _seed_combined_reactions(client, ordered)
+    current_app.logger.info(
+        "Posted combined Strength announcement for practices %s (ts: %s)",
+        [item.id for item in ordered],
+        message_ts,
+    )
+    return {
+        "success": True,
+        "message_ts": message_ts,
+        "channel_id": channel_id,
+        "details": details,
+    }
 
 
 def update_practice_announcement(

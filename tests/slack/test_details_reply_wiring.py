@@ -319,6 +319,8 @@ class TestUpsertDetailsReply:
         daylight=None,
         aqi=None,
         blocks=None,
+        commit_error=None,
+        rollback_error=None,
     ):
         from app.slack.practices.announcements import _upsert_details_reply
 
@@ -333,6 +335,10 @@ class TestUpsertDetailsReply:
         with patch("app.slack.practices.announcements.build_practice_details_blocks", return_value=default_blocks), \
              patch("app.slack.practices.announcements.build_practice_details_fallback_text", return_value="Complete practice details", create=True), \
              patch("app.slack.practices.announcements.db") as mock_db:
+            if commit_error is not None:
+                mock_db.session.commit.side_effect = commit_error
+            if rollback_error is not None:
+                mock_db.session.rollback.side_effect = rollback_error
             result = _upsert_details_reply(
                 client, practice, practice_info, conditions
             )
@@ -363,6 +369,59 @@ class TestUpsertDetailsReply:
 
         assert practice.slack_details_ts == "9999.0001"
         mock_db.session.commit.assert_called_once()
+
+    @pytest.mark.parametrize("cleanup_error", [None, "cant_delete_message"])
+    def test_new_details_commit_failure_restores_and_compensates(
+        self, app_context, cleanup_error
+    ):
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "9999.0001"}
+        if cleanup_error:
+            client.chat_delete.side_effect = SlackApiError(
+                "cleanup failed", {"error": cleanup_error}
+            )
+        practice = _make_practice(slack_details_ts=None)
+
+        mock_db, result = self._call(
+            client,
+            practice,
+            commit_error=RuntimeError("database commit failed"),
+        )
+
+        assert result["success"] is False
+        assert "database commit failed" in result["error"]
+        assert result["cleanup"]["success"] is (cleanup_error is None)
+        if cleanup_error:
+            assert result["ambiguous_orphan"] == {
+                "channel_id": "CTEST",
+                "message_ts": "9999.0001",
+            }
+        else:
+            assert "ambiguous_orphan" not in result
+        assert practice.slack_details_ts is None
+        mock_db.session.rollback.assert_called_once_with()
+        client.chat_delete.assert_called_once_with(
+            channel="CTEST", ts="9999.0001"
+        )
+
+    def test_details_compensation_survives_rollback_failure(self, app_context):
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "9999.0001"}
+        practice = _make_practice(slack_details_ts=None)
+
+        _mock_db, result = self._call(
+            client,
+            practice,
+            commit_error=RuntimeError("commit failed"),
+            rollback_error=RuntimeError("rollback failed"),
+        )
+
+        assert result["success"] is False
+        assert result["cleanup"] == {"success": True}
+        assert practice.slack_details_ts is None
+        client.chat_delete.assert_called_once_with(
+            channel="CTEST", ts="9999.0001"
+        )
 
     def test_existing_ts_calls_chat_update(self):
         """When slack_details_ts is already set, chat_update is used instead."""
@@ -446,6 +505,10 @@ class TestUpsertDetailsReply:
             mock_db.session.rollback.side_effect = lambda: rollback_states.append(
                 practice.slack_details_ts
             )
+            client.chat_delete.side_effect = [
+                None,
+                SlackApiError("missing", {"error": "message_not_found"}),
+            ]
 
             first = _upsert_details_reply(
                 client,
@@ -587,6 +650,171 @@ class TestPostPracticeAnnouncementWiring:
             "reactions",
             "log",
         ]
+
+    def test_missing_root_timestamp_does_not_mutate_or_commit(self, app_context):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(
+            slack_message_ts=None,
+            slack_channel_id="C-ORIGINAL",
+            slack_details_ts=None,
+        )
+        practice.slack_session_emoji = "six"
+        client = MagicMock()
+        client.chat_postMessage.return_value = {}
+
+        with patch(
+            "app.slack.practices.announcements.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.slack.practices.announcements._get_announcement_channel",
+            return_value="CTEST",
+        ), patch(
+            "app.practices.service.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements._conditions_for_render"
+        ), patch(
+            "app.slack.practices.announcements.build_practice_announcement_blocks",
+            return_value=[],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_fallback_text",
+            return_value="complete fallback",
+        ), patch(
+            "app.slack.practices.announcements._upsert_details_reply"
+        ) as details, patch(
+            "app.slack.practices.announcements._seed_plan_reactions"
+        ) as reactions, patch(
+            "app.slack.practices.announcements.db"
+        ) as mock_db:
+            result = post_practice_announcement(practice)
+
+        assert result == {
+            "success": False,
+            "error": "Slack did not return a message timestamp",
+        }
+        assert (
+            practice.slack_channel_id,
+            practice.slack_message_ts,
+            practice.slack_session_emoji,
+        ) == ("C-ORIGINAL", None, "six")
+        mock_db.session.commit.assert_not_called()
+        details.assert_not_called()
+        reactions.assert_not_called()
+
+    @pytest.mark.parametrize("cleanup_error", [None, "cant_delete_message"])
+    def test_root_link_commit_failure_restores_fields_and_compensates(
+        self, app_context, cleanup_error
+    ):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(
+            slack_message_ts=None,
+            slack_channel_id="C-ORIGINAL",
+            slack_details_ts=None,
+        )
+        practice.slack_session_emoji = "six"
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "1111.0001"}
+        if cleanup_error:
+            client.chat_delete.side_effect = SlackApiError(
+                "cleanup failed", {"error": cleanup_error}
+            )
+
+        with patch(
+            "app.slack.practices.announcements.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.slack.practices.announcements._get_announcement_channel",
+            return_value="CTEST",
+        ), patch(
+            "app.practices.service.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements._conditions_for_render"
+        ), patch(
+            "app.slack.practices.announcements.build_practice_announcement_blocks",
+            return_value=[],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_fallback_text",
+            return_value="complete fallback",
+        ), patch(
+            "app.slack.practices.announcements._upsert_details_reply"
+        ) as details, patch(
+            "app.slack.practices.announcements._seed_plan_reactions"
+        ) as reactions, patch(
+            "app.slack.practices.announcements.db"
+        ) as mock_db:
+            mock_db.session.commit.side_effect = RuntimeError(
+                "database commit failed"
+            )
+            result = post_practice_announcement(practice)
+
+        assert result["success"] is False
+        assert "database commit failed" in result["error"]
+        assert result["cleanup"]["success"] is (cleanup_error is None)
+        assert "safe_to_fallback" not in result
+        if cleanup_error:
+            assert result["ambiguous_orphan"] == {
+                "channel_id": "CTEST",
+                "message_ts": "1111.0001",
+            }
+        else:
+            assert "ambiguous_orphan" not in result
+        assert (
+            practice.slack_channel_id,
+            practice.slack_message_ts,
+            practice.slack_session_emoji,
+        ) == ("C-ORIGINAL", None, "six")
+        mock_db.session.rollback.assert_called_once_with()
+        client.chat_delete.assert_called_once_with(
+            channel="CTEST", ts="1111.0001"
+        )
+        details.assert_not_called()
+        reactions.assert_not_called()
+
+    def test_generic_root_post_failure_is_contained_without_mutation(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import post_practice_announcement
+
+        practice = _make_practice(
+            slack_message_ts=None,
+            slack_channel_id="C-ORIGINAL",
+            slack_details_ts=None,
+        )
+        practice.slack_session_emoji = "six"
+        client = MagicMock()
+        client.chat_postMessage.side_effect = RuntimeError("network interrupted")
+
+        with patch(
+            "app.slack.practices.announcements.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.slack.practices.announcements._get_announcement_channel",
+            return_value="CTEST",
+        ), patch(
+            "app.practices.service.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements._conditions_for_render"
+        ), patch(
+            "app.slack.practices.announcements.build_practice_announcement_blocks",
+            return_value=[],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_fallback_text",
+            return_value="complete fallback",
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            result = post_practice_announcement(practice)
+
+        assert result == {"success": False, "error": "network interrupted"}
+        assert (
+            practice.slack_channel_id,
+            practice.slack_message_ts,
+            practice.slack_session_emoji,
+        ) == ("C-ORIGINAL", None, "six")
+        mock_db.session.commit.assert_not_called()
+        client.chat_delete.assert_not_called()
 
     def test_explicit_none_weather_is_not_refetched(self, app_context):
         from app.slack.practices.announcements import post_practice_announcement
@@ -975,6 +1203,50 @@ class TestUpsertCombinedDetailsReply:
             assert p.slack_details_ts == "REPLY.TS", \
                 f"Practice #{p.id} should have slack_details_ts='REPLY.TS'"
 
+    @pytest.mark.parametrize("cleanup_error", [None, "cant_delete_message"])
+    def test_new_combined_details_commit_failure_restores_and_compensates(
+        self, app_context, cleanup_error
+    ):
+        from app.slack.practices.announcements import (
+            _upsert_combined_details_reply,
+        )
+
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "REPLY.TS"}
+        if cleanup_error:
+            client.chat_delete.side_effect = SlackApiError(
+                "cleanup failed", {"error": cleanup_error}
+            )
+        practices = _make_group_practices(2)
+
+        with patch(
+            "app.practices.service.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=self._blocks(),
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            mock_db.session.commit.side_effect = RuntimeError(
+                "database commit failed"
+            )
+            result = _upsert_combined_details_reply(client, practices)
+
+        assert result["success"] is False
+        assert "database commit failed" in result["error"]
+        assert result["cleanup"]["success"] is (cleanup_error is None)
+        if cleanup_error:
+            assert result["ambiguous_orphan"] == {
+                "channel_id": "CCOMBINED",
+                "message_ts": "REPLY.TS",
+            }
+        else:
+            assert "ambiguous_orphan" not in result
+        assert all(p.slack_details_ts is None for p in practices)
+        mock_db.session.rollback.assert_called_once_with()
+        client.chat_delete.assert_called_once_with(
+            channel="CCOMBINED", ts="REPLY.TS"
+        )
+
     def test_existing_ts_calls_chat_update(self, app_context):
         """When any practice in the group has slack_details_ts, chat_update is used."""
         from app.slack.practices.announcements import _upsert_combined_details_reply
@@ -1030,6 +1302,29 @@ class TestUpsertCombinedDetailsReply:
         )
         assert all(p.slack_details_ts is None for p in practices)
         mock_db.session.commit.assert_called_once()
+
+    def test_missing_stale_combined_details_is_an_idempotent_delete(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import (
+            _upsert_combined_details_reply,
+        )
+
+        client = MagicMock()
+        client.chat_delete.side_effect = SlackApiError(
+            "missing", {"error": "message_not_found"}
+        )
+        practices = _make_group_practices(2, existing_details_ts="OLD.TS")
+
+        with patch(
+            "app.slack.practices.announcements.build_practice_details_blocks",
+            return_value=[],
+        ), patch("app.slack.practices.announcements.db") as mock_db:
+            result = _upsert_combined_details_reply(client, practices)
+
+        assert result == {"success": True, "deleted": True}
+        assert all(p.slack_details_ts is None for p in practices)
+        mock_db.session.commit.assert_called_once_with()
 
     def test_delete_failure_retains_every_details_timestamp(self, app_context):
         from app.slack.practices.announcements import _upsert_combined_details_reply

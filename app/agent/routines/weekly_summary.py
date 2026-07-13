@@ -15,6 +15,7 @@ from app.slack.blocks import (
 )
 from app.slack.client import get_channel_id_by_name, get_slack_client
 from app.slack.practices._config import _get_announcement_channel
+from app.slack.practices.announcements import _delete_slack_message
 from app.utils import now_central_naive
 
 
@@ -127,8 +128,10 @@ def run_weekly_summary(
                 **result,
                 "slack_posted": False,
                 "slack_error": "Channel not found",
+                "refresh_linked": False,
             }
-        response = get_slack_client().chat_postMessage(
+        client = get_slack_client()
+        response = client.chat_postMessage(
             channel=channel_id,
             blocks=blocks,
             text=fallback,
@@ -139,14 +142,59 @@ def run_weekly_summary(
                 **result,
                 "slack_posted": False,
                 "slack_error": "Slack returned no message timestamp",
+                "refresh_linked": False,
             }
-        for practice in practices:
-            practice.slack_weekly_summary_ts = message_ts
-        db.session.commit()
+        if channel_override:
+            return {
+                **result,
+                "slack_posted": True,
+                "slack_message_ts": message_ts,
+                "refresh_linked": False,
+            }
+
+        original_timestamps = {
+            practice.id: practice.slack_weekly_summary_ts
+            for practice in practices
+        }
+        try:
+            for practice in practices:
+                practice.slack_weekly_summary_ts = message_ts
+            db.session.commit()
+        except Exception as exc:
+            try:
+                db.session.rollback()
+            except Exception:
+                logger.warning(
+                    "Could not roll back weekly summary timestamp links",
+                    exc_info=True,
+                )
+            for practice in practices:
+                practice.slack_weekly_summary_ts = original_timestamps[
+                    practice.id
+                ]
+            cleanup = _delete_slack_message(
+                client,
+                channel=channel_id,
+                ts=message_ts,
+            )
+            failure = {
+                **result,
+                "slack_posted": False,
+                "slack_error": str(exc),
+                "refresh_linked": False,
+                "cleanup": cleanup,
+            }
+            if not cleanup["success"]:
+                failure["ambiguous_orphan"] = {
+                    "channel_id": channel_id,
+                    "message_ts": message_ts,
+                }
+            return failure
         return {
             **result,
             "slack_posted": True,
             "slack_message_ts": message_ts,
+            "refresh_linked": True,
         }
     except Exception as exc:
         logger.exception("Failed to post weekly summary")
@@ -154,4 +202,5 @@ def run_weekly_summary(
             **result,
             "slack_posted": False,
             "slack_error": str(exc),
+            "refresh_linked": False,
         }

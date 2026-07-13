@@ -82,11 +82,21 @@ def run_with_query(
     dry_run=True,
     channel_override=None,
     channel_error=None,
+    post_response=None,
+    commit_error=None,
+    cleanup_error=None,
 ):
     now = now or datetime(2026, 7, 12, 20, 0)
     client = MagicMock()
-    client.chat_postMessage.return_value = {"ts": "1783980000.000100"}
+    client.chat_postMessage.return_value = (
+        {"ts": "1783980000.000100"}
+        if post_response is None else post_response
+    )
+    if cleanup_error is not None:
+        client.chat_delete.side_effect = cleanup_error
     fake_db = SimpleNamespace(session=MagicMock())
+    if commit_error is not None:
+        fake_db.session.commit.side_effect = commit_error
     blocks = [{"type": "section", "text": {"type": "mrkdwn", "text": "week"}}]
     fallback = "Complete calendar-week fallback"
     channel_lookup = MagicMock(
@@ -339,6 +349,69 @@ def test_post_uses_complete_fallback_and_saves_timestamp_to_every_row():
     outcome.db.session.commit.assert_called_once_with()
     assert outcome.result["fallback"] == outcome.fallback
     assert outcome.result["slack_posted"] is True
+    assert outcome.result["refresh_linked"] is True
+
+
+def test_channel_override_posts_preview_without_persisting_refresh_links():
+    sessions = [
+        practice(1, datetime(2026, 7, 14, 18, 15)),
+        practice(2, datetime(2026, 7, 16, 18, 5)),
+    ]
+
+    outcome = run_with_query(
+        FakeQuery(sessions),
+        week_start=date(2026, 7, 13),
+        dry_run=False,
+        channel_override="#weekly-preview",
+    )
+
+    outcome.client.chat_postMessage.assert_called_once_with(
+        channel="C-OVERRIDE",
+        blocks=outcome.blocks,
+        text=outcome.fallback,
+    )
+    assert outcome.result["slack_posted"] is True
+    assert outcome.result["refresh_linked"] is False
+    assert [item.slack_weekly_summary_ts for item in sessions] == [None, None]
+    outcome.db.session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("cleanup_fails", [False, True])
+def test_production_link_commit_failure_restores_rows_and_compensates(
+    cleanup_fails,
+):
+    sessions = [
+        practice(1, datetime(2026, 7, 14, 18, 15)),
+        practice(2, datetime(2026, 7, 16, 18, 5)),
+    ]
+    cleanup_error = (
+        RuntimeError("cleanup failed") if cleanup_fails else None
+    )
+
+    outcome = run_with_query(
+        FakeQuery(sessions),
+        week_start=date(2026, 7, 13),
+        dry_run=False,
+        commit_error=RuntimeError("database commit failed"),
+        cleanup_error=cleanup_error,
+    )
+
+    assert outcome.result["slack_posted"] is False
+    assert "database commit failed" in outcome.result["slack_error"]
+    assert outcome.result["cleanup"]["success"] is not cleanup_fails
+    assert outcome.result["refresh_linked"] is False
+    if cleanup_fails:
+        assert outcome.result["ambiguous_orphan"] == {
+            "channel_id": "C-WEEK",
+            "message_ts": "1783980000.000100",
+        }
+    else:
+        assert "ambiguous_orphan" not in outcome.result
+    assert [item.slack_weekly_summary_ts for item in sessions] == [None, None]
+    outcome.db.session.rollback.assert_called_once_with()
+    outcome.client.chat_delete.assert_called_once_with(
+        channel="C-WEEK", ts="1783980000.000100"
+    )
 
 
 def test_dry_run_builds_full_preview_but_writes_nothing():

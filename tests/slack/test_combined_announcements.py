@@ -429,6 +429,112 @@ def test_ambiguous_slack_failure_is_never_safe_to_fallback(app_context):
     assert "safe_to_fallback" not in result
 
 
+def test_combined_missing_timestamp_does_not_mutate_links_or_commit(app_context):
+    from app.slack.practices.announcements import post_combined_lift_announcement
+
+    practices = [
+        model_practice(1, 14, 18, "six"),
+        model_practice(2, 15, 19, "seven"),
+    ]
+    practices[0].slack_channel_id = "C-OLD-1"
+    practices[1].slack_channel_id = "C-OLD-2"
+    client = MagicMock()
+    client.chat_postMessage.return_value = {}
+    with patch(
+        "app.slack.practices.announcements.assign_combined_session_emojis",
+        return_value={"success": True, "emojis": {1: "six", 2: "seven"}},
+    ), patch(
+        "app.slack.practices.announcements._get_announcement_channel",
+        return_value="C-STRENGTH",
+    ), patch(
+        "app.slack.practices.announcements.get_slack_client",
+        return_value=client,
+    ), patch(
+        "app.slack.practices.announcements.convert_practice_to_info",
+        side_effect=lambda item: item,
+    ), patch("app.slack.practices.announcements.db") as mock_db:
+        result = post_combined_lift_announcement(practices)
+
+    assert result == {
+        "success": False,
+        "error": "Slack did not return a message timestamp",
+    }
+    assert [item.slack_channel_id for item in practices] == [
+        "C-OLD-1",
+        "C-OLD-2",
+    ]
+    assert [item.slack_message_ts for item in practices] == [None, None]
+    mock_db.session.commit.assert_not_called()
+
+
+@pytest.mark.parametrize("cleanup_error", [None, "cant_delete_message"])
+def test_combined_link_commit_failure_restores_links_and_compensates(
+    app_context, cleanup_error
+):
+    from slack_sdk.errors import SlackApiError
+
+    from app.slack.practices.announcements import post_combined_lift_announcement
+
+    practices = [
+        model_practice(1, 14, 18, "six"),
+        model_practice(2, 15, 19, "seven"),
+    ]
+    practices[0].slack_channel_id = "C-OLD-1"
+    practices[1].slack_channel_id = "C-OLD-2"
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ts": "123.456"}
+    if cleanup_error:
+        client.chat_delete.side_effect = SlackApiError(
+            "cleanup failed", {"error": cleanup_error}
+        )
+    with patch(
+        "app.slack.practices.announcements.assign_combined_session_emojis",
+        return_value={"success": True, "emojis": {1: "six", 2: "seven"}},
+    ), patch(
+        "app.slack.practices.announcements._get_announcement_channel",
+        return_value="C-STRENGTH",
+    ), patch(
+        "app.slack.practices.announcements.get_slack_client",
+        return_value=client,
+    ), patch(
+        "app.slack.practices.announcements.convert_practice_to_info",
+        side_effect=lambda item: item,
+    ), patch(
+        "app.slack.practices.announcements._upsert_combined_details_reply"
+    ) as details, patch(
+        "app.slack.practices.announcements._seed_combined_reactions"
+    ) as reactions, patch(
+        "app.slack.practices.announcements.db"
+    ) as mock_db:
+        mock_db.session.commit.side_effect = RuntimeError(
+            "database commit failed"
+        )
+        result = post_combined_lift_announcement(practices)
+
+    assert result["success"] is False
+    assert "database commit failed" in result["error"]
+    assert result["cleanup"]["success"] is (cleanup_error is None)
+    assert "safe_to_fallback" not in result
+    if cleanup_error:
+        assert result["ambiguous_orphan"] == {
+            "channel_id": "C-STRENGTH",
+            "message_ts": "123.456",
+        }
+    else:
+        assert "ambiguous_orphan" not in result
+    assert [item.slack_channel_id for item in practices] == [
+        "C-OLD-1",
+        "C-OLD-2",
+    ]
+    assert [item.slack_message_ts for item in practices] == [None, None]
+    mock_db.session.rollback.assert_called_once_with()
+    client.chat_delete.assert_called_once_with(
+        channel="C-STRENGTH", ts="123.456"
+    )
+    details.assert_not_called()
+    reactions.assert_not_called()
+
+
 def test_standalone_post_clears_abandoned_combined_value(app_context):
     from app.slack.practices.announcements import post_practice_announcement
 

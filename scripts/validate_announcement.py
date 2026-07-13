@@ -19,7 +19,6 @@ from zoneinfo import ZoneInfo
 
 from slack_sdk.errors import SlackApiError
 
-from app import create_app
 from app.practices.interfaces import AnnouncementConditions, PracticeStatus
 from app.slack.blocks import (
     build_combined_fallback_text,
@@ -646,9 +645,12 @@ def main(argv=None):
         )
         return 2
 
-    app = create_app()
-    with app.app_context():
-        (post if args[0] == "post" else teardown)()
+    command = args[0]
+    result = (post if command == "post" else teardown)()
+    if isinstance(result, dict) and result.get("success") is False:
+        error = result.get("error") or "unknown error"
+        print(f"{command} failed: {error}", file=sys.stderr)
+        return 1
     return 0
 
 
