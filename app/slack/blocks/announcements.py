@@ -12,6 +12,7 @@ from app.practices.interfaces import (
     WeatherConditions,
 )
 from app.practices.plan_reactions import (
+    format_plan_reaction_legend,
     format_supplemental_reaction_fallback,
     format_supplemental_reaction_sentence,
 )
@@ -49,6 +50,7 @@ _COMBINED_FALLBACK_SHARED_NOTES_MAX = 500
 _COMBINED_FALLBACK_SESSION_NOTES_MAX = 140
 _COMBINED_FALLBACK_SHARED_SOCIAL_MAX = 200
 _COMBINED_FALLBACK_SESSION_SOCIAL_MAX = 100
+_COMBINED_FALLBACK_PLAN_MAX = 500
 _ACTIVE_ALERTS_VISIBLE_MAX = 20
 _RUNNING_LATE_LINE = "Running late? Reply in the thread. <!channel>"
 _FALLBACK_RUNNING_LATE = "Running late? Reply in the thread."
