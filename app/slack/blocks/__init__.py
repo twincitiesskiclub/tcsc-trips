@@ -34,6 +34,7 @@ from app.slack.blocks.rsvp import (
 )
 from app.slack.blocks.summary import (
     build_weekly_summary_blocks,
+    build_weekly_summary_fallback_text,
 )
 from app.slack.blocks.app_home import (
     build_app_home_blocks,
@@ -81,6 +82,7 @@ __all__ = [
     "build_rsvp_summary_context",
     # summary
     "build_weekly_summary_blocks",
+    "build_weekly_summary_fallback_text",
     # app_home
     "build_app_home_blocks",
     "_build_practice_card",

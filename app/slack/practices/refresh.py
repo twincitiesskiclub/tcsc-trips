@@ -35,13 +35,13 @@ class PracticeSurface:
         return bool(getattr(practice, self.ts_field, None))
 
     def refresh(self, practice, change_type, **context):
+        if change_type not in self.applies_to:
+            return {"skipped": "not_applicable"}
         if not self.is_present(practice):
             # The post exists in Slack but this practice isn't linked to it
             # (e.g. created out-of-band after the post). Distinguished from a
             # not-applicable change type so it can be logged as a real gap.
             return {"skipped": "absent"}
-        if change_type not in self.applies_to:
-            return {"skipped": "not_applicable"}
         return self._refresh_fn(practice, change_type, **context)
 
 
@@ -331,48 +331,69 @@ def _refresh_weekly_summary(practice, change_type, **_context):
     try:
         from app.practices.service import convert_practice_to_info
         from app.practices.interfaces import PracticeStatus
-        from app.slack.blocks import build_weekly_summary_blocks
+        from app.slack.blocks import (
+            build_weekly_summary_blocks,
+            build_weekly_summary_fallback_text,
+        )
         from app.slack.client import get_slack_client
         from app.integrations.weather import get_weather_for_location
 
         week_start, week_end = _week_bounds(practice.date)
 
-        # Get all scheduled/confirmed practices for the week. On delete the row
+        # Get all visible practices for the week. On delete the row
         # is still in the session, so exclude it (see _refresh_coach_summary).
         week_query = Practice.query.filter(
             Practice.date >= week_start,
             Practice.date < week_end,
             Practice.status.in_([
                 PracticeStatus.SCHEDULED.value,
-                PracticeStatus.CONFIRMED.value
+                PracticeStatus.CONFIRMED.value,
+                PracticeStatus.CANCELLED.value,
             ])
         )
         if change_type == 'delete':
             week_query = week_query.filter(Practice.id != practice.id)
-        practices_for_week = week_query.order_by(Practice.date).all()
+        practices_for_week = week_query.order_by(Practice.date, Practice.id).all()
 
         # Build weather data
         weather_data = {}
-        for p in practices_for_week:
-            if p.location and p.location.latitude and p.location.longitude:
+        for item in practices_for_week:
+            location = item.location
+            if (
+                item.status != PracticeStatus.CANCELLED.value
+                and location
+                and location.latitude is not None
+                and location.longitude is not None
+            ):
                 try:
                     weather = get_weather_for_location(
-                        lat=p.location.latitude,
-                        lon=p.location.longitude,
-                        target_datetime=p.date
+                        lat=location.latitude,
+                        lon=location.longitude,
+                        target_datetime=item.date,
                     )
-                    weather_data[p.id] = {
-                        'temp_f': int(weather.temperature_f),
-                        'feels_like_f': int(weather.feels_like_f),
-                        'conditions': weather.conditions_summary,
-                        'precipitation_chance': int(weather.precipitation_chance)
+                    weather_data[item.id] = {
+                        "temp_f": weather.temperature_f,
+                        "conditions": weather.conditions_summary,
                     }
-                except Exception as e:
-                    logger.warning(f"Weather fetch failed for practice {p.id}: {e}")
+                except Exception as exc:
+                    logger.warning(
+                        "Weekly weather refresh failed for practice #%s: %s",
+                        item.id,
+                        exc,
+                    )
 
         # Rebuild blocks
         practice_infos = [convert_practice_to_info(p) for p in practices_for_week]
-        blocks = build_weekly_summary_blocks(practice_infos, weather_data=weather_data)
+        blocks = build_weekly_summary_blocks(
+            practice_infos,
+            week_start=week_start.date(),
+            weather_data=weather_data,
+        )
+        fallback = build_weekly_summary_fallback_text(
+            practice_infos,
+            week_start=week_start.date(),
+            weather_data=weather_data,
+        )
 
         # Find the channel — use the practice's slack_channel_id if available,
         # otherwise fall back to the announcement channel
@@ -386,7 +407,7 @@ def _refresh_weekly_summary(practice, change_type, **_context):
             channel=channel_id,
             ts=practice.slack_weekly_summary_ts,
             blocks=blocks,
-            text="Weekly Practice Summary"
+            text=fallback,
         )
 
         return {'success': True}
@@ -396,11 +417,21 @@ def _refresh_weekly_summary(practice, change_type, **_context):
         return {'success': False, 'error': str(e)}
 
 
+WEEKLY_CHANGE_TYPES = tuple(
+    change_type for change_type in ALL_CHANGE_TYPES if change_type != "rsvp"
+)
+
+
 PRACTICE_SURFACES = [
     PracticeSurface("announcement", "slack_message_ts", ALL_CHANGE_TYPES, _refresh_announcement),
     PracticeSurface("collab", "slack_collab_message_ts", ALL_CHANGE_TYPES, _refresh_collab),
     PracticeSurface("coach_summary", "slack_coach_summary_ts", ALL_CHANGE_TYPES, _refresh_coach_summary),
-    PracticeSurface("weekly_summary", "slack_weekly_summary_ts", ALL_CHANGE_TYPES, _refresh_weekly_summary),
+    PracticeSurface(
+        "weekly_summary",
+        "slack_weekly_summary_ts",
+        WEEKLY_CHANGE_TYPES,
+        _refresh_weekly_summary,
+    ),
 ]
 
 

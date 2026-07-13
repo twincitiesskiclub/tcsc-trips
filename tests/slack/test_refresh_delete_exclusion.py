@@ -112,3 +112,69 @@ def test_weekly_summary_excludes_deleted_practice(app, week):
         )
         assert dup.id not in ids, "deleted practice must be excluded from weekly summary"
         assert keep.id in ids, "surviving practice must remain"
+
+
+def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
+    app, week,
+):
+    keep, _dup = week
+    with app.app_context():
+        keep_obj = db.session.get(Practice, keep.id)
+        cancelled = Practice(
+            date=datetime(2026, 6, 11, 18, 15),
+            day_of_week='Thursday',
+            status='cancelled',
+            cancellation_reason='Heat warning',
+            location_id=keep_obj.location_id,
+            slack_weekly_summary_ts=keep_obj.slack_weekly_summary_ts,
+            slack_channel_id='C1',
+        )
+        db.session.add(cancelled)
+        db.session.commit()
+        cancelled_id = cancelled.id
+        captured = {}
+        blocks = [
+            {"type": "section", "text": {"type": "mrkdwn", "text": "week"}}
+        ]
+        fallback = "Complete weekly fallback including cancellation"
+
+        def fake_blocks(infos, *, week_start, weather_data):
+            captured['block_ids'] = [info.id for info in infos]
+            captured['block_week_start'] = week_start
+            captured['block_weather'] = weather_data
+            return blocks
+
+        def fake_fallback(infos, *, week_start, weather_data):
+            captured['fallback_ids'] = [info.id for info in infos]
+            captured['fallback_week_start'] = week_start
+            captured['fallback_weather'] = weather_data
+            return fallback
+
+        client = MagicMock()
+        with patch(
+            'app.slack.blocks.build_weekly_summary_blocks',
+            side_effect=fake_blocks,
+        ), patch(
+            'app.slack.blocks.build_weekly_summary_fallback_text',
+            side_effect=fake_fallback,
+            create=True,
+        ), patch(
+            'app.slack.client.get_slack_client', return_value=client,
+        ):
+            result = refreshmod._refresh_weekly_summary(keep_obj, 'edit')
+
+        assert result == {'success': True}
+        assert cancelled_id in captured['block_ids']
+        assert captured['block_ids'] == captured['fallback_ids']
+        assert captured['block_week_start'] == datetime(2026, 6, 8).date()
+        assert captured['fallback_week_start'] == captured['block_week_start']
+        assert captured['block_weather'] == captured['fallback_weather'] == {}
+        client.chat_update.assert_called_once_with(
+            channel='C1',
+            ts=keep_obj.slack_weekly_summary_ts,
+            blocks=blocks,
+            text=fallback,
+        )
+
+        db.session.delete(db.session.get(Practice, cancelled_id))
+        db.session.commit()

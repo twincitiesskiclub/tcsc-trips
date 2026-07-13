@@ -56,6 +56,17 @@ class TestRefreshDispatch:
             results = refresh_practice_posts(practice, change_type='rsvp', actor_slack_id='U123')
         assert 'edit_logs' not in results
 
+    def test_weekly_rsvp_is_not_applicable_even_without_timestamp(self):
+        practice = FakePractice()
+
+        results = refresh_practice_posts(
+            practice,
+            change_type="rsvp",
+            notify=False,
+        )
+
+        assert results["weekly_summary"] == {"skipped": "not_applicable"}
+
 
 class TestRefreshAnnouncement:
     """Test announcement update routing by change_type."""
