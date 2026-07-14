@@ -1180,10 +1180,7 @@ function cfgBuildPlanReactionDefaults(record, entityKey, responseKey) {
         if (!record.id) return;
         const incomplete = firstIncompleteRow();
         if (incomplete) {
-            setStatus('Complete both fields or remove the unfinished reaction.', true);
-            const emoji = incomplete.querySelector('.plan-reaction-emoji');
-            const label = incomplete.querySelector('.plan-reaction-label');
-            (!emoji.value.trim() ? emoji : label).focus();
+            setStatus('Complete both fields to save.', false);
             return;
         }
 
