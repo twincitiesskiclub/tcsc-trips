@@ -29,6 +29,13 @@ _FULL_EDIT_UNSYNCED_ERROR = (
     "Practice changes were saved, but the Slack announcement was not updated. "
     "Retry the edit or refresh the announcement."
 )
+_PRACTICE_PREVIEW_CHANNEL_ID = "C07G9RTMRT3"
+_PRACTICE_PREVIEW_CHANNEL_ONLY_TEXT = (
+    ":warning: Practice Preview is available only in the test channel."
+)
+_PRACTICE_PREVIEW_RETRY_TEXT = (
+    ":warning: Could not open Practice Preview. Please try again."
+)
 
 # Module-level variables
 bolt_app = None
@@ -101,24 +108,8 @@ if _bot_token:
 
     @bolt_app.command("/tcsc")
     def handle_tcsc_command(ack, command, client, logger):
-        """Handle /tcsc slash command."""
-        ack()
-
-        from app.slack.commands import handle_tcsc_command as process_command
-
-        command_text = command.get("text", "")
-        user_id = command.get("user_id", "")
-        user_name = command.get("user_name", "")
-
-        with get_app_context():
-            response = process_command(command_text, user_id, user_name)
-
-        client.chat_postEphemeral(
-            channel=command["channel_id"],
-            user=user_id,
-            text=response.get("text", ""),
-            blocks=response.get("blocks")
-        )
+        """Handle /tcsc slash commands, including the test-only preview."""
+        _handle_tcsc_command(ack, command, client, logger)
 
     @bolt_app.command("/dispatch")
     def handle_dispatch_command(ack, command, client, logger):
@@ -740,6 +731,11 @@ if _bot_token:
     # View Submissions (Modal Forms)
     # =========================================================================
 
+    @bolt_app.view("practice_preview")
+    def handle_practice_preview_submission(ack):
+        """Close Practice Preview without parsing or persisting its fields."""
+        _handle_practice_preview_submission(ack)
+
     @bolt_app.view("practice_create")
     def handle_practice_create_submission(ack, body, view, client, logger):
         """Handle practice create modal submission from the weekly summary.
@@ -1335,6 +1331,70 @@ else:
 # =============================================================================
 # Helper Functions (always defined)
 # =============================================================================
+
+def _handle_tcsc_command(ack, command: dict, client, logger) -> None:
+    """Route /tcsc while keeping Practice Preview isolated from persistence."""
+    ack()
+
+    command_text = command.get("text", "")
+    user_id = command.get("user_id", "")
+    user_name = command.get("user_name", "")
+    channel_id = command.get("channel_id", "")
+
+    if command_text.strip().lower() == "practice-preview":
+        if channel_id != _PRACTICE_PREVIEW_CHANNEL_ID:
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text=_PRACTICE_PREVIEW_CHANNEL_ONLY_TEXT,
+            )
+            return
+
+        trigger_id = command.get("trigger_id")
+        if not trigger_id:
+            logger.error("No trigger_id in /tcsc practice-preview command")
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text=_PRACTICE_PREVIEW_RETRY_TEXT,
+            )
+            return
+
+        from app.slack.modals import build_practice_preview_modal
+        from app.utils import now_central_naive
+
+        practice_date = now_central_naive().replace(
+            hour=18, minute=15, second=0, microsecond=0
+        )
+        modal = build_practice_preview_modal(practice_date)
+        try:
+            client.views_open(trigger_id=trigger_id, view=modal)
+        except Exception:
+            logger.exception("Could not open Practice Preview")
+            client.chat_postEphemeral(
+                channel=channel_id,
+                user=user_id,
+                text=_PRACTICE_PREVIEW_RETRY_TEXT,
+            )
+        return
+
+    from app.slack.commands import handle_tcsc_command as process_command
+
+    with get_app_context():
+        response = process_command(command_text, user_id, user_name)
+
+    client.chat_postEphemeral(
+        channel=channel_id,
+        user=user_id,
+        text=response.get("text", ""),
+        blocks=response.get("blocks"),
+    )
+
+
+def _handle_practice_preview_submission(ack) -> None:
+    """Dismiss the synthetic preview without reading or saving its state."""
+    ack()
+
 
 def _safe_get(d: dict, *keys, default=None):
     """Safely get nested dictionary values, handling None values.
