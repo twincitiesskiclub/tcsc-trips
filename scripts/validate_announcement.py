@@ -292,7 +292,7 @@ _combined_same_day_early = _practice(
     practice_types=[SimpleNamespace(id=2, name="Strength")],
     workout_description="3 x 8 strength circuit",
     logistics_notes="Bring indoor shoes.",
-    plan_reactions=_combined_plan,
+    plan_reactions=[],
     slack_session_emoji="six",
 )
 _combined_same_day_late = _practice(
@@ -302,7 +302,7 @@ _combined_same_day_late = _practice(
     practice_types=[SimpleNamespace(id=2, name="Strength")],
     workout_description="3 x 8 strength circuit",
     logistics_notes="Bring indoor shoes.",
-    plan_reactions=_combined_plan,
+    plan_reactions=[],
     slack_session_emoji="seven",
 )
 _mixed_active = _practice(

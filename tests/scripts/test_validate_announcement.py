@@ -70,6 +70,18 @@ def _stub_build(*, details=False):
     return [{"type": "divider"}], "root fallback", reply
 
 
+def _rsvp_text(blocks):
+    matches = [
+        element["text"]
+        for block in blocks
+        if block.get("type") == "context"
+        for element in block.get("elements", [])
+        if element.get("text", "").startswith("Bop ")
+    ]
+    assert len(matches) == 1
+    return matches[0]
+
+
 def test_channel_and_cli_offer_no_destination_override(monkeypatch):
     monkeypatch.setenv("SLACK_CHANNEL", "C_PRODUCTION")
     monkeypatch.setenv("TEST_CHANNEL", "C_PRODUCTION")
@@ -166,6 +178,11 @@ def test_registry_is_synthetic_complete_and_uses_final_builders():
 
 
 def test_approved_review_scenarios_render_exact_copy_and_icons():
+    routine = validate.SCENARIOS["routine"]
+    routine_blocks, _, _ = validate.build_scenario("routine", routine)
+    assert len(_rsvp_text(routine_blocks).splitlines()) == 1
+    assert "*Where · Theodore Wirth - Trailhead*" in str(routine_blocks)
+
     standalone = validate.SCENARIOS["multiple_plan_reactions"]
     assert standalone.practices[0].plan_reactions == [
         {"emoji": "hatching_chick", "label": "new rollerskier"},
@@ -183,12 +200,15 @@ def test_approved_review_scenarios_render_exact_copy_and_icons():
         "new rollerskier, a :older_adult::skin-tone-4: for experienced "
         "rollerskier, and a :athletic_shoe: for runner."
     ) in str(standalone_blocks)
+    assert len(_rsvp_text(standalone_blocks).splitlines()) == 2
 
     cross_day = validate.SCENARIOS["combined_strength"]
     assert len({item.date.date() for item in cross_day.practices}) == 2
     cross_blocks, _, _ = validate.build_scenario("combined_strength", cross_day)
     assert "Tue at 6:15 PM" in str(cross_blocks)
     assert "Wed at 7:15 PM" in str(cross_blocks)
+    assert all(practice.plan_reactions for practice in cross_day.practices)
+    assert len(_rsvp_text(cross_blocks).splitlines()) == 2
 
     same_day = validate.SCENARIOS["combined_strength_same_day"]
     assert len({item.date.date() for item in same_day.practices}) == 1
@@ -196,6 +216,8 @@ def test_approved_review_scenarios_render_exact_copy_and_icons():
         "combined_strength_same_day", same_day
     )
     assert ":six: for 6:05 PM or :seven: for 7:20 PM" in str(same_blocks)
+    assert all(not practice.plan_reactions for practice in same_day.practices)
+    assert len(_rsvp_text(same_blocks).splitlines()) == 1
 
     weekly = validate.SCENARIOS["weekly_cross_month_cancelled"]
     weekly_blocks, weekly_fallback, _ = validate.build_scenario(
