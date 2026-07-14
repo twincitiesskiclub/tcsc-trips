@@ -1,7 +1,7 @@
 # Practice Announcement Final Copy Refinement Design
 
 **Date:** 2026-07-14
-**Status:** Approved micro-design; awaiting written-spec review
+**Status:** Approved
 **Scope:** RSVP line wrapping and the standalone location heading
 
 ## 1. Context
