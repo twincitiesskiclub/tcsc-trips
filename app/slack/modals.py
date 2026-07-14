@@ -888,6 +888,45 @@ def build_practice_create_modal(
     }
 
 
+def build_practice_preview_modal(practice_date: 'datetime') -> dict:
+    """Build a discard-only preview of the production practice create modal."""
+    modal = build_practice_create_modal(
+        practice_date,
+        "18:15",
+        locations=[(1, "Theodore Wirth - Trailhead")],
+        all_activities=[(1, "Rollerski"), (2, "Running")],
+        all_types=[(1, "Intervals"), (2, "Technique")],
+        slot_defaults={
+            "location_id": 1,
+            "activity_ids": [1],
+            "type_ids": [1],
+            "coach_ids": [1],
+            "lead_ids": [2],
+        },
+        eligible_coaches=[(1, "Preview Coach", "U_PREVIEW_COACH")],
+        eligible_leads=[(2, "Preview Lead", "U_PREVIEW_LEAD")],
+        initial_plan_reactions=[
+            {
+                "emoji": "evergreen_tree",
+                "label": "Endurance instead of intervals",
+            },
+            {"emoji": "hatching_chick", "label": "new rollerskier"},
+            {
+                "emoji": "older_adult::skin-tone-4",
+                "label": "experienced rollerskier",
+            },
+            {"emoji": "athletic_shoe", "label": "runner"},
+        ],
+    )
+    modal.update({
+        "title": {"type": "plain_text", "text": "Practice Preview"},
+        "submit": {"type": "plain_text", "text": "Close Preview"},
+        "callback_id": "practice_preview",
+        "private_metadata": "",
+    })
+    return modal
+
+
 def build_lead_substitution_modal(practice: PracticeInfo) -> dict:
     """Build modal for lead to request substitution.
 
