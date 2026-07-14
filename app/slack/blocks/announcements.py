@@ -329,7 +329,8 @@ def build_practice_announcement_blocks(
         if practice.location and practice.location.spot
         else None
     )
-    where_text = f"*Where:* {location_name + (' - ' + spot if spot else '')}"
+    location_label = location_name + (" - " + spot if spot else "")
+    where_text = f"*Where · {location_label}*"
     address = _address_link(practice.location) if practice.location else None
     if address:
         where_text += f"\n📍 {address}"

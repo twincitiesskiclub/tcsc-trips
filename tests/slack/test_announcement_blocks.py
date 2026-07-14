@@ -155,7 +155,7 @@ def _assert_no_adjacent_dividers(blocks):
 
 
 def _assert_urgent_precedes_location_and_workout(blocks, needle):
-    assert _block_index(blocks, needle) < _block_index(blocks, "*Where:*")
+    assert _block_index(blocks, needle) < _block_index(blocks, "*Where ·")
     assert _block_index(blocks, needle) < _block_index(blocks, "*Workout")
 
 
@@ -179,14 +179,43 @@ def test_hero_header_is_day_activity_time(practice_info, conditions):
     assert blocks[0]["text"]["text"] == "Monday · Classic Ski at 6:00 PM"
 
 
-def test_hero_has_where_workout_notes_and_social(practice_info, conditions):
+def test_hero_has_dot_separated_where_workout_notes_and_social(
+    practice_info, conditions
+):
+    blocks = build_practice_announcement_blocks(practice_info, conditions)
+    where = next(
+        block["text"]["text"]
+        for block in blocks
+        if block.get("type") == "section"
+        and block.get("text", {}).get("text", "").startswith("*Where")
+    )
+    assert where == (
+        "*Where · Theodore Wirth - Trailhead*\n"
+        "📍 <https://maps.example/wirth|1301 Theodore Wirth Pkwy>\n\u200b"
+    )
+    text = rendered_text(blocks)
+    assert "*Where:*" not in text
+    assert "*Workout · Intervals*" in text
+    assert "*📝 Notes*" in text
+    assert "Social after at Utepils Brewing" in text
+
+
+def test_where_heading_omits_absent_spot(practice_info, conditions):
+    practice_info.location.spot = None
     text = rendered_text(
         build_practice_announcement_blocks(practice_info, conditions)
     )
-    assert "*Where:*" in text and "Theodore Wirth - Trailhead" in text
-    assert "*Workout · Intervals*" in text
-    assert "*📝 Notes*" in text and "Meet at the flagpole." in text
-    assert "Social after at Utepils Brewing" in text
+    assert "*Where · Theodore Wirth*" in text
+    assert "*Where · Theodore Wirth -*" not in text
+
+
+def test_where_heading_uses_tbd_without_location(practice_info, conditions):
+    practice_info.location = None
+    text = rendered_text(
+        build_practice_announcement_blocks(practice_info, conditions)
+    )
+    assert "*Where · TBD*" in text
+    assert "📍" not in text
 
 
 def test_hero_omits_notes_and_social_when_absent(practice_info, conditions):
@@ -885,7 +914,7 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
     for required in (
         "Monday · Classic Ski at 6:00 PM",
         "Alert 0",
-        "*Where:*",
+        "*Where ·",
         "*Workout",
         "*📝 Notes*",
         "Social after at",
