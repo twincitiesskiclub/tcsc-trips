@@ -107,9 +107,10 @@ def test_cross_day_mapping_is_only_in_bottom_context():
     assert ":seven: *Wednesday" not in text
     assert _combined_rsvp_text(blocks) == (
         "Bop :six: for Tue at 6:15 PM or :seven: for Wed at 7:15 PM "
-        "so we'll know you'll be there.\n"
-        "Running late? Reply in the thread. <!channel>"
+        "so we'll know you'll be there. Running late? Reply in the thread. "
+        "<!channel>"
     )
+    assert len(_combined_rsvp_text(blocks).splitlines()) == 1
 
 
 def test_combined_shared_plan_is_appended_to_attendance_line():
@@ -121,12 +122,14 @@ def test_combined_shared_plan_is_appended_to_attendance_line():
         combined_practice(1, 14, 18, "six", plan=plan),
         combined_practice(2, 15, 19, "seven", plan=plan),
     ]
-    assert _combined_rsvp_text(build_combined_lift_blocks(practices)) == (
+    rsvp = _combined_rsvp_text(build_combined_lift_blocks(practices))
+    assert rsvp == (
         "Bop :six: for Tue at 6:15 PM or :seven: for Wed at 7:15 PM "
         "so we'll know you'll be there. In addition to your attendance emoji, "
         "hit a :hatching_chick: for first strength practice support.\n"
         "Running late? Reply in the thread. <!channel>"
     )
+    assert len(rsvp.splitlines()) == 2
 
 
 def test_same_day_rows_and_mapping_use_times_only():
@@ -141,9 +144,10 @@ def test_same_day_rows_and_mapping_use_times_only():
     assert "Tuesday, July 14 · 6:05 PM" not in text
     assert _combined_rsvp_text(blocks) == (
         "Bop :six: for 6:05 PM or :seven: for 7:20 PM "
-        "so we'll know you'll be there.\n"
-        "Running late? Reply in the thread. <!channel>"
+        "so we'll know you'll be there. Running late? Reply in the thread. "
+        "<!channel>"
     )
+    assert len(_combined_rsvp_text(blocks).splitlines()) == 1
 
 
 def test_same_day_cancelled_sibling_keeps_time_only_active_mapping():

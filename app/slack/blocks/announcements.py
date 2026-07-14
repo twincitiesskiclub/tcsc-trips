@@ -106,11 +106,12 @@ def _rsvp_context_block(
     first_line = attendance_sentence
     if supplemental:
         first_line += " " + supplemental
+    separator = "\n" if supplemental else " "
     return {
         "type": "context",
         "elements": [{
             "type": "mrkdwn",
-            "text": f"{first_line}\n{_RUNNING_LATE_LINE}",
+            "text": f"{first_line}{separator}{_RUNNING_LATE_LINE}",
         }],
     }
 

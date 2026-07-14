@@ -455,22 +455,25 @@ def _rsvp_context(blocks):
         ),
     ],
 )
-def test_standalone_rsvp_is_one_two_line_context(
+def test_standalone_rsvp_uses_conditional_line_break(
     practice_info, conditions, reactions, supplemental
 ):
     practice_info.plan_reactions = reactions
     block = _rsvp_context(
         build_practice_announcement_blocks(practice_info, conditions)
     )
+    separator = "\n" if supplemental else " "
     assert block["elements"] == [{
         "type": "mrkdwn",
         "text": (
             "Bop :white_check_mark: so we'll know you'll be there."
-            f"{supplemental}\n"
+            f"{supplemental}{separator}"
             "Running late? Reply in the thread. <!channel>"
         ),
     }]
-    assert len(block["elements"][0]["text"].splitlines()) == 2
+    assert len(block["elements"][0]["text"].splitlines()) == (
+        2 if supplemental else 1
+    )
 
 
 def test_context_budget_preserves_attendance_and_complete_second_line(monkeypatch):
