@@ -1014,6 +1014,32 @@ def test_details_fallback_uses_same_plain_normalized_content(
     assert "<https://trails.example/report|Trail report>" not in fallback
 
 
+@pytest.mark.parametrize(
+    ("authored", "expected"),
+    [
+        ("Ends with a period.", "Ends with a period."),
+        ("Ends with a question?", "Ends with a question?"),
+        ("Ends with excitement!", "Ends with excitement!"),
+        ("Already truncated…", "Already truncated…"),
+        ("Needs punctuation", "Needs punctuation."),
+    ],
+)
+def test_details_fallback_adds_only_missing_terminal_punctuation(
+    practice_info, empty_conditions, authored, expected
+):
+    practice_info.location.parking_notes = authored
+
+    fallback = announcement_blocks.build_practice_details_fallback_text(
+        practice_info,
+        empty_conditions,
+    )
+
+    assert fallback == (
+        f"Practice details for Monday, July 13. Parking: {expected}"
+    )
+    assert practice_info.location.parking_notes == authored
+
+
 def test_details_fallback_plainification_is_total_for_long_colon_tokens(
     practice_info, conditions
 ):

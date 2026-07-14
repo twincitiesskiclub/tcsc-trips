@@ -268,7 +268,7 @@ def _practice_status_label(practice):
 
 
 def _sentence(prefix, value):
-    return f"{prefix}{value}{'' if value.endswith('…') else '.'}"
+    return f"{prefix}{value}{'' if value.endswith(('.', '?', '!', '…')) else '.'}"
 
 
 def build_practice_announcement_blocks(
