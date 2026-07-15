@@ -61,6 +61,48 @@ const overflowType = {
   ],
 };
 
+test('resolver and catalog use server casefold keys with stable ties', () => {
+  const scenarios = [
+    {
+      names: [['Zebra', 'zebra'], ['alpha', 'alpha'], ['Alpha', 'alpha']],
+      expected: ['option_2', 'option_3', 'option_1'],
+    },
+    {
+      names: [['Ábc', 'ábc'], ['Zebra', 'zebra']],
+      expected: ['option_2', 'option_1'],
+    },
+    {
+      names: [
+        ['Zebra', 'zebra'],
+        ['Straße', 'strasse'],
+        ['STRASSE', 'strasse'],
+        ['Kelvin', 'kelvin'],
+      ],
+      expected: ['option_4', 'option_2', 'option_3', 'option_1'],
+    },
+  ];
+
+  for (const scenario of scenarios) {
+    const sources = scenario.names.map(([name, sortKey], index) => ({
+      id: index + 1,
+      name,
+      plan_reaction_sort_key: sortKey,
+      default_plan_reactions: [{
+        emoji: `option_${index + 1}`,
+        label: `Option ${index + 1}`,
+      }],
+    }));
+    assert.deepEqual(
+      Model.resolve(sources, []).rows.map(row => row.emoji),
+      scenario.expected,
+    );
+    assert.deepEqual(
+      Model.buildCatalog(sources, []).map(row => row.emoji),
+      scenario.expected,
+    );
+  }
+});
+
 test('one activity is ordinary and two activities derive multisport defaults', () => {
   const one = Model.create({
     types: [intervals],
@@ -98,7 +140,7 @@ test('1 to 2 to 3 to 1 preserves edits only on rows whose origin survives', () =
     types: [intervals],
     activities: [run, rollerski],
   });
-  Model.updateLabel(
+  state = Model.updateLabel(
     state,
     Model.rowByEmoji(state, 'evergreen_tree').rowId,
     'Easy endurance',
@@ -118,26 +160,30 @@ test('1 to 2 to 3 to 1 preserves edits only on rows whose origin survives', () =
   );
 });
 
-test('updateLabel is the intentional in-place setter exception', () => {
+test('updateLabel clones the full state before changing a nested row', () => {
   const state = Model.create({
     types: [intervals],
     activities: [],
     savedSnapshot: null,
   });
+  const originalRow = state.rows[0];
   const returned = Model.updateLabel(state, state.rows[0].rowId, 'Edited');
 
-  assert.strictEqual(returned, state);
-  assert.equal(state.rows[0].label, 'Edited');
+  assert.notStrictEqual(returned, state);
+  assert.notStrictEqual(returned.rows, state.rows);
+  assert.notStrictEqual(returned.rows[0], originalRow);
+  assert.equal(returned.rows[0].label, 'Edited');
+  assert.equal(state.rows[0].label, 'Endurance instead of intervals');
 });
 
 test('remove and undo preserve the fixed key, edited description, and slot', () => {
-  const state = Model.create({
+  let state = Model.create({
     types: [intervals],
     activities: [run],
     savedSnapshot: null,
   });
   const row = state.rows[0];
-  Model.updateLabel(state, row.rowId, 'Edited');
+  state = Model.updateLabel(state, row.rowId, 'Edited');
 
   const removed = Model.remove(state, row.rowId);
   assert.equal(state.rows[0].removed, false);
@@ -280,6 +326,82 @@ test('suppression survives a partial original-source disappearance', () => {
   );
 });
 
+test('suppression expires when one mapping leaves a still-selected source', () => {
+  const original = {
+    id: 30,
+    name: 'Mutable source',
+    plan_reaction_sort_key: 'mutable source',
+    default_plan_reactions: [
+      {emoji: 'snowflake', label: 'Snow'},
+      {emoji: 'zap', label: 'Speed'},
+    ],
+  };
+  const withoutSnowflake = {
+    ...original,
+    default_plan_reactions: [{emoji: 'zap', label: 'Speed'}],
+  };
+  const state = Model.create({
+    types: [original],
+    activities: [],
+    savedSnapshot: [],
+  });
+
+  const expired = Model.reconcile(state, {
+    types: [withoutSnowflake],
+    activities: [],
+  });
+  assert.deepEqual(expired.suppressed.map(item => item.emoji), ['zap']);
+
+  const restored = Model.reconcile(expired, {
+    types: [original],
+    activities: [],
+  });
+  assert.deepEqual(Model.activeRows(restored).map(row => row.emoji), [
+    'snowflake',
+  ]);
+  assert.deepEqual(restored.suppressed.map(item => item.emoji), ['zap']);
+});
+
+test('all Add permutations recover canonical order from reversed tombstones', () => {
+  const source = {
+    id: 31,
+    name: 'Three defaults',
+    plan_reaction_sort_key: 'three defaults',
+    default_plan_reactions: [
+      {emoji: 'a', label: 'A'},
+      {emoji: 'b', label: 'B'},
+      {emoji: 'c', label: 'C'},
+    ],
+  };
+  const base = Model.create({
+    types: [source],
+    activities: [],
+    savedSnapshot: [],
+  });
+  base.suppressed.reverse();
+  const catalog = Model.buildCatalog([source], []);
+  const permutations = [
+    ['a', 'b', 'c'],
+    ['a', 'c', 'b'],
+    ['b', 'a', 'c'],
+    ['b', 'c', 'a'],
+    ['c', 'a', 'b'],
+    ['c', 'b', 'a'],
+  ];
+
+  for (const permutation of permutations) {
+    let state = structuredClone(base);
+    for (const emoji of permutation) {
+      state = Model.add(
+        state,
+        catalog.find(option => option.emoji === emoji),
+      );
+    }
+    assert.deepEqual(state.rows.map(row => row.emoji), ['a', 'b', 'c']);
+    assert.deepEqual(Model.snapshot(state).map(row => row.emoji), ['a', 'b', 'c']);
+  }
+});
+
 test('adding a suppressed applicable option recovers its inherited order', () => {
   const state = Model.create({
     types: [intervals],
@@ -366,28 +488,151 @@ test('restore is atomic and allocates fresh monotonically increasing row IDs', (
 });
 
 test('snapshot trims labels and reports the invalid row ID', () => {
-  const state = Model.create({
+  let state = Model.create({
     types: [intervals],
     activities: [],
     savedSnapshot: null,
   });
   const rowId = state.rows[0].rowId;
-  Model.updateLabel(state, rowId, '  Easy endurance  ');
+  state = Model.updateLabel(state, rowId, '  Easy endurance  ');
   assert.deepEqual(Model.snapshot(state), [
     {emoji: 'evergreen_tree', label: 'Easy endurance'},
   ]);
 
-  Model.updateLabel(state, rowId, '   ');
+  state = Model.updateLabel(state, rowId, '   ');
   assert.throws(
     () => Model.snapshot(state),
     error => error.rowId === rowId && /required/.test(error.message),
   );
 
-  Model.updateLabel(state, rowId, 'x'.repeat(81));
+  state = Model.updateLabel(state, rowId, 'x'.repeat(81));
   assert.throws(
     () => Model.snapshot(state),
     error => error.rowId === rowId && /80/.test(error.message),
   );
+});
+
+test('saved snapshots reject impossible list, key, and label states', () => {
+  const createWith = savedSnapshot => Model.create({
+    types: [],
+    activities: [],
+    savedSnapshot,
+  });
+  const five = Array.from({length: 5}, (_, index) => ({
+    emoji: `option_${index}`,
+    label: `Option ${index}`,
+  }));
+
+  assert.throws(() => createWith({}), /expected a list/);
+  assert.throws(() => createWith(five), /at most 4/);
+  assert.throws(() => createWith([
+    {emoji: 'snowflake', label: 'One'},
+    {emoji: 'snowflake', label: 'Two'},
+  ]), /appears more than once/);
+  assert.throws(() => createWith([
+    {emoji: 'white_check_mark', label: 'Reserved'},
+  ]), /reserved for attendance/);
+  assert.throws(() => createWith([
+    {emoji: 'not:fixed', label: 'Invalid'},
+  ]), /Slack emoji shortcode/);
+  assert.throws(() => createWith([
+    {emoji: 'snowflake', label: '...'},
+  ]), /label is required/);
+});
+
+test('source pairs use the same normalization boundary as saved snapshots', () => {
+  const sourceWith = defaultPlanReactions => ({
+    id: 40,
+    name: 'Hostile source',
+    plan_reaction_sort_key: 'hostile source',
+    default_plan_reactions: defaultPlanReactions,
+  });
+
+  assert.throws(
+    () => Model.buildCatalog([sourceWith({})], []),
+    /expected a list/,
+  );
+  assert.throws(
+    () => Model.resolve([sourceWith(Array.from(
+      {length: 5},
+      (_, index) => ({emoji: `option_${index}`, label: `Option ${index}`}),
+    ))], []),
+    /at most 4/,
+  );
+  assert.throws(
+    () => Model.resolve([sourceWith([
+      {emoji: 'snowflake', label: 'One'},
+      {emoji: 'snowflake', label: 'Two'},
+    ])], []),
+    /appears more than once/,
+  );
+  assert.throws(
+    () => Model.buildCatalog([sourceWith([
+      {emoji: 'one', label: 'Reserved'},
+    ])], []),
+    /reserved for attendance/,
+  );
+
+  const normalized = Model.resolve([sourceWith([
+    {emoji: '\x1f:SNOWFLAKE:\x1f', label: '  Snow route  '},
+  ])], []);
+  assert.deepEqual(normalized.rows.map(({emoji, label}) => ({emoji, label})), [
+    {emoji: 'snowflake', label: 'Snow route'},
+  ]);
+  assert.throws(
+    () => Model.resolve([sourceWith([
+      {emoji: '\ufeffsnowflake\ufeff', label: 'Snow route'},
+    ])], []),
+    /Slack emoji shortcode/,
+  );
+});
+
+test('snapshot matches Python line, punctuation, and Unicode length rules', () => {
+  const base = Model.create({
+    types: [intervals],
+    activities: [],
+    savedSnapshot: null,
+  });
+  const rowId = base.rows[0].rowId;
+  const lineBreaks = ['\n', '\r', '\v', '\f', '\x1c', '\x1d', '\x1e', '\x85', '\u2028', '\u2029'];
+
+  for (const separator of lineBreaks) {
+    const state = Model.updateLabel(base, rowId, `Before${separator}After`);
+    assert.throws(
+      () => Model.snapshot(state),
+      error => error.rowId === rowId && /single line/.test(error.message),
+    );
+  }
+
+  const punctuation = Model.updateLabel(base, rowId, '...');
+  assert.throws(
+    () => Model.snapshot(punctuation),
+    error => error.rowId === rowId && /required/.test(error.message),
+  );
+
+  const pythonWhitespace = Model.updateLabel(base, rowId, '\x1fSnow route\x1f');
+  assert.equal(Model.snapshot(pythonWhitespace)[0].label, 'Snow route');
+  const byteOrderMark = Model.updateLabel(base, rowId, '\ufeff');
+  assert.equal(Model.snapshot(byteOrderMark)[0].label, '\ufeff');
+
+  const eightyCodePoints = Model.updateLabel(base, rowId, '😀'.repeat(80));
+  assert.equal(Model.snapshot(eightyCodePoints)[0].label, '😀'.repeat(80));
+  const eightyOneCodePoints = Model.updateLabel(base, rowId, '😀'.repeat(81));
+  assert.throws(
+    () => Model.snapshot(eightyOneCodePoints),
+    error => error.rowId === rowId && /80/.test(error.message),
+  );
+});
+
+test('picker-open transition is clone-safe and reconcile and Restore close it', () => {
+  const state = Model.create({types: [], activities: [], savedSnapshot: null});
+  const opened = Model.setAddOpen(state, true);
+
+  assert.notStrictEqual(opened, state);
+  assert.equal(state.addOpen, false);
+  assert.equal(opened.addOpen, true);
+  assert.equal(Model.reconcile(opened, {types: [], activities: []}).addOpen, false);
+  assert.equal(Model.restore(opened, {types: [], activities: []}).addOpen, false);
 });
 
 test('canAdd follows blocking, slots, inherited, and unconfigured rules', () => {

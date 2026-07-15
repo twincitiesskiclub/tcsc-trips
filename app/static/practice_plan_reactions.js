@@ -6,9 +6,126 @@
   'use strict';
 
   const MAX = 4;
+  const MAX_LABEL = 80;
+  const MAX_NAME = 80;
+  const EMOJI_RE = /^([a-z0-9_+\-]+)(?:::skin-tone-[2-6])?$/;
+  const LINE_BREAK_RE = /[\n\r\v\f\x1c-\x1e\x85\u2028\u2029]/;
+  const PYTHON_TRIM_RE =
+    /^[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+|[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/g;
+  const PYTHON_TRIM_END_RE =
+    /[\u0009-\u000d\u001c-\u0020\u0085\u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000]+$/;
+  const RESERVED = new Set([
+    'white_check_mark', 'ballot_box_with_check', 'heavy_check_mark',
+    'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight',
+    'nine', 'keycap_ten',
+  ]);
 
   function clone(state) {
     return structuredClone(state);
+  }
+
+  function validationError(message, rowId = null) {
+    const error = new Error(message);
+    if (rowId !== null) error.rowId = rowId;
+    return error;
+  }
+
+  function codePointLength(value) {
+    return Array.from(value).length;
+  }
+
+  function pythonTrim(value) {
+    return value.replace(PYTHON_TRIM_RE, '');
+  }
+
+  function normalizeEmoji(value, source, rowId) {
+    let emoji = pythonTrim(String(value || '')).toLowerCase();
+    if (emoji.startsWith(':') && emoji.endsWith(':') && emoji.length > 2) {
+      emoji = emoji.slice(1, -1);
+    }
+    if (codePointLength(emoji) > MAX_NAME) {
+      throw validationError(
+        `${source}: emoji name must be ${MAX_NAME} characters or fewer`,
+        rowId,
+      );
+    }
+    const match = EMOJI_RE.exec(emoji);
+    if (!match) {
+      throw validationError(
+        `${source}: enter a Slack emoji shortcode`,
+        rowId,
+      );
+    }
+    if (RESERVED.has(match[1])) {
+      throw validationError(
+        `${source}: :${emoji}: is reserved for attendance`,
+        rowId,
+      );
+    }
+    return emoji;
+  }
+
+  function requireDisplayLabel(label, source, rowId) {
+    const display = label
+      .replace(/[.?!]+$/, '')
+      .replace(PYTHON_TRIM_END_RE, '');
+    if (!display) {
+      throw validationError(`${source}: label is required`, rowId);
+    }
+  }
+
+  function normalizePairs(value, {
+    source = 'Plan reactions',
+    rowIds = [],
+  } = {}) {
+    if (value === null || value === undefined) return [];
+    if (!Array.isArray(value)) {
+      throw new Error(`${source}: expected a list`);
+    }
+    if (value.length > MAX) {
+      throw new Error(`${source}: use at most ${MAX} reactions`);
+    }
+
+    const normalized = [];
+    const seen = new Set();
+    value.forEach((item, index) => {
+      const itemSource = `${source} row ${index + 1}`;
+      const rowId = rowIds[index] === undefined ? null : rowIds[index];
+      if (!item || typeof item !== 'object' || Array.isArray(item)) {
+        throw validationError(
+          `${itemSource}: expected emoji and label`,
+          rowId,
+        );
+      }
+      const emoji = normalizeEmoji(item.emoji, itemSource, rowId);
+      const rawLabel = String(item.label || '');
+      if (LINE_BREAK_RE.test(rawLabel)) {
+        throw validationError(
+          `${itemSource}: label must be a single line`,
+          rowId,
+        );
+      }
+      const label = pythonTrim(rawLabel);
+      if (!label) {
+        throw validationError(`${itemSource}: label is required`, rowId);
+      }
+      requireDisplayLabel(label, itemSource, rowId);
+      if (codePointLength(label) > MAX_LABEL) {
+        throw validationError(
+          `${itemSource}: label must be ${MAX_LABEL} characters or fewer`,
+          rowId,
+        );
+      }
+      if (seen.has(emoji)) {
+        throw validationError(
+          `${source}: :${emoji}: appears more than once`,
+          rowId,
+        );
+      }
+      seen.add(emoji);
+      normalized.push({emoji, label});
+    });
+    return normalized;
   }
 
   function distinct(items) {
@@ -25,13 +142,37 @@
     return distinct(items).map(item => Number(item.id));
   }
 
+  function compareCodePoints(left, right) {
+    const leftPoints = Array.from(String(left), char => char.codePointAt(0));
+    const rightPoints = Array.from(String(right), char => char.codePointAt(0));
+    const length = Math.min(leftPoints.length, rightPoints.length);
+    for (let index = 0; index < length; index += 1) {
+      if (leftPoints[index] !== rightPoints[index]) {
+        return leftPoints[index] - rightPoints[index];
+      }
+    }
+    return leftPoints.length - rightPoints.length;
+  }
+
+  function sortSources(items) {
+    return distinct(items)
+      .map((item, inputOrder) => ({item, inputOrder}))
+      .sort((left, right) => {
+        const leftKey = typeof left.item.plan_reaction_sort_key === 'string'
+          ? left.item.plan_reaction_sort_key
+          : String(left.item.name || '').toLowerCase();
+        const rightKey = typeof right.item.plan_reaction_sort_key === 'string'
+          ? right.item.plan_reaction_sort_key
+          : String(right.item.name || '').toLowerCase();
+        return compareCodePoints(leftKey, rightKey)
+          || left.inputOrder - right.inputOrder;
+      })
+      .map(entry => entry.item);
+  }
+
   function resolve(types, activities) {
-    const typeSources = distinct(types).sort((left, right) =>
-      left.name.localeCompare(right.name)
-    );
-    const activitySources = distinct(activities).sort((left, right) =>
-      left.name.localeCompare(right.name)
-    );
+    const typeSources = sortSources(types);
+    const activitySources = sortSources(activities);
     const sources = typeSources.map(item => ({kind: 'type', item}));
     if (activitySources.length >= 2) {
       sources.push(
@@ -46,7 +187,10 @@
       const sourceName = `${
         source.kind === 'type' ? 'Workout Type' : 'Activity'
       } ${source.item.name}`;
-      for (const pair of source.item.default_plan_reactions || []) {
+      for (const pair of normalizePairs(
+        source.item.default_plan_reactions || [],
+        {source: sourceName},
+      )) {
         const prior = seen.get(pair.emoji);
         if (prior && prior.label !== pair.label) {
           return {
@@ -138,12 +282,15 @@
   }
 
   function create({types = [], activities = [], savedSnapshot = null}) {
+    const saved = savedSnapshot === null
+      ? null
+      : normalizePairs(savedSnapshot, {source: 'Saved Plan reactions'});
     const resolution = resolve(types, activities);
     const state = emptyState(types, activities);
     if (resolution.error) {
       state.blockingError = resolution.error;
-      if (savedSnapshot !== null) {
-        (savedSnapshot || []).forEach((pair, protectedOrder) => {
+      if (saved !== null) {
+        saved.forEach((pair, protectedOrder) => {
           state.rows.push(newRow(state, {
             emoji: pair.emoji,
             label: pair.label,
@@ -162,7 +309,7 @@
       resolution.rows.map((row, index) => [row.emoji, {index, row}]),
     );
 
-    if (savedSnapshot === null) {
+    if (saved === null) {
       resolution.rows.forEach((row, inheritedOrder) => {
         state.rows.push(newRow(state, {
           emoji: row.emoji,
@@ -172,7 +319,6 @@
         }));
       });
     } else {
-      const saved = savedSnapshot || [];
       saved.forEach((pair, protectedOrder) => {
         const match = current.get(pair.emoji);
         state.rows.push(newRow(state, {
@@ -274,6 +420,7 @@
     ];
     working.effectiveInheritedCount = resolution.rows.length;
     working.blockingError = null;
+    working.addOpen = false;
     return working;
   }
 
@@ -312,7 +459,10 @@
 
   function add(state, option) {
     if (!option) throw new Error('Choose a Plan reaction');
+    const pair = normalizePairs([option])[0];
+    option = {...option, ...pair};
     const working = clone(state);
+    working.addOpen = false;
     const suppressed = working.suppressed.find(
       item => item.emoji === option.emoji,
     );
@@ -382,46 +532,27 @@
   }
 
   function updateLabel(state, rowId, label) {
-    const row = state.rows.find(item => item.rowId === rowId);
+    const working = clone(state);
+    const row = working.rows.find(item => item.rowId === rowId);
     if (!row) throw new Error('Unknown reaction row');
     row.label = label;
-    return state;
+    return working;
   }
 
   function activeRows(state) {
     return state.rows.filter(row => !row.removed);
   }
 
-  function validationError(message, rowId) {
-    const error = new Error(message);
-    error.rowId = rowId;
-    return error;
-  }
-
   function snapshot(state) {
     if (state.blockingError) throw new Error(state.blockingError);
-    return activeRows(state).map(row => {
-      const label = String(row.label || '').trim();
-      if (!label) {
-        throw validationError(
-          `Description for :${row.emoji}: is required.`,
-          row.rowId,
-        );
-      }
-      if (label.length > 80) {
-        throw validationError(
-          `Description for :${row.emoji}: must be 80 characters or fewer.`,
-          row.rowId,
-        );
-      }
-      if (/\r|\n/.test(label)) {
-        throw validationError(
-          `Description for :${row.emoji}: must be a single line.`,
-          row.rowId,
-        );
-      }
-      return {emoji: row.emoji, label};
-    });
+    const rows = activeRows(state);
+    return normalizePairs(
+      rows.map(row => ({emoji: row.emoji, label: row.label})),
+      {
+        source: 'Plan reactions',
+        rowIds: rows.map(row => row.rowId),
+      },
+    );
   }
 
   function rowByEmoji(state, emoji) {
@@ -430,18 +561,22 @@
 
   function buildCatalog(types, activities) {
     const sources = [
-      ...distinct(types)
-        .sort((left, right) => left.name.localeCompare(right.name))
+      ...sortSources(types)
         .map(item => ({kind: 'type', item})),
-      ...distinct(activities)
-        .sort((left, right) => left.name.localeCompare(right.name))
+      ...sortSources(activities)
         .map(item => ({kind: 'activity', item})),
     ];
     const merged = new Map();
     const ordered = [];
     for (const source of sources) {
       const sourceKey = `${source.kind}:${Number(source.item.id)}`;
-      for (const pair of source.item.default_plan_reactions || []) {
+      const sourceName = `${
+        source.kind === 'type' ? 'Workout Type' : 'Activity'
+      } ${source.item.name}`;
+      for (const pair of normalizePairs(
+        source.item.default_plan_reactions || [],
+        {source: sourceName},
+      )) {
         const key = JSON.stringify([pair.emoji, pair.label]);
         if (merged.has(key)) {
           merged.get(key).sourceKeys.push(sourceKey);
@@ -474,6 +609,12 @@
       );
   }
 
+  function setAddOpen(state, isOpen) {
+    const working = clone(state);
+    working.addOpen = Boolean(isOpen);
+    return working;
+  }
+
   return {
     MAX,
     resolve,
@@ -491,5 +632,6 @@
     buildCatalog,
     availableCatalog,
     canAdd,
+    setAddOpen,
   };
 });

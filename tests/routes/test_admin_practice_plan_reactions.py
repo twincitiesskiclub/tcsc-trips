@@ -907,12 +907,127 @@ def test_practice_reaction_css_targets_the_controller_row_class():
     assert "#workout-editor .plan-reaction-action{" not in template
 
 
+def test_removed_reactions_use_full_contrast_surface_and_safe_wrapping():
+    template = DETAIL_TEMPLATE.read_text()
+
+    removed_match = re.search(
+        r"#workout-editor \.practice-reaction-row\.is-removed\{([^}]*)\}",
+        template,
+    )
+    assert removed_match
+    removed = removed_match.group(1)
+    assert "opacity" not in removed
+    assert "background:#f8fafb" in removed
+    assert "border:1px solid #cbd5e1" in removed
+    assert "color:#1c2c44" in removed
+    static_match = re.search(
+        r"#workout-editor \.practice-reaction-label-static\{([^}]*)\}",
+        template,
+    )
+    assert static_match
+    static_label = static_match.group(1)
+    assert "min-width:0" in static_label
+    assert "overflow-wrap:anywhere" in static_label
+
+    def channel(value):
+        normalized = value / 255
+        return (
+            normalized / 12.92
+            if normalized <= 0.04045
+            else ((normalized + 0.055) / 1.055) ** 2.4
+        )
+
+    def luminance(color):
+        values = [int(color[index:index + 2], 16) for index in (1, 3, 5)]
+        red, green, blue = [channel(value) for value in values]
+        return 0.2126 * red + 0.7152 * green + 0.0722 * blue
+
+    light = luminance("#f8fafb")
+    dark = luminance("#1c2c44")
+    ratio = (max(light, dark) + 0.05) / (min(light, dark) + 0.05)
+    assert ratio >= 4.5
+
+
+def test_practice_reference_loading_mounts_safe_fallbacks_independently():
+    script = DETAIL_SCRIPT.read_text()
+    editor = (REPO_ROOT / "app/static/practice_plan_reaction_editor.js").read_text()
+
+    assert "Promise.allSettled(" in editor
+    assert "if (!response.ok)" in editor
+    assert "PracticePlanReactionEditor.loadReferenceData(fetch)" in script
+    assert "references.reactionSettingsReady" in script
+    assert "Could not load reaction Settings. Try again." in script
+    assert "referenceError:" in script
+    assert "await Promise.all([" not in script
+
+
+def test_invalid_reaction_settings_retry_with_the_protected_saved_row_fallback():
+    script = DETAIL_SCRIPT.read_text()
+    initializer = script.split(
+        "function initializePlanReactionEditor", 1
+    )[1].split("document.addEventListener", 1)[0]
+
+    assert "try {" in initializer
+    assert "catch (error)" in initializer
+    assert "if (referenceError) throw error;" in initializer
+    assert "initializePlanReactionEditor(reactionSettingsLoadError);" in initializer
+    assert initializer.index("PracticePlanReactionEditor.mount") < initializer.index(
+        "catch (error)"
+    ) < initializer.index(
+        "initializePlanReactionEditor(reactionSettingsLoadError);"
+    )
+
+
+def test_any_reference_failure_blocks_submit_before_empty_assignments_can_save():
+    script = DETAIL_SCRIPT.read_text()
+
+    assert "let formReferenceLoadError = null;" in script
+    assert (
+        "formReferenceLoadError = "
+        "'Could not load form options. Refresh and try again.';" in script
+    )
+    submit = script.split(
+        "document.getElementById('practice-form').addEventListener('submit'", 1
+    )[1]
+    assert "if (formReferenceLoadError) {" in submit
+    assert "showToast(formReferenceLoadError, 'error');" in submit
+    assert submit.index("if (formReferenceLoadError) {") < submit.index(
+        "const payload = {"
+    )
+
+
+def test_all_reaction_server_fields_are_mirrored_to_the_live_status():
+    script = DETAIL_SCRIPT.read_text()
+
+    assert "PracticePlanReactionEditor.isReactionField(result.field)" in script
+    assert "planReactionController.showError(result.error);" in script
+
+
 def test_practice_reaction_script_never_renders_untrusted_html():
     script = DETAIL_SCRIPT.read_text()
     editor = (REPO_ROOT / "app/static/practice_plan_reaction_editor.js").read_text()
 
     assert "innerHTML" not in editor
     assert ".plan-reaction-emoji" not in script
+
+
+def test_reaction_source_json_exposes_python_casefold_sort_keys(
+    admin_client, db_session
+):
+    activity = PracticeActivity(name="Plan Reaction Test Straße Activity")
+    practice_type = PracticeType(name="Plan Reaction Test Kelvin Type")
+    db.session.add_all([activity, practice_type])
+    db.session.commit()
+
+    activities = admin_client.get("/admin/practices/activities/data").get_json()[
+        "activities"
+    ]
+    types = admin_client.get("/admin/practices/types/data").get_json()["types"]
+    activity_json = next(item for item in activities if item["id"] == activity.id)
+    type_json = next(item for item in types if item["id"] == practice_type.id)
+
+    assert activity_json["plan_reaction_sort_key"] == activity.name.casefold()
+    assert type_json["plan_reaction_sort_key"] == practice_type.name.casefold()
 
 
 def test_create_activity_persists_default_plan_reactions(admin_client, db_session):

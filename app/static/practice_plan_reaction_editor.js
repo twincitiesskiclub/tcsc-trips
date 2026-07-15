@@ -8,6 +8,69 @@
 })(typeof window !== 'undefined' ? window : globalThis, function (Model) {
   'use strict';
 
+  const CATALOG_EMPTY =
+    'Configure reaction pairs in Practices Settings first.';
+  const REACTION_FIELDS = new Set([
+    'plan_reactions',
+    'activity_ids',
+    'type_ids',
+  ]);
+
+  function isReactionField(field) {
+    return REACTION_FIELDS.has(field);
+  }
+
+  async function loadReferenceData(fetchImpl) {
+    const specs = [
+      ['locations', '/admin/practices/locations/data'],
+      ['activities', '/admin/practices/activities/data'],
+      ['types', '/admin/practices/types/data'],
+      ['people', '/admin/practices/people/data'],
+    ];
+    const settled = await Promise.allSettled(specs.map(async ([key, url]) => {
+      const response = await fetchImpl(url);
+      if (!response.ok) {
+        throw new Error(`${key} reference request failed (${response.status})`);
+      }
+      const body = await response.json();
+      if (key === 'people') {
+        const people = {};
+        ['coaches', 'leads', 'assists'].forEach(role => {
+          const value = body[role] ?? [];
+          if (!Array.isArray(value)) {
+            throw new Error(`people ${role} response is invalid`);
+          }
+          people[role] = value;
+        });
+        return people;
+      }
+      const value = body[key];
+      if (!Array.isArray(value)) {
+        throw new Error(`${key} reference response is invalid`);
+      }
+      return value;
+    }));
+    const result = {
+      locations: [],
+      activities: [],
+      types: [],
+      people: {coaches: [], leads: [], assists: []},
+      failed: [],
+      reactionSettingsReady: false,
+    };
+    settled.forEach((item, index) => {
+      const key = specs[index][0];
+      if (item.status === 'fulfilled') {
+        result[key] = item.value;
+      } else {
+        result.failed.push(key);
+      }
+    });
+    result.reactionSettingsReady = !result.failed.includes('activities')
+      && !result.failed.includes('types');
+    return result;
+  }
+
   function mount({
     root,
     types = [],
@@ -15,6 +78,7 @@
     selectedTypeIds = [],
     selectedActivityIds = [],
     savedSnapshot = null,
+    referenceError = null,
   }) {
     if (!root) throw new Error('Plan reaction editor root is required');
     if (!Model) throw new Error('Practice plan reaction model is required');
@@ -35,6 +99,7 @@
     }
 
     const catalog = Model.buildCatalog(types, activities);
+    const externalBlockingError = referenceError || null;
     let typeIds = normalizedIds(selectedTypeIds);
     let activityIds = normalizedIds(selectedActivityIds);
     let state = Model.create({
@@ -57,11 +122,18 @@
       statusNode.classList.toggle('field-error', Boolean(isError));
     }
 
+    restoreButton.disabled = Boolean(externalBlockingError);
+    restoreButton.setAttribute('aria-describedby', 'plan-reaction-status');
+
     function syncLabels() {
       rowsNode.querySelectorAll('[data-reaction-row]').forEach(rowNode => {
         const input = rowNode.querySelector('.practice-reaction-label');
         if (input) {
-          Model.updateLabel(state, rowNode.dataset.rowId, input.value);
+          state = Model.updateLabel(
+            state,
+            rowNode.dataset.rowId,
+            input.value,
+          );
         }
       });
     }
@@ -90,13 +162,14 @@
       });
     }
 
-    function makeButton(label, action, rowId) {
+    function makeButton(label, action, rowId, ariaLabel) {
       const button = document.createElement('button');
       button.type = 'button';
       button.className = 'btn btn-secondary practice-reaction-action';
       button.dataset.action = action;
       button.dataset.rowId = rowId;
       button.textContent = label;
+      button.setAttribute('aria-label', ariaLabel);
       return button;
     }
 
@@ -124,7 +197,12 @@
         removedLabel.className = 'practice-reaction-removed-label';
         removedLabel.textContent = 'Removed';
         actions.append(removedLabel, document.createTextNode(' '));
-        const undoButton = makeButton('Undo', 'undo', row.rowId);
+        const undoButton = makeButton(
+          'Undo',
+          'undo',
+          row.rowId,
+          `Undo removal of :${row.emoji}: reaction`,
+        );
         undoButton.addEventListener('click', () => {
           syncLabels();
           state = Model.undo(state, row.rowId);
@@ -155,7 +233,12 @@
       field.append(input, errorNode);
       rowNode.append(field);
 
-      const removeButton = makeButton('Remove', 'remove', row.rowId);
+      const removeButton = makeButton(
+        'Remove',
+        'remove',
+        row.rowId,
+        `Remove :${row.emoji}: reaction`,
+      );
       removeButton.addEventListener('click', () => {
         syncLabels();
         state = Model.remove(state, row.rowId);
@@ -180,12 +263,13 @@
         optionNode.textContent = `:${option.emoji}: ${option.label}`;
         catalogSelect.append(optionNode);
       });
-      const addAvailable = Model.canAdd(state) && options.length > 0;
+      const addAvailable = !externalBlockingError
+        && Model.canAdd(state)
+        && options.length > 0;
       addButton.hidden = !addAvailable;
-      if (!addAvailable) {
-        catalogSelect.hidden = true;
-        addButton.setAttribute('aria-expanded', 'false');
-      }
+      const catalogOpen = addAvailable && state.addOpen;
+      catalogSelect.hidden = !catalogOpen;
+      addButton.setAttribute('aria-expanded', String(catalogOpen));
     }
 
     function render() {
@@ -195,7 +279,10 @@
       emptyNode.hidden = state.rows.length > 0;
       renderCatalog();
 
-      if (state.unconfiguredActivityNames.length) {
+      if (!externalBlockingError && catalog.length === 0) {
+        unconfiguredNode.hidden = false;
+        unconfiguredNode.textContent = CATALOG_EMPTY;
+      } else if (state.unconfiguredActivityNames.length) {
         unconfiguredNode.hidden = false;
         unconfiguredNode.textContent =
           `No configured Activity reactions for: ${state.unconfiguredActivityNames.join(', ')}.`;
@@ -207,10 +294,9 @@
 
     addButton.addEventListener('click', () => {
       syncLabels();
+      state = Model.setAddOpen(state, true);
       renderCatalog();
-      catalogSelect.hidden = false;
-      addButton.setAttribute('aria-expanded', 'true');
-      catalogSelect.focus();
+      if (!catalogSelect.hidden) catalogSelect.focus();
     });
 
     catalogSelect.addEventListener('change', () => {
@@ -228,6 +314,10 @@
 
     function setSelection(nextTypeIds, nextActivityIds) {
       syncLabels();
+      if (externalBlockingError) {
+        announce(externalBlockingError, true);
+        return;
+      }
       typeIds = normalizedIds(nextTypeIds);
       activityIds = normalizedIds(nextActivityIds);
       state = Model.reconcile(state, {
@@ -248,6 +338,10 @@
 
     function restore() {
       syncLabels();
+      if (externalBlockingError) {
+        announce(externalBlockingError, true);
+        return;
+      }
       state = Model.restore(state, {
         types: selectedSources(types, typeIds),
         activities: selectedSources(activities, activityIds),
@@ -264,6 +358,7 @@
       syncLabels();
       clearSubmissionErrors();
       try {
+        if (externalBlockingError) throw new Error(externalBlockingError);
         return Model.snapshot(state);
       } catch (error) {
         if (error.rowId) {
@@ -289,16 +384,24 @@
     }
 
     render();
-    if (state.blockingError) {
+    if (externalBlockingError) {
+      announce(externalBlockingError, true);
+    } else if (state.blockingError) {
       announce(state.blockingError, true);
     } else if (state.unconfiguredActivityNames.length) {
       announce(
         `No configured Activity reactions for: ${state.unconfiguredActivityNames.join(', ')}.`,
       );
+    } else if (catalog.length === 0) {
+      announce(CATALOG_EMPTY);
     }
 
-    return {setSelection, restore, snapshot};
+    function showError(message) {
+      announce(message, true);
+    }
+
+    return {setSelection, restore, snapshot, showError};
   }
 
-  return {mount};
+  return {mount, loadReferenceData, isReactionField};
 });

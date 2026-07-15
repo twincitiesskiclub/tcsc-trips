@@ -35,6 +35,7 @@ def _activity_json(activity):
     return {
         'id': activity.id,
         'name': activity.name,
+        'plan_reaction_sort_key': activity.name.casefold(),
         'gear_required': activity.gear_required or [],
         'default_plan_reactions': activity.default_plan_reactions or [],
         'practice_count': len(activity.practices),
@@ -45,6 +46,7 @@ def _type_json(practice_type):
     return {
         'id': practice_type.id,
         'name': practice_type.name,
+        'plan_reaction_sort_key': practice_type.name.casefold(),
         'fitness_goals': practice_type.fitness_goals or [],
         'has_intervals': practice_type.has_intervals,
         'default_plan_reactions': practice_type.default_plan_reactions or [],

@@ -10,6 +10,9 @@ const savedPlanReactions = {{ (practice.plan_reactions or []) | tojson if practi
 let activitiesData = [];
 let typesData = [];
 let planReactionController = null;
+let formReferenceLoadError = null;
+const reactionSettingsLoadError =
+    'Could not load reaction Settings. Try again.';
 
 function selectedTagIds(containerId) {
     return peCollectIds(containerId);
@@ -23,15 +26,25 @@ function refreshPlanReactionSelection() {
     );
 }
 
-function initializePlanReactionEditor() {
-    planReactionController = PracticePlanReactionEditor.mount({
-        root: document.getElementById('plan-reaction-editor'),
-        types: typesData,
-        activities: activitiesData,
-        selectedTypeIds: selectedTagIds('types-pills'),
-        selectedActivityIds: selectedTagIds('activities-pills'),
-        savedSnapshot: practiceId ? savedPlanReactions : null,
-    });
+function initializePlanReactionEditor(referenceError = null) {
+    const referencesReady = !referenceError;
+    try {
+        planReactionController = PracticePlanReactionEditor.mount({
+            root: document.getElementById('plan-reaction-editor'),
+            types: referencesReady ? typesData : [],
+            activities: referencesReady ? activitiesData : [],
+            selectedTypeIds: referencesReady ? selectedTagIds('types-pills') : [],
+            selectedActivityIds: referencesReady
+                ? selectedTagIds('activities-pills')
+                : [],
+            savedSnapshot: practiceId ? savedPlanReactions : null,
+            referenceError: referenceError,
+        });
+    } catch (error) {
+        if (referenceError) throw error;
+        console.error('Reaction Settings data is invalid:', error);
+        initializePlanReactionEditor(reactionSettingsLoadError);
+    }
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -45,44 +58,42 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 async function loadFormData() {
-    try {
-        const [locs, acts, types, people] = await Promise.all([
-            fetch('/admin/practices/locations/data').then(r => r.json()),
-            fetch('/admin/practices/activities/data').then(r => r.json()),
-            fetch('/admin/practices/types/data').then(r => r.json()),
-            fetch('/admin/practices/people/data').then(r => r.json()),
-        ]);
+    const references = await PracticePlanReactionEditor.loadReferenceData(fetch);
+    const locationSelect = document.getElementById('location_id');
+    references.locations.forEach(loc => {
+        const opt = document.createElement('option');
+        opt.value = loc.id;
+        opt.textContent = loc.name + (loc.spot ? ` — ${loc.spot}` : '');
+        if (loc.id === selLocationId) opt.selected = true;
+        locationSelect.appendChild(opt);
+    });
 
-        const locationSelect = document.getElementById('location_id');
-        (locs.locations || []).forEach(loc => {
-            const opt = document.createElement('option');
-            opt.value = loc.id;
-            opt.textContent = loc.name + (loc.spot ? ` — ${loc.spot}` : '');
-            if (loc.id === selLocationId) opt.selected = true;
-            locationSelect.appendChild(opt);
-        });
+    activitiesData = references.activities;
+    typesData = references.types;
+    peRenderTagPills(
+        'activities-pills', activitiesData, selActivities,
+        refreshPlanReactionSelection
+    );
+    peRenderTagPills(
+        'types-pills', typesData, selTypes, refreshPlanReactionSelection
+    );
+    initializePlanReactionEditor(
+        references.reactionSettingsReady ? null : reactionSettingsLoadError
+    );
 
-        activitiesData = acts.activities || [];
-        typesData = types.types || [];
-        peRenderTagPills(
-            'activities-pills', activitiesData, selActivities,
-            refreshPlanReactionSelection
-        );
-        peRenderTagPills(
-            'types-pills', typesData, selTypes, refreshPlanReactionSelection
-        );
-        initializePlanReactionEditor();
-        peRenderPersonPills('coaches-pills', 'coaches-summary', people.coaches || [], selCoaches);
-        peRenderPersonPills('leads-pills', 'leads-summary', people.leads || [], selLeads);
-        peRenderPersonPills('assists-pills', 'assists-summary', people.assists || [], selAssists);
+    const people = references.people;
+    peRenderPersonPills('coaches-pills', 'coaches-summary', people.coaches, selCoaches);
+    peRenderPersonPills('leads-pills', 'leads-summary', people.leads, selLeads);
+    peRenderPersonPills('assists-pills', 'assists-summary', people.assists, selAssists);
 
-        if (selAssists.length > 0) toggleAssists();
+    if (selAssists.length > 0) toggleAssists();
+    document.getElementById('people-search').addEventListener('input', () =>
+        peFilterPeople('people-search', ['coaches-pills', 'leads-pills', 'assists-pills']));
 
-        document.getElementById('people-search').addEventListener('input', () =>
-            peFilterPeople('people-search', ['coaches-pills', 'leads-pills', 'assists-pills']));
-    } catch (err) {
-        console.error('Error loading form data:', err);
-        showToast('Error loading form data', 'error');
+    if (references.failed.length) {
+        formReferenceLoadError = 'Could not load form options. Refresh and try again.';
+        console.error('Reference data failed:', references.failed.join(', '));
+        showToast(formReferenceLoadError, 'error');
     }
 }
 
@@ -99,6 +110,10 @@ function toggleAssists() {
 
 document.getElementById('practice-form').addEventListener('submit', async (e) => {
     e.preventDefault();
+    if (formReferenceLoadError) {
+        showToast(formReferenceLoadError, 'error');
+        return;
+    }
     const form = e.target;
     const fd = new FormData(form);
 
@@ -143,10 +158,11 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
             showToast(result.message || 'Practice saved', 'success');
             setTimeout(() => { window.location.href = '/admin/practices'; }, 800);
         } else {
-            if (result.field === 'plan_reactions') {
-                const status = document.getElementById('plan-reaction-status');
-                status.textContent = result.error;
-                status.classList.add('field-error');
+            if (
+                planReactionController &&
+                PracticePlanReactionEditor.isReactionField(result.field)
+            ) {
+                planReactionController.showError(result.error);
             }
             showToast(result.error || 'Failed to save practice', 'error');
             form.classList.remove('form-loading');
