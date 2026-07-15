@@ -10,10 +10,17 @@ from ..practices.models import (
     practice_types_junction
 )
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
+from ..practices.plan_reaction_queries import (
+    PlanReactionSourceSelectionError,
+    load_all_plan_reaction_sources,
+    load_selected_plan_reaction_sources,
+)
 from ..practices.plan_reactions import (
     PlanReactionValidationError,
+    build_plan_reaction_catalog,
     normalize_plan_reactions,
-    resolve_default_plan_reactions,
+    resolve_plan_reaction_defaults,
+    validate_authorized_plan_reactions,
 )
 from sqlalchemy.orm import joinedload
 
@@ -43,6 +50,59 @@ def _type_json(practice_type):
         'default_plan_reactions': practice_type.default_plan_reactions or [],
         'practice_count': len(practice_type.practices),
     }
+
+
+def _prepare_plan_reaction_submission(data, *, existing_practice=None):
+    activity_ids = (
+        data.get('activity_ids') or []
+        if 'activity_ids' in data
+        else (
+            [item.id for item in existing_practice.activities]
+            if existing_practice is not None
+            else []
+        )
+    )
+    type_ids = (
+        data.get('type_ids') or []
+        if 'type_ids' in data
+        else (
+            [item.id for item in existing_practice.practice_types]
+            if existing_practice is not None
+            else []
+        )
+    )
+    selected = load_selected_plan_reaction_sources(
+        db.session,
+        activity_ids=activity_ids,
+        type_ids=type_ids,
+    )
+    resolution = resolve_plan_reaction_defaults(
+        selected.practice_types,
+        selected.activities,
+    )
+    all_sources = load_all_plan_reaction_sources(db.session)
+    catalog = build_plan_reaction_catalog(
+        all_sources.practice_types,
+        all_sources.activities,
+    )
+    protected = (
+        existing_practice.plan_reactions or []
+        if existing_practice
+        else []
+    )
+    if data.get('restore_plan_reaction_defaults') is True:
+        plan_reactions = resolution.snapshot
+    elif 'plan_reactions' in data:
+        plan_reactions = validate_authorized_plan_reactions(
+            data['plan_reactions'],
+            catalog=catalog,
+            protected_snapshot=protected,
+        )
+    elif existing_practice is None:
+        plan_reactions = resolution.snapshot
+    else:
+        plan_reactions = None
+    return selected, plan_reactions
 
 
 def _week_coach_summary_ts(practice_date, exclude_id=None):
@@ -204,27 +264,19 @@ def create_practice():
                 'field': field,
             }), 400
 
-    activity_ids = data.get('activity_ids') or []
-    type_ids = data.get('type_ids') or []
-    selected_activities = (
-        PracticeActivity.query.filter(PracticeActivity.id.in_(activity_ids)).all()
-        if activity_ids else []
-    )
-    selected_types = (
-        PracticeType.query.filter(PracticeType.id.in_(type_ids)).all()
-        if type_ids else []
-    )
-
     try:
-        plan_reactions = (
-            normalize_plan_reactions(data['plan_reactions'])
-            if 'plan_reactions' in data
-            else resolve_default_plan_reactions(
-                selected_types, selected_activities
-            )
-        )
+        selected, plan_reactions = _prepare_plan_reaction_submission(data)
+    except PlanReactionSourceSelectionError as exc:
+        field = {
+            'activities': 'activity_ids',
+            'types': 'type_ids',
+        }[exc.field]
+        return jsonify({'error': str(exc), 'field': field}), 400
     except PlanReactionValidationError as exc:
-        return jsonify({'error': str(exc), 'field': 'plan_reactions'}), 400
+        return jsonify({
+            'error': str(exc),
+            'field': 'plan_reactions',
+        }), 400
 
     try:
         # Parse date
@@ -242,8 +294,8 @@ def create_practice():
             plan_reactions=plan_reactions,
             is_dark_practice=data.get('is_dark_practice', False),
         )
-        practice.activities = selected_activities
-        practice.practice_types = selected_types
+        practice.activities = list(selected.activities)
+        practice.practice_types = list(selected.practice_types)
         db.session.add(practice)
         db.session.flush()
 
@@ -326,31 +378,29 @@ def edit_practice(practice_id):
                     'field': field,
                 }), 400
 
-        selected_activities = (
-            PracticeActivity.query.filter(
-                PracticeActivity.id.in_(data['activity_ids'])
-            ).all() if data.get('activity_ids') else []
-        ) if 'activity_ids' in data else list(practice.activities)
-        selected_types = (
-            PracticeType.query.filter(
-                PracticeType.id.in_(data['type_ids'])
-            ).all() if data.get('type_ids') else []
-        ) if 'type_ids' in data else list(practice.practice_types)
-
         try:
-            if data.get('restore_plan_reaction_defaults') is True:
-                practice.plan_reactions = resolve_default_plan_reactions(
-                    selected_types, selected_activities
-                )
-            elif 'plan_reactions' in data:
-                practice.plan_reactions = normalize_plan_reactions(
-                    data['plan_reactions']
-                )
+            selected, plan_reactions = _prepare_plan_reaction_submission(
+                data,
+                existing_practice=practice,
+            )
+        except PlanReactionSourceSelectionError as exc:
+            field = {
+                'activities': 'activity_ids',
+                'types': 'type_ids',
+            }[exc.field]
+            return jsonify({'error': str(exc), 'field': field}), 400
         except PlanReactionValidationError as exc:
+            field = {
+                'activities': 'activity_ids',
+                'types': 'type_ids',
+            }.get(exc.field, 'plan_reactions')
             return jsonify({
                 'error': str(exc),
-                'field': 'plan_reactions',
+                'field': field,
             }), 400
+
+        if plan_reactions is not None:
+            practice.plan_reactions = plan_reactions
 
         # Update fields if provided
         if 'date' in data:
@@ -378,11 +428,11 @@ def edit_practice(practice_id):
 
         # Update activities if provided
         if 'activity_ids' in data:
-            practice.activities = selected_activities
+            practice.activities = list(selected.activities)
 
         # Update types if provided
         if 'type_ids' in data:
-            practice.practice_types = selected_types
+            practice.practice_types = list(selected.practice_types)
 
         # Update coaches, leads, and assistants if provided (now using user_id)
         if 'coach_ids' in data or 'lead_ids' in data or 'assist_ids' in data:

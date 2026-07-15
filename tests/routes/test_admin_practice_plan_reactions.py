@@ -26,6 +26,19 @@ PLAN_REACTION_EDITOR = REPO_ROOT / "app/static/plan_reactions.js"
 PRACTICE_EDITOR = REPO_ROOT / "app/static/practice_editor.js"
 
 
+def _confirmed_absent_id(model):
+    highest_id = (
+        db.session.query(model.id)
+        .order_by(model.id.desc())
+        .limit(1)
+        .scalar()
+        or 0
+    )
+    unknown_id = highest_id + 1
+    assert db.session.get(model, unknown_id) is None
+    return unknown_id
+
+
 @pytest.fixture
 def app():
     app = create_app()
@@ -169,14 +182,21 @@ def practice_with_plan_reactions(db_session, location):
 
 
 def test_create_without_plan_key_resolves_selected_defaults(
-    admin_client, db_session, activity_with_plan_reactions, location
+    admin_client,
+    db_session,
+    activity_with_plan_reactions,
+    second_activity,
+    location,
 ):
     response = admin_client.post(
         "/admin/practices/create",
         json={
             "date": "2026-07-14T18:15",
             "location_id": location.id,
-            "activity_ids": [activity_with_plan_reactions.id],
+            "activity_ids": [
+                activity_with_plan_reactions.id,
+                second_activity.id,
+            ],
             "type_ids": [],
         },
     )
@@ -185,9 +205,9 @@ def test_create_without_plan_key_resolves_selected_defaults(
     practice = db_session.session.get(
         Practice, response.get_json()["practice_id"]
     )
-    assert (
-        practice.plan_reactions
-        == activity_with_plan_reactions.default_plan_reactions
+    assert practice.plan_reactions == (
+        activity_with_plan_reactions.default_plan_reactions
+        + second_activity.default_plan_reactions
     )
 
 
@@ -212,6 +232,113 @@ def test_create_explicit_empty_suppresses_defaults(
     assert practice.plan_reactions == []
 
 
+def test_create_without_selector_keys_uses_empty_sources(
+    admin_client, db_session, location
+):
+    response = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": "2026-07-14T18:15",
+            "location_id": location.id,
+        },
+    )
+
+    assert response.status_code == 200
+    practice = db.session.get(Practice, response.get_json()["practice_id"])
+    assert practice.plan_reactions == []
+    assert practice.activities == []
+    assert practice.practice_types == []
+
+
+def test_create_duplicate_activity_ids_count_once_not_as_multisport(
+    admin_client, db_session, activity_with_plan_reactions, location
+):
+    response = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": "2026-07-14T18:15",
+            "location_id": location.id,
+            "activity_ids": [activity_with_plan_reactions.id] * 3,
+            "type_ids": [],
+        },
+    )
+
+    assert response.status_code == 200
+    practice = db.session.get(Practice, response.get_json()["practice_id"])
+    assert practice.plan_reactions == []
+    assert [item.id for item in practice.activities] == [
+        activity_with_plan_reactions.id
+    ]
+
+
+@pytest.mark.parametrize(
+    ("field", "model", "error_label"),
+    [
+        ("activity_ids", PracticeActivity, "Activity"),
+        ("type_ids", PracticeType, "Workout Type"),
+    ],
+)
+def test_create_rejects_unknown_selector_ids(
+    admin_client,
+    db_session,
+    activity_with_plan_reactions,
+    conflicting_type,
+    location,
+    field,
+    model,
+    error_label,
+):
+    unknown_id = _confirmed_absent_id(model)
+    known_id = (
+        activity_with_plan_reactions.id
+        if field == "activity_ids"
+        else conflicting_type.id
+    )
+    payload = {"activity_ids": [], "type_ids": []}
+    payload[field] = [known_id, unknown_id]
+    response = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": "2026-07-14T18:15",
+            "location_id": location.id,
+            **payload,
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": f"Unknown {error_label} ID: {unknown_id}",
+        "field": field,
+    }
+
+
+def test_edit_rejects_unknown_selector_id_without_mutating_snapshot(
+    admin_client,
+    db_session,
+    practice_with_plan_reactions,
+    activity_with_plan_reactions,
+):
+    unknown_id = _confirmed_absent_id(PracticeActivity)
+    before = list(practice_with_plan_reactions.plan_reactions)
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={
+            "activity_ids": [
+                activity_with_plan_reactions.id,
+                unknown_id,
+            ]
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": f"Unknown Activity ID: {unknown_id}",
+        "field": "activity_ids",
+    }
+    db.session.refresh(practice_with_plan_reactions)
+    assert practice_with_plan_reactions.plan_reactions == before
+
+
 def test_editing_tags_without_plan_key_preserves_snapshot(
     admin_client, db_session, practice_with_plan_reactions, second_activity
 ):
@@ -227,7 +354,10 @@ def test_editing_tags_without_plan_key_preserves_snapshot(
 
 
 def test_date_edit_passes_temporary_notice_and_previous_plan_snapshot(
-    admin_client, practice_with_plan_reactions, monkeypatch
+    admin_client,
+    practice_with_plan_reactions,
+    second_activity,
+    monkeypatch,
 ):
     refresh_calls = []
     monkeypatch.setattr(
@@ -382,11 +512,15 @@ def test_restore_defaults_resolves_current_selected_sources(
     db_session,
     practice_with_plan_reactions,
     activity_with_plan_reactions,
+    second_activity,
 ):
     response = admin_client.post(
         f"/admin/practices/{practice_with_plan_reactions.id}/edit",
         json={
-            "activity_ids": [activity_with_plan_reactions.id],
+            "activity_ids": [
+                activity_with_plan_reactions.id,
+                second_activity.id,
+            ],
             "type_ids": [],
             "restore_plan_reaction_defaults": True,
         },
@@ -396,12 +530,14 @@ def test_restore_defaults_resolves_current_selected_sources(
     db_session.session.refresh(practice_with_plan_reactions)
     assert practice_with_plan_reactions.plan_reactions == (
         activity_with_plan_reactions.default_plan_reactions
+        + second_activity.default_plan_reactions
     )
 
 
 def test_create_derived_defaults_reports_source_named_conflict(
     admin_client,
     activity_with_plan_reactions,
+    second_activity,
     conflicting_type,
     location,
 ):
@@ -410,7 +546,10 @@ def test_create_derived_defaults_reports_source_named_conflict(
         json={
             "date": "2026-07-14T18:15",
             "location_id": location.id,
-            "activity_ids": [activity_with_plan_reactions.id],
+            "activity_ids": [
+                activity_with_plan_reactions.id,
+                second_activity.id,
+            ],
             "type_ids": [conflicting_type.id],
         },
     )
@@ -420,6 +559,131 @@ def test_create_derived_defaults_reports_source_named_conflict(
     assert result["field"] == "plan_reactions"
     assert "Activity Plan Reaction Test Clearable Activity" in result["error"]
     assert "Workout Type Plan Reaction Test Conflicting Type" in result["error"]
+
+
+def test_explicit_snapshot_cannot_bypass_selected_source_conflict(
+    admin_client,
+    activity_with_plan_reactions,
+    second_activity,
+    conflicting_type,
+    location,
+):
+    response = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": "2026-07-14T18:15",
+            "location_id": location.id,
+            "activity_ids": [
+                activity_with_plan_reactions.id,
+                second_activity.id,
+            ],
+            "type_ids": [conflicting_type.id],
+            "plan_reactions": [],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["field"] == "plan_reactions"
+    assert "conflicting labels" in response.get_json()["error"]
+
+
+def test_create_rejects_tampered_emoji_absent_from_settings(
+    admin_client, location
+):
+    response = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": "2026-07-14T18:15",
+            "location_id": location.id,
+            "activity_ids": [],
+            "type_ids": [],
+            "plan_reactions": [
+                {"emoji": "made_up", "label": "tampered"}
+            ],
+        },
+    )
+
+    assert response.status_code == 400
+    assert response.get_json()["field"] == "plan_reactions"
+    assert "not configured in Settings" in response.get_json()["error"]
+
+
+def test_edit_allows_saved_key_after_settings_key_was_removed(
+    admin_client, db_session, practice_with_plan_reactions
+):
+    practice_with_plan_reactions.plan_reactions = [
+        {"emoji": "legacy_saved", "label": "legacy description"}
+    ]
+    db.session.commit()
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={
+            "plan_reactions": [
+                {
+                    "emoji": "legacy_saved",
+                    "label": "custom legacy description",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    db.session.refresh(practice_with_plan_reactions)
+    assert practice_with_plan_reactions.plan_reactions[0]["label"] == (
+        "custom legacy description"
+    )
+
+
+def test_edit_allows_current_catalog_key_with_custom_description(
+    admin_client,
+    db_session,
+    practice_with_plan_reactions,
+    activity_with_plan_reactions,
+):
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={
+            "plan_reactions": [
+                {
+                    "emoji": "hatching_chick",
+                    "label": "First time on rollerskis",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 200
+    db.session.refresh(practice_with_plan_reactions)
+    assert practice_with_plan_reactions.plan_reactions == [
+        {
+            "emoji": "hatching_chick",
+            "label": "First time on rollerskis",
+        }
+    ]
+
+
+def test_deleted_catalog_key_blocks_new_open_edit_row_but_preserves_saved_key(
+    admin_client,
+    db_session,
+    practice_with_plan_reactions,
+    activity_with_plan_reactions,
+):
+    activity_with_plan_reactions.default_plan_reactions = []
+    db.session.commit()
+    response = admin_client.post(
+        f"/admin/practices/{practice_with_plan_reactions.id}/edit",
+        json={
+            "plan_reactions": [
+                {
+                    "emoji": "hatching_chick",
+                    "label": "unsaved open-modal text",
+                }
+            ]
+        },
+    )
+
+    assert response.status_code == 400
+    assert "not configured in Settings" in response.get_json()["error"]
 
 
 @pytest.mark.parametrize("field", ["workout_description", "logistics_notes"])
