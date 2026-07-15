@@ -4,8 +4,10 @@ from types import SimpleNamespace
 import pytest
 
 from app.practices.plan_reactions import (
+    EVERGREEN_PLAN_REACTION,
     MAX_PLAN_REACTION_NAME,
     PlanReactionValidationError,
+    build_plan_reaction_catalog,
     format_plan_reaction_legend,
     format_plan_reaction_lines,
     format_reaction_name_for_fallback,
@@ -15,11 +17,17 @@ from app.practices.plan_reactions import (
     parse_plan_reaction_lines,
     plan_reaction_names,
     resolve_default_plan_reactions,
+    resolve_plan_reaction_defaults,
+    validate_authorized_plan_reactions,
 )
 
 
-def source(name, options):
-    return SimpleNamespace(name=name, default_plan_reactions=options)
+def source(source_id, name, options):
+    return SimpleNamespace(
+        id=source_id,
+        name=name,
+        default_plan_reactions=options,
+    )
 
 
 def test_parse_and_format_colon_wrapped_lines():
@@ -45,8 +53,18 @@ def test_legend_escapes_member_supplied_slack_markup():
 def test_resolver_orders_types_then_activities_and_deduplicates_identical_pair():
     duplicate = [{"emoji": "evergreen_tree", "label": "Endurance instead of intervals"}]
     result = resolve_default_plan_reactions(
-        [source("Intervals", duplicate)],
-        [source("Rollerski", duplicate + [{"emoji": "hatching_chick", "label": "New to rollerskiing"}])],
+        [source(10, "Intervals", duplicate)],
+        [
+            source(
+                1,
+                "Rollerski",
+                duplicate + [{
+                    "emoji": "hatching_chick",
+                    "label": "New to rollerskiing",
+                }],
+            ),
+            source(2, "Run", []),
+        ],
     )
     assert result == duplicate + [{"emoji": "hatching_chick", "label": "New to rollerskiing"}]
 
@@ -54,8 +72,11 @@ def test_resolver_orders_types_then_activities_and_deduplicates_identical_pair()
 def test_resolver_rejects_same_emoji_with_two_labels():
     with pytest.raises(PlanReactionValidationError, match="conflicting labels") as error:
         resolve_default_plan_reactions(
-            [source("Intervals", [{"emoji": "evergreen_tree", "label": "Endurance"}])],
-            [source("Rollerski", [{"emoji": "evergreen_tree", "label": "New skier"}])],
+            [source(10, "Intervals", [{"emoji": "evergreen_tree", "label": "Endurance"}])],
+            [
+                source(1, "Rollerski", [{"emoji": "evergreen_tree", "label": "New skier"}]),
+                source(2, "Run", []),
+            ],
         )
     assert "Workout Type Intervals" in str(error.value)
     assert "Activity Rollerski" in str(error.value)
@@ -123,22 +144,101 @@ def test_label_length_and_shortcode_wrapping_boundaries():
 
 def test_resolver_sorts_sources_and_rejects_effective_overflow():
     ordered = resolve_default_plan_reactions(
-        [source("Zulu", [{"emoji": "z", "label": "Zulu"}]),
-         source("Alpha", [{"emoji": "a", "label": "Alpha"}])],
-        [source("Beta", [{"emoji": "b", "label": "Beta"}])],
+        [source(20, "Zulu", [{"emoji": "z", "label": "Zulu"}]),
+         source(10, "Alpha", [{"emoji": "a", "label": "Alpha"}])],
+        [
+            source(1, "Beta", [{"emoji": "b", "label": "Beta"}]),
+            source(2, "Gamma", []),
+        ],
     )
     assert [item["emoji"] for item in ordered] == ["a", "z", "b"]
     with pytest.raises(PlanReactionValidationError, match="more than 4"):
         resolve_default_plan_reactions(
-            [source("Type", [
+            [source(10, "Type", [
                 {"emoji": f"type_{index}", "label": f"Type {index}"}
                 for index in range(3)
             ])],
-            [source("Activity", [
-                {"emoji": f"activity_{index}", "label": f"Activity {index}"}
-                for index in range(2)
-            ])],
+            [
+                source(1, "Activity", [
+                    {"emoji": f"activity_{index}", "label": f"Activity {index}"}
+                    for index in range(2)
+                ]),
+                source(2, "Other Activity", []),
+            ],
         )
+
+
+@pytest.mark.parametrize("activity_count", [0, 1])
+def test_activity_defaults_do_not_apply_before_multisport(activity_count):
+    run = source(1, "Run", [{"emoji": "athletic_shoe", "label": "runner"}])
+    result = resolve_plan_reaction_defaults([], [run][:activity_count])
+    assert result.snapshot == []
+    assert result.unconfigured_activity_names == ()
+
+
+def test_types_always_apply_and_two_distinct_activities_enable_activity_defaults():
+    intervals = source(10, "Intervals", [EVERGREEN_PLAN_REACTION])
+    run = source(1, "Run", [{"emoji": "athletic_shoe", "label": "runner"}])
+    ski = source(2, "Skate Rollerski", [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"},
+    ])
+    result = resolve_plan_reaction_defaults([intervals], [ski, run, run])
+    assert result.snapshot == [
+        EVERGREEN_PLAN_REACTION,
+        {"emoji": "athletic_shoe", "label": "runner"},
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"},
+    ]
+    assert result.rows[1].source_keys == ("activity:1",)
+
+
+def test_multisport_names_unconfigured_activities_without_blocking():
+    result = resolve_plan_reaction_defaults(
+        [],
+        [source(2, "Strength", []), source(1, "Run", [])],
+    )
+    assert result.snapshot == []
+    assert result.unconfigured_activity_names == ("Run", "Strength")
+
+
+def test_catalog_deduplicates_exact_pairs_but_keeps_distinct_labels_for_one_key():
+    catalog = build_plan_reaction_catalog(
+        [source(10, "Intervals", [EVERGREEN_PLAN_REACTION])],
+        [
+            source(1, "Run", [{"emoji": "athletic_shoe", "label": "runner"}]),
+            source(2, "Trail Run", [{"emoji": "athletic_shoe", "label": "trail runner"}]),
+            source(3, "Duplicate", [{"emoji": "athletic_shoe", "label": "runner"}]),
+        ],
+    )
+    assert [(item.emoji, item.label) for item in catalog] == [
+        ("evergreen_tree", "Endurance instead of intervals"),
+        ("athletic_shoe", "runner"),
+        ("athletic_shoe", "trail runner"),
+    ]
+    assert len({item.option_id for item in catalog}) == 3
+
+
+def test_authorization_allows_custom_descriptions_but_not_unknown_keys():
+    catalog = build_plan_reaction_catalog([], [
+        source(1, "Run", [{"emoji": "athletic_shoe", "label": "runner"}]),
+    ])
+    assert validate_authorized_plan_reactions(
+        [{"emoji": "athletic_shoe", "label": "Run group"}], catalog=catalog
+    ) == [{"emoji": "athletic_shoe", "label": "Run group"}]
+    with pytest.raises(PlanReactionValidationError, match="not configured in Settings"):
+        validate_authorized_plan_reactions(
+            [{"emoji": "wheel", "label": "rollerski"}], catalog=catalog
+        )
+
+
+def test_full_edit_authorization_protects_only_saved_snapshot_keys():
+    saved = [{"emoji": "wheel", "label": "rollerski"}]
+    assert validate_authorized_plan_reactions(
+        [{"emoji": "wheel", "label": "classic rollerski"}],
+        catalog=(),
+        protected_snapshot=saved,
+    ) == [{"emoji": "wheel", "label": "classic rollerski"}]
 
 
 def test_skin_tone_bare_and_wrapped_names_normalize_and_round_trip():

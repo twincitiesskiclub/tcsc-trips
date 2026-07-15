@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 import re
 from collections.abc import Iterable, Mapping
+from dataclasses import dataclass
 
 MAX_PLAN_REACTIONS = 4
 MAX_PLAN_REACTION_LABEL = 80
@@ -39,7 +42,56 @@ RESERVED_ATTENDANCE_EMOJIS = frozenset({
 
 
 class PlanReactionValidationError(ValueError):
-    """Raised when a Plan-reaction definition cannot be rendered safely."""
+    """Validation error with optional adapter-safe field metadata."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        field: str | None = None,
+        row_id: str | None = None,
+        emoji: str | None = None,
+    ):
+        super().__init__(message)
+        self.field = field
+        self.row_id = row_id
+        self.emoji = emoji
+
+
+@dataclass(frozen=True)
+class ResolvedPlanReaction:
+    emoji: str
+    label: str
+    source_keys: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class PlanReactionResolution:
+    rows: tuple[ResolvedPlanReaction, ...]
+    unconfigured_activity_names: tuple[str, ...] = ()
+
+    @property
+    def snapshot(self) -> list[dict[str, str]]:
+        return [
+            {"emoji": row.emoji, "label": row.label}
+            for row in self.rows
+        ]
+
+
+@dataclass(frozen=True)
+class PlanReactionCatalogOption:
+    option_id: str
+    emoji: str
+    label: str
+    source_keys: tuple[str, ...]
+
+
+@dataclass
+class _MutableResolvedReaction:
+    emoji: str
+    label: str
+    source_keys: list[str]
+    source_names: list[str]
 
 
 def _normalize_emoji(value: object, source: str) -> str:
@@ -93,35 +145,162 @@ def normalize_plan_reactions(value: object, *, source: str = "Plan reactions") -
     return normalized
 
 
-def resolve_default_plan_reactions(practice_types: Iterable, activities: Iterable) -> list[dict[str, str]]:
-    sources = [
-        (f"Workout Type {item.name}", item)
-        for item in sorted(practice_types or [], key=lambda item: item.name.lower())
-    ] + [
-        (f"Activity {item.name}", item)
-        for item in sorted(activities or [], key=lambda item: item.name.lower())
-    ]
-    merged: list[dict[str, str]] = []
-    by_emoji: dict[str, tuple[str, str]] = {}
-    for source_name, item in sources:
-        options = normalize_plan_reactions(
-            getattr(item, "default_plan_reactions", None) or [], source=source_name
+def _distinct_sources(items: Iterable, kind: str) -> list[tuple[str, object]]:
+    by_key = {}
+    for item in items or ():
+        source_id = getattr(item, "id", None)
+        name = str(getattr(item, "name", "") or "").strip()
+        if isinstance(source_id, bool) or not isinstance(source_id, int) or not name:
+            raise PlanReactionValidationError(f"Invalid {kind} reaction source")
+        by_key.setdefault(f"{kind}:{source_id}", item)
+    return sorted(by_key.items(), key=lambda pair: pair[1].name.casefold())
+
+
+def resolve_plan_reaction_defaults(
+    practice_types: Iterable,
+    activities: Iterable,
+) -> PlanReactionResolution:
+    type_sources = _distinct_sources(practice_types, "type")
+    activity_sources = _distinct_sources(activities, "activity")
+    applicable = type_sources + (
+        activity_sources if len(activity_sources) >= 2 else []
+    )
+    rows = []
+    by_emoji = {}
+    for source_key, item in applicable:
+        source_name = (
+            f"Workout Type {item.name}"
+            if source_key.startswith("type:")
+            else f"Activity {item.name}"
         )
-        for option in options:
-            previous = by_emoji.get(option["emoji"])
-            if previous and previous[0] != option["label"]:
+        for option in normalize_plan_reactions(
+            getattr(item, "default_plan_reactions", None) or [],
+            source=source_name,
+        ):
+            prior = by_emoji.get(option["emoji"])
+            if prior and prior.label != option["label"]:
+                prior_name = prior.source_names[0]
                 raise PlanReactionValidationError(
-                    f":{option['emoji']}: has conflicting labels in {previous[1]} and {source_name}"
+                    f":{option['emoji']}: has conflicting labels in "
+                    f"{prior_name} and {source_name}",
+                    field=(
+                        "activities"
+                        if source_key.startswith("activity:")
+                        else "types"
+                    ),
+                    emoji=option["emoji"],
                 )
-            if previous:
+            if prior:
+                prior.source_keys.append(source_key)
+                prior.source_names.append(source_name)
                 continue
-            by_emoji[option["emoji"]] = (option["label"], source_name)
-            merged.append(option)
-    if len(merged) > MAX_PLAN_REACTIONS:
+            mutable = _MutableResolvedReaction(
+                emoji=option["emoji"],
+                label=option["label"],
+                source_keys=[source_key],
+                source_names=[source_name],
+            )
+            by_emoji[option["emoji"]] = mutable
+            rows.append(mutable)
+    if len(rows) > MAX_PLAN_REACTIONS:
         raise PlanReactionValidationError(
-            f"Selected Activities and Workout Types produce more than {MAX_PLAN_REACTIONS} reactions"
+            "Selected Activities and Workout Types produce more than "
+            f"{MAX_PLAN_REACTIONS} reactions",
+            field="activities" if len(activity_sources) >= 2 else "types",
         )
-    return merged
+    return PlanReactionResolution(
+        rows=tuple(
+            ResolvedPlanReaction(
+                row.emoji,
+                row.label,
+                tuple(row.source_keys),
+            )
+            for row in rows
+        ),
+        unconfigured_activity_names=(
+            tuple(
+                item.name
+                for _, item in activity_sources
+                if not item.default_plan_reactions
+            )
+            if len(activity_sources) >= 2
+            else ()
+        ),
+    )
+
+
+def resolve_default_plan_reactions(
+    practice_types: Iterable,
+    activities: Iterable,
+) -> list[dict[str, str]]:
+    return resolve_plan_reaction_defaults(practice_types, activities).snapshot
+
+
+def build_plan_reaction_catalog(
+    practice_types: Iterable,
+    activities: Iterable,
+) -> tuple[PlanReactionCatalogOption, ...]:
+    merged = {}
+    ordered = []
+    for source_key, item in (
+        _distinct_sources(practice_types, "type")
+        + _distinct_sources(activities, "activity")
+    ):
+        source_name = (
+            f"Workout Type {item.name}"
+            if source_key.startswith("type:")
+            else f"Activity {item.name}"
+        )
+        for pair in normalize_plan_reactions(
+            item.default_plan_reactions or [],
+            source=source_name,
+        ):
+            key = (pair["emoji"], pair["label"])
+            if key in merged:
+                merged[key].append(source_key)
+                continue
+            merged[key] = [source_key]
+            ordered.append(key)
+    return tuple(
+        PlanReactionCatalogOption(
+            option_id=hashlib.sha256(
+                json.dumps(
+                    key,
+                    separators=(",", ":"),
+                    ensure_ascii=True,
+                ).encode()
+            ).hexdigest()[:16],
+            emoji=key[0],
+            label=key[1],
+            source_keys=tuple(merged[key]),
+        )
+        for key in ordered
+    )
+
+
+def validate_authorized_plan_reactions(
+    value,
+    *,
+    catalog,
+    protected_snapshot=(),
+    source="Plan reactions",
+) -> list[dict[str, str]]:
+    normalized = normalize_plan_reactions(value, source=source)
+    allowed = {item.emoji for item in catalog}
+    allowed.update(
+        item["emoji"]
+        for item in normalize_plan_reactions(
+            list(protected_snapshot or []),
+            source="Saved Plan reactions",
+        )
+    )
+    for row in normalized:
+        if row["emoji"] not in allowed:
+            raise PlanReactionValidationError(
+                f"{source}: :{row['emoji']}: is not configured in Settings",
+                emoji=row["emoji"],
+            )
+    return normalized
 
 
 def parse_plan_reaction_lines(text: str) -> list[dict[str, str]]:
