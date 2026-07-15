@@ -1,0 +1,188 @@
+{
+  "schema_version": 1,
+  "extraction": {
+    "channel_id": "C042G463AQ1",
+    "channel_name": "announcements-practices",
+    "extracted_at_utc": "2026-07-15T17:05:15Z",
+    "history_pages": 6,
+    "returned_messages": 1097,
+    "raw_extract_sha256": "cec3462bc1a7cb4aa2e09b66a26b0c6ec5aaa5448f5f3498a1f42ee22d19674e"
+  },
+  "review": {
+    "state": "approved",
+    "reviewed_on": "2026-07-15",
+    "reviewer": "announcement-format design review",
+    "note": "Approved normalization follows the current 2026 reaction grammar; observations are never promoted at runtime."
+  },
+  "evidence": [
+    {
+      "id": "weekly-multisport-2024-07-02",
+      "message_ts": "1719804485.929409",
+      "posted_at_central": "2024-06-30T22:28:05.929409-05:00",
+      "practice_date": "2024-07-02",
+      "message_sha256": "fbdb2025a273cbe3094c07789ab060415380c2365e1446ef0eeed0cb74ab564d",
+      "excerpt": "Multisport used runner, bike, and snowflake choices.",
+      "observed_activities": ["Run", "Bike", "Rollerski"],
+      "normalized_pairs": [],
+      "confidence": "supporting",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "trail-multisport-2024-08-27",
+      "message_ts": "1724770515.276249",
+      "posted_at_central": "2024-08-27T09:55:15.276249-05:00",
+      "practice_date": "2024-08-27",
+      "message_sha256": "43cca321704aea8233f52a7b92b27f5a4c13abb17b68c36c70230b9a0f045b91",
+      "excerpt": "Trail run, skate rollerski, or mountain bike used activity reactions.",
+      "observed_activities": ["Run", "Skate Rollerski", "Mountain Bike"],
+      "normalized_pairs": [
+        {"emoji": "mountain_bicyclist", "label": "mountain biker"}
+      ],
+      "confidence": "direct",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "summer-multisport-2025-07-13",
+      "message_ts": "1752029138.964859",
+      "posted_at_central": "2025-07-08T21:45:38.964859-05:00",
+      "practice_date": "2025-07-13",
+      "message_sha256": "01588553f8181603c6f3c9faf1002c38fc7ee22e22c19baff6c914deb89b67e3",
+      "excerpt": "Run, rollerski, and bike choices recurred on a multisport practice.",
+      "observed_activities": ["Run", "Rollerski", "Bike"],
+      "normalized_pairs": [],
+      "confidence": "supporting",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "interval-practice-2026-02-03",
+      "message_ts": "1770084008.307079",
+      "posted_at_central": "2026-02-02T20:00:08.307079-06:00",
+      "practice_date": "2026-02-03",
+      "message_sha256": "16d9ac0b60b5899eebe2356d37e6644d7d21f5cd5d5ed7112d2d44fa57db11ae",
+      "excerpt": "Interval practice root carried the endurance reaction option.",
+      "observed_workout_types": ["has_intervals"],
+      "normalized_pairs": [
+        {"emoji": "evergreen_tree", "label": "Endurance instead of intervals"}
+      ],
+      "confidence": "direct",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "interval-policy-2026-02-03",
+      "message_ts": "1770089703.614499",
+      "posted_at_central": "2026-02-02T21:35:03.614499-06:00",
+      "practice_date": "2026-02-03",
+      "message_sha256": "bac4188034ee0bce192ef2ad2b540a83cefc7f1e35fa3e1e0c124c403cc60d59",
+      "excerpt": "The channel states the endurance option appears on practices tagged with intervals.",
+      "observed_workout_types": ["has_intervals"],
+      "normalized_pairs": [
+        {"emoji": "evergreen_tree", "label": "Endurance instead of intervals"}
+      ],
+      "confidence": "policy",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "rollerski-run-2026-06-02",
+      "message_ts": "1780405202.087649",
+      "posted_at_central": "2026-06-02T08:00:02.087649-05:00",
+      "practice_date": "2026-06-02",
+      "message_sha256": "df829b451087835235022187ba851a4979440d8172abc6508100a292930243f1",
+      "excerpt": "Rollerski plus Run used new rollerskier, experienced rollerskier, and runner choices.",
+      "observed_activities": ["Skate/Classic Rollerski", "Run"],
+      "normalized_pairs": [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"},
+        {"emoji": "athletic_shoe", "label": "runner"}
+      ],
+      "confidence": "direct",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "run-bike-rollerski-2026-06-16",
+      "message_ts": "1781614801.941199",
+      "posted_at_central": "2026-06-16T08:00:01.941199-05:00",
+      "practice_date": "2026-06-16",
+      "message_sha256": "d07c2e272e61a17ced5a60d92d2f69b20fd547fe7aa1bd5a0ec23c608332c83c",
+      "excerpt": "Run, Bike, and Skate/Classic Rollerski used a bike activity choice.",
+      "observed_activities": ["Run", "Bike", "Skate/Classic Rollerski"],
+      "normalized_pairs": [
+        {"emoji": "bike", "label": "bike"}
+      ],
+      "confidence": "direct",
+      "review_state": "approved_evidence"
+    },
+    {
+      "id": "rollerski-run-2026-07-07",
+      "message_ts": "1783429201.952879",
+      "posted_at_central": "2026-07-07T08:00:01.952879-05:00",
+      "practice_date": "2026-07-07",
+      "message_sha256": "8d36368cbbc1856c4f6c86ad71b46f80385f41c335a615da5b8c5a73b0b15ca7",
+      "excerpt": "Skate/Classic Rollerski plus Run repeated the approved three-choice grammar.",
+      "observed_activities": ["Skate/Classic Rollerski", "Run"],
+      "normalized_pairs": [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"},
+        {"emoji": "athletic_shoe", "label": "runner"}
+      ],
+      "confidence": "direct",
+      "review_state": "approved_evidence"
+    }
+  ],
+  "approved_targets": [
+    {
+      "kind": "workout_type_selector",
+      "selector": {"has_intervals": true},
+      "defaults": [
+        {"emoji": "evergreen_tree", "label": "Endurance instead of intervals"}
+      ],
+      "evidence_ids": ["interval-practice-2026-02-03", "interval-policy-2026-02-03"]
+    },
+    {
+      "kind": "activity",
+      "name": "Run",
+      "defaults": [{"emoji": "athletic_shoe", "label": "runner"}],
+      "evidence_ids": ["rollerski-run-2026-06-02", "rollerski-run-2026-07-07"]
+    },
+    {
+      "kind": "activity",
+      "name": "Bike",
+      "defaults": [{"emoji": "bike", "label": "bike"}],
+      "evidence_ids": ["run-bike-rollerski-2026-06-16"]
+    },
+    {
+      "kind": "activity",
+      "name": "Mountain Bike",
+      "defaults": [{"emoji": "mountain_bicyclist", "label": "mountain biker"}],
+      "evidence_ids": ["trail-multisport-2024-08-27"]
+    },
+    {
+      "kind": "activity",
+      "name": "Classic Rollerski",
+      "defaults": [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"}
+      ],
+      "normalization_note": "Approved current Rollerski grammar applies to each exact Rollerski Activity.",
+      "evidence_ids": ["rollerski-run-2026-06-02", "rollerski-run-2026-07-07"]
+    },
+    {
+      "kind": "activity",
+      "name": "Skate Rollerski",
+      "defaults": [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"}
+      ],
+      "normalization_note": "Approved current Rollerski grammar applies to each exact Rollerski Activity.",
+      "evidence_ids": ["rollerski-run-2026-06-02", "rollerski-run-2026-07-07"]
+    },
+    {
+      "kind": "activity",
+      "name": "Skate/Classic Rollerski",
+      "defaults": [
+        {"emoji": "hatching_chick", "label": "new rollerskier"},
+        {"emoji": "older_adult::skin-tone-4", "label": "experienced rollerskier"}
+      ],
+      "evidence_ids": ["rollerski-run-2026-06-02", "rollerski-run-2026-07-07"]
+    }
+  ]
+}
