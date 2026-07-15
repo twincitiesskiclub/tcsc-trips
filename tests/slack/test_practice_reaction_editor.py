@@ -27,6 +27,7 @@ from app.slack.practice_reaction_editor import (
     REMOVE_ACTION_ID,
     RESTORE_ACTION_ID,
     UNDO_ACTION_ID,
+    _validate_preview_config,
     apply_current_view_values,
     build_practice_reaction_blocks,
     build_retryable_practice_reaction_error_view,
@@ -81,6 +82,15 @@ PREVIEW_CONFIG = {
     "eligible_leads": [],
 }
 
+_TEST_METADATA_MAX_DEPTH = 32
+_PREVIEW_OPTION_COLLECTIONS = (
+    "locations",
+    "practice_types",
+    "activities",
+    "eligible_coaches",
+    "eligible_leads",
+)
+
 
 def _blocks_by_id(blocks):
     return {
@@ -102,6 +112,38 @@ def _action_ids(blocks):
         if "action_id" in accessory:
             action_ids.append(accessory["action_id"])
     return action_ids
+
+
+def _nested_list(depth):
+    value = "leaf"
+    for _ in range(depth):
+        value = [value]
+    return value
+
+
+def _preview_option(collection, item_id, *, name="x", slack_uid="U"):
+    if collection == "locations":
+        return {"id": item_id, "name": name}
+    if collection in {"practice_types", "activities"}:
+        return {
+            "id": item_id,
+            "name": name,
+            "default_plan_reactions": [],
+        }
+    return {
+        "user_id": item_id,
+        "name": name,
+        "slack_uid": slack_uid,
+    }
+
+
+def _isolated_preview_config(collection, items):
+    config = copy.deepcopy(PREVIEW_CONFIG)
+    for key in _PREVIEW_OPTION_COLLECTIONS:
+        config[key] = []
+    config["slot_defaults"] = {}
+    config[collection] = items
+    return config
 
 
 @pytest.fixture
@@ -429,6 +471,117 @@ def test_unconfigured_context_and_blocking_error_escape_mrkdwn(empty_state):
     assert ADD_ACTION_ID not in _action_ids(blocks)
 
 
+def test_dynamic_mrkdwn_is_bounded_after_nine_name_escape_expansion(
+    empty_state,
+):
+    empty_state.unconfigured_activity_names = tuple(
+        f"{index}{'&' * 74}" for index in range(9)
+    )
+    empty_state.blocking_error = "&" * 1000
+
+    blocks = build_practice_reaction_blocks(
+        empty_state,
+        CATALOG,
+        allow_restore=False,
+    )
+    text_objects = [
+        value
+        for block in blocks
+        for value in (
+            block.get("text"),
+            *block.get("elements", []),
+        )
+        if isinstance(value, dict)
+        and value.get("type") in {"mrkdwn", "plain_text"}
+    ]
+
+    assert all(len(value["text"]) <= 3000 for value in text_objects)
+    assert _blocks_by_id(blocks)["practice_reaction_error"]["text"][
+        "text"
+    ].endswith("…")
+    context = _blocks_by_id(blocks)["practice_reaction_unconfigured"]
+    assert context["elements"][0]["text"].endswith("…")
+
+
+def test_decoded_row_ids_respect_exact_slack_block_id_boundary(editor_state):
+    longest_prefix = "practice_reaction_controls_"
+    max_row_id_chars = 255 - len(longest_prefix)
+    row_id = "r" + "1" * (max_row_id_chars - 1)
+    encoded = encode_practice_reaction_metadata(
+        mode="create",
+        context={
+            "date": "2026-07-14",
+            "channel_id": None,
+            "message_ts": None,
+        },
+        state=editor_state,
+    )
+    envelope = json.loads(encoded)
+    envelope["s"]["rows"][0]["row_id"] = row_id
+    envelope["s"]["next_row_number"] = int(row_id[1:]) + 1
+    boundary = json.dumps(envelope, separators=(",", ":"))
+
+    decoded = decode_practice_reaction_metadata(boundary)[2]
+    blocks = build_practice_reaction_blocks(decoded, CATALOG, allow_restore=False)
+    assert max(len(block["block_id"]) for block in blocks) == 255
+
+    one_past_row_id = f"{row_id}1"
+    envelope["s"]["rows"][0]["row_id"] = one_past_row_id
+    envelope["s"]["next_row_number"] = int(one_past_row_id[1:]) + 1
+    one_past = json.dumps(envelope, separators=(",", ":"))
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        decode_practice_reaction_metadata(one_past)
+
+    decoded.rows[0].row_id = one_past_row_id
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        build_practice_reaction_blocks(
+            decoded,
+            CATALOG,
+            allow_restore=False,
+        )
+
+
+def test_prospective_row_id_respects_exact_slack_block_id_boundary(empty_state):
+    max_row_id_chars = 255 - len("practice_reaction_controls_")
+    empty_state.next_row_number = int("1" * (max_row_id_chars - 1))
+    encoded = encode_practice_reaction_metadata(
+        mode="create",
+        context={
+            "date": "2026-07-14",
+            "channel_id": None,
+            "message_ts": None,
+        },
+        state=empty_state,
+    )
+    decoded = decode_practice_reaction_metadata(encoded)[2]
+    build_practice_reaction_blocks(decoded, CATALOG, allow_restore=False)
+
+    one_past = copy.deepcopy(empty_state)
+    one_past.next_row_number = int("1" * max_row_id_chars)
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        encode_practice_reaction_metadata(
+            mode="create",
+            context={
+                "date": "2026-07-14",
+                "channel_id": None,
+                "message_ts": None,
+            },
+            state=one_past,
+        )
+
+    envelope = json.loads(encoded)
+    envelope["s"]["next_row_number"] = one_past.next_row_number
+    hostile = json.dumps(envelope, separators=(",", ":"))
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        decode_practice_reaction_metadata(hostile)
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        build_practice_reaction_blocks(
+            one_past,
+            CATALOG,
+            allow_restore=False,
+        )
+
+
 def test_metadata_round_trip_is_versioned_bounded_and_preview_has_no_target(
     editor_state,
 ):
@@ -460,6 +613,88 @@ def test_metadata_rejects_unknown_version_and_oversize(editor_state):
             state=editor_state,
             preview_config={"padding": "x" * 3000},
         )
+
+
+def test_metadata_encode_accepts_depth_boundary_and_rejects_one_past(
+    editor_state,
+):
+    at_boundary = {
+        "date": "2026-07-14",
+        "channel_id": None,
+        "message_ts": None,
+        "silent": {
+            "nested": _nested_list(_TEST_METADATA_MAX_DEPTH - 2),
+        },
+    }
+    encoded = encode_practice_reaction_metadata(
+        mode="create",
+        context=at_boundary,
+        state=editor_state,
+    )
+    assert decode_practice_reaction_metadata(encoded)[1] == at_boundary
+
+    one_past = copy.deepcopy(at_boundary)
+    one_past["silent"] = {
+        "nested": _nested_list(_TEST_METADATA_MAX_DEPTH - 1),
+    }
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        encode_practice_reaction_metadata(
+            mode="create",
+            context=one_past,
+            state=editor_state,
+        )
+
+
+def test_metadata_decode_normalizes_size_valid_parser_recursion(editor_state):
+    encoded = encode_practice_reaction_metadata(
+        mode="create",
+        context={
+            "date": "2026-07-14",
+            "channel_id": None,
+            "message_ts": None,
+        },
+        state=editor_state,
+    )
+    marker = '"message_ts":null}'
+    assert marker in encoded
+    nested_json = "[" * 1100 + '"leaf"' + "]" * 1100
+    hostile = encoded.replace(
+        marker,
+        f'"message_ts":null,"silent":{nested_json}}}',
+        1,
+    )
+    assert len(hostile) < 3000
+
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        decode_practice_reaction_metadata(hostile)
+
+
+def test_preview_metadata_depth_is_adapter_safe_for_encode_and_decode(
+    editor_state,
+):
+    config = copy.deepcopy(PREVIEW_CONFIG)
+    config["slot_defaults"]["nested"] = _nested_list(700)
+
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        encode_practice_reaction_metadata(
+            mode="preview",
+            context={"preview": True},
+            state=editor_state,
+            preview_config=config,
+        )
+
+    valid = encode_practice_reaction_metadata(
+        mode="preview",
+        context={"preview": True},
+        state=editor_state,
+        preview_config=PREVIEW_CONFIG,
+    )
+    envelope = json.loads(valid)
+    envelope["p"] = config
+    hostile = json.dumps(envelope, separators=(",", ":"))
+    assert len(hostile) < 3000
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        decode_practice_reaction_metadata(hostile)
 
 
 @pytest.mark.parametrize(
@@ -504,6 +739,131 @@ def test_metadata_rejects_preview_database_target_during_encode(editor_state):
             context={"preview": True},
             state=editor_state,
             preview_config=preview_config,
+        )
+
+
+@pytest.mark.parametrize("collection", _PREVIEW_OPTION_COLLECTIONS)
+def test_preview_option_collections_accept_100_and_reject_101(collection):
+    items = [
+        _preview_option(collection, index + 1)
+        for index in range(100)
+    ]
+    config = _isolated_preview_config(collection, items)
+
+    _validate_preview_config(config)
+    config[collection].append(_preview_option(collection, 101))
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        _validate_preview_config(config)
+
+
+@pytest.mark.parametrize("collection", _PREVIEW_OPTION_COLLECTIONS)
+def test_preview_option_names_accept_75_and_reject_76(collection):
+    config = _isolated_preview_config(
+        collection,
+        [_preview_option(collection, 1, name="x" * 75)],
+    )
+
+    _validate_preview_config(config)
+    config[collection][0]["name"] = "x" * 76
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        _validate_preview_config(config)
+
+
+@pytest.mark.parametrize("collection", _PREVIEW_OPTION_COLLECTIONS)
+def test_preview_option_values_accept_150_and_reject_151(collection):
+    boundary_id = int("1" * 150)
+    config = _isolated_preview_config(
+        collection,
+        [_preview_option(collection, boundary_id)],
+    )
+
+    _validate_preview_config(config)
+    one_past_id = int("1" * 151)
+    id_key = "user_id" if collection.startswith("eligible_") else "id"
+    config[collection][0][id_key] = one_past_id
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        _validate_preview_config(config)
+
+
+@pytest.mark.parametrize("collection", ("eligible_coaches", "eligible_leads"))
+def test_preview_slack_uids_accept_150_and_reject_151(collection):
+    config = _isolated_preview_config(
+        collection,
+        [_preview_option(collection, 1, slack_uid="U" * 150)],
+    )
+
+    _validate_preview_config(config)
+    config[collection][0]["slack_uid"] = "U" * 151
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        _validate_preview_config(config)
+
+
+def _complete_preview_defaults_config():
+    config = copy.deepcopy(PREVIEW_CONFIG)
+    config["eligible_coaches"] = [
+        {"user_id": 2, "name": "Coach", "slack_uid": "U2"}
+    ]
+    config["eligible_leads"] = [
+        {"user_id": 3, "name": "Lead", "slack_uid": "U3"}
+    ]
+    config["slot_defaults"] = {
+        "location_id": 1,
+        "workout": "x",
+        "activity_ids": [1],
+        "type_ids": [1],
+        "coach_ids": [2],
+        "lead_ids": [3],
+        "is_dark_practice": True,
+    }
+    return config
+
+
+def test_preview_slot_defaults_accept_complete_schema_and_workout_boundary():
+    config = _complete_preview_defaults_config()
+    config["slot_defaults"]["workout"] = "x" * 2500
+
+    _validate_preview_config(config)
+    config["slot_defaults"]["workout"] = "x" * 2501
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        _validate_preview_config(config)
+
+
+@pytest.mark.parametrize(
+    ("key", "value"),
+    [
+        ("unknown", "value"),
+        ("location_id", 1.0),
+        ("workout", {"nested": "value"}),
+        ("workout", 1.0),
+        ("activity_ids", 1.0),
+        ("type_ids", [1.0]),
+        ("coach_ids", "2"),
+        ("lead_ids", [True]),
+        ("is_dark_practice", 1),
+    ],
+)
+def test_preview_slot_defaults_reject_unknown_keys_and_wrong_types(key, value):
+    config = _complete_preview_defaults_config()
+    config["slot_defaults"][key] = value
+
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        _validate_preview_config(config)
+
+
+@pytest.mark.parametrize("workout", ({"nested": "value"}, 1.0))
+def test_preview_metadata_encode_rejects_wrong_type_workout(
+    editor_state,
+    workout,
+):
+    config = copy.deepcopy(PREVIEW_CONFIG)
+    config["slot_defaults"]["workout"] = workout
+
+    with pytest.raises(PlanReactionValidationError, match="Preview"):
+        encode_practice_reaction_metadata(
+            mode="preview",
+            context={"preview": True},
+            state=editor_state,
+            preview_config=config,
         )
 
 

@@ -608,6 +608,7 @@ def _deserialize_plan_reaction_editor_state(
         raise _metadata_error()
     if (
         isinstance(payload["version"], bool)
+        or not isinstance(payload["version"], int)
         or payload["version"] != PLAN_REACTION_EDITOR_VERSION
     ):
         raise _metadata_error()

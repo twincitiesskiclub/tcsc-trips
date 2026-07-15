@@ -945,6 +945,7 @@ def test_metadata_rejects_orphan_or_preemptive_suppression(payload):
         {"version": PLAN_REACTION_EDITOR_VERSION},
         _empty_metadata(extra="hostile"),
         _empty_metadata(version=99),
+        _empty_metadata(version=1.0),
         _empty_metadata(rows="not rows"),
         _empty_metadata(rows=["not a row"]),
         _empty_metadata(
@@ -1003,6 +1004,7 @@ def test_metadata_rejects_orphan_or_preemptive_suppression(payload):
         "missing-fields",
         "unknown-field",
         "unknown-version",
+        "float-version",
         "rows-not-list",
         "row-not-mapping",
         "duplicate-row-id",

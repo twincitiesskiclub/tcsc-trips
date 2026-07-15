@@ -26,8 +26,14 @@ from app.practices.plan_reactions import (
 
 PRACTICE_REACTION_METADATA_VERSION = 1
 SLACK_PRIVATE_METADATA_MAX_CHARS = 3000
-SLACK_REACTION_CATALOG_MAX_OPTIONS = 100
+SLACK_STATIC_SELECT_MAX_OPTIONS = 100
+SLACK_REACTION_CATALOG_MAX_OPTIONS = SLACK_STATIC_SELECT_MAX_OPTIONS
 SLACK_OPTION_TEXT_MAX_CHARS = 75
+SLACK_OPTION_VALUE_MAX_CHARS = 150
+SLACK_TEXT_OBJECT_MAX_CHARS = 3000
+SLACK_BLOCK_ID_MAX_CHARS = 255
+PREVIEW_WORKOUT_MAX_CHARS = 2500
+_METADATA_MAX_DEPTH = 32
 
 DESCRIPTION_ACTION_ID = "practice_reaction_description"
 REMOVE_ACTION_ID = "practice_reaction_remove"
@@ -69,6 +75,21 @@ _PREVIEW_DATABASE_TARGET_KEYS = {
     "table_id",
     "target_id",
 }
+_PREVIEW_SLOT_DEFAULT_KEYS = {
+    "location_id",
+    "workout",
+    "activity_ids",
+    "type_ids",
+    "coach_ids",
+    "lead_ids",
+    "is_dark_practice",
+}
+_ROW_BLOCK_ID_PREFIXES = (
+    "practice_reaction_key_",
+    "practice_reaction_row_",
+    "practice_reaction_controls_",
+    "practice_reaction_removed_",
+)
 
 
 def _mrkdwn_escape(value: object) -> str:
@@ -127,6 +148,7 @@ def build_practice_reaction_blocks(
 ) -> list[dict]:
     """Render validated reaction working state as bounded Block Kit blocks."""
 
+    _validate_slack_row_block_ids(state)
     blocks = []
     for row in state.rows:
         shortcode = f":{row.emoji}:"
@@ -135,6 +157,7 @@ def build_practice_reaction_blocks(
             if row.label:
                 text = f"{text}\n{_mrkdwn_escape(row.label)}"
             text = f"{text}\n_Removed_"
+            text = _ellipsize(text, SLACK_TEXT_OBJECT_MAX_CHARS)
             blocks.append(
                 {
                     "type": "section",
@@ -211,9 +234,10 @@ def build_practice_reaction_blocks(
         )
 
     if state.unconfigured_activity_names:
-        names = ", ".join(
-            _mrkdwn_escape(name)
-            for name in state.unconfigured_activity_names
+        names = ", ".join(state.unconfigured_activity_names)
+        message = _mrkdwn_escape(
+            "No reaction pairs are configured for selected "
+            f"Activities: {names}."
         )
         blocks.append(
             {
@@ -222,9 +246,9 @@ def build_practice_reaction_blocks(
                 "elements": [
                     {
                         "type": "mrkdwn",
-                        "text": (
-                            "No reaction pairs are configured for selected "
-                            f"Activities: {names}."
+                        "text": _ellipsize(
+                            message,
+                            SLACK_TEXT_OBJECT_MAX_CHARS,
                         ),
                     }
                 ],
@@ -238,7 +262,10 @@ def build_practice_reaction_blocks(
                 "block_id": "practice_reaction_error",
                 "text": {
                     "type": "mrkdwn",
-                    "text": _mrkdwn_escape(state.blocking_error),
+                    "text": _ellipsize(
+                        _mrkdwn_escape(state.blocking_error),
+                        SLACK_TEXT_OBJECT_MAX_CHARS,
+                    ),
                 },
             }
         )
@@ -367,36 +394,58 @@ def _metadata_error(message: str = "Invalid practice reaction metadata"):
     return PlanReactionValidationError(message)
 
 
-def _validate_json_tree(value, *, path: str = "metadata") -> None:
-    if value is None or isinstance(value, (str, int, bool)):
-        return
-    if isinstance(value, float):
-        if not math.isfinite(value):
+def _validate_slack_row_block_ids(state: PlanReactionEditorState) -> None:
+    row_ids = [row.row_id for row in state.rows]
+    try:
+        row_ids.append(f"r{state.next_row_number}")
+    except (TypeError, ValueError, RecursionError):
+        raise _metadata_error() from None
+    for row_id in row_ids:
+        if not isinstance(row_id, str):
             raise _metadata_error()
-        return
-    if isinstance(value, list):
-        for index, item in enumerate(value):
-            _validate_json_tree(item, path=f"{path}[{index}]")
-        return
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            if not isinstance(key, str):
+        if any(
+            len(prefix) + len(row_id) > SLACK_BLOCK_ID_MAX_CHARS
+            for prefix in _ROW_BLOCK_ID_PREFIXES
+        ):
+            raise _metadata_error()
+
+
+def _validate_json_tree(value) -> None:
+    pending = [(value, 0)]
+    while pending:
+        item, depth = pending.pop()
+        if depth > _METADATA_MAX_DEPTH:
+            raise _metadata_error()
+        if item is None or isinstance(item, (str, int, bool)):
+            continue
+        if isinstance(item, float):
+            if not math.isfinite(item):
                 raise _metadata_error()
-            _validate_json_tree(item, path=f"{path}.{key}")
-        return
-    raise _metadata_error()
+            continue
+        if isinstance(item, list):
+            pending.extend((child, depth + 1) for child in item)
+            continue
+        if isinstance(item, Mapping):
+            for key, child in item.items():
+                if not isinstance(key, str):
+                    raise _metadata_error()
+                pending.append((child, depth + 1))
+            continue
+        raise _metadata_error()
 
 
 def _contains_preview_database_target(value) -> bool:
-    if isinstance(value, Mapping):
-        for key, item in value.items():
-            normalized = str(key).strip().lower().replace("-", "_")
-            if normalized in _PREVIEW_DATABASE_TARGET_KEYS:
-                return True
-            if _contains_preview_database_target(item):
-                return True
-    elif isinstance(value, list):
-        return any(_contains_preview_database_target(item) for item in value)
+    pending = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, Mapping):
+            for key, child in item.items():
+                normalized = key.strip().lower().replace("-", "_")
+                if normalized in _PREVIEW_DATABASE_TARGET_KEYS:
+                    return True
+                pending.append(child)
+        elif isinstance(item, list):
+            pending.extend(item)
     return False
 
 
@@ -406,8 +455,27 @@ def _require_positive_int(value) -> int:
     return value
 
 
+def _require_preview_option_id(value) -> int:
+    result = _require_positive_int(value)
+    if len(str(result)) > SLACK_OPTION_VALUE_MAX_CHARS:
+        raise _metadata_error("Invalid Preview reaction configuration")
+    return result
+
+
+def _validate_preview_option_name(value) -> None:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or len(value) > SLACK_OPTION_TEXT_MAX_CHARS
+    ):
+        raise _metadata_error("Invalid Preview reaction configuration")
+
+
 def _validate_preview_sources(value, *, kind: str) -> set[int]:
-    if not isinstance(value, list):
+    if (
+        not isinstance(value, list)
+        or len(value) > SLACK_STATIC_SELECT_MAX_OPTIONS
+    ):
         raise _metadata_error("Invalid Preview reaction configuration")
     ids = set()
     for source in value:
@@ -417,12 +485,11 @@ def _validate_preview_sources(value, *, kind: str) -> set[int]:
             "default_plan_reactions",
         }:
             raise _metadata_error("Invalid Preview reaction configuration")
-        source_id = _require_positive_int(source["id"])
+        source_id = _require_preview_option_id(source["id"])
         if source_id in ids:
             raise _metadata_error("Invalid Preview reaction configuration")
         ids.add(source_id)
-        if not isinstance(source["name"], str) or not source["name"].strip():
-            raise _metadata_error("Invalid Preview reaction configuration")
+        _validate_preview_option_name(source["name"])
         pairs = source["default_plan_reactions"]
         try:
             normalized = normalize_plan_reactions(
@@ -439,7 +506,10 @@ def _validate_preview_sources(value, *, kind: str) -> set[int]:
 
 
 def _validate_preview_people(value) -> set[int]:
-    if not isinstance(value, list):
+    if (
+        not isinstance(value, list)
+        or len(value) > SLACK_STATIC_SELECT_MAX_OPTIONS
+    ):
         raise _metadata_error("Invalid Preview reaction configuration")
     ids = set()
     for person in value:
@@ -449,15 +519,15 @@ def _validate_preview_people(value) -> set[int]:
             "slack_uid",
         }:
             raise _metadata_error("Invalid Preview reaction configuration")
-        user_id = _require_positive_int(person["user_id"])
+        user_id = _require_preview_option_id(person["user_id"])
         if user_id in ids:
             raise _metadata_error("Invalid Preview reaction configuration")
         ids.add(user_id)
-        if not isinstance(person["name"], str) or not person["name"].strip():
-            raise _metadata_error("Invalid Preview reaction configuration")
+        _validate_preview_option_name(person["name"])
         if (
             not isinstance(person["slack_uid"], str)
             or not person["slack_uid"].strip()
+            or len(person["slack_uid"]) > SLACK_OPTION_VALUE_MAX_CHARS
         ):
             raise _metadata_error("Invalid Preview reaction configuration")
     return ids
@@ -468,7 +538,7 @@ def _validate_id_selection(value, *, allowed: set[int]) -> None:
         raise _metadata_error("Invalid Preview reaction configuration")
     selected = []
     for item in value:
-        selected.append(_require_positive_int(item))
+        selected.append(_require_preview_option_id(item))
     if len(selected) != len(set(selected)) or not set(selected) <= allowed:
         raise _metadata_error("Invalid Preview reaction configuration")
 
@@ -476,6 +546,7 @@ def _validate_id_selection(value, *, allowed: set[int]) -> None:
 def _validate_preview_config(config) -> None:
     if not isinstance(config, Mapping) or set(config) != _PREVIEW_CONFIG_KEYS:
         raise _metadata_error("Invalid Preview reaction configuration")
+    _validate_json_tree(config)
     if _contains_preview_database_target(config):
         raise _metadata_error("Preview metadata cannot contain a database target")
     try:
@@ -489,18 +560,20 @@ def _validate_preview_config(config) -> None:
         raise _metadata_error("Invalid Preview reaction configuration")
 
     locations = config["locations"]
-    if not isinstance(locations, list):
+    if (
+        not isinstance(locations, list)
+        or len(locations) > SLACK_STATIC_SELECT_MAX_OPTIONS
+    ):
         raise _metadata_error("Invalid Preview reaction configuration")
     location_ids = set()
     for location in locations:
         if not isinstance(location, Mapping) or set(location) != {"id", "name"}:
             raise _metadata_error("Invalid Preview reaction configuration")
-        location_id = _require_positive_int(location["id"])
+        location_id = _require_preview_option_id(location["id"])
         if location_id in location_ids:
             raise _metadata_error("Invalid Preview reaction configuration")
         location_ids.add(location_id)
-        if not isinstance(location["name"], str) or not location["name"].strip():
-            raise _metadata_error("Invalid Preview reaction configuration")
+        _validate_preview_option_name(location["name"])
 
     type_ids = _validate_preview_sources(
         config["practice_types"],
@@ -514,12 +587,22 @@ def _validate_preview_config(config) -> None:
     lead_ids = _validate_preview_people(config["eligible_leads"])
 
     defaults = config["slot_defaults"]
-    if not isinstance(defaults, Mapping):
+    if (
+        not isinstance(defaults, Mapping)
+        or not set(defaults) <= _PREVIEW_SLOT_DEFAULT_KEYS
+    ):
         raise _metadata_error("Invalid Preview reaction configuration")
-    _validate_json_tree(defaults)
     if "location_id" in defaults:
-        if _require_positive_int(defaults["location_id"]) not in location_ids:
+        if (
+            _require_preview_option_id(defaults["location_id"])
+            not in location_ids
+        ):
             raise _metadata_error("Invalid Preview reaction configuration")
+    if "workout" in defaults and (
+        not isinstance(defaults["workout"], str)
+        or len(defaults["workout"]) > PREVIEW_WORKOUT_MAX_CHARS
+    ):
+        raise _metadata_error("Invalid Preview reaction configuration")
     for key, allowed in (
         ("activity_ids", activity_ids),
         ("type_ids", type_ids),
@@ -528,6 +611,11 @@ def _validate_preview_config(config) -> None:
     ):
         if key in defaults:
             _validate_id_selection(defaults[key], allowed=allowed)
+    if "is_dark_practice" in defaults and not isinstance(
+        defaults["is_dark_practice"],
+        bool,
+    ):
+        raise _metadata_error("Invalid Preview reaction configuration")
 
 
 def _validate_context(mode: str, context) -> None:
@@ -590,17 +678,23 @@ def encode_practice_reaction_metadata(
         raise _metadata_error()
     if mode == "preview" and preview_config is None:
         raise _metadata_error("Preview reaction metadata requires Preview configuration")
-
-    envelope = {
-        "v": PRACTICE_REACTION_METADATA_VERSION,
-        "m": mode,
-        "c": copy.deepcopy(dict(context)),
-        "s": _validated_serialized_state(state),
-    }
     if preview_config is not None:
-        envelope["p"] = copy.deepcopy(preview_config)
-    _validate_json_tree(envelope)
-    raw = json.dumps(envelope, separators=(",", ":"), ensure_ascii=True)
+        _validate_json_tree(preview_config)
+
+    _validate_slack_row_block_ids(state)
+    serialized_state = _validated_serialized_state(state)
+    try:
+        envelope = {
+            "v": PRACTICE_REACTION_METADATA_VERSION,
+            "m": mode,
+            "c": copy.deepcopy(dict(context)),
+            "s": serialized_state,
+        }
+        if preview_config is not None:
+            envelope["p"] = copy.deepcopy(preview_config)
+        raw = json.dumps(envelope, separators=(",", ":"), ensure_ascii=True)
+    except (TypeError, ValueError, RecursionError):
+        raise _metadata_error() from None
     if len(raw) > SLACK_PRIVATE_METADATA_MAX_CHARS:
         raise PlanReactionValidationError(
             "Practice reaction metadata exceeds Slack's 3,000-character limit"
@@ -634,7 +728,7 @@ def decode_practice_reaction_metadata(raw: str):
             object_pairs_hook=_object_without_duplicate_keys,
             parse_constant=_reject_json_constant,
         )
-    except (TypeError, ValueError, json.JSONDecodeError):
+    except (TypeError, ValueError, RecursionError, json.JSONDecodeError):
         raise _metadata_error() from None
     if not isinstance(envelope, Mapping):
         raise _metadata_error()
@@ -660,6 +754,7 @@ def decode_practice_reaction_metadata(raw: str):
     if mode == "preview":
         _validate_preview_config(preview_config)
     state = deserialize_plan_reaction_editor_state(envelope["s"])
+    _validate_slack_row_block_ids(state)
     return mode, copy.deepcopy(dict(context)), state, copy.deepcopy(preview_config)
 
 
@@ -836,7 +931,10 @@ def build_retryable_practice_reaction_error_view(
             "block_id": "practice_reaction_lookup_error",
             "text": {
                 "type": "mrkdwn",
-                "text": _mrkdwn_escape(message),
+                "text": _ellipsize(
+                    _mrkdwn_escape(message),
+                    SLACK_TEXT_OBJECT_MAX_CHARS,
+                ),
             },
         },
     )

@@ -126,6 +126,24 @@ def test_create_uses_structured_reactions_and_dispatching_selectors():
     assert preview is None
 
 
+def test_create_ellipsizes_location_activity_and_type_option_text():
+    long_name = "x" * 76
+    modal = build_practice_create_modal(
+        datetime(2026, 7, 14, 18, 15),
+        "18:15",
+        locations=[(10, long_name)],
+        all_activities=[(1, long_name)],
+        all_types=[(1, long_name)],
+        **_reaction_inputs(),
+    )
+    blocks = _blocks_by_id(modal)
+
+    for block_id in ("location_block", "activities_block", "types_block"):
+        option = blocks[block_id]["element"]["options"][0]
+        assert len(option["text"]["text"]) == 75
+        assert option["text"]["text"].endswith("…")
+
+
 def test_create_submission_uses_edited_visible_plan_value():
     fields, errors = _parse_practice_authoring_values(
         _authoring_values(

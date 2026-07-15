@@ -10,10 +10,17 @@ from app.practices.plan_reactions import (
     build_plan_reaction_catalog,
 )
 from app.slack.practice_reaction_editor import (
+    SLACK_OPTION_TEXT_MAX_CHARS,
     apply_current_view_values,
     build_practice_reaction_blocks,
     encode_practice_reaction_metadata,
 )
+
+
+def _bounded_option_text(value: str) -> str:
+    if len(value) <= SLACK_OPTION_TEXT_MAX_CHARS:
+        return value
+    return f"{value[: SLACK_OPTION_TEXT_MAX_CHARS - 1]}…"
 
 
 def _build_practice_flags_element(practice=None, *, is_dark_practice=False, has_social=False) -> dict:
@@ -87,7 +94,10 @@ def _build_person_multi_select(
         multi_static_select element dict
     """
     options = [
-        {"text": {"type": "plain_text", "text": name[:75]}, "value": str(uid)}
+        {
+            "text": {"type": "plain_text", "text": _bounded_option_text(name)},
+            "value": str(uid),
+        }
         for uid, name, _ in eligible_users
     ]
 
@@ -98,8 +108,10 @@ def _build_person_multi_select(
     for assignment in current_assignments:
         aid = str(assignment.user_id)
         if aid not in eligible_ids:
-            label = (getattr(assignment, "display_name", None)
-                     or f"Unknown (uid {assignment.user_id})")[:75]
+            label = _bounded_option_text(
+                getattr(assignment, "display_name", None)
+                or f"Unknown (uid {assignment.user_id})"
+            )
             options.append({
                 "text": {"type": "plain_text", "text": label},
                 "value": aid,
@@ -141,7 +153,10 @@ def _build_activity_type_multi_select(
     """
     options = [
         {
-            "text": {"type": "plain_text", "text": name},
+            "text": {
+                "type": "plain_text",
+                "text": _bounded_option_text(name),
+            },
             "value": str(id)
         }
         for id, name in all_options
@@ -482,7 +497,10 @@ def build_practice_edit_full_modal(
     if locations:
         for loc_id, loc_name in locations:
             option = {
-                "text": {"type": "plain_text", "text": loc_name},
+                "text": {
+                    "type": "plain_text",
+                    "text": _bounded_option_text(loc_name),
+                },
                 "value": str(loc_id)
             }
             location_options.append(option)
@@ -730,7 +748,10 @@ def build_practice_create_modal(
     if locations:
         for loc_id, loc_name in locations:
             option = {
-                "text": {"type": "plain_text", "text": loc_name},
+                "text": {
+                    "type": "plain_text",
+                    "text": _bounded_option_text(loc_name),
+                },
                 "value": str(loc_id)
             }
             location_options.append(option)

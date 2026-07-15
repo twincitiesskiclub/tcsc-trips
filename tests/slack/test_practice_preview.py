@@ -50,7 +50,15 @@ def test_preview_wraps_the_structured_production_create_modal():
         "text": "Close Preview",
     }
     assert modal["callback_id"] == "practice_preview"
-    assert modal["private_metadata"]
+    assert len(modal["blocks"]) == 22
+    assert len(modal["private_metadata"]) == 1849
+    options = [
+        option
+        for block in modal["blocks"]
+        for option in block.get("element", {}).get("options", [])
+    ]
+    assert all(len(option["text"]["text"]) <= 75 for option in options)
+    assert all(len(option["value"]) <= 150 for option in options)
 
 
 def test_preview_derives_four_rows_from_interval_run_and_rollerski_sources():
