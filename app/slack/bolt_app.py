@@ -40,12 +40,59 @@ _PRACTICE_PREVIEW_RETRY_TEXT = (
     ":warning: Could not open Practice Preview. Please try again."
 )
 
+
+class _AuthoritativePracticeReactionLoadError(Exception):
+    """Server-owned practice reaction data could not be loaded safely."""
+
 # Module-level variables
 bolt_app = None
 handler = None  # HTTP handler (for production)
 socket_mode_handler = None  # Socket Mode handler (for local dev)
 _socket_mode_started = False
-_flask_app = None  # Reference to Flask app for Socket Mode context
+_flask_app = None  # Reference for background HTTP/lazy and Socket Mode workers
+
+_PRACTICE_REACTION_ACTION_ID_ORDER = (
+    "activity_ids",
+    "type_ids",
+    "practice_reaction_remove",
+    "practice_reaction_undo",
+    "practice_reaction_add",
+    "practice_reaction_catalog_select",
+    "practice_reaction_restore",
+)
+
+
+def bind_flask_app(flask_app) -> None:
+    """Bind the Flask application used by Bolt background workers."""
+    global _flask_app
+
+    _flask_app = flask_app
+
+
+def _ack_practice_reaction_action(ack) -> None:
+    """Primary Bolt action listener: send the transport acknowledgment only."""
+    ack()
+
+
+def _run_practice_reaction_action_lazy(body, action, client, logger) -> None:
+    """Shared lazy worker for all structured practice-reaction actions."""
+    _handle_practice_reaction_action(
+        lambda: None,
+        body,
+        action,
+        client,
+        logger,
+    )
+
+
+def _register_practice_reaction_action_listeners(app, *, worker=None) -> None:
+    """Register seven ack-only actions with one shared Bolt lazy worker."""
+    lazy_worker = worker or _run_practice_reaction_action_lazy
+    for action_id in _PRACTICE_REACTION_ACTION_ID_ORDER:
+        app.action(action_id)(
+            ack=_ack_practice_reaction_action,
+            lazy=[lazy_worker],
+        )
 
 # Only initialize Bolt if we have the required token
 # This allows the app to start without Slack credentials (e.g., for migrations)
@@ -769,26 +816,7 @@ if _bot_token:
             )
             client.views_open(trigger_id=trigger_id, view=modal)
 
-    for _practice_reaction_action_id in (
-        "activity_ids",
-        "type_ids",
-        "practice_reaction_remove",
-        "practice_reaction_undo",
-        "practice_reaction_add",
-        "practice_reaction_catalog_select",
-        "practice_reaction_restore",
-    ):
-        bolt_app.action(_practice_reaction_action_id)(
-            lambda ack, body, action, client, logger: (
-                _handle_practice_reaction_action(
-                    ack,
-                    body,
-                    action,
-                    client,
-                    logger,
-                )
-            )
-        )
+    _register_practice_reaction_action_listeners(bolt_app)
 
     # =========================================================================
     # View Submissions (Modal Forms)
@@ -856,6 +884,7 @@ if _bot_token:
             view=view,
             client=client,
             logger=logger,
+            post_save_dispatcher=_dispatch_practice_edit_full_post_save,
         )
 
     @bolt_app.view("practice_rsvp")
@@ -1335,31 +1364,28 @@ def _handle_practice_preview_submission(ack) -> None:
     ack()
 
 
-_PRACTICE_REACTION_ACTION_IDS = frozenset({
-    "activity_ids",
-    "type_ids",
-    "practice_reaction_remove",
-    "practice_reaction_undo",
-    "practice_reaction_add",
-    "practice_reaction_catalog_select",
-    "practice_reaction_restore",
-})
+_PRACTICE_REACTION_ACTION_IDS = frozenset(
+    _PRACTICE_REACTION_ACTION_ID_ORDER
+)
 _PRACTICE_REACTION_CALLBACKS = {
     "preview": "practice_preview",
     "create": "practice_create",
     "edit": "practice_edit_full",
 }
+_PRACTICE_REACTION_SELECTOR_MISSING = object()
 
 
-def _strict_practice_reaction_selector_ids(
+def _parse_practice_reaction_selector_ids(
     values,
     *,
     block_id: str,
     action_id: str,
-) -> tuple[int, ...]:
-    """Parse one complete Slack multi-select value without coercion."""
+):
+    """Parse a selector as present-valid, present-invalid, or missing."""
     if not isinstance(values, Mapping):
         raise ValueError("Invalid practice reaction selector state")
+    if block_id not in values:
+        return _PRACTICE_REACTION_SELECTOR_MISSING
     block = values.get(block_id)
     selection = block.get(action_id) if isinstance(block, Mapping) else None
     options = (
@@ -1384,10 +1410,76 @@ def _strict_practice_reaction_selector_ids(
             raise ValueError("Invalid practice reaction selector state")
         value = int(raw)
         if value in seen:
-            raise ValueError("Invalid practice reaction selector state")
+            continue
         seen.add(value)
         result.append(value)
     return tuple(result)
+
+
+def _strict_practice_reaction_selector_ids(
+    values,
+    *,
+    block_id: str,
+    action_id: str,
+) -> tuple[int, ...]:
+    """Parse one complete Slack multi-select value without coercion."""
+    result = _parse_practice_reaction_selector_ids(
+        values,
+        block_id=block_id,
+        action_id=action_id,
+    )
+    if result is _PRACTICE_REACTION_SELECTOR_MISSING:
+        raise ValueError("Invalid practice reaction selector state")
+    return result
+
+
+def _resolve_practice_reaction_selector_ids(
+    parsed,
+    *,
+    authoritative_sources,
+    last_valid_ids,
+) -> tuple[int, ...]:
+    if parsed is not _PRACTICE_REACTION_SELECTOR_MISSING:
+        return parsed
+    if not tuple(authoritative_sources or ()) and not tuple(last_valid_ids or ()):
+        return ()
+    raise ValueError("Invalid practice reaction selector state")
+
+
+def _require_canonical_practice_reaction_selector_ids(
+    view,
+    parsed,
+    *,
+    block_id: str,
+    action_id: str,
+) -> None:
+    """Reject selector IDs that were not options in Slack's current view."""
+    if parsed is _PRACTICE_REACTION_SELECTOR_MISSING:
+        return
+    blocks = view.get("blocks") if isinstance(view, Mapping) else None
+    if not isinstance(blocks, list):
+        raise ValueError("Invalid practice reaction selector options")
+    block = next(
+        (
+            item
+            for item in blocks
+            if isinstance(item, Mapping) and item.get("block_id") == block_id
+        ),
+        None,
+    )
+    element = block.get("element") if isinstance(block, Mapping) else None
+    if not isinstance(element, Mapping) or element.get("action_id") != action_id:
+        raise ValueError("Invalid practice reaction selector options")
+    options = element.get("options")
+    if not isinstance(options, list):
+        raise ValueError("Invalid practice reaction selector options")
+    canonical = {
+        option.get("value")
+        for option in options
+        if isinstance(option, Mapping) and isinstance(option.get("value"), str)
+    }
+    if any(str(value) not in canonical for value in parsed):
+        raise ValueError("Invalid practice reaction selector options")
 
 
 def _preview_practice_reaction_sources(preview_config):
@@ -1459,6 +1551,15 @@ def _apply_practice_reaction_action(
             activities=selected_activities,
         ).state
 
+    if action_id == "practice_reaction_restore":
+        if mode != "edit":
+            raise PlanReactionValidationError("Restore is available only in Edit")
+        return restore_plan_reaction_defaults(
+            state,
+            practice_types=selected_types,
+            activities=selected_activities,
+        ).state
+
     if (
         frozenset(activity_ids) != frozenset(state.last_valid_activity_ids)
         or frozenset(type_ids) != frozenset(state.last_valid_type_ids)
@@ -1486,15 +1587,6 @@ def _apply_practice_reaction_action(
         if not isinstance(row_id, str):
             raise PlanReactionValidationError("Unknown removed reaction row")
         return undo_plan_reaction(state, row_id)
-
-    if action_id == "practice_reaction_restore":
-        if mode != "edit":
-            raise PlanReactionValidationError("Restore is available only in Edit")
-        return restore_plan_reaction_defaults(
-            state,
-            practice_types=selected_types,
-            activities=selected_activities,
-        ).state
 
     if not _practice_reaction_add_allowed(state):
         raise PlanReactionValidationError("Cannot add a Plan reaction")
@@ -1608,8 +1700,8 @@ def _build_production_practice_reaction_view(
     context,
     state,
     action,
-    activity_ids,
-    type_ids,
+    activity_selection,
+    type_selection,
     values,
     build_plan_reaction_catalog,
 ):
@@ -1621,22 +1713,54 @@ def _build_production_practice_reaction_view(
         build_practice_edit_full_modal,
     )
 
-    selected_sources = load_selected_plan_reaction_sources(
-        db.session,
-        activity_ids=activity_ids,
-        type_ids=type_ids,
+    try:
+        all_sources = load_all_plan_reaction_sources(db.session)
+    except Exception as exc:
+        raise _AuthoritativePracticeReactionLoadError(
+            "Could not load practice reaction Settings"
+        ) from exc
+    activity_ids = _resolve_practice_reaction_selector_ids(
+        activity_selection,
+        authoritative_sources=all_sources.activities,
+        last_valid_ids=state.last_valid_activity_ids,
     )
+    type_ids = _resolve_practice_reaction_selector_ids(
+        type_selection,
+        authoritative_sources=all_sources.practice_types,
+        last_valid_ids=state.last_valid_type_ids,
+    )
+    try:
+        selected_sources = load_selected_plan_reaction_sources(
+            db.session,
+            activity_ids=activity_ids,
+            type_ids=type_ids,
+        )
+    except Exception as exc:
+        raise _AuthoritativePracticeReactionLoadError(
+            "Could not load selected practice reaction sources"
+        ) from exc
     practice = None
     if mode == "edit":
-        practice = db.session.get(Practice, context["practice_id"])
+        try:
+            practice = db.session.get(Practice, context["practice_id"])
+        except Exception as exc:
+            raise _AuthoritativePracticeReactionLoadError(
+                "Could not load practice reaction Edit target"
+            ) from exc
         if practice is None:
-            raise ValueError("Unknown practice reaction Edit target")
+            raise _AuthoritativePracticeReactionLoadError(
+                "Unknown practice reaction Edit target"
+            )
 
-    all_sources = load_all_plan_reaction_sources(db.session)
-    catalog = build_plan_reaction_catalog(
-        all_sources.practice_types,
-        all_sources.activities,
-    )
+    try:
+        catalog = build_plan_reaction_catalog(
+            all_sources.practice_types,
+            all_sources.activities,
+        )
+    except Exception as exc:
+        raise _AuthoritativePracticeReactionLoadError(
+            "Could not normalize practice reaction Settings"
+        ) from exc
     state = _apply_practice_reaction_action(
         state,
         action=action,
@@ -1647,21 +1771,31 @@ def _build_production_practice_reaction_view(
         catalog=catalog,
         mode=mode,
     )
-    locations, all_activities, all_types = _load_modal_ref_data()
-    eligible_coaches, eligible_leads = _load_eligible_people()
+    try:
+        locations, all_activities, all_types = _load_modal_ref_data()
+        eligible_coaches, eligible_leads = _load_eligible_people()
+    except Exception as exc:
+        raise _AuthoritativePracticeReactionLoadError(
+            "Could not load practice modal reference data"
+        ) from exc
 
     if mode == "edit":
-        return build_practice_edit_full_modal(
-            convert_practice_to_info(practice),
-            locations=locations,
-            eligible_coaches=eligible_coaches,
-            eligible_leads=eligible_leads,
-            all_activities=all_activities,
-            all_types=all_types,
-            reaction_editor=state,
-            reaction_catalog=catalog,
-            current_values=values,
-        )
+        try:
+            return build_practice_edit_full_modal(
+                convert_practice_to_info(practice),
+                locations=locations,
+                eligible_coaches=eligible_coaches,
+                eligible_leads=eligible_leads,
+                all_activities=all_activities,
+                all_types=all_types,
+                reaction_editor=state,
+                reaction_catalog=catalog,
+                current_values=values,
+            )
+        except Exception as exc:
+            raise _AuthoritativePracticeReactionLoadError(
+                "Could not rebuild practice Edit modal"
+            ) from exc
 
     current_time = _safe_get(
         values,
@@ -1672,25 +1806,30 @@ def _build_production_practice_reaction_view(
     )
     if not isinstance(current_time, str):
         current_time = "18:00"
-    return build_practice_create_modal(
-        datetime.strptime(context["date"], "%Y-%m-%d"),
-        current_time,
-        locations=locations,
-        channel_id=context["channel_id"],
-        message_ts=context["message_ts"],
-        all_activities=all_activities,
-        all_types=all_types,
-        slot_defaults={
-            "activity_ids": list(activity_ids),
-            "type_ids": list(type_ids),
-        },
-        silent_defaults=context.get("silent"),
-        eligible_coaches=eligible_coaches,
-        eligible_leads=eligible_leads,
-        reaction_editor=state,
-        reaction_catalog=catalog,
-        current_values=values,
-    )
+    try:
+        return build_practice_create_modal(
+            datetime.strptime(context["date"], "%Y-%m-%d"),
+            current_time,
+            locations=locations,
+            channel_id=context["channel_id"],
+            message_ts=context["message_ts"],
+            all_activities=all_activities,
+            all_types=all_types,
+            slot_defaults={
+                "activity_ids": list(activity_ids),
+                "type_ids": list(type_ids),
+            },
+            silent_defaults=context.get("silent"),
+            eligible_coaches=eligible_coaches,
+            eligible_leads=eligible_leads,
+            reaction_editor=state,
+            reaction_catalog=catalog,
+            current_values=values,
+        )
+    except Exception as exc:
+        raise _AuthoritativePracticeReactionLoadError(
+            "Could not rebuild practice Create modal"
+        ) from exc
 
 
 def _update_practice_reaction_view(
@@ -1756,13 +1895,25 @@ def _handle_practice_reaction_action(ack, body, action, client, logger) -> None:
         )
         if callback_id != _PRACTICE_REACTION_CALLBACKS[mode]:
             raise ValueError("Practice reaction mode/callback mismatch")
-        activity_ids = _strict_practice_reaction_selector_ids(
+        activity_selection = _parse_practice_reaction_selector_ids(
             values,
             block_id="activities_block",
             action_id="activity_ids",
         )
-        type_ids = _strict_practice_reaction_selector_ids(
+        type_selection = _parse_practice_reaction_selector_ids(
             values,
+            block_id="types_block",
+            action_id="type_ids",
+        )
+        _require_canonical_practice_reaction_selector_ids(
+            view,
+            activity_selection,
+            block_id="activities_block",
+            action_id="activity_ids",
+        )
+        _require_canonical_practice_reaction_selector_ids(
+            view,
+            type_selection,
             block_id="types_block",
             action_id="type_ids",
         )
@@ -1771,6 +1922,16 @@ def _handle_practice_reaction_action(ack, body, action, client, logger) -> None:
         if mode == "preview":
             all_types, all_activities = _preview_practice_reaction_sources(
                 preview_config
+            )
+            activity_ids = _resolve_practice_reaction_selector_ids(
+                activity_selection,
+                authoritative_sources=all_activities,
+                last_valid_ids=state.last_valid_activity_ids,
+            )
+            type_ids = _resolve_practice_reaction_selector_ids(
+                type_selection,
+                authoritative_sources=all_types,
+                last_valid_ids=state.last_valid_type_ids,
             )
             selected_types = _selected_practice_reaction_sources(
                 all_types,
@@ -1805,21 +1966,26 @@ def _handle_practice_reaction_action(ack, body, action, client, logger) -> None:
                         context=context,
                         state=state,
                         action=action,
-                        activity_ids=activity_ids,
-                        type_ids=type_ids,
+                        activity_selection=activity_selection,
+                        type_selection=type_selection,
                         values=values,
                         build_plan_reaction_catalog=(
                             build_plan_reaction_catalog
                         ),
                     )
-            except PlanReactionValidationError:
-                raise
-            except ValueError:
-                raise
-            except Exception:
+            except _AuthoritativePracticeReactionLoadError:
                 logger.exception(
                     "Could not load authoritative practice reaction Settings"
                 )
+                try:
+                    with get_app_context():
+                        from app.models import db
+
+                        db.session.rollback()
+                except Exception:
+                    logger.exception(
+                        "Could not roll back failed practice reaction load"
+                    )
                 from app.slack.practice_reaction_editor import (
                     build_retryable_practice_reaction_error_view,
                 )
@@ -1987,27 +2153,93 @@ def _strict_practice_option_values(
     return tuple(result)
 
 
-def _practice_reaction_error_block(state, exc) -> str:
+def _practice_reaction_error_block(state, view, exc) -> str:
     emoji = getattr(exc, "emoji", None)
     row = next(
         (item for item in state.rows if item.emoji == emoji and not item.removed),
         next((item for item in state.rows if not item.removed), None),
     )
-    return (
+    preferred = (
         f"practice_reaction_row_{row.row_id}"
         if row is not None
         else "location_block"
     )
+    return _practice_submission_error_block(view, preferred)
 
 
-def _practice_source_error_block(exc) -> str:
-    return (
+def _practice_source_error_block(view, exc) -> str:
+    preferred = (
         "activities_block"
         if getattr(exc, "field", None) == "activities"
         else "types_block"
         if getattr(exc, "field", None) == "types"
         else "location_block"
     )
+    return _practice_submission_error_block(view, preferred)
+
+
+def _practice_view_input_block_ids(view) -> tuple[str, ...]:
+    """Return the real input block IDs Slack can attach submission errors to."""
+    blocks = view.get("blocks") if isinstance(view, Mapping) else None
+    if not isinstance(blocks, list):
+        return ()
+    return tuple(
+        block_id
+        for block in blocks
+        if isinstance(block, Mapping)
+        and block.get("type") == "input"
+        and isinstance((block_id := block.get("block_id")), str)
+        and block_id
+    )
+
+
+def _practice_submission_error_block(view, preferred: str) -> str:
+    """Choose an input block that is actually present in the submitted view."""
+    input_block_ids = _practice_view_input_block_ids(view)
+    if preferred in input_block_ids:
+        return preferred
+    for fallback in (
+        "location_block",
+        "workout_block",
+        "notes_block",
+        "flags_block",
+    ):
+        if fallback in input_block_ids:
+            return fallback
+    if input_block_ids:
+        return input_block_ids[0]
+    return "location_block"
+
+
+def _practice_reaction_submission_state_errors(
+    state,
+    view,
+    *,
+    activity_ids: tuple[int, ...],
+    type_ids: tuple[int, ...],
+) -> dict[str, str]:
+    """Reject blocked or stale selector metadata before authorization/mutation."""
+    errors = {}
+    message = state.blocking_error or (
+        "The Activity or Workout Type selection changed unexpectedly. "
+        "Please choose it again."
+    )
+    activity_mismatch = frozenset(activity_ids) != frozenset(
+        state.last_valid_activity_ids
+    )
+    type_mismatch = frozenset(type_ids) != frozenset(
+        state.last_valid_type_ids
+    )
+    input_block_ids = _practice_view_input_block_ids(view)
+    if activity_mismatch and "activities_block" in input_block_ids:
+        errors["activities_block"] = message
+    if type_mismatch and "types_block" in input_block_ids:
+        errors["types_block"] = message
+    if state.blocking_error and not errors:
+        errors[_practice_submission_error_block(view, "location_block")] = message
+    elif (activity_mismatch or type_mismatch) and not errors:
+        errors[_practice_submission_error_block(view, "location_block")] = message
+    return errors
 
 
 def _handle_practice_create_submission(
@@ -2059,27 +2291,27 @@ def _handle_practice_create_submission(
         return None
 
     try:
-        activity_ids = _strict_practice_reaction_selector_ids(
+        activity_selection = _parse_practice_reaction_selector_ids(
             values,
             block_id="activities_block",
             action_id="activity_ids",
         )
     except (TypeError, ValueError):
         ack(response_action="errors", errors={
-            "activities_block": (
+            _practice_submission_error_block(view, "activities_block"): (
                 "Invalid Activity selection. Please try again."
             )
         })
         return None
     try:
-        type_ids = _strict_practice_reaction_selector_ids(
+        type_selection = _parse_practice_reaction_selector_ids(
             values,
             block_id="types_block",
             action_id="type_ids",
         )
     except (TypeError, ValueError):
         ack(response_action="errors", errors={
-            "types_block": (
+            _practice_submission_error_block(view, "types_block"): (
                 "Invalid Workout Type selection. Please try again."
             )
         })
@@ -2094,6 +2326,57 @@ def _handle_practice_create_submission(
         )
 
         try:
+            all_sources = load_all_plan_reaction_sources(db.session)
+        except Exception:
+            db.session.rollback()
+            logger.exception("Could not validate practice Create Settings")
+            ack(response_action="errors", errors={
+                "location_block": (
+                    "Could not load reaction Settings. Please try again."
+                )
+            })
+            return None
+
+        try:
+            activity_ids = _resolve_practice_reaction_selector_ids(
+                activity_selection,
+                authoritative_sources=all_sources.activities,
+                last_valid_ids=state.last_valid_activity_ids,
+            )
+        except ValueError:
+            ack(response_action="errors", errors={
+                _practice_submission_error_block(
+                    view,
+                    "activities_block",
+                ): "Invalid Activity selection. Please try again."
+            })
+            return None
+        try:
+            type_ids = _resolve_practice_reaction_selector_ids(
+                type_selection,
+                authoritative_sources=all_sources.practice_types,
+                last_valid_ids=state.last_valid_type_ids,
+            )
+        except ValueError:
+            ack(response_action="errors", errors={
+                _practice_submission_error_block(
+                    view,
+                    "types_block",
+                ): "Invalid Workout Type selection. Please try again."
+            })
+            return None
+
+        state_errors = _practice_reaction_submission_state_errors(
+            state,
+            view,
+            activity_ids=activity_ids,
+            type_ids=type_ids,
+        )
+        if state_errors:
+            ack(response_action="errors", errors=state_errors)
+            return None
+
+        try:
             selected_sources = load_selected_plan_reaction_sources(
                 db.session,
                 activity_ids=activity_ids,
@@ -2105,17 +2388,26 @@ def _handle_practice_create_submission(
             )
         except PlanReactionValidationError as exc:
             ack(response_action="errors", errors={
-                _practice_source_error_block(exc): str(exc)
+                _practice_source_error_block(view, exc): str(exc)
+            })
+            return None
+        except Exception:
+            db.session.rollback()
+            logger.exception("Could not load practice Create reaction sources")
+            ack(response_action="errors", errors={
+                "location_block": (
+                    "Could not load reaction Settings. Please try again."
+                )
             })
             return None
 
         try:
-            all_sources = load_all_plan_reaction_sources(db.session)
             catalog = build_plan_reaction_catalog(
                 all_sources.practice_types,
                 all_sources.activities,
             )
         except Exception:
+            db.session.rollback()
             logger.exception("Could not validate practice Create Settings")
             ack(response_action="errors", errors={
                 "location_block": (
@@ -2139,7 +2431,7 @@ def _handle_practice_create_submission(
             )
         except PlanReactionValidationError as exc:
             ack(response_action="errors", errors={
-                _practice_reaction_error_block(state, exc): str(exc)
+                _practice_reaction_error_block(state, view, exc): str(exc)
             })
             return None
 
@@ -2283,8 +2575,122 @@ def _handle_practice_create_submission(
     return None
 
 
+def _run_practice_edit_full_post_save(
+    *,
+    practice_id,
+    user_id,
+    should_notify,
+    had_root,
+    previous_date,
+    previous_location_id,
+    previous_plan_reactions,
+    client,
+    logger,
+):
+    """Refresh announcements after save while owning an application context."""
+    with get_app_context():
+        from app.models import db
+        from app.practices.models import Practice
+        from app.slack.practices import refresh_practice_posts
+        from app.slack.practices.announcements import (
+            build_announcement_change_notice,
+        )
+
+        reload_failed = False
+        try:
+            practice = db.session.get(Practice, practice_id)
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Practice %s was saved but reload failed before refresh",
+                practice_id,
+            )
+            practice = None
+            reload_failed = True
+        if practice is None:
+            if not reload_failed:
+                logger.error(
+                    "Practice %s was saved but could not be reloaded for refresh",
+                    practice_id,
+                )
+            refresh_results = {
+                "announcement": {
+                    "success": False,
+                    "error": "Saved practice could not be reloaded",
+                }
+            }
+        else:
+            announcement_notice = build_announcement_change_notice(
+                previous_date=previous_date,
+                previous_location_id=previous_location_id,
+                practice=practice,
+            )
+            try:
+                refresh_results = refresh_practice_posts(
+                    practice,
+                    change_type="edit",
+                    actor_slack_id=user_id,
+                    notify=should_notify,
+                    announcement_notice=announcement_notice,
+                    previous_plan_reactions=previous_plan_reactions,
+                )
+            except Exception as exc:
+                logger.exception(
+                    "Practice %s was saved but refresh raised", practice_id
+                )
+                refresh_results = {
+                    "announcement": {"success": False, "error": str(exc)},
+                }
+
+        announcement = (refresh_results or {}).get("announcement") or {}
+        if had_root and announcement.get("success") is not True:
+            if client is not None:
+                try:
+                    client.chat_postMessage(
+                        channel=user_id,
+                        text=(
+                            ":warning: Your "
+                            + _FULL_EDIT_UNSYNCED_ERROR[0].lower()
+                            + _FULL_EDIT_UNSYNCED_ERROR[1:]
+                        ),
+                    )
+                except Exception:
+                    logger.warning(
+                        "Could not DM saved-but-unsynced practice edit to %s",
+                        user_id,
+                        exc_info=True,
+                    )
+            return {
+                "success": False,
+                "practice_updated": True,
+                "error": _FULL_EDIT_UNSYNCED_ERROR,
+                "refresh_results": refresh_results,
+            }
+
+        return {
+            "success": True,
+            "practice_updated": True,
+            "refresh_results": refresh_results,
+        }
+
+
+def _dispatch_practice_edit_full_post_save(work) -> None:
+    """Run committed Full Edit Slack synchronization off the response path."""
+    threading.Thread(
+        target=work,
+        daemon=True,
+        name="practice-edit-post-save",
+    ).start()
+
+
 def _handle_practice_edit_full_submission(
-    ack, body, view, logger, client=None
+    ack,
+    body,
+    view,
+    logger,
+    client=None,
+    *,
+    post_save_dispatcher=None,
 ):
     """Validate and persist the active full-edit modal submission."""
     from app.practices.plan_reactions import (
@@ -2332,27 +2738,27 @@ def _handle_practice_edit_full_submission(
         return None
 
     try:
-        activity_ids = _strict_practice_reaction_selector_ids(
+        activity_selection = _parse_practice_reaction_selector_ids(
             values,
             block_id="activities_block",
             action_id="activity_ids",
         )
     except (TypeError, ValueError):
         ack(response_action="errors", errors={
-            "activities_block": (
+            _practice_submission_error_block(view, "activities_block"): (
                 "Invalid Activity selection. Please try again."
             )
         })
         return None
     try:
-        type_ids = _strict_practice_reaction_selector_ids(
+        type_selection = _parse_practice_reaction_selector_ids(
             values,
             block_id="types_block",
             action_id="type_ids",
         )
     except (TypeError, ValueError):
         ack(response_action="errors", errors={
-            "types_block": (
+            _practice_submission_error_block(view, "types_block"): (
                 "Invalid Workout Type selection. Please try again."
             )
         })
@@ -2365,14 +2771,73 @@ def _handle_practice_edit_full_submission(
             PracticeLocation,
         )
         from app.models import User, db
-        from app.slack.practices import refresh_practice_posts
-
-        practice = db.session.get(Practice, practice_id)
+        try:
+            practice = db.session.get(Practice, practice_id)
+        except Exception:
+            db.session.rollback()
+            logger.exception("Could not load practice %s for Full Edit", practice_id)
+            ack(response_action="errors", errors={
+                "location_block": (
+                    "Could not load the practice. Please try again."
+                )
+            })
+            return None
         if not practice:
             logger.error("Practice %s not found", practice_id)
             ack(response_action="errors", errors={
                 "location_block": "Practice not found. Close and try again."
             })
+            return None
+
+        try:
+            all_sources = load_all_plan_reaction_sources(db.session)
+        except Exception:
+            db.session.rollback()
+            logger.exception("Could not validate practice Full Edit Settings")
+            ack(response_action="errors", errors={
+                "location_block": (
+                    "Could not load reaction Settings. Please try again."
+                )
+            })
+            return None
+
+        try:
+            activity_ids = _resolve_practice_reaction_selector_ids(
+                activity_selection,
+                authoritative_sources=all_sources.activities,
+                last_valid_ids=state.last_valid_activity_ids,
+            )
+        except ValueError:
+            ack(response_action="errors", errors={
+                _practice_submission_error_block(
+                    view,
+                    "activities_block",
+                ): "Invalid Activity selection. Please try again."
+            })
+            return None
+        try:
+            type_ids = _resolve_practice_reaction_selector_ids(
+                type_selection,
+                authoritative_sources=all_sources.practice_types,
+                last_valid_ids=state.last_valid_type_ids,
+            )
+        except ValueError:
+            ack(response_action="errors", errors={
+                _practice_submission_error_block(
+                    view,
+                    "types_block",
+                ): "Invalid Workout Type selection. Please try again."
+            })
+            return None
+
+        state_errors = _practice_reaction_submission_state_errors(
+            state,
+            view,
+            activity_ids=activity_ids,
+            type_ids=type_ids,
+        )
+        if state_errors:
+            ack(response_action="errors", errors=state_errors)
             return None
 
         try:
@@ -2387,17 +2852,26 @@ def _handle_practice_edit_full_submission(
             )
         except PlanReactionValidationError as exc:
             ack(response_action="errors", errors={
-                _practice_source_error_block(exc): str(exc)
+                _practice_source_error_block(view, exc): str(exc)
+            })
+            return None
+        except Exception:
+            db.session.rollback()
+            logger.exception("Could not load practice Full Edit reaction sources")
+            ack(response_action="errors", errors={
+                "location_block": (
+                    "Could not load reaction Settings. Please try again."
+                )
             })
             return None
 
         try:
-            all_sources = load_all_plan_reaction_sources(db.session)
             catalog = build_plan_reaction_catalog(
                 all_sources.practice_types,
                 all_sources.activities,
             )
         except Exception:
+            db.session.rollback()
             logger.exception("Could not validate practice Full Edit Settings")
             ack(response_action="errors", errors={
                 "location_block": (
@@ -2421,7 +2895,7 @@ def _handle_practice_edit_full_submission(
             )
         except PlanReactionValidationError as exc:
             ack(response_action="errors", errors={
-                _practice_reaction_error_block(state, exc): str(exc)
+                _practice_reaction_error_block(state, view, exc): str(exc)
             })
             return None
 
@@ -2479,7 +2953,6 @@ def _handle_practice_edit_full_submission(
             })
             return None
 
-        ack()
         had_root = bool(practice.slack_message_ts)
         previous_date = practice.date
         previous_location_id = practice.location_id
@@ -2487,106 +2960,71 @@ def _handle_practice_edit_full_submission(
             dict(item) for item in (practice.plan_reactions or [])
         ]
 
-        if location_id is not None:
-            practice.location_id = location_id
-        practice.workout_description = authoring["workout_description"]
-        practice.logistics_notes = authoring["logistics_notes"] or None
-        practice.plan_reactions = plan_reactions
-        practice.is_dark_practice = "is_dark_practice" in flag_values
-        if "has_social" not in flag_values:
-            practice.social_location_id = None
-
-        if "coaches_block" in values:
-            PracticeLead.query.filter_by(
-                practice_id=practice.id, role="coach"
-            ).delete()
-            for user_id_value in coach_user_ids:
-                db.session.add(PracticeLead(
-                    practice_id=practice.id,
-                    user_id=user_id_value,
-                    role="coach",
-                ))
-
-        if "leads_block" in values:
-            PracticeLead.query.filter_by(
-                practice_id=practice.id, role="lead"
-            ).delete()
-            for user_id_value in lead_user_ids:
-                db.session.add(PracticeLead(
-                    practice_id=practice.id,
-                    user_id=user_id_value,
-                    role="lead",
-                ))
-
-        practice.activities = list(selected_sources.activities)
-        practice.practice_types = list(selected_sources.practice_types)
-
         try:
+            if location_id is not None:
+                practice.location_id = location_id
+            practice.workout_description = authoring["workout_description"]
+            practice.logistics_notes = authoring["logistics_notes"] or None
+            practice.plan_reactions = plan_reactions
+            practice.is_dark_practice = "is_dark_practice" in flag_values
+            if "has_social" not in flag_values:
+                practice.social_location_id = None
+
+            if "coaches_block" in values:
+                PracticeLead.query.filter_by(
+                    practice_id=practice.id, role="coach"
+                ).delete()
+                for user_id_value in coach_user_ids:
+                    db.session.add(PracticeLead(
+                        practice_id=practice.id,
+                        user_id=user_id_value,
+                        role="coach",
+                    ))
+
+            if "leads_block" in values:
+                PracticeLead.query.filter_by(
+                    practice_id=practice.id, role="lead"
+                ).delete()
+                for user_id_value in lead_user_ids:
+                    db.session.add(PracticeLead(
+                        practice_id=practice.id,
+                        user_id=user_id_value,
+                        role="lead",
+                    ))
+
+            practice.activities = list(selected_sources.activities)
+            practice.practice_types = list(selected_sources.practice_types)
             db.session.commit()
         except Exception:
             db.session.rollback()
             logger.exception("Practice %s Full Edit failed to save", practice_id)
+            ack(response_action="errors", errors={
+                "location_block": (
+                    "Could not save practice changes. Please try again."
+                )
+            })
             return {
                 "success": False,
                 "practice_updated": False,
                 "error": "Could not save practice changes. Please try again.",
             }
         logger.info(f"Practice {practice_id} fully updated by {user_id}")
-        from app.slack.practices.announcements import (
-            build_announcement_change_notice,
-        )
-        announcement_notice = build_announcement_change_notice(
+        ack()
+        post_save_work = lambda: _run_practice_edit_full_post_save(
+            practice_id=practice_id,
+            user_id=user_id,
+            should_notify=should_notify,
+            had_root=had_root,
             previous_date=previous_date,
             previous_location_id=previous_location_id,
-            practice=practice,
+            previous_plan_reactions=previous_plan_reactions,
+            client=client,
+            logger=logger,
         )
-        try:
-            refresh_results = refresh_practice_posts(
-                practice,
-                change_type="edit",
-                actor_slack_id=user_id,
-                notify=should_notify,
-                announcement_notice=announcement_notice,
-                previous_plan_reactions=previous_plan_reactions,
-            )
-        except Exception as exc:
-            logger.exception(
-                "Practice %s was saved but refresh raised", practice_id
-            )
-            refresh_results = {
-                "announcement": {"success": False, "error": str(exc)},
-            }
-
-        announcement = (refresh_results or {}).get("announcement") or {}
-        if had_root and announcement.get("success") is not True:
-            if client is not None:
-                try:
-                    client.chat_postMessage(
-                        channel=user_id,
-                        text=(
-                            ":warning: Your "
-                            + _FULL_EDIT_UNSYNCED_ERROR[0].lower()
-                            + _FULL_EDIT_UNSYNCED_ERROR[1:]
-                        ),
-                    )
-                except Exception:
-                    logger.warning(
-                        "Could not DM saved-but-unsynced practice edit to %s",
-                        user_id,
-                        exc_info=True,
-                    )
-            return {
-                "success": False,
-                "practice_updated": True,
-                "error": _FULL_EDIT_UNSYNCED_ERROR,
-                "refresh_results": refresh_results,
-            }
-
-        return {
-            "success": True,
-            "practice_updated": True,
-            "refresh_results": refresh_results,
-        }
+        if post_save_dispatcher is not None:
+            post_save_dispatcher(post_save_work)
+            return {"success": True, "practice_updated": True}
+        return post_save_work()
 
 
 def _load_modal_ref_data():
@@ -3029,7 +3467,10 @@ def start_socket_mode(flask_app=None):
 
     Returns True if started successfully, False if not available or already running.
     """
-    global _socket_mode_started, _flask_app
+    global _socket_mode_started
+
+    if flask_app is not None:
+        bind_flask_app(flask_app)
 
     if not socket_mode_handler:
         logger.warning("Socket Mode not available - SLACK_APP_TOKEN not set")
@@ -3038,10 +3479,6 @@ def start_socket_mode(flask_app=None):
     if _socket_mode_started:
         logger.info("Socket Mode already running")
         return True
-
-    # Store Flask app reference for handlers
-    if flask_app:
-        _flask_app = flask_app
 
     def run_socket_mode():
         global _socket_mode_started
@@ -3061,7 +3498,7 @@ def start_socket_mode(flask_app=None):
 
 
 def get_app_context():
-    """Get Flask app context for use in Socket Mode handlers.
+    """Get Flask app context for use in Bolt background workers.
 
     Returns a context manager that can be used with 'with' statement.
     Falls back to no-op if Flask app is not available.

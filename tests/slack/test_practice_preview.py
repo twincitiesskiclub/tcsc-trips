@@ -345,14 +345,20 @@ def test_preview_selector_transition_one_two_three_one_matrix(
         )
 
 
-def test_nonselector_action_accepts_reordered_distinct_selector_ids(
+def test_nonselector_action_deduplicates_selector_ids_in_first_seen_order(
     preview_action_body,
 ):
     values = preview_action_body["view"]["state"]["values"]
     values["activities_block"]["activity_ids"]["selected_options"] = [
         {"value": "2"},
         {"value": "1"},
+        {"value": "2"},
     ]
+    assert bolt_module._strict_practice_reaction_selector_ids(
+        values,
+        block_id="activities_block",
+        action_id="activity_ids",
+    ) == (2, 1)
     client = MagicMock()
 
     bolt_module._handle_practice_reaction_action(
@@ -449,11 +455,6 @@ def test_add_then_catalog_select_appends_configured_fixed_key(
         lambda body: body["view"]["state"]["values"]["activities_block"][
             "activity_ids"
         ].update({"selected_options": [{"value": "999"}]}),
-        lambda body: body["view"]["state"]["values"]["activities_block"][
-            "activity_ids"
-        ].update({
-            "selected_options": [{"value": "1"}, {"value": "1"}]
-        }),
         lambda body: body["view"]["state"]["values"]["activities_block"][
             "activity_ids"
         ].update({"selected_options": [{"value": "01"}]}),

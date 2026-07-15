@@ -9,14 +9,20 @@ import pytest
 from app import create_app
 from app.models import db
 from app.practices.interfaces import PracticeInfo, PracticeStatus
-from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.plan_reaction_editor import (
+    build_plan_reaction_editor_state,
+    reconcile_plan_reaction_editor_state,
+)
 from app.practices.plan_reaction_queries import (
+    PlanReactionSourceSelectionError,
+    SelectedPlanReactionSources,
     load_all_plan_reaction_sources,
     load_selected_plan_reaction_sources,
 )
 from app.practices.models import (
     Practice,
     PracticeActivity,
+    PracticeLead,
     PracticeLocation,
     PracticeType,
 )
@@ -72,6 +78,13 @@ def _view_values(modal):
             }
         values[block_id] = {action_id: action_value}
     return values
+
+
+def _omit_selector(modal, block_id):
+    modal["blocks"] = [
+        block for block in modal["blocks"] if block.get("block_id") != block_id
+    ]
+    modal["state"]["values"].pop(block_id, None)
 
 
 def _full_edit_action_body(practice):
@@ -474,6 +487,73 @@ def test_full_edit_restore_preserves_every_nonreaction_value(
     assert all(row.emoji != "athletic_shoe" for row in state.rows)
 
 
+def test_full_edit_restore_recovers_a_blocked_union_transition(
+    db_session,
+    practice_record,
+    source_records,
+):
+    practice_record.plan_reactions = [
+        {"emoji": f"protected_{index}", "label": f"Protected {index}"}
+        for index in range(4)
+    ]
+    db.session.commit()
+    body = _full_edit_action_body(practice_record)
+    values = body["view"]["state"]["values"]
+    values["notes_block"]["logistics_notes"]["value"] = "Keep recovery notes"
+    values["types_block"]["type_ids"]["selected_options"] = [{
+        "value": str(source_records["replacement_type"].id)
+    }]
+    client = MagicMock()
+    logger = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "type_ids"},
+        client,
+        logger,
+    )
+    blocked_view = client.views_update.call_args.kwargs["view"]
+    blocked_state = decode_practice_reaction_metadata(
+        blocked_view["private_metadata"]
+    )[2]
+    assert blocked_state.blocking_error and "more than 4" in (
+        blocked_state.blocking_error
+    )
+    blocked_view.update({
+        "id": "V_FULL_EDIT",
+        "hash": "HASH_BLOCKED_RESTORE",
+        "state": {"values": _view_values(blocked_view)},
+    })
+    blocked_body = {
+        "type": "block_actions",
+        "user": {"id": "U-FULL-EDIT-TEST"},
+        "view": blocked_view,
+    }
+    client.reset_mock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        blocked_body,
+        {"action_id": "practice_reaction_restore"},
+        client,
+        logger,
+    )
+
+    restored_view = client.views_update.call_args.kwargs["view"]
+    restored = decode_practice_reaction_metadata(
+        restored_view["private_metadata"]
+    )[2]
+    assert [row.emoji for row in restored.rows] == ["mountain"]
+    assert restored.blocking_error is None
+    assert restored.last_valid_type_ids == (
+        source_records["replacement_type"].id,
+    )
+    assert _blocks_by_id(restored_view)["notes_block"]["element"][
+        "initial_value"
+    ] == "Keep recovery notes"
+
+
 def test_restore_conflict_keeps_reaction_state_unchanged(
     db_session,
     practice_record,
@@ -515,6 +595,58 @@ def test_restore_conflict_keeps_reaction_state_unchanged(
     assert after.blocking_error
 
 
+def test_restore_conflict_after_stale_transition_preserves_all_working_state(
+    db_session,
+    practice_record,
+    source_records,
+):
+    practice_record.plan_reactions = [
+        {"emoji": f"protected_{index}", "label": f"Protected {index}"}
+        for index in range(4)
+    ]
+    source_records["current_type"].default_plan_reactions = [
+        {"emoji": "collision", "label": "Current label"}
+    ]
+    source_records["replacement_type"].default_plan_reactions = [
+        {"emoji": "collision", "label": "Conflicting label"}
+    ]
+    db.session.commit()
+    body = _full_edit_action_body(practice_record)
+    before = decode_practice_reaction_metadata(
+        body["view"]["private_metadata"]
+    )[2]
+    values = body["view"]["state"]["values"]
+    values["notes_block"]["logistics_notes"]["value"] = "Keep conflict notes"
+    values["types_block"]["type_ids"]["selected_options"] = [
+        {"value": str(source_records["current_type"].id)},
+        {"value": str(source_records["replacement_type"].id)},
+    ]
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_restore"},
+        client,
+        MagicMock(),
+    )
+
+    rebuilt = client.views_update.call_args.kwargs["view"]
+    after = decode_practice_reaction_metadata(rebuilt["private_metadata"])[2]
+    assert [
+        (row.row_id, row.emoji, row.label, row.removed)
+        for row in after.rows
+    ] == [
+        (row.row_id, row.emoji, row.label, row.removed)
+        for row in before.rows
+    ]
+    assert after.blocking_error and "conflicting labels" in after.blocking_error
+    assert after.last_valid_type_ids == before.last_valid_type_ids
+    assert _blocks_by_id(rebuilt)["notes_block"]["element"][
+        "initial_value"
+    ] == "Keep conflict notes"
+
+
 def test_settings_lookup_failure_preserves_modal_and_surfaces_retry(
     db_session,
     practice_record,
@@ -549,6 +681,353 @@ def test_settings_lookup_failure_preserves_modal_and_surfaces_retry(
     assert updated["workout_block"]["element"]["initial_value"] == (
         "Unsaved workout"
     )
+
+
+@pytest.mark.parametrize("failure_kind", ["source_outage", "stale_source"])
+def test_action_authoritative_source_failure_rebuilds_preserved_retry_view(
+    db_session,
+    practice_record,
+    monkeypatch,
+    failure_kind,
+):
+    body = _full_edit_action_body(practice_record)
+    body["view"]["state"]["values"]["workout_block"][
+        "workout_description"
+    ]["value"] = "Preserve source retry workout"
+    failure = (
+        RuntimeError("database unavailable")
+        if failure_kind == "source_outage"
+        else PlanReactionSourceSelectionError(
+            "Selected Workout Type was deleted",
+            field="types",
+        )
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_selected_plan_reaction_sources",
+        lambda _session, **_ids: (_ for _ in ()).throw(failure),
+    )
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    rebuilt = client.views_update.call_args.kwargs["view"]
+    blocks = _blocks_by_id(rebuilt)
+    assert "Try again" in blocks["practice_reaction_lookup_error"]["text"][
+        "text"
+    ]
+    assert blocks["workout_block"]["element"]["initial_value"] == (
+        "Preserve source retry workout"
+    )
+
+
+def test_action_malformed_authoritative_settings_rebuilds_retry_view(
+    db_session,
+    practice_record,
+    monkeypatch,
+):
+    body = _full_edit_action_body(practice_record)
+    malformed = SimpleNamespace(
+        id=999,
+        name="Malformed Settings Type",
+        default_plan_reactions="not-a-list",
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        lambda _session: SelectedPlanReactionSources(
+            practice_types=(malformed,),
+            activities=(),
+        ),
+    )
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    assert "practice_reaction_lookup_error" in _blocks_by_id(
+        client.views_update.call_args.kwargs["view"]
+    )
+
+
+def test_action_deleted_edit_target_rebuilds_retry_view(
+    db_session,
+    practice_record,
+):
+    body = _full_edit_action_body(practice_record)
+    mode, _context, state, _preview = decode_practice_reaction_metadata(
+        body["view"]["private_metadata"]
+    )
+    body["view"]["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context={"practice_id": 999999999},
+        state=state,
+    )
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    assert "practice_reaction_lookup_error" in _blocks_by_id(
+        client.views_update.call_args.kwargs["view"]
+    )
+
+
+@pytest.mark.parametrize(
+    ("activity_empty", "type_empty"),
+    [(True, False), (False, True), (True, True)],
+)
+def test_edit_action_accepts_legitimately_omitted_empty_selectors(
+    db_session,
+    practice_record,
+    source_records,
+    monkeypatch,
+    activity_empty,
+    type_empty,
+):
+    selected_activities = (
+        () if activity_empty else (source_records["current_activity"],)
+    )
+    selected_types = () if type_empty else (source_records["current_type"],)
+    state = build_plan_reaction_editor_state(
+        practice_types=selected_types,
+        activities=selected_activities,
+        saved_snapshot=practice_record.plan_reactions,
+    ).state
+    body = _full_edit_action_body(practice_record)
+    body["view"]["private_metadata"] = encode_practice_reaction_metadata(
+        mode="edit",
+        context={"practice_id": practice_record.id},
+        state=state,
+    )
+    if activity_empty:
+        _omit_selector(body["view"], "activities_block")
+    if type_empty:
+        _omit_selector(body["view"], "types_block")
+    activity_id = source_records["current_activity"].id
+    type_id = source_records["current_type"].id
+
+    def load_sources(session):
+        return SelectedPlanReactionSources(
+            practice_types=(
+                ()
+                if type_empty
+                else (session.get(PracticeType, type_id),)
+            ),
+            activities=(
+                ()
+                if activity_empty
+                else (session.get(PracticeActivity, activity_id),)
+            ),
+        )
+
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        load_sources,
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_selected_plan_reaction_sources",
+        lambda session, **_ids: load_sources(session),
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "_load_modal_ref_data",
+        lambda: (
+            [(source_records["current_location"].id, "Current")],
+            [
+                (source.id, source.name)
+                for source in selected_activities
+            ],
+            [(source.id, source.name) for source in selected_types],
+        ),
+    )
+    monkeypatch.setattr(bolt_module, "_load_eligible_people", lambda: ([], []))
+    client = MagicMock()
+    original = [dict(item) for item in practice_record.plan_reactions]
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    rebuilt = client.views_update.call_args.kwargs["view"]
+    blocks = _blocks_by_id(rebuilt)
+    if activity_empty:
+        assert "activities_block" not in blocks
+    if type_empty:
+        assert "types_block" not in blocks
+    assert "practice_reaction_removed_r0" in blocks
+    db.session.refresh(practice_record)
+    assert practice_record.plan_reactions == original
+
+
+def test_edit_action_missing_configured_selector_cannot_clear_relations(
+    db_session,
+    practice_record,
+):
+    body = _full_edit_action_body(practice_record)
+    mode, context, state, _preview = decode_practice_reaction_metadata(
+        body["view"]["private_metadata"]
+    )
+    state.last_valid_activity_ids = ()
+    body["view"]["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context=context,
+        state=state,
+    )
+    _omit_selector(body["view"], "activities_block")
+    client = MagicMock()
+    activity_ids = {item.id for item in practice_record.activities}
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    client.views_update.assert_not_called()
+    db.session.refresh(practice_record)
+    assert {item.id for item in practice_record.activities} == activity_ids
+
+
+@pytest.mark.parametrize(
+    ("activity_empty", "type_empty"),
+    [(True, False), (False, True), (True, True)],
+)
+def test_full_edit_submission_accepts_legitimately_omitted_empty_selectors(
+    db_session,
+    practice_record,
+    source_records,
+    refresh_calls,
+    monkeypatch,
+    activity_empty,
+    type_empty,
+):
+    selected_activities = (
+        () if activity_empty else (source_records["current_activity"],)
+    )
+    selected_types = () if type_empty else (source_records["current_type"],)
+    state = build_plan_reaction_editor_state(
+        practice_types=selected_types,
+        activities=selected_activities,
+        saved_snapshot=practice_record.plan_reactions,
+    ).state
+    view = _full_edit_submission_view(practice_record)
+    view["private_metadata"] = encode_practice_reaction_metadata(
+        mode="edit",
+        context={"practice_id": practice_record.id},
+        state=state,
+    )
+    if activity_empty:
+        _omit_selector(view, "activities_block")
+    if type_empty:
+        _omit_selector(view, "types_block")
+    activity_id = source_records["current_activity"].id
+    type_id = source_records["current_type"].id
+
+    def load_sources(session):
+        return SelectedPlanReactionSources(
+            practice_types=(
+                ()
+                if type_empty
+                else (session.get(PracticeType, type_id),)
+            ),
+            activities=(
+                ()
+                if activity_empty
+                else (session.get(PracticeActivity, activity_id),)
+            ),
+        )
+
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        load_sources,
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_selected_plan_reaction_sources",
+        lambda session, **_ids: load_sources(session),
+    )
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls == [{}]
+    db.session.refresh(practice_record)
+    assert {item.id for item in practice_record.activities} == {
+        item.id for item in selected_activities
+    }
+    assert {item.id for item in practice_record.practice_types} == {
+        item.id for item in selected_types
+    }
+    assert len(refresh_calls) == 1
+
+
+def test_full_edit_missing_selector_with_configured_sources_uses_existing_block(
+    db_session,
+    practice_record,
+    refresh_calls,
+):
+    view = _full_edit_submission_view(practice_record, workout="Must not save")
+    mode, context, state, _preview = decode_practice_reaction_metadata(
+        view["private_metadata"]
+    )
+    state.last_valid_activity_ids = ()
+    view["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context=context,
+        state=state,
+    )
+    _omit_selector(view, "activities_block")
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls == [{
+        "response_action": "errors",
+        "errors": {
+            "location_block": "Invalid Activity selection. Please try again."
+        },
+    }]
+    db.session.refresh(practice_record)
+    assert practice_record.workout_description == "Original workout"
+    assert refresh_calls == []
 
 
 def test_unknown_full_edit_selector_has_no_update_or_persistence(
@@ -843,6 +1322,93 @@ def test_full_edit_source_changes_preserve_submitted_plan_snapshot(
     assert len(refresh_calls) == 1
 
 
+@pytest.mark.parametrize("clear_blocking_error", [False, True])
+def test_full_edit_rejects_blocked_or_tampered_selector_transition(
+    db_session,
+    practice_record,
+    source_records,
+    refresh_calls,
+    clear_blocking_error,
+):
+    practice_record.plan_reactions = [
+        {"emoji": f"protected_{index}", "label": f"Protected {index}"}
+        for index in range(4)
+    ]
+    db.session.commit()
+    selected = load_selected_plan_reaction_sources(
+        db.session,
+        activity_ids=[source_records["current_activity"].id],
+        type_ids=[source_records["current_type"].id],
+    )
+    state = build_plan_reaction_editor_state(
+        practice_types=selected.practice_types,
+        activities=selected.activities,
+        saved_snapshot=practice_record.plan_reactions,
+    ).state
+    blocked = reconcile_plan_reaction_editor_state(
+        state,
+        practice_types=[source_records["replacement_type"]],
+        activities=[source_records["current_activity"]],
+    ).state
+    assert blocked.blocking_error and "more than 4" in blocked.blocking_error
+    if clear_blocking_error:
+        blocked.blocking_error = None
+    view = _full_edit_submission_view(
+        practice_record,
+        workout="Must not save",
+    )
+    view["state"]["values"]["types_block"]["type_ids"][
+        "selected_options"
+    ] = [{"value": str(source_records["replacement_type"].id)}]
+    view["private_metadata"] = encode_practice_reaction_metadata(
+        mode="edit",
+        context={"practice_id": practice_record.id},
+        state=blocked,
+    )
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls[0]["response_action"] == "errors"
+    assert "types_block" in ack.calls[0]["errors"]
+    db.session.refresh(practice_record)
+    assert practice_record.workout_description == "Original workout"
+    assert refresh_calls == []
+
+
+def test_full_edit_submission_counts_duplicate_selector_ids_once(
+    db_session,
+    practice_record,
+    source_records,
+    refresh_calls,
+):
+    view = _full_edit_submission_view(practice_record)
+    type_id = source_records["current_type"].id
+    view["state"]["values"]["types_block"]["type_ids"][
+        "selected_options"
+    ] = [{"value": str(type_id)}, {"value": str(type_id)}]
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls == [{}]
+    db.session.refresh(practice_record)
+    assert [item.id for item in practice_record.practice_types] == [type_id]
+    assert len(refresh_calls) == 1
+
+
 def test_full_edit_commit_failure_rolls_back_without_refresh(
     db_session,
     practice_record,
@@ -865,7 +1431,12 @@ def test_full_edit_commit_failure_rolls_back_without_refresh(
         ack,
     )
 
-    assert ack.calls == [{}]
+    assert ack.calls == [{
+        "response_action": "errors",
+        "errors": {
+            "location_block": "Could not save practice changes. Please try again."
+        },
+    }]
     rollback.assert_called_once_with()
     assert result == {
         "success": False,
@@ -873,6 +1444,252 @@ def test_full_edit_commit_failure_rolls_back_without_refresh(
         "error": "Could not save practice changes. Please try again.",
     }
     assert practice_record.workout_description == "Original workout"
+    assert refresh_calls == []
+
+
+def test_full_edit_mutation_failure_rolls_back_and_keeps_modal_open(
+    db_session,
+    practice_record,
+    refresh_calls,
+    monkeypatch,
+):
+    view = _full_edit_submission_view(practice_record, workout="Must roll back")
+    view["state"]["values"]["coaches_block"] = {
+        "coach_ids": {"selected_options": []}
+    }
+    failing_query = MagicMock()
+    failing_query.filter_by.return_value.delete.side_effect = RuntimeError(
+        "relationship mutation failed"
+    )
+    monkeypatch.setattr(PracticeLead, "query", failing_query)
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    ack = AckRecorder()
+
+    result = bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    rollback.assert_called_once_with()
+    assert ack.calls == [{
+        "response_action": "errors",
+        "errors": {
+            "location_block": "Could not save practice changes. Please try again."
+        },
+    }]
+    assert result == {
+        "success": False,
+        "practice_updated": False,
+        "error": "Could not save practice changes. Please try again.",
+    }
+    assert refresh_calls == []
+
+
+def test_full_edit_injected_post_save_dispatcher_defers_refresh(
+    db_session,
+    practice_record,
+    refresh_calls,
+):
+    ack = AckRecorder()
+    dispatcher = MagicMock()
+
+    result = bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=_full_edit_submission_view(
+            practice_record,
+            workout="Saved before dispatch",
+        ),
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+        post_save_dispatcher=dispatcher,
+    )
+
+    assert ack.calls == [{}]
+    assert result == {"success": True, "practice_updated": True}
+    assert refresh_calls == []
+    dispatcher.assert_called_once()
+
+    dispatcher.call_args.args[0]()
+
+    assert len(refresh_calls) == 1
+
+
+def test_full_edit_post_save_reload_failure_reports_saved_but_unsynced(
+    db_session,
+    practice_record,
+    monkeypatch,
+):
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    monkeypatch.setattr(
+        db.session,
+        "get",
+        MagicMock(side_effect=RuntimeError("database unavailable")),
+    )
+    client = MagicMock()
+    logger = MagicMock()
+
+    result = bolt_module._run_practice_edit_full_post_save(
+        practice_id=practice_record.id,
+        user_id="U-FULL-EDIT-TEST",
+        should_notify=False,
+        had_root=True,
+        previous_date=practice_record.date,
+        previous_location_id=practice_record.location_id,
+        previous_plan_reactions=[
+            dict(item) for item in (practice_record.plan_reactions or [])
+        ],
+        client=client,
+        logger=logger,
+    )
+
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    assert result["success"] is False
+    assert result["practice_updated"] is True
+    assert result["error"] == (
+        "Practice changes were saved, but the Slack announcement was not "
+        "updated. Retry the edit or refresh the announcement."
+    )
+    client.chat_postMessage.assert_called_once()
+
+
+@pytest.mark.parametrize("failure_kind", ["target_query", "source_query"])
+def test_full_edit_authoritative_query_failure_rolls_back_and_keeps_modal_open(
+    db_session,
+    practice_record,
+    refresh_calls,
+    monkeypatch,
+    failure_kind,
+):
+    view = _full_edit_submission_view(practice_record, workout="Must not save")
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    if failure_kind == "target_query":
+        monkeypatch.setattr(
+            db.session,
+            "get",
+            MagicMock(side_effect=RuntimeError("target database unavailable")),
+        )
+    else:
+        monkeypatch.setattr(
+            bolt_module,
+            "load_selected_plan_reaction_sources",
+            lambda _session, **_ids: (_ for _ in ()).throw(
+                RuntimeError("source database unavailable")
+            ),
+        )
+    ack = AckRecorder()
+    logger = MagicMock()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logger,
+    )
+
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    assert ack.calls[0]["response_action"] == "errors"
+    assert "location_block" in ack.calls[0]["errors"]
+    assert refresh_calls == []
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_block"),
+    [("deleted_activity", "activities_block"), ("malformed_type", "types_block")],
+)
+def test_full_edit_stale_or_malformed_selected_source_maps_selector_error(
+    db_session,
+    practice_record,
+    source_records,
+    refresh_calls,
+    failure_kind,
+    expected_block,
+):
+    if failure_kind == "deleted_activity":
+        replacement = source_records["replacement_activity"]
+        view = _full_edit_submission_view(
+            practice_record,
+            activity_ids=[replacement.id],
+        )
+        db.session.delete(replacement)
+    else:
+        view = _full_edit_submission_view(practice_record)
+        source_records["current_type"].default_plan_reactions = "not-a-list"
+    db.session.commit()
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls[0]["response_action"] == "errors"
+    assert expected_block in ack.calls[0]["errors"]
+    db.session.refresh(practice_record)
+    assert practice_record.workout_description == "Original workout"
+    assert refresh_calls == []
+
+
+@pytest.mark.parametrize("failure_kind", ["catalog_query", "malformed_settings"])
+def test_full_edit_catalog_failure_rolls_back_and_keeps_modal_open(
+    db_session,
+    practice_record,
+    refresh_calls,
+    monkeypatch,
+    failure_kind,
+):
+    view = _full_edit_submission_view(practice_record, workout="Must not save")
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    if failure_kind == "catalog_query":
+        failure_loader = lambda _session: (_ for _ in ()).throw(
+            RuntimeError("catalog unavailable")
+        )
+    else:
+        failure_loader = lambda _session: SelectedPlanReactionSources(
+            practice_types=(SimpleNamespace(
+                id=999,
+                name="Malformed Settings Type",
+                default_plan_reactions="not-a-list",
+            ),),
+            activities=(),
+        )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        failure_loader,
+    )
+    ack = AckRecorder()
+    logger = MagicMock()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logger,
+    )
+
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    assert ack.calls[0]["response_action"] == "errors"
+    assert "location_block" in ack.calls[0]["errors"]
     assert refresh_calls == []
 
 

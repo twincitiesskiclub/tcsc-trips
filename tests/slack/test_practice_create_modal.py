@@ -13,7 +13,12 @@ import pytest
 
 from app import create_app
 from app.models import db
-from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.plan_reaction_editor import (
+    add_catalog_plan_reaction,
+    build_plan_reaction_editor_state,
+    reconcile_plan_reaction_editor_state,
+)
+from app.practices.plan_reaction_queries import SelectedPlanReactionSources
 from app.practices.models import (
     Practice,
     PracticeActivity,
@@ -71,6 +76,13 @@ def _view_values(modal):
             }
         values[block_id] = {action_id: action_value}
     return values
+
+
+def _omit_selector(modal, block_id):
+    modal["blocks"] = [
+        block for block in modal["blocks"] if block.get("block_id") != block_id
+    ]
+    modal["state"]["values"].pop(block_id, None)
 
 
 def _reaction_inputs():
@@ -323,6 +335,118 @@ def test_create_submission_rejects_unknown_activity_before_persistence(
     assert Practice.query.count() == before
 
 
+def test_create_source_query_outage_rolls_back_and_acks_retryable_error(
+    db_session,
+    create_view,
+    monkeypatch,
+):
+    rollback = MagicMock(side_effect=db.session.rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    monkeypatch.setattr(
+        bolt_module,
+        "load_selected_plan_reaction_sources",
+        lambda _session, **_ids: (_ for _ in ()).throw(
+            RuntimeError("database unavailable")
+        ),
+    )
+    ack = MagicMock()
+    logger = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        logger,
+    )
+
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert "location_block" in ack.call_args.kwargs["errors"]
+    assert Practice.query.count() == before
+
+
+@pytest.mark.parametrize(
+    ("failure_kind", "expected_block"),
+    [("deleted_activity", "activities_block"), ("malformed_type", "types_block")],
+)
+def test_create_stale_or_malformed_selected_source_maps_selector_error(
+    db_session,
+    create_sources,
+    create_view,
+    failure_kind,
+    expected_block,
+):
+    _location, activity, practice_type = create_sources
+    if failure_kind == "deleted_activity":
+        db.session.delete(activity)
+    else:
+        practice_type.default_plan_reactions = "not-a-list"
+    db.session.commit()
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert expected_block in ack.call_args.kwargs["errors"]
+    assert Practice.query.count() == before
+
+
+@pytest.mark.parametrize("failure_kind", ["catalog_query", "malformed_settings"])
+def test_create_catalog_failure_rolls_back_and_acks_retryable_error(
+    db_session,
+    create_view,
+    monkeypatch,
+    failure_kind,
+):
+    rollback = MagicMock(side_effect=db.session.rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    if failure_kind == "catalog_query":
+        failure_loader = lambda _session: (_ for _ in ()).throw(
+            RuntimeError("catalog unavailable")
+        )
+    else:
+        failure_loader = lambda _session: SelectedPlanReactionSources(
+            practice_types=(SimpleNamespace(
+                id=999,
+                name="Malformed Settings Type",
+                default_plan_reactions="not-a-list",
+            ),),
+            activities=(),
+        )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        failure_loader,
+    )
+    ack = MagicMock()
+    logger = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        logger,
+    )
+
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert "location_block" in ack.call_args.kwargs["errors"]
+    assert Practice.query.count() == before
+
+
 def test_create_submission_maps_malformed_activity_state_without_persistence(
     db_session,
     create_view,
@@ -470,6 +594,280 @@ def test_create_submission_maps_incomplete_structured_row_without_persistence(
             "practice_reaction_row_r0": (
                 "Enter a description for :snowflake:."
             )
+        },
+    }
+    assert Practice.query.count() == before
+
+
+@pytest.mark.parametrize("clear_blocking_error", [False, True])
+def test_create_submission_rejects_blocked_or_tampered_selector_transition(
+    db_session,
+    create_sources,
+    clear_blocking_error,
+    monkeypatch,
+):
+    location, activity, selected_type = create_sources
+    catalog_type = PracticeType(
+        name=f"{CREATE_TEST_PREFIX} Four-row catalog",
+        default_plan_reactions=[
+            {"emoji": f"catalog_{index}", "label": f"Catalog {index}"}
+            for index in range(4)
+        ],
+    )
+    db.session.add(catalog_type)
+    db.session.commit()
+    catalog = build_plan_reaction_catalog(
+        [catalog_type, selected_type],
+        [activity],
+    )
+    state = build_plan_reaction_editor_state(
+        practice_types=[],
+        activities=[activity],
+        saved_snapshot=None,
+    ).state
+    for option in catalog[:4]:
+        state = add_catalog_plan_reaction(state, option)
+    blocked = reconcile_plan_reaction_editor_state(
+        state,
+        practice_types=[selected_type],
+        activities=[activity],
+    ).state
+    assert blocked.blocking_error and "more than 4" in blocked.blocking_error
+    if clear_blocking_error:
+        blocked.blocking_error = None
+
+    modal = build_practice_create_modal(
+        datetime(2026, 7, 21, 18, 15),
+        "18:15",
+        locations=[(location.id, location.name)],
+        channel_id="C-CREATE-TEST",
+        message_ts=CREATE_TEST_PREFIX,
+        all_activities=[(activity.id, activity.name)],
+        all_types=[
+            (catalog_type.id, catalog_type.name),
+            (selected_type.id, selected_type.name),
+        ],
+        slot_defaults={
+            "location_id": location.id,
+            "activity_ids": [activity.id],
+            "type_ids": [selected_type.id],
+        },
+        reaction_editor=blocked,
+        reaction_catalog=catalog,
+    )
+    modal["state"] = {"values": _view_values(modal)}
+    ack = MagicMock()
+    thread = MagicMock()
+    monkeypatch.setattr(bolt_module.threading, "Thread", thread)
+    before = Practice.query.count()
+    add = MagicMock()
+    flush = MagicMock()
+    commit = MagicMock()
+    monkeypatch.setattr(db.session, "add", add)
+    monkeypatch.setattr(db.session, "flush", flush)
+    monkeypatch.setattr(db.session, "commit", commit)
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        modal,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert "types_block" in ack.call_args.kwargs["errors"]
+    assert Practice.query.count() == before
+    add.assert_not_called()
+    flush.assert_not_called()
+    commit.assert_not_called()
+    thread.assert_not_called()
+
+
+def test_create_submission_counts_duplicate_selector_ids_once(
+    db_session,
+    create_sources,
+    create_view,
+    monkeypatch,
+):
+    _location, activity, _practice_type = create_sources
+    create_view["state"]["values"]["activities_block"]["activity_ids"][
+        "selected_options"
+    ] = [{"value": str(activity.id)}, {"value": str(activity.id)}]
+    monkeypatch.setattr(bolt_module.threading, "Thread", MagicMock())
+    ack = MagicMock()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    ack.assert_called_once_with()
+    created = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+    assert [item.id for item in created.activities] == [activity.id]
+
+
+@pytest.mark.parametrize(
+    ("activity_empty", "type_empty"),
+    [(True, False), (False, True), (True, True)],
+)
+def test_create_submission_accepts_legitimately_omitted_empty_selectors(
+    db_session,
+    create_sources,
+    create_view,
+    monkeypatch,
+    activity_empty,
+    type_empty,
+):
+    _location, activity, practice_type = create_sources
+    selected_activities = () if activity_empty else (activity,)
+    selected_types = () if type_empty else (practice_type,)
+    state = build_plan_reaction_editor_state(
+        practice_types=selected_types,
+        activities=selected_activities,
+        saved_snapshot=None,
+    ).state
+    mode, context, _old_state, _preview = decode_practice_reaction_metadata(
+        create_view["private_metadata"]
+    )
+    create_view["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context=context,
+        state=state,
+    )
+    if activity_empty:
+        _omit_selector(create_view, "activities_block")
+    if type_empty:
+        _omit_selector(create_view, "types_block")
+    activity_id = activity.id
+    type_id = practice_type.id
+
+    def load_sources(session):
+        return SelectedPlanReactionSources(
+            practice_types=(
+                ()
+                if type_empty
+                else (session.get(PracticeType, type_id),)
+            ),
+            activities=(
+                ()
+                if activity_empty
+                else (session.get(PracticeActivity, activity_id),)
+            ),
+        )
+
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        load_sources,
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_selected_plan_reaction_sources",
+        lambda session, **_ids: load_sources(session),
+    )
+    thread = MagicMock()
+    monkeypatch.setattr(bolt_module.threading, "Thread", thread)
+    ack = MagicMock()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    ack.assert_called_once_with()
+    created = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+    assert {item.id for item in created.activities} == {
+        item.id for item in selected_activities
+    }
+    assert {item.id for item in created.practice_types} == {
+        item.id for item in selected_types
+    }
+
+
+def test_create_missing_selector_with_configured_sources_uses_existing_error_block(
+    db_session,
+    create_sources,
+    create_view,
+    monkeypatch,
+):
+    _location, activity, practice_type = create_sources
+    mode, context, state, _preview = decode_practice_reaction_metadata(
+        create_view["private_metadata"]
+    )
+    state.last_valid_activity_ids = ()
+    create_view["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context=context,
+        state=state,
+    )
+    _omit_selector(create_view, "activities_block")
+    sources = SelectedPlanReactionSources(
+        practice_types=(practice_type,),
+        activities=(activity,),
+    )
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        lambda _session: sources,
+    )
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs == {
+        "response_action": "errors",
+        "errors": {
+            "location_block": "Invalid Activity selection. Please try again."
+        },
+    }
+    assert Practice.query.count() == before
+
+
+def test_create_selector_error_never_targets_block_absent_from_view(
+    db_session,
+    create_view,
+):
+    create_view["blocks"] = [
+        block
+        for block in create_view["blocks"]
+        if block.get("block_id") != "activities_block"
+    ]
+    create_view["state"]["values"]["activities_block"]["activity_ids"][
+        "selected_options"
+    ] = [{"value": "not-an-id"}]
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs == {
+        "response_action": "errors",
+        "errors": {
+            "location_block": "Invalid Activity selection. Please try again."
         },
     }
     assert Practice.query.count() == before

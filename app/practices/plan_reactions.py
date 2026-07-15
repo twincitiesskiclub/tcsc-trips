@@ -151,9 +151,34 @@ def _distinct_sources(items: Iterable, kind: str) -> list[tuple[str, object]]:
         source_id = getattr(item, "id", None)
         name = str(getattr(item, "name", "") or "").strip()
         if isinstance(source_id, bool) or not isinstance(source_id, int) or not name:
-            raise PlanReactionValidationError(f"Invalid {kind} reaction source")
+            raise PlanReactionValidationError(
+                f"Invalid {kind} reaction source",
+                field="activities" if kind == "activity" else "types",
+            )
         by_key.setdefault(f"{kind}:{source_id}", item)
     return sorted(by_key.items(), key=lambda pair: pair[1].name.casefold())
+
+
+def _normalize_source_plan_reactions(item, source_key: str, source_name: str):
+    """Normalize a Settings source while retaining its selector provenance."""
+    try:
+        return normalize_plan_reactions(
+            getattr(item, "default_plan_reactions", None) or [],
+            source=source_name,
+        )
+    except PlanReactionValidationError as exc:
+        if exc.field is not None:
+            raise
+        raise PlanReactionValidationError(
+            str(exc),
+            field=(
+                "activities"
+                if source_key.startswith("activity:")
+                else "types"
+            ),
+            row_id=exc.row_id,
+            emoji=exc.emoji,
+        ) from exc
 
 
 def resolve_plan_reaction_defaults(
@@ -173,9 +198,10 @@ def resolve_plan_reaction_defaults(
             if source_key.startswith("type:")
             else f"Activity {item.name}"
         )
-        for option in normalize_plan_reactions(
-            getattr(item, "default_plan_reactions", None) or [],
-            source=source_name,
+        for option in _normalize_source_plan_reactions(
+            item,
+            source_key,
+            source_name,
         ):
             prior = by_emoji.get(option["emoji"])
             if prior and prior.label != option["label"]:
@@ -251,9 +277,10 @@ def build_plan_reaction_catalog(
             if source_key.startswith("type:")
             else f"Activity {item.name}"
         )
-        for pair in normalize_plan_reactions(
-            item.default_plan_reactions or [],
-            source=source_name,
+        for pair in _normalize_source_plan_reactions(
+            item,
+            source_key,
+            source_name,
         ):
             key = (pair["emoji"], pair["label"])
             if key in merged:

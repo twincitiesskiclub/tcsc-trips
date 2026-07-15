@@ -82,6 +82,35 @@ def test_resolver_rejects_same_emoji_with_two_labels():
     assert "Activity Rollerski" in str(error.value)
 
 
+@pytest.mark.parametrize(
+    ("practice_types", "activities", "expected_field"),
+    [
+        (
+            [source(10, "Malformed Type", "not-a-list")],
+            [],
+            "types",
+        ),
+        (
+            [],
+            [
+                source(1, "Malformed Activity", "not-a-list"),
+                source(2, "Second Activity", []),
+            ],
+            "activities",
+        ),
+    ],
+)
+def test_settings_source_normalization_errors_identify_the_selector_field(
+    practice_types,
+    activities,
+    expected_field,
+):
+    with pytest.raises(PlanReactionValidationError) as error:
+        resolve_plan_reaction_defaults(practice_types, activities)
+
+    assert error.value.field == expected_field
+
+
 @pytest.mark.parametrize("emoji", ["white_check_mark", "six", "ballot_box_with_check"])
 def test_reserved_attendance_emoji_is_rejected(emoji):
     with pytest.raises(PlanReactionValidationError, match="reserved"):
