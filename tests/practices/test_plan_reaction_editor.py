@@ -116,6 +116,61 @@ def test_existing_empty_snapshot_suppresses_current_defaults(sources):
     }
 
 
+def test_suppression_records_resolver_inherited_order_on_build(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[],
+    ).state
+
+    assert [
+        (item.emoji, item.inherited_order) for item in state.suppressed
+    ] == [
+        (pair["emoji"], order)
+        for order, pair in enumerate(FOUR_APPROVED_ROWS)
+    ]
+
+
+def test_reconcile_updates_suppression_to_current_inherited_order(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[],
+    ).state
+
+    reconciled = reconcile_plan_reaction_editor_state(
+        state,
+        practice_types=[],
+        activities=[sources.run, sources.rollerski],
+    ).state
+
+    assert [
+        (item.emoji, item.inherited_order)
+        for item in reconciled.suppressed
+    ] == [
+        ("hatching_chick", 0),
+        ("older_adult::skin-tone-4", 1),
+        ("athletic_shoe", 2),
+    ]
+
+
+def test_serialization_includes_explicit_suppressed_inherited_order(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[],
+    ).state
+
+    payload = serialize_plan_reaction_editor_state(state)
+
+    assert [item["inherited_order"] for item in payload["suppressed"]] == [
+        0,
+        1,
+        2,
+        3,
+    ]
+
+
 def test_edit_reconstructs_inherited_custom_label_and_protected_snapshot(sources):
     saved = [
         {"emoji": "athletic_shoe", "label": "trail runner"},
@@ -249,6 +304,37 @@ def test_adding_a_suppressed_applicable_default_recovers_inherited_origin_now(
     ]
 
 
+def test_successive_immediate_adds_use_tombstone_order_not_list_position(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[],
+    ).state
+    state.suppressed.reverse()
+    source_keys = {
+        "evergreen_tree": (f"type:{sources.intervals.id}",),
+        "hatching_chick": (f"activity:{sources.rollerski.id}",),
+        "older_adult::skin-tone-4": (
+            f"activity:{sources.rollerski.id}",
+        ),
+        "athletic_shoe": (f"activity:{sources.run.id}",),
+    }
+
+    for pair in reversed(FOUR_APPROVED_ROWS):
+        state = add_catalog_plan_reaction(
+            state,
+            PlanReactionCatalogOption(
+                option_id=pair["emoji"],
+                emoji=pair["emoji"],
+                label=pair["label"],
+                source_keys=source_keys[pair["emoji"]],
+            ),
+        )
+
+    assert [row.inherited_order for row in state.rows] == [0, 1, 2, 3]
+    assert active_plan_reaction_snapshot(state) == FOUR_APPROVED_ROWS
+
+
 def test_suppression_clears_only_after_all_original_sources_disappear(sources):
     state = build_plan_reaction_editor_state(
         practice_types=[],
@@ -300,6 +386,7 @@ def test_partial_source_disappearance_keeps_serializable_original_suppression(
                 f"activity:{sources.run.id}",
                 f"activity:{sources.trail_run.id}",
             ),
+            0,
         )
     ]
     assert deserialize_plan_reaction_editor_state(
@@ -706,6 +793,74 @@ def test_metadata_rejects_unrepresented_effective_inherited_count(sources):
         deserialize_plan_reaction_editor_state(payload)
 
 
+def test_metadata_round_trips_canonical_suppression_and_rejects_reversed(
+    sources,
+):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[],
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+
+    assert deserialize_plan_reaction_editor_state(deepcopy(payload)) == state
+
+    payload["suppressed"].reverse()
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
+def test_metadata_rejects_duplicate_suppressed_inherited_order(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[],
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["suppressed"][1]["inherited_order"] = 0
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
+def test_metadata_rejects_row_and_suppression_inherited_order_collision(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=[EVERGREEN_PLAN_REACTION],
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["suppressed"][0]["inherited_order"] = 0
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
+def test_metadata_rejects_suppressed_order_outside_effective_count(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[],
+        saved_snapshot=[],
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["suppressed"][0]["inherited_order"] = 1
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
 def _empty_metadata(**changes):
     payload = {
         "version": PLAN_REACTION_EDITOR_VERSION,
@@ -751,14 +906,22 @@ def _metadata_row(
     [
         _empty_metadata(
             suppressed=[
-                {"emoji": "snowflake", "source_keys": ["activity:99"]}
+                {
+                    "emoji": "snowflake",
+                    "source_keys": ["activity:99"],
+                    "inherited_order": 0,
+                }
             ],
             last_valid_activity_ids=[1, 2],
             effective_inherited_count=1,
         ),
         _empty_metadata(
             suppressed=[
-                {"emoji": "snowflake", "source_keys": ["activity:1"]}
+                {
+                    "emoji": "snowflake",
+                    "source_keys": ["activity:1"],
+                    "inherited_order": 0,
+                }
             ],
             last_valid_activity_ids=[1],
             effective_inherited_count=1,
@@ -826,7 +989,12 @@ def test_metadata_rejects_orphan_or_preemptive_suppression(payload):
             next_row_number=1,
         ),
         _empty_metadata(
-            suppressed=[{"emoji": "snowflake", "source_keys": ["bad"]}],
+            suppressed=[{
+                "emoji": "snowflake",
+                "source_keys": ["bad"],
+                "inherited_order": 0,
+            }],
+            effective_inherited_count=1,
         ),
     ],
     ids=[
@@ -877,6 +1045,7 @@ def test_suppressed_dataclass_round_trips_as_source_key_tuple():
             SuppressedPlanReaction(
                 emoji="snowflake",
                 source_keys=("type:10", "activity:2"),
+                inherited_order=0,
             )
         ],
         last_valid_type_ids=(10,),
@@ -890,3 +1059,4 @@ def test_suppressed_dataclass_round_trips_as_source_key_tuple():
 
     assert decoded == state
     assert decoded.suppressed[0].source_keys == ("type:10", "activity:2")
+    assert decoded.suppressed[0].inherited_order == 0
