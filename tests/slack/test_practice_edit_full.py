@@ -1,5 +1,6 @@
 import logging
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -7,14 +8,17 @@ import pytest
 from app import create_app
 from app.models import db
 from app.practices.interfaces import PracticeInfo, PracticeStatus
+from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
 from app.practices.models import (
     Practice,
     PracticeActivity,
     PracticeLocation,
     PracticeType,
 )
+from app.practices.plan_reactions import build_plan_reaction_catalog
 import app.slack.bolt_app as bolt_module
 from app.slack.modals import build_practice_edit_full_modal
+from app.slack.practice_reaction_editor import decode_practice_reaction_metadata
 
 
 TEST_PREFIX = "Slack Full Edit Test"
@@ -217,23 +221,79 @@ def _practice_info():
     )
 
 
+def _edit_reaction_inputs(practice):
+    settings_source = SimpleNamespace(
+        id=1,
+        name="Configured options",
+        default_plan_reactions=[
+            {
+                "emoji": row["emoji"],
+                "label": row["label"],
+            }
+            for row in practice.plan_reactions or []
+        ],
+    )
+    editor = build_plan_reaction_editor_state(
+        practice_types=[],
+        activities=[],
+        saved_snapshot=practice.plan_reactions or [],
+    ).state
+    return {
+        "reaction_editor": editor,
+        "reaction_catalog": build_plan_reaction_catalog(
+            [settings_source],
+            [],
+        ),
+    }
+
+
 def test_full_edit_modal_limits_all_authoring_fields():
-    blocks = _blocks_by_id(build_practice_edit_full_modal(_practice_info()))
+    practice = _practice_info()
+    blocks = _blocks_by_id(
+        build_practice_edit_full_modal(
+            practice,
+            **_edit_reaction_inputs(practice),
+        )
+    )
 
     assert blocks["workout_block"]["element"]["max_length"] == 2500
     assert blocks["notes_block"]["element"]["max_length"] == 2500
-    assert blocks["plan_reactions_block"]["element"]["max_length"] == 1000
+    assert blocks["practice_reaction_row_r0"]["element"]["max_length"] == 80
+    assert "plan_reactions_block" not in blocks
 
 
 def test_full_edit_modal_prefills_saved_notes_and_plan_snapshot():
-    blocks = _blocks_by_id(build_practice_edit_full_modal(_practice_info()))
+    practice = _practice_info()
+    modal = build_practice_edit_full_modal(
+        practice,
+        **_edit_reaction_inputs(practice),
+    )
+    blocks = _blocks_by_id(modal)
 
     assert blocks["notes_block"]["element"]["initial_value"] == (
         "Meet by the flagpole"
     )
-    assert blocks["plan_reactions_block"]["element"]["initial_value"] == (
-        ":evergreen_tree: Endurance instead of intervals"
+    assert blocks["practice_reaction_key_r0"]["text"]["text"] == (
+        "*:evergreen_tree:*"
     )
+    assert blocks["practice_reaction_row_r0"]["element"]["initial_value"] == (
+        "Endurance instead of intervals"
+    )
+    action_ids = [
+        element["action_id"]
+        for block in blocks.values()
+        for element in block.get("elements", [])
+    ]
+    assert "practice_reaction_restore" in action_ids
+    mode, context, state, preview = decode_practice_reaction_metadata(
+        modal["private_metadata"]
+    )
+    assert (mode, context, preview) == (
+        "edit",
+        {"practice_id": 42},
+        None,
+    )
+    assert state.rows[0].emoji == "evergreen_tree"
 
 
 def test_full_edit_modal_wraps_skin_tone_name_once():
@@ -242,11 +302,17 @@ def test_full_edit_modal_wraps_skin_tone_name_once():
         "emoji": "older_adult::skin-tone-4",
         "label": "experienced rollerskier",
     }]
-    field = _blocks_by_id(
-        build_practice_edit_full_modal(practice)
-    )["plan_reactions_block"]
-    assert field["element"]["initial_value"] == (
-        ":older_adult::skin-tone-4: experienced rollerskier"
+    blocks = _blocks_by_id(
+        build_practice_edit_full_modal(
+            practice,
+            **_edit_reaction_inputs(practice),
+        )
+    )
+    assert blocks["practice_reaction_key_r0"]["text"]["text"] == (
+        "*:older_adult::skin-tone-4:*"
+    )
+    assert blocks["practice_reaction_row_r0"]["element"]["initial_value"] == (
+        "experienced rollerskier"
     )
 
 

@@ -5,9 +5,18 @@ time from the weekly coach-summary 'Add Practice' button.
 """
 
 from datetime import datetime
+from types import SimpleNamespace
 
+from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.plan_reactions import (
+    EVERGREEN_PLAN_REACTION,
+    build_plan_reaction_catalog,
+)
 from app.slack.bolt_app import _parse_practice_authoring_values
 from app.slack.modals import build_practice_create_modal
+from app.slack.practice_reaction_editor import (
+    decode_practice_reaction_metadata,
+)
 
 
 def _blocks_by_id(modal):
@@ -21,6 +30,23 @@ def _authoring_values(workout="", plan_text=""):
     }
 
 
+def _reaction_inputs():
+    intervals = SimpleNamespace(
+        id=1,
+        name="Intervals",
+        default_plan_reactions=[EVERGREEN_PLAN_REACTION],
+    )
+    editor = build_plan_reaction_editor_state(
+        practice_types=[intervals],
+        activities=[],
+        saved_snapshot=None,
+    ).state
+    return {
+        "reaction_editor": editor,
+        "reaction_catalog": build_plan_reaction_catalog([intervals], []),
+    }
+
+
 def test_create_modal_has_coach_and_lead_pickers():
     eligible_coaches = [(1, "Alice Coach", "U1"), (2, "Bob Coach", "U2")]
     eligible_leads = [(3, "Carol Lead", "U3")]
@@ -30,6 +56,7 @@ def test_create_modal_has_coach_and_lead_pickers():
         locations=[(10, "Theodore Wirth")],
         eligible_coaches=eligible_coaches,
         eligible_leads=eligible_leads,
+        **_reaction_inputs(),
     )
     blocks = _blocks_by_id(modal)
     assert "coaches_block" in blocks, "create modal must expose a Coaches picker"
@@ -46,6 +73,7 @@ def test_create_modal_preselects_default_coaches():
         eligible_coaches=[(1, "Alice Coach", "U1"), (2, "Bob Coach", "U2")],
         eligible_leads=[(3, "Carol Lead", "U3")],
         slot_defaults={"coach_ids": [2]},
+        **_reaction_inputs(),
     )
     coaches = _blocks_by_id(modal)["coaches_block"]["element"]
     initial = {o["value"] for o in coaches.get("initial_options", [])}
@@ -55,30 +83,47 @@ def test_create_modal_preselects_default_coaches():
 def test_create_modal_omits_pickers_when_no_people():
     """No eligible people -> no coach/lead blocks (graceful, like the edit modal)."""
     modal = build_practice_create_modal(
-        datetime(2026, 6, 9, 18, 0), "18:00", locations=[(10, "Theodore Wirth")]
+        datetime(2026, 6, 9, 18, 0),
+        "18:00",
+        locations=[(10, "Theodore Wirth")],
+        **_reaction_inputs(),
     )
     blocks = _blocks_by_id(modal)
     assert "coaches_block" not in blocks
     assert "leads_block" not in blocks
 
 
-def test_create_modal_prefills_plan_reactions_and_limits_workout():
+def test_create_uses_structured_reactions_and_dispatching_selectors():
     modal = build_practice_create_modal(
         datetime(2026, 7, 14, 18, 15),
         "18:15",
         locations=[(10, "Theodore Wirth")],
-        initial_plan_reactions=[
-            {"emoji": "evergreen_tree", "label": "Endurance instead of intervals"}
-        ],
+        all_activities=[(1, "Run"), (2, "Rollerski")],
+        all_types=[(1, "Intervals")],
+        slot_defaults={"activity_ids": [1, 2], "type_ids": [1]},
+        **_reaction_inputs(),
     )
     blocks = _blocks_by_id(modal)
-    field = blocks["plan_reactions_block"]
-    assert field["label"]["text"] == "Plan reactions"
-    assert field["element"]["initial_value"] == (
-        ":evergreen_tree: Endurance instead of intervals"
+
+    assert "plan_reactions_block" not in blocks
+    assert blocks["activities_block"]["dispatch_action"] is True
+    assert blocks["types_block"]["dispatch_action"] is True
+    assert blocks["practice_reaction_key_r0"]["text"]["text"] == (
+        "*:evergreen_tree:*"
     )
-    assert "Defaults loaded from Settings" in field["hint"]["text"]
+    assert blocks["practice_reaction_row_r0"]["element"]["max_length"] == 80
     assert blocks["workout_block"]["element"]["max_length"] == 2500
+    mode, context, state, preview = decode_practice_reaction_metadata(
+        modal["private_metadata"]
+    )
+    assert mode == "create"
+    assert context == {
+        "date": "2026-07-14",
+        "channel_id": None,
+        "message_ts": None,
+    }
+    assert state.rows[0].emoji == "evergreen_tree"
+    assert preview is None
 
 
 def test_create_submission_uses_edited_visible_plan_value():

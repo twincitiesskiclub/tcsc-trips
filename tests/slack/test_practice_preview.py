@@ -2,25 +2,19 @@
 
 from contextlib import nullcontext
 from datetime import datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import app.slack.bolt_app as bolt_module
-from app.slack.modals import (
-    build_practice_create_modal,
-    build_practice_preview_modal,
+from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.plan_reactions import build_plan_reaction_catalog
+from app.slack.modals import build_practice_preview_modal
+from app.slack.practice_reaction_editor import (
+    decode_practice_reaction_metadata,
 )
 
 
 PREVIEW_DATE = datetime(2026, 7, 14, 18, 15)
-PREVIEW_REACTIONS = [
-    {"emoji": "evergreen_tree", "label": "Endurance instead of intervals"},
-    {"emoji": "hatching_chick", "label": "new rollerskier"},
-    {
-        "emoji": "older_adult::skin-tone-4",
-        "label": "experienced rollerskier",
-    },
-    {"emoji": "athletic_shoe", "label": "runner"},
-]
 
 
 def _blocks_by_id(modal):
@@ -29,26 +23,6 @@ def _blocks_by_id(modal):
         for block in modal["blocks"]
         if "block_id" in block
     }
-
-
-def _expected_create_modal():
-    return build_practice_create_modal(
-        PREVIEW_DATE,
-        "18:15",
-        locations=[(1, "Theodore Wirth - Trailhead")],
-        all_activities=[(1, "Rollerski"), (2, "Running")],
-        all_types=[(1, "Intervals"), (2, "Technique")],
-        slot_defaults={
-            "location_id": 1,
-            "activity_ids": [1],
-            "type_ids": [1],
-            "coach_ids": [1],
-            "lead_ids": [2],
-        },
-        eligible_coaches=[(1, "Preview Coach", "U_PREVIEW_COACH")],
-        eligible_leads=[(2, "Preview Lead", "U_PREVIEW_LEAD")],
-        initial_plan_reactions=PREVIEW_REACTIONS,
-    )
 
 
 def _preview_command(**overrides):
@@ -63,27 +37,32 @@ def _preview_command(**overrides):
     return command
 
 
-def test_preview_wraps_the_production_create_modal():
-    expected = _expected_create_modal()
-    expected.update({
-        "title": {"type": "plain_text", "text": "Practice Preview"},
-        "submit": {"type": "plain_text", "text": "Close Preview"},
-        "callback_id": "practice_preview",
-        "private_metadata": "",
-    })
+def test_preview_wraps_the_structured_production_create_modal():
+    modal = build_practice_preview_modal(PREVIEW_DATE)
 
-    assert build_practice_preview_modal(PREVIEW_DATE) == expected
+    assert modal["type"] == "modal"
+    assert modal["title"] == {
+        "type": "plain_text",
+        "text": "Practice Preview",
+    }
+    assert modal["submit"] == {
+        "type": "plain_text",
+        "text": "Close Preview",
+    }
+    assert modal["callback_id"] == "practice_preview"
+    assert modal["private_metadata"]
 
 
-def test_preview_prefills_synthetic_options_and_all_reaction_lines():
-    blocks = _blocks_by_id(build_practice_preview_modal(PREVIEW_DATE))
+def test_preview_derives_four_rows_from_interval_run_and_rollerski_sources():
+    modal = build_practice_preview_modal(PREVIEW_DATE)
+    blocks = _blocks_by_id(modal)
 
     assert blocks["time_block"]["element"]["initial_time"] == "18:15"
     assert blocks["location_block"]["element"]["initial_option"]["value"] == "1"
     assert [
         option["value"]
         for option in blocks["activities_block"]["element"]["initial_options"]
-    ] == ["1"]
+    ] == ["1", "2"]
     assert [
         option["value"]
         for option in blocks["types_block"]["element"]["initial_options"]
@@ -96,12 +75,67 @@ def test_preview_prefills_synthetic_options_and_all_reaction_lines():
         option["value"]
         for option in blocks["leads_block"]["element"]["initial_options"]
     ] == ["2"]
-    assert blocks["plan_reactions_block"]["element"]["initial_value"] == (
-        ":evergreen_tree: Endurance instead of intervals\n"
-        ":hatching_chick: new rollerskier\n"
-        ":older_adult::skin-tone-4: experienced rollerskier\n"
-        ":athletic_shoe: runner"
+    assert "plan_reactions_block" not in blocks
+    assert [
+        blocks[f"practice_reaction_key_r{index}"]["text"]["text"]
+        for index in range(4)
+    ] == [
+        "*:evergreen_tree:*",
+        "*:athletic_shoe:*",
+        "*:hatching_chick:*",
+        "*:older_adult::skin-tone-4:*",
+    ]
+    assert blocks["activities_block"]["dispatch_action"] is True
+    assert blocks["types_block"]["dispatch_action"] is True
+
+    mode, context, state, preview = decode_practice_reaction_metadata(
+        modal["private_metadata"]
     )
+    assert mode == "preview"
+    assert context == {"preview": True}
+    assert [row.emoji for row in state.rows] == [
+        "evergreen_tree",
+        "athletic_shoe",
+        "hatching_chick",
+        "older_adult::skin-tone-4",
+    ]
+    assert preview["activities"][2]["name"] == "Strength"
+    assert preview["slot_defaults"]["activity_ids"] == [1, 2]
+
+
+def test_preview_metadata_fully_rebuilds_sources_and_catalog_without_database():
+    modal = build_practice_preview_modal(PREVIEW_DATE)
+    _mode, _context, encoded_state, preview = (
+        decode_practice_reaction_metadata(modal["private_metadata"])
+    )
+    practice_types = [SimpleNamespace(**source) for source in preview["practice_types"]]
+    activities = [SimpleNamespace(**source) for source in preview["activities"]]
+    selected_type_ids = set(preview["slot_defaults"]["type_ids"])
+    selected_activity_ids = set(preview["slot_defaults"]["activity_ids"])
+    selected_types = [
+        source for source in practice_types if source.id in selected_type_ids
+    ]
+    selected_activities = [
+        source for source in activities if source.id in selected_activity_ids
+    ]
+
+    rebuilt = build_plan_reaction_editor_state(
+        practice_types=selected_types,
+        activities=selected_activities,
+        saved_snapshot=None,
+    ).state
+    catalog = build_plan_reaction_catalog(practice_types, activities)
+
+    assert [row.emoji for row in rebuilt.rows] == [
+        row.emoji for row in encoded_state.rows
+    ]
+    assert [option.emoji for option in catalog] == [
+        "evergreen_tree",
+        "athletic_shoe",
+        "hatching_chick",
+        "older_adult::skin-tone-4",
+    ]
+    assert "practice_id" not in modal["private_metadata"]
 
 
 def test_preview_command_rejects_every_other_channel_before_opening_a_view():

@@ -371,9 +371,17 @@ if _bot_token:
 
         with get_app_context():
             from app.practices.models import Practice, PracticeLocation, PracticeActivity, PracticeType
+            from app.practices.plan_reaction_editor import (
+                build_plan_reaction_editor_state,
+            )
+            from app.practices.plan_reaction_queries import (
+                load_all_plan_reaction_sources,
+                load_selected_plan_reaction_sources,
+            )
+            from app.practices.plan_reactions import build_plan_reaction_catalog
             from app.practices.service import convert_practice_to_info
             from app.slack.modals import build_practice_edit_full_modal
-            from app.models import Tag, User
+            from app.models import db, Tag, User
 
             practice = Practice.query.get(practice_id)
             if not practice:
@@ -421,6 +429,22 @@ if _bot_token:
                 for t in PracticeType.query.order_by(PracticeType.name).all()
             ]
 
+            selected_sources = load_selected_plan_reaction_sources(
+                db.session,
+                activity_ids=[item.id for item in practice.activities],
+                type_ids=[item.id for item in practice.practice_types],
+            )
+            all_reaction_sources = load_all_plan_reaction_sources(db.session)
+            reaction_editor = build_plan_reaction_editor_state(
+                practice_types=selected_sources.practice_types,
+                activities=selected_sources.activities,
+                saved_snapshot=practice.plan_reactions or [],
+            ).state
+            reaction_catalog = build_plan_reaction_catalog(
+                all_reaction_sources.practice_types,
+                all_reaction_sources.activities,
+            )
+
             # Convert to PracticeInfo and build modal
             practice_info = convert_practice_to_info(practice)
             modal = build_practice_edit_full_modal(
@@ -429,7 +453,9 @@ if _bot_token:
                 eligible_coaches=eligible_coaches,
                 eligible_leads=eligible_leads,
                 all_activities=all_activities,
-                all_types=all_types
+                all_types=all_types,
+                reaction_editor=reaction_editor,
+                reaction_catalog=reaction_catalog,
             )
 
             # Open the modal
@@ -631,11 +657,17 @@ if _bot_token:
             return
 
         with get_app_context():
-            from app.models import AppConfig
-            from app.practices.models import PracticeActivity, PracticeType
+            from app.models import AppConfig, db
+            from app.practices.plan_reaction_editor import (
+                build_plan_reaction_editor_state,
+            )
+            from app.practices.plan_reaction_queries import (
+                load_all_plan_reaction_sources,
+                load_selected_plan_reaction_sources,
+            )
             from app.practices.plan_reactions import (
                 PlanReactionValidationError,
-                resolve_default_plan_reactions,
+                build_plan_reaction_catalog,
             )
             from app.slack.modals import build_practice_create_modal
 
@@ -684,17 +716,23 @@ if _bot_token:
 
             activity_ids = (slot_defaults or {}).get("activity_ids", [])
             type_ids = (slot_defaults or {}).get("type_ids", [])
-            activities = (
-                PracticeActivity.query.filter(PracticeActivity.id.in_(activity_ids)).all()
-                if activity_ids else []
-            )
-            practice_types = (
-                PracticeType.query.filter(PracticeType.id.in_(type_ids)).all()
-                if type_ids else []
-            )
             try:
-                initial_plan_reactions = resolve_default_plan_reactions(
-                    practice_types, activities
+                selected_sources = load_selected_plan_reaction_sources(
+                    db.session,
+                    activity_ids=activity_ids,
+                    type_ids=type_ids,
+                )
+                all_reaction_sources = load_all_plan_reaction_sources(
+                    db.session
+                )
+                reaction_editor = build_plan_reaction_editor_state(
+                    practice_types=selected_sources.practice_types,
+                    activities=selected_sources.activities,
+                    saved_snapshot=None,
+                ).state
+                reaction_catalog = build_plan_reaction_catalog(
+                    all_reaction_sources.practice_types,
+                    all_reaction_sources.activities,
                 )
             except PlanReactionValidationError as exc:
                 client.chat_postEphemeral(
@@ -723,7 +761,8 @@ if _bot_token:
                 slot_defaults=slot_defaults,
                 silent_defaults=silent_defaults if silent_defaults else None,
                 eligible_coaches=eligible_coaches, eligible_leads=eligible_leads,
-                initial_plan_reactions=initial_plan_reactions,
+                reaction_editor=reaction_editor,
+                reaction_catalog=reaction_catalog,
             )
             client.views_open(trigger_id=trigger_id, view=modal)
 

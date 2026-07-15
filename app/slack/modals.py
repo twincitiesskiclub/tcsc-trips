@@ -1,8 +1,19 @@
 """Slack modal view builders for practice interactions."""
 
+from types import SimpleNamespace
 from typing import Optional
+
 from app.practices.interfaces import PracticeInfo, LeadRole
-from app.practices.plan_reactions import format_plan_reaction_lines
+from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.plan_reactions import (
+    EVERGREEN_PLAN_REACTION,
+    build_plan_reaction_catalog,
+)
+from app.slack.practice_reaction_editor import (
+    apply_current_view_values,
+    build_practice_reaction_blocks,
+    encode_practice_reaction_metadata,
+)
 
 
 def _build_practice_flags_element(practice=None, *, is_dark_practice=False, has_social=False) -> dict:
@@ -437,7 +448,11 @@ def build_practice_edit_full_modal(
     eligible_coaches: list = None,
     eligible_leads: list = None,
     all_activities: list = None,
-    all_types: list = None
+    all_types: list = None,
+    *,
+    reaction_editor,
+    reaction_catalog,
+    current_values=None,
 ) -> dict:
     """Build modal for full practice editing from collab channel.
 
@@ -509,6 +524,7 @@ def build_practice_edit_full_modal(
         blocks.append({
             "type": "input",
             "block_id": "activities_block",
+            "dispatch_action": True,
             "optional": True,
             "label": {"type": "plain_text", "text": "Activities"},
             "element": _build_activity_type_multi_select(
@@ -521,6 +537,7 @@ def build_practice_edit_full_modal(
         blocks.append({
             "type": "input",
             "block_id": "types_block",
+            "dispatch_action": True,
             "optional": True,
             "label": {"type": "plain_text", "text": "Practice Types"},
             "element": _build_activity_type_multi_select(
@@ -554,19 +571,7 @@ def build_practice_edit_full_modal(
             )
         })
 
-    # Add location and practice authoring blocks
-    formatted_plan_reactions = format_plan_reaction_lines(
-        practice.plan_reactions or []
-    )
-    plan_reactions_element = {
-        "type": "plain_text_input",
-        "action_id": "plan_reactions",
-        "multiline": True,
-        "max_length": 1000,
-        "placeholder": {"type": "plain_text", "text": ":emoji: What it means"},
-    }
-    if formatted_plan_reactions:
-        plan_reactions_element["initial_value"] = formatted_plan_reactions
+    # Add location and practice authoring blocks.
     blocks.extend([
         {
             "type": "input",
@@ -604,19 +609,15 @@ def build_practice_edit_full_modal(
                 },
                 "initial_value": practice.logistics_notes or ""
             }
-        },
-        {
-            "type": "input",
-            "block_id": "plan_reactions_block",
-            "optional": True,
-            "label": {"type": "plain_text", "text": "Plan reactions"},
-            "hint": {
-                "type": "plain_text",
-                "text": "Edit this practice's saved reactions, one per line.",
-            },
-            "element": plan_reactions_element,
         }
     ])
+    blocks.extend(
+        build_practice_reaction_blocks(
+            reaction_editor,
+            reaction_catalog,
+            allow_restore=True,
+        )
+    )
 
     # Add flags and notification blocks
     blocks.extend([
@@ -653,15 +654,21 @@ def build_practice_edit_full_modal(
         }
     ])
 
-    return {
+    modal = {
         "type": "modal",
         "callback_id": "practice_edit_full",
-        "private_metadata": str(practice.id),
+        "private_metadata": encode_practice_reaction_metadata(
+            mode="edit",
+            context={"practice_id": practice.id},
+            state=reaction_editor,
+        ),
         "title": {"type": "plain_text", "text": "Edit Practice"},
         "submit": {"type": "plain_text", "text": "Save Changes"},
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks
     }
+    apply_current_view_values(modal["blocks"], current_values)
+    return modal
 
 
 def build_practice_create_modal(
@@ -670,7 +677,12 @@ def build_practice_create_modal(
     all_activities: list = None, all_types: list = None,
     slot_defaults: dict = None, silent_defaults: dict = None,
     eligible_coaches: list = None, eligible_leads: list = None,
-    initial_plan_reactions: list[dict[str, str]] | None = None
+    *,
+    reaction_editor,
+    reaction_catalog,
+    current_values=None,
+    view_mode="create",
+    preview_config=None,
 ) -> dict:
     """Build modal for creating a new practice from weekly summary.
 
@@ -687,13 +699,15 @@ def build_practice_create_modal(
         silent_defaults: Dict of defaults applied silently on submit (social_location_id)
         eligible_coaches: List of (user_id, name, slack_uid) tuples for the coach picker
         eligible_leads: List of (user_id, name, slack_uid) tuples for the lead picker
-        initial_plan_reactions: Resolved reaction defaults shown for practice-specific editing
+        reaction_editor: Prepared structured reaction working state
+        reaction_catalog: Prepared global Settings reaction catalog
+        current_values: Complete current Slack view state to preserve on rebuild
+        view_mode: Metadata mode, either Create or Preview
+        preview_config: Complete synthetic configuration for DB-free Preview rebuilds
 
     Returns:
         Slack modal view payload
     """
-    import json
-    from types import SimpleNamespace
     date_str = practice_date.strftime('%A, %B %-d')
     defaults = slot_defaults or {}
 
@@ -705,7 +719,11 @@ def build_practice_create_modal(
     }
     if silent_defaults:
         metadata_dict['silent'] = silent_defaults
-    metadata = json.dumps(metadata_dict)
+    metadata_context = (
+        {"preview": True}
+        if view_mode == "preview"
+        else metadata_dict
+    )
 
     # Build location dropdown options
     location_options = []
@@ -794,6 +812,7 @@ def build_practice_create_modal(
         blocks.append({
             "type": "input",
             "block_id": "activities_block",
+            "dispatch_action": True,
             "optional": True,
             "label": {"type": "plain_text", "text": "Activities"},
             "element": _build_activity_type_multi_select(
@@ -807,6 +826,7 @@ def build_practice_create_modal(
         blocks.append({
             "type": "input",
             "block_id": "types_block",
+            "dispatch_action": True,
             "optional": True,
             "label": {"type": "plain_text", "text": "Practice Types"},
             "element": _build_activity_type_multi_select(
@@ -814,30 +834,13 @@ def build_practice_create_modal(
             )
         })
 
-    plan_element = {
-        "type": "plain_text_input",
-        "action_id": "plan_reactions",
-        "multiline": True,
-        "max_length": 1000,
-        "placeholder": {"type": "plain_text", "text": ":emoji: What it means"},
-    }
-    formatted = format_plan_reaction_lines(initial_plan_reactions or [])
-    if formatted:
-        plan_element["initial_value"] = formatted
-    blocks.append({
-        "type": "input",
-        "block_id": "plan_reactions_block",
-        "optional": True,
-        "label": {"type": "plain_text", "text": "Plan reactions"},
-        "hint": {
-            "type": "plain_text",
-            "text": (
-                "Defaults loaded from Settings. Edit as needed for this practice, "
-                "one reaction per line."
-            ),
-        },
-        "element": plan_element,
-    })
+    blocks.extend(
+        build_practice_reaction_blocks(
+            reaction_editor,
+            reaction_catalog,
+            allow_restore=False,
+        )
+    )
 
     # Coaches multi-select, pre-selected from slot defaults (coach_ids)
     if eligible_coaches:
@@ -877,52 +880,131 @@ def build_practice_create_modal(
         "element": _build_practice_flags_element(is_dark_practice=default_is_dark)
     })
 
-    return {
+    modal = {
         "type": "modal",
         "callback_id": "practice_create",
-        "private_metadata": metadata,
+        "private_metadata": encode_practice_reaction_metadata(
+            mode=view_mode,
+            context=metadata_context,
+            state=reaction_editor,
+            preview_config=preview_config,
+        ),
         "title": {"type": "plain_text", "text": "Add Practice"},
         "submit": {"type": "plain_text", "text": "Create Practice"},
         "close": {"type": "plain_text", "text": "Cancel"},
         "blocks": blocks
     }
+    apply_current_view_values(modal["blocks"], current_values)
+    return modal
 
 
 def build_practice_preview_modal(practice_date: 'datetime') -> dict:
     """Build a discard-only preview of the production practice create modal."""
-    modal = build_practice_create_modal(
-        practice_date,
-        "18:15",
-        locations=[(1, "Theodore Wirth - Trailhead")],
-        all_activities=[(1, "Rollerski"), (2, "Running")],
-        all_types=[(1, "Intervals"), (2, "Technique")],
-        slot_defaults={
-            "location_id": 1,
-            "activity_ids": [1],
-            "type_ids": [1],
-            "coach_ids": [1],
-            "lead_ids": [2],
-        },
-        eligible_coaches=[(1, "Preview Coach", "U_PREVIEW_COACH")],
-        eligible_leads=[(2, "Preview Lead", "U_PREVIEW_LEAD")],
-        initial_plan_reactions=[
-            {
-                "emoji": "evergreen_tree",
-                "label": "Endurance instead of intervals",
-            },
+    intervals = SimpleNamespace(
+        id=1,
+        name="Intervals",
+        default_plan_reactions=[dict(EVERGREEN_PLAN_REACTION)],
+    )
+    run = SimpleNamespace(
+        id=1,
+        name="Run",
+        default_plan_reactions=[
+            {"emoji": "athletic_shoe", "label": "runner"}
+        ],
+    )
+    rollerski = SimpleNamespace(
+        id=2,
+        name="Skate/Classic Rollerski",
+        default_plan_reactions=[
             {"emoji": "hatching_chick", "label": "new rollerskier"},
             {
                 "emoji": "older_adult::skin-tone-4",
                 "label": "experienced rollerskier",
             },
-            {"emoji": "athletic_shoe", "label": "runner"},
         ],
+    )
+    strength = SimpleNamespace(
+        id=3,
+        name="Strength",
+        default_plan_reactions=[],
+    )
+    practice_types = [intervals]
+    activities = [run, rollerski, strength]
+    selected_activities = [run, rollerski]
+    reaction_editor = build_plan_reaction_editor_state(
+        practice_types=practice_types,
+        activities=selected_activities,
+        saved_snapshot=None,
+    ).state
+    reaction_catalog = build_plan_reaction_catalog(
+        practice_types,
+        activities,
+    )
+    locations = [(1, "Theodore Wirth - Trailhead")]
+    slot_defaults = {
+        "location_id": 1,
+        "activity_ids": [1, 2],
+        "type_ids": [1],
+        "coach_ids": [1],
+        "lead_ids": [2],
+    }
+    eligible_coaches = [(1, "Preview Coach", "U_PREVIEW_COACH")]
+    eligible_leads = [(2, "Preview Lead", "U_PREVIEW_LEAD")]
+    preview_config = {
+        "practice_date": practice_date.strftime("%Y-%m-%d"),
+        "default_time": "18:15",
+        "locations": [
+            {"id": location_id, "name": name}
+            for location_id, name in locations
+        ],
+        "practice_types": [
+            {
+                "id": source.id,
+                "name": source.name,
+                "default_plan_reactions": [
+                    dict(pair) for pair in source.default_plan_reactions
+                ],
+            }
+            for source in practice_types
+        ],
+        "activities": [
+            {
+                "id": source.id,
+                "name": source.name,
+                "default_plan_reactions": [
+                    dict(pair) for pair in source.default_plan_reactions
+                ],
+            }
+            for source in activities
+        ],
+        "slot_defaults": dict(slot_defaults),
+        "eligible_coaches": [
+            {"user_id": user_id, "name": name, "slack_uid": slack_uid}
+            for user_id, name, slack_uid in eligible_coaches
+        ],
+        "eligible_leads": [
+            {"user_id": user_id, "name": name, "slack_uid": slack_uid}
+            for user_id, name, slack_uid in eligible_leads
+        ],
+    }
+    modal = build_practice_create_modal(
+        practice_date,
+        "18:15",
+        locations=locations,
+        all_activities=[(source.id, source.name) for source in activities],
+        all_types=[(source.id, source.name) for source in practice_types],
+        slot_defaults=slot_defaults,
+        eligible_coaches=eligible_coaches,
+        eligible_leads=eligible_leads,
+        reaction_editor=reaction_editor,
+        reaction_catalog=reaction_catalog,
+        view_mode="preview",
+        preview_config=preview_config,
     )
     modal.update({
         "title": {"type": "plain_text", "text": "Practice Preview"},
         "submit": {"type": "plain_text", "text": "Close Preview"},
         "callback_id": "practice_preview",
-        "private_metadata": "",
     })
     return modal
 
