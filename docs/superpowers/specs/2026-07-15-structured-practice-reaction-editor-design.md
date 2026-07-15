@@ -1,7 +1,7 @@
 # Structured Practice Reaction Editor and Multisport Defaults Design
 
 **Date:** 2026-07-15<br>
-**Status:** Draft for written review<br>
+**Status:** Approved<br>
 **Primary surfaces:** Slack practice Create, Preview, and Full Edit; Admin
 practice Create/Edit; Practices Settings<br>
 **Live validation channel:** `C07G9RTMRT3`<br>
