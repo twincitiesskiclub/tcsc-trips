@@ -18,10 +18,10 @@ window.showToast = function(message, type = 'info') {
     }
 
     const icons = {
-        success: '&#10003;',
-        error: '&#10007;',
-        info: '&#8505;',
-        warning: '&#9888;'
+        success: '✓',
+        error: '✗',
+        info: 'ℹ',
+        warning: '⚠'
     };
 
     const colors = {
@@ -33,11 +33,23 @@ window.showToast = function(message, type = 'info') {
 
     const toast = document.createElement('div');
     toast.className = `${colors[type] || colors.info} text-white px-4 py-3 rounded-tcsc shadow-lg flex items-center gap-3 min-w-[280px] max-w-md transform translate-x-full transition-transform duration-300`;
-    toast.innerHTML = `
-        <span class="text-lg flex-shrink-0">${icons[type] || icons.info}</span>
-        <span class="flex-1 text-sm">${message}</span>
-        <button class="text-white/70 hover:text-white text-xl leading-none flex-shrink-0" onclick="this.parentElement.remove()">&times;</button>
-    `;
+
+    const icon = document.createElement('span');
+    icon.className = 'text-lg flex-shrink-0';
+    icon.textContent = icons[type] || icons.info;
+
+    const messageNode = document.createElement('span');
+    messageNode.className = 'flex-1 text-sm';
+    messageNode.textContent = String(message ?? '');
+
+    const dismiss = document.createElement('button');
+    dismiss.type = 'button';
+    dismiss.className = 'text-white/70 hover:text-white text-xl leading-none flex-shrink-0';
+    dismiss.setAttribute('aria-label', 'Dismiss notification');
+    dismiss.textContent = '×';
+    dismiss.addEventListener('click', () => toast.remove());
+
+    toast.append(icon, messageNode, dismiss);
 
     container.appendChild(toast);
 

@@ -5,7 +5,7 @@
   "scripts": {
     "tailwind:watch": "tailwindcss -i ./app/static/css/tailwind-input.css -o ./app/static/css/tailwind-output.css --watch",
     "tailwind:build": "tailwindcss -i ./app/static/css/tailwind-input.css -o ./app/static/css/tailwind-output.css --minify",
-    "test:practice-reactions": "node --test tests/js/practice_plan_reactions.test.js tests/js/practice_plan_reaction_editor.test.js"
+    "test:practice-reactions": "node --test tests/js/practice_plan_reactions.test.js tests/js/practice_plan_reaction_editor.test.js tests/js/toast.test.js"
   },
   "devDependencies": {
     "@tailwindcss/forms": "^0.5.7",

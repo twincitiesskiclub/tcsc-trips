@@ -8,6 +8,10 @@ const {JSDOM} = require('jsdom');
 
 const Editor = require('../../app/static/practice_plan_reaction_editor.js');
 const ROOT = path.resolve(__dirname, '../..');
+const TOAST_SOURCE = fs.readFileSync(
+  path.join(ROOT, 'app/static/js/toast.js'),
+  'utf8',
+);
 
 const intervals = {
   id: 10,
@@ -847,6 +851,67 @@ test('detail orchestration blocks POST and renders safe fallbacks for malformed 
     savedReaction: 'Protected',
     blockedToast: true,
   });
+  dom.window.close();
+});
+
+test('hostile reaction conflict reaches the real toast as inert text', async () => {
+  const dom = makeDetailDom();
+  const {window} = dom;
+  const {document} = window;
+  const attack = '<img src=x onerror="window.__toastXss = true">';
+  const bodies = referenceBodies();
+  bodies['/admin/practices/activities/data'].activities.push({
+    id: 2,
+    name: attack,
+    plan_reaction_sort_key: 'hostile',
+    default_plan_reactions: [
+      {emoji: 'athletic_shoe', label: 'Different runner'},
+    ],
+    gear_required: [],
+    practice_count: 0,
+  });
+  let postCount = 0;
+
+  window.PracticePlanReactionEditor = Editor;
+  window.requestAnimationFrame = callback => callback();
+  window.console.error = () => {};
+  window.fetch = async (url, options = {}) => {
+    if (options.method === 'POST') {
+      postCount += 1;
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({error: 'Unexpected POST'}),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => bodies[url],
+    };
+  };
+  window.eval(TOAST_SOURCE);
+  window.eval(fs.readFileSync(
+    path.join(ROOT, 'app/static/practice_editor.js'),
+    'utf8',
+  ));
+  window.eval(detailScriptForTest());
+  await window.loadFormData();
+
+  document.querySelector('#activities-pills [data-value="2"]').click();
+  document.getElementById('practice-form').dispatchEvent(
+    new window.Event('submit', {bubbles: true, cancelable: true}),
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  const toast = document.querySelector('#toast-container > div');
+  assert.equal(postCount, 0);
+  assert.ok(toast);
+  assert.match(toast.querySelector('.flex-1').textContent, /<img/);
+  assert.equal(toast.querySelectorAll('img').length, 0);
+  assert.equal(window.__toastXss, undefined);
+  assert.equal(toast.querySelector('button').getAttribute('onclick'), null);
+  toast.querySelector('button').click();
   dom.window.close();
 });
 
