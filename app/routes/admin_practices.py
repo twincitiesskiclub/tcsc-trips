@@ -54,7 +54,7 @@ def _type_json(practice_type):
 
 def _prepare_plan_reaction_submission(data, *, existing_practice=None):
     activity_ids = (
-        data.get('activity_ids') or []
+        data['activity_ids']
         if 'activity_ids' in data
         else (
             [item.id for item in existing_practice.activities]
@@ -63,7 +63,7 @@ def _prepare_plan_reaction_submission(data, *, existing_practice=None):
         )
     )
     type_ids = (
-        data.get('type_ids') or []
+        data['type_ids']
         if 'type_ids' in data
         else (
             [item.id for item in existing_practice.practice_types]

@@ -24,6 +24,13 @@ DETAIL_TEMPLATE = REPO_ROOT / "app/templates/admin/practices/detail.html"
 DETAIL_SCRIPT = REPO_ROOT / "app/templates/admin/practices/_detail_script.js"
 PLAN_REACTION_EDITOR = REPO_ROOT / "app/static/plan_reactions.js"
 PRACTICE_EDITOR = REPO_ROOT / "app/static/practice_editor.js"
+MALFORMED_SELECTOR_VALUES = (
+    pytest.param(False, id="false"),
+    pytest.param(0, id="zero"),
+    pytest.param("", id="empty-string"),
+    pytest.param({}, id="empty-mapping"),
+    pytest.param({"id": 1}, id="truthy-mapping"),
+)
 
 
 def _confirmed_absent_id(model):
@@ -337,6 +344,86 @@ def test_edit_rejects_unknown_selector_id_without_mutating_snapshot(
     }
     db.session.refresh(practice_with_plan_reactions)
     assert practice_with_plan_reactions.plan_reactions == before
+
+
+@pytest.mark.parametrize("field", ["activity_ids", "type_ids"])
+@pytest.mark.parametrize("selector_value", MALFORMED_SELECTOR_VALUES)
+def test_create_rejects_malformed_selector_values(
+    admin_client,
+    location,
+    field,
+    selector_value,
+):
+    payload = {
+        "date": "2026-07-14T18:15",
+        "location_id": location.id,
+        "activity_ids": [],
+        "type_ids": [],
+    }
+    payload[field] = selector_value
+
+    response = admin_client.post("/admin/practices/create", json=payload)
+
+    label = {
+        "activity_ids": "Activity IDs",
+        "type_ids": "Workout Type IDs",
+    }[field]
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": f"{label}: invalid ID",
+        "field": field,
+    }
+
+
+@pytest.mark.parametrize("field", ["activity_ids", "type_ids"])
+@pytest.mark.parametrize("selector_value", MALFORMED_SELECTOR_VALUES)
+def test_edit_rejects_malformed_selector_values_without_mutation(
+    admin_client,
+    db_session,
+    practice_with_plan_reactions,
+    activity_with_plan_reactions,
+    conflicting_type,
+    field,
+    selector_value,
+):
+    practice_with_plan_reactions.activities = [activity_with_plan_reactions]
+    practice_with_plan_reactions.practice_types = [conflicting_type]
+    practice_with_plan_reactions.workout_description = "Original workout"
+    db.session.commit()
+    practice_id = practice_with_plan_reactions.id
+    before_snapshot = [
+        dict(item) for item in practice_with_plan_reactions.plan_reactions
+    ]
+    before_activity_ids = [
+        item.id for item in practice_with_plan_reactions.activities
+    ]
+    before_type_ids = [
+        item.id for item in practice_with_plan_reactions.practice_types
+    ]
+
+    response = admin_client.post(
+        f"/admin/practices/{practice_id}/edit",
+        json={
+            field: selector_value,
+            "workout_description": "Must not be saved",
+        },
+    )
+
+    label = {
+        "activity_ids": "Activity IDs",
+        "type_ids": "Workout Type IDs",
+    }[field]
+    assert response.status_code == 400
+    assert response.get_json() == {
+        "error": f"{label}: invalid ID",
+        "field": field,
+    }
+    db.session.expire_all()
+    practice = db.session.get(Practice, practice_id)
+    assert [item.id for item in practice.activities] == before_activity_ids
+    assert [item.id for item in practice.practice_types] == before_type_ids
+    assert practice.plan_reactions == before_snapshot
+    assert practice.workout_description == "Original workout"
 
 
 def test_editing_tags_without_plan_key_preserves_snapshot(
