@@ -221,6 +221,34 @@ def test_adding_a_suppressed_catalog_option_clears_its_tombstone(sources):
     assert shoe.inherited_source_keys == (f"activity:{sources.run.id}",)
 
 
+def test_adding_a_suppressed_applicable_default_recovers_inherited_origin_now(
+    sources,
+):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.strength],
+        saved_snapshot=[RUN_PLAN_REACTION],
+    ).state
+    option = PlanReactionCatalogOption(
+        option_id="tree",
+        emoji=EVERGREEN_PLAN_REACTION["emoji"],
+        label=EVERGREEN_PLAN_REACTION["label"],
+        source_keys=(f"type:{sources.intervals.id}",),
+    )
+
+    added = add_catalog_plan_reaction(state, option)
+
+    tree = next(row for row in added.rows if row.emoji == "evergreen_tree")
+    assert tree.inherited_source_keys == (f"type:{sources.intervals.id}",)
+    assert tree.inherited_order == 0
+    assert tree.catalog_order == 0
+    assert not added.suppressed
+    assert active_plan_reaction_snapshot(added) == [
+        EVERGREEN_PLAN_REACTION,
+        RUN_PLAN_REACTION,
+    ]
+
+
 def test_suppression_clears_only_after_all_original_sources_disappear(sources):
     state = build_plan_reaction_editor_state(
         practice_types=[],
@@ -277,6 +305,38 @@ def test_partial_source_disappearance_keeps_serializable_original_suppression(
     assert deserialize_plan_reaction_editor_state(
         serialize_plan_reaction_editor_state(partial)
     ) == partial
+
+
+def test_suppression_expires_when_emoji_mapping_disappears_from_same_source(
+    sources,
+):
+    snow = {"emoji": "snowflake", "label": "snow"}
+    speed = {"emoji": "zap", "label": "speed"}
+    configurable = source(5, "Configurable", [snow, speed])
+    state = build_plan_reaction_editor_state(
+        practice_types=[],
+        activities=[configurable, sources.strength],
+        saved_snapshot=[speed],
+    ).state
+
+    configurable.default_plan_reactions = [speed]
+    mapping_absent = reconcile_plan_reaction_editor_state(
+        state,
+        practice_types=[],
+        activities=[configurable, sources.strength],
+    ).state
+
+    assert "snowflake" not in {
+        item.emoji for item in mapping_absent.suppressed
+    }
+
+    configurable.default_plan_reactions = [snow, speed]
+    mapping_returned = reconcile_plan_reaction_editor_state(
+        mapping_absent,
+        practice_types=[],
+        activities=[configurable, sources.strength],
+    ).state
+    assert "snowflake" in {row.emoji for row in mapping_returned.rows}
 
 
 def test_remove_and_undo_preserve_description_emoji_row_id_and_slot(sources):
@@ -442,6 +502,35 @@ def test_restore_is_atomic_and_clears_all_practice_specific_working_state(source
     assert restored.state.next_row_number >= original.next_row_number
 
 
+def test_restore_allocates_fresh_row_ids_that_stale_values_cannot_target(sources):
+    original = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=None,
+    ).state
+    old_row_ids = {row.row_id for row in original.rows}
+    stale_view_values = {
+        f"practice_reaction_row_{row.row_id}": f"stale {row.emoji}"
+        for row in original.rows
+    }
+
+    restored = restore_plan_reaction_defaults(
+        original,
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+    ).state
+
+    restored_row_ids = {row.row_id for row in restored.rows}
+    assert old_row_ids.isdisjoint(restored_row_ids)
+    assert all(
+        f"practice_reaction_row_{row.row_id}" not in stale_view_values
+        for row in restored.rows
+    )
+    assert restored.next_row_number == (
+        original.next_row_number + len(restored.rows)
+    )
+
+
 def test_failed_restore_keeps_original_working_state_atomically(sources):
     original = build_plan_reaction_editor_state(
         practice_types=[],
@@ -549,6 +638,74 @@ def test_serialization_uses_complete_json_primitive_schema_and_omits_only_active
     assert json.loads(json.dumps(payload)) == payload
 
 
+def test_metadata_rejects_noncanonical_row_sequence(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=None,
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["rows"].reverse()
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
+def test_metadata_rejects_origin_values_that_break_canonical_sequence(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[sources.run, sources.rollerski],
+        saved_snapshot=None,
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    first_order = payload["rows"][0]["inherited_order"]
+    payload["rows"][0]["inherited_order"] = payload["rows"][1][
+        "inherited_order"
+    ]
+    payload["rows"][1]["inherited_order"] = first_order
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
+def test_metadata_rejects_inherited_order_outside_effective_count(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[],
+        saved_snapshot=None,
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["rows"][0]["inherited_order"] = 1
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
+def test_metadata_rejects_unrepresented_effective_inherited_count(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[],
+        saved_snapshot=None,
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["effective_inherited_count"] = 2
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
 def _empty_metadata(**changes):
     payload = {
         "version": PLAN_REACTION_EDITOR_VERSION,
@@ -587,6 +744,34 @@ def _metadata_row(
         "protected_order": protected_order,
         "catalog_order": number if catalog_order is None else catalog_order,
     }
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [
+        _empty_metadata(
+            suppressed=[
+                {"emoji": "snowflake", "source_keys": ["activity:99"]}
+            ],
+            last_valid_activity_ids=[1, 2],
+            effective_inherited_count=1,
+        ),
+        _empty_metadata(
+            suppressed=[
+                {"emoji": "snowflake", "source_keys": ["activity:1"]}
+            ],
+            last_valid_activity_ids=[1],
+            effective_inherited_count=1,
+        ),
+    ],
+    ids=["orphan-source", "preemptive-single-activity"],
+)
+def test_metadata_rejects_orphan_or_preemptive_suppression(payload):
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
 
 
 @pytest.mark.parametrize(
@@ -696,6 +881,7 @@ def test_suppressed_dataclass_round_trips_as_source_key_tuple():
         ],
         last_valid_type_ids=(10,),
         last_valid_activity_ids=(2,),
+        effective_inherited_count=1,
     )
 
     decoded = deserialize_plan_reaction_editor_state(

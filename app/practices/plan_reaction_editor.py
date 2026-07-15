@@ -232,16 +232,14 @@ def reconcile_plan_reaction_editor_state(
         row.emoji: (index, row)
         for index, row in enumerate(resolution.rows)
     }
-    source_keys_now = {
-        key
-        for row in resolution.rows
-        for key in row.source_keys
-    }
-    kept_suppression = [
-        item
-        for item in working.suppressed
-        if any(key in source_keys_now for key in item.source_keys)
-    ]
+    kept_suppression = []
+    for item in working.suppressed:
+        match = desired.get(item.emoji)
+        if match and any(
+            key in match[1].source_keys for key in item.source_keys
+        ):
+            kept_suppression.append(item)
+    kept_suppression.sort(key=lambda item: desired[item.emoji][0])
     suppressed_keys = {item.emoji for item in kept_suppression}
 
     kept_rows = []
@@ -340,6 +338,42 @@ def add_catalog_plan_reaction(
     option: PlanReactionCatalogOption,
 ) -> PlanReactionEditorState:
     working = _clone(state)
+    suppressed = next(
+        (
+            item
+            for item in working.suppressed
+            if item.emoji == option.emoji
+        ),
+        None,
+    )
+    inherited_source_keys = ()
+    inherited_order = None
+    if suppressed is not None:
+        inherited_source_keys = tuple(
+            key
+            for key in suppressed.source_keys
+            if _source_key_is_applicable(
+                key,
+                type_ids=working.last_valid_type_ids,
+                activity_ids=working.last_valid_activity_ids,
+            )
+        )
+        missing_orders = [
+            order
+            for order in range(working.effective_inherited_count)
+            if order
+            not in {
+                row.inherited_order
+                for row in working.rows
+                if row.inherited_order is not None
+            }
+        ]
+        inherited_order_by_emoji = {
+            item.emoji: order
+            for item, order in zip(working.suppressed, missing_orders)
+        }
+        if inherited_source_keys:
+            inherited_order = inherited_order_by_emoji.get(option.emoji)
     working.suppressed = [
         item
         for item in working.suppressed
@@ -378,6 +412,8 @@ def add_catalog_plan_reaction(
             working,
             emoji=option.emoji,
             label=option.label,
+            inherited=inherited_source_keys,
+            inherited_order=inherited_order,
             catalog_order=order,
         )
     )
@@ -414,10 +450,11 @@ def restore_plan_reaction_defaults(
             None,
             restored.blocking_error,
         )
-    restored.state.next_row_number = max(
-        state.next_row_number,
-        restored.state.next_row_number,
-    )
+    next_row_number = state.next_row_number
+    for row in restored.state.rows:
+        row.row_id = f"r{next_row_number}"
+        next_row_number += 1
+    restored.state.next_row_number = next_row_number
     return restored
 
 
@@ -555,7 +592,7 @@ def _decode_label(value, *, removed: bool) -> str:
     return value
 
 
-def _source_key_is_selected(
+def _source_key_is_applicable(
     source_key: str,
     *,
     type_ids: tuple[int, ...],
@@ -565,8 +602,9 @@ def _source_key_is_selected(
     if not match:
         return False
     source_id = int(match.group(2))
-    selected_ids = type_ids if match.group(1) == "type" else activity_ids
-    return source_id in selected_ids
+    if match.group(1) == "type":
+        return source_id in type_ids
+    return len(activity_ids) >= 2 and source_id in activity_ids
 
 
 def _deserialize_plan_reaction_editor_state(
@@ -638,6 +676,11 @@ def _deserialize_plan_reaction_editor_state(
         inherited_order = _decode_order(row_payload["inherited_order"])
         protected_order = _decode_order(row_payload["protected_order"])
         catalog_order = _decode_order(row_payload["catalog_order"])
+        if (
+            inherited_order is not None
+            and inherited_order >= effective_inherited_count
+        ):
+            raise _metadata_error()
         if bool(inherited_source_keys) != (inherited_order is not None):
             raise _metadata_error()
         if (
@@ -647,7 +690,7 @@ def _deserialize_plan_reaction_editor_state(
         ):
             raise _metadata_error()
         if any(
-            not _source_key_is_selected(
+            not _source_key_is_applicable(
                 source_key,
                 type_ids=type_ids,
                 activity_ids=activity_ids,
@@ -696,10 +739,26 @@ def _deserialize_plan_reaction_editor_state(
             not source_keys
             or emoji in emojis
             or emoji in suppressed_emojis
+            or not any(
+                _source_key_is_applicable(
+                    source_key,
+                    type_ids=type_ids,
+                    activity_ids=activity_ids,
+                )
+                for source_key in source_keys
+            )
         ):
             raise _metadata_error()
         suppressed.append(SuppressedPlanReaction(emoji, source_keys))
         suppressed_emojis.add(emoji)
+
+    if rows != sorted(rows, key=_row_sort_key):
+        raise _metadata_error()
+    if (
+        len(orders["inherited"]) + len(suppressed)
+        != effective_inherited_count
+    ):
+        raise _metadata_error()
 
     return PlanReactionEditorState(
         version=payload["version"],
