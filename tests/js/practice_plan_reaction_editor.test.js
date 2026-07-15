@@ -2,9 +2,12 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
 const {JSDOM} = require('jsdom');
 
 const Editor = require('../../app/static/practice_plan_reaction_editor.js');
+const ROOT = path.resolve(__dirname, '../..');
 
 const intervals = {
   id: 10,
@@ -46,6 +49,52 @@ const strength = {
   name: 'Strength',
   default_plan_reactions: [],
 };
+
+function referenceBodies({
+  people = {
+    coaches: [{
+      id: 12,
+      name: 'Ada Skier',
+      tags: [{name: 'HEAD_COACH', emoji: ':snowflake:'}],
+    }],
+    leads: [],
+    assists: [],
+  },
+} = {}) {
+  return {
+    '/admin/practices/locations/data': {
+      locations: [{
+        id: 7,
+        name: 'Wirth',
+        spot: null,
+        address: null,
+        google_maps_url: null,
+        latitude: null,
+        longitude: null,
+        parking_notes: null,
+        practice_count: 0,
+      }],
+    },
+    '/admin/practices/activities/data': {
+      activities: [{
+        ...run,
+        plan_reaction_sort_key: 'a run',
+        gear_required: [],
+        practice_count: 0,
+      }],
+    },
+    '/admin/practices/types/data': {
+      types: [{
+        ...intervals,
+        plan_reaction_sort_key: 'intervals',
+        fitness_goals: [],
+        has_intervals: true,
+        practice_count: 0,
+      }],
+    },
+    '/admin/practices/people/data': people,
+  };
+}
 
 function mountEditor({
   types = [intervals, conflictingType],
@@ -91,6 +140,88 @@ function mountEditor({
     referenceError,
   });
   return {dom, controller, document, root};
+}
+
+function detailScriptForTest() {
+  let source = fs.readFileSync(
+    path.join(
+      ROOT,
+      'app/templates/admin/practices/_detail_script.js',
+    ),
+    'utf8',
+  );
+  const values = {
+    practiceId: '42',
+    selLocationId: '7',
+    selActivities: '[1]',
+    selTypes: '[10]',
+    selCoaches: '[12]',
+    selLeads: '[]',
+    selAssists: '[]',
+    savedPlanReactions: '[{"emoji":"wheel","label":"Protected"}]',
+  };
+  for (const [name, value] of Object.entries(values)) {
+    source = source.replace(
+      new RegExp(`^const ${name} = .*;$`, 'm'),
+      `const ${name} = ${value};`,
+    );
+  }
+  source = source.replace(
+    /document\.addEventListener\('DOMContentLoaded',[\s\S]*?^\}\);\n/m,
+    '',
+  );
+  source = source.replace(
+    /\{% if practice %\}[\s\S]*?\{% endif %\}\s*$/,
+    '',
+  );
+  return `${source}\nwindow.readFormReferenceLoadError = () => `
+    + 'formReferenceLoadError;';
+}
+
+function makeDetailDom() {
+  return new JSDOM(`<!doctype html><html><body>
+    <form id="practice-form" action="/admin/practices/42">
+      <input name="date" value="2026-07-15T18:00">
+      <select id="location_id" name="location_id">
+        <option value="">Select a location</option>
+      </select>
+      <select name="social_location_id"><option value=""></option></select>
+      <div id="activities-pills"></div>
+      <div id="types-pills"></div>
+      <input id="people-search">
+      <div id="coaches-summary"></div>
+      <div id="coaches-pills"></div>
+      <div id="leads-summary"></div>
+      <div id="leads-pills"></div>
+      <button type="button" id="assists-toggle" aria-expanded="false">
+        <span class="chevron"></span>
+        <span id="assists-toggle-text">Show</span>
+      </button>
+      <div id="assists-summary"></div>
+      <div id="assists-collapsible" class="hidden">
+        <div id="assists-pills"></div>
+      </div>
+      <textarea name="workout_description">Keep workout</textarea>
+      <textarea name="logistics_notes">Keep logistics</textarea>
+      <input name="is_dark_practice" type="checkbox" checked>
+      <select name="status"><option value="scheduled" selected>Scheduled</option></select>
+      <section id="plan-reaction-editor">
+        <div id="plan-reaction-rows"></div>
+        <p id="plan-reaction-empty">No Plan reactions yet.</p>
+        <button type="button" id="restore-plan-reactions">Restore defaults</button>
+        <button type="button" id="add-plan-reaction"
+                aria-controls="plan-reaction-catalog"
+                aria-expanded="false">Add reaction</button>
+        <select id="plan-reaction-catalog" hidden></select>
+        <p id="plan-reaction-unconfigured" hidden></p>
+        <span id="plan-reaction-status"></span>
+      </section>
+      <button type="submit">Save Changes</button>
+    </form>
+  </body></html>`, {
+    url: 'https://example.test/admin/practices/42/edit',
+    runScripts: 'outside-only',
+  });
 }
 
 test('practice row renders fixed shortcode, one description input, and no move controls', () => {
@@ -493,24 +624,9 @@ test('labels are assigned as text and values, never interpreted as HTML', () => 
 });
 
 test('reference loader checks HTTP status and isolates unrelated failures', async () => {
-  const bodies = {
-    '/admin/practices/locations/data': {
-      locations: [{
-        id: 7,
-        name: 'Wirth',
-        spot: null,
-        address: null,
-        google_maps_url: null,
-        latitude: null,
-        longitude: null,
-        parking_notes: null,
-        practice_count: 0,
-      }],
-    },
-    '/admin/practices/activities/data': {activities: [run]},
-    '/admin/practices/types/data': {types: [intervals]},
-    '/admin/practices/people/data': {coaches: [], leads: [], assists: []},
-  };
+  const bodies = referenceBodies({
+    people: {coaches: [], leads: [], assists: []},
+  });
   function fetchWith(failures = {}) {
     return async url => {
       if (failures[url] === 'network') throw new Error('network failure');
@@ -527,8 +643,14 @@ test('reference loader checks HTTP status and isolates unrelated failures', asyn
     '/admin/practices/people/data': 'network',
   }));
   assert.equal(peopleFailure.reactionSettingsReady, true);
-  assert.deepEqual(peopleFailure.activities, [run]);
-  assert.deepEqual(peopleFailure.types, [intervals]);
+  assert.deepEqual(
+    peopleFailure.activities,
+    bodies['/admin/practices/activities/data'].activities,
+  );
+  assert.deepEqual(
+    peopleFailure.types,
+    bodies['/admin/practices/types/data'].types,
+  );
   assert.deepEqual(peopleFailure.failed, ['people']);
 
   const locationFailure = await Editor.loadReferenceData(fetchWith({
@@ -536,7 +658,10 @@ test('reference loader checks HTTP status and isolates unrelated failures', asyn
   }));
   assert.equal(locationFailure.reactionSettingsReady, true);
   assert.deepEqual(locationFailure.locations, []);
-  assert.deepEqual(locationFailure.activities, [run]);
+  assert.deepEqual(
+    locationFailure.activities,
+    bodies['/admin/practices/activities/data'].activities,
+  );
   assert.deepEqual(locationFailure.failed, ['locations']);
 
   const activityFailure = await Editor.loadReferenceData(fetchWith({
@@ -544,7 +669,10 @@ test('reference loader checks HTTP status and isolates unrelated failures', asyn
   }));
   assert.equal(activityFailure.reactionSettingsReady, false);
   assert.deepEqual(activityFailure.activities, []);
-  assert.deepEqual(activityFailure.types, [intervals]);
+  assert.deepEqual(
+    activityFailure.types,
+    bodies['/admin/practices/types/data'].types,
+  );
   assert.deepEqual(activityFailure.failed, ['activities']);
 
   const typeFailure = await Editor.loadReferenceData(fetchWith({
@@ -566,6 +694,160 @@ test('reference loader checks HTTP status and isolates unrelated failures', asyn
     assists: [],
   });
   assert.deepEqual(malformedPeople.failed, ['people']);
+});
+
+test('reference loader rejects malformed records before rendering', async t => {
+  const valid = referenceBodies();
+  const cases = [
+    {
+      name: 'location name',
+      url: '/admin/practices/locations/data',
+      key: 'locations',
+      body: {locations: [{...valid[
+        '/admin/practices/locations/data'
+      ].locations[0], name: null}]},
+    },
+    {
+      name: 'Activity id',
+      url: '/admin/practices/activities/data',
+      key: 'activities',
+      body: {activities: [{...valid[
+        '/admin/practices/activities/data'
+      ].activities[0], id: '1'}]},
+    },
+    {
+      name: 'Workout Type name',
+      url: '/admin/practices/types/data',
+      key: 'types',
+      body: {types: [{...valid[
+        '/admin/practices/types/data'
+      ].types[0], name: null}]},
+    },
+    {
+      name: 'person name',
+      url: '/admin/practices/people/data',
+      key: 'people',
+      body: {
+        coaches: [{id: 12, name: null, tags: []}],
+        leads: [],
+        assists: [],
+      },
+    },
+    {
+      name: 'person tags',
+      url: '/admin/practices/people/data',
+      key: 'people',
+      body: {
+        coaches: [{id: 12, name: 'Ada Skier', tags: {}}],
+        leads: [],
+        assists: [],
+      },
+    },
+    {
+      name: 'missing people role array',
+      url: '/admin/practices/people/data',
+      key: 'people',
+      body: {coaches: [], leads: []},
+    },
+  ];
+
+  for (const scenario of cases) {
+    await t.test(scenario.name, async () => {
+      const result = await Editor.loadReferenceData(async url => ({
+        ok: true,
+        status: 200,
+        json: async () => url === scenario.url
+          ? scenario.body
+          : valid[url],
+      }));
+
+      assert.deepEqual(result.failed, [scenario.key]);
+      if (scenario.key === 'people') {
+        assert.deepEqual(result.people, {
+          coaches: [],
+          leads: [],
+          assists: [],
+        });
+      } else {
+        assert.deepEqual(result[scenario.key], []);
+      }
+    });
+  }
+});
+
+test('detail orchestration blocks POST and renders safe fallbacks for malformed records', async () => {
+  const dom = makeDetailDom();
+  const {window} = dom;
+  const {document} = window;
+  const toasts = [];
+  let postCount = 0;
+  const bodies = referenceBodies({
+    people: {
+      coaches: [{id: 12, name: null, tags: []}],
+      leads: [],
+      assists: [],
+    },
+  });
+  window.PracticePlanReactionEditor = Editor;
+  window.showToast = (message, kind) => toasts.push([message, kind]);
+  window.console.error = () => {};
+  window.fetch = async (url, options = {}) => {
+    if (options.method === 'POST') {
+      postCount += 1;
+      return {
+        ok: false,
+        status: 400,
+        json: async () => ({error: 'Unexpected POST'}),
+      };
+    }
+    return {
+      ok: true,
+      status: 200,
+      json: async () => bodies[url],
+    };
+  };
+  window.eval(fs.readFileSync(
+    path.join(ROOT, 'app/static/practice_editor.js'),
+    'utf8',
+  ));
+  window.eval(detailScriptForTest());
+
+  let loadError = null;
+  try {
+    await window.loadFormData();
+  } catch (error) {
+    loadError = error.message;
+  }
+  document.getElementById('practice-form').dispatchEvent(
+    new window.Event('submit', {bubbles: true, cancelable: true}),
+  );
+  await new Promise(resolve => setTimeout(resolve, 0));
+
+  assert.deepEqual({
+    loadError,
+    guard: window.readFormReferenceLoadError(),
+    postCount,
+    location: document.getElementById('location_id').value,
+    activity: document.querySelector('#activities-pills button')?.textContent,
+    peopleFallback: document.getElementById('coaches-pills').textContent,
+    savedReaction: document.querySelector(
+      '.practice-reaction-label',
+    )?.value,
+    blockedToast: toasts.some(([message, kind]) => (
+      message === 'Could not load form options. Refresh and try again.'
+      && kind === 'error'
+    )),
+  }, {
+    loadError: null,
+    guard: 'Could not load form options. Refresh and try again.',
+    postCount: 0,
+    location: '7',
+    activity: 'A Run',
+    peopleFallback: 'No people available',
+    savedReaction: 'Protected',
+    blockedToast: true,
+  });
+  dom.window.close();
 });
 
 test('reaction server fields include snapshot and both selector adapters', () => {

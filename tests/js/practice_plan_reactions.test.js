@@ -103,6 +103,57 @@ test('resolver and catalog use server casefold keys with stable ties', () => {
   }
 });
 
+test('malformed sources and conflict copy match Python', () => {
+  const malformedType = {
+    id: '10',
+    name: 'String id',
+    plan_reaction_sort_key: 'string id',
+    default_plan_reactions: [],
+  };
+  const malformedActivity = {
+    id: 1,
+    name: null,
+    plan_reaction_sort_key: '',
+    default_plan_reactions: [],
+  };
+  assert.throws(
+    () => Model.resolve([malformedType], []),
+    /Invalid type reaction source/,
+  );
+  assert.throws(
+    () => Model.buildCatalog([malformedType], []),
+    /Invalid type reaction source/,
+  );
+  assert.throws(
+    () => Model.resolve([], [malformedActivity]),
+    /Invalid activity reaction source/,
+  );
+  assert.throws(
+    () => Model.buildCatalog([], [malformedActivity]),
+    /Invalid activity reaction source/,
+  );
+
+  const alpha = {
+    id: 21,
+    name: 'Alpha',
+    plan_reaction_sort_key: 'alpha',
+    default_plan_reactions: [{emoji: 'snowflake', label: 'Snow'}],
+  };
+  const beta = {
+    id: 22,
+    name: 'Beta',
+    plan_reaction_sort_key: 'beta',
+    default_plan_reactions: [{
+      emoji: 'snowflake',
+      label: 'Different snow',
+    }],
+  };
+  assert.equal(
+    Model.resolve([alpha, beta], []).error,
+    ':snowflake: has conflicting labels in Workout Type Alpha and Workout Type Beta',
+  );
+});
+
 test('one activity is ordinary and two activities derive multisport defaults', () => {
   const one = Model.create({
     types: [intervals],

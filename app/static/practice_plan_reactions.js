@@ -128,18 +128,27 @@
     return normalized;
   }
 
-  function distinct(items) {
+  function distinct(items, kind) {
     const seen = new Set();
     return (items || []).filter(item => {
-      const key = Number(item.id);
-      if (!Number.isInteger(key) || key <= 0 || seen.has(key)) return false;
+      const key = item && item.id;
+      const name = pythonTrim(String((item && item.name) || ''));
+      if (
+        typeof key !== 'number'
+        || !Number.isInteger(key)
+        || key <= 0
+        || !name
+      ) {
+        throw new Error(`Invalid ${kind} reaction source`);
+      }
+      if (seen.has(key)) return false;
       seen.add(key);
       return true;
     });
   }
 
-  function sourceIds(items) {
-    return distinct(items).map(item => Number(item.id));
+  function sourceIds(items, kind) {
+    return distinct(items, kind).map(item => item.id);
   }
 
   function compareCodePoints(left, right) {
@@ -154,8 +163,8 @@
     return leftPoints.length - rightPoints.length;
   }
 
-  function sortSources(items) {
-    return distinct(items)
+  function sortSources(items, kind) {
+    return distinct(items, kind)
       .map((item, inputOrder) => ({item, inputOrder}))
       .sort((left, right) => {
         const leftKey = typeof left.item.plan_reaction_sort_key === 'string'
@@ -171,8 +180,8 @@
   }
 
   function resolve(types, activities) {
-    const typeSources = sortSources(types);
-    const activitySources = sortSources(activities);
+    const typeSources = sortSources(types, 'type');
+    const activitySources = sortSources(activities, 'activity');
     const sources = typeSources.map(item => ({kind: 'type', item}));
     if (activitySources.length >= 2) {
       sources.push(
@@ -196,7 +205,7 @@
           return {
             rows: [],
             unconfiguredActivityNames: [],
-            error: `:${pair.emoji}: conflicts between ${prior.sourceName} and ${sourceName}`,
+            error: `:${pair.emoji}: has conflicting labels in ${prior.sourceName} and ${sourceName}`,
           };
         }
         if (prior) {
@@ -235,8 +244,8 @@
     return {
       rows: [],
       suppressed: [],
-      lastValidTypeIds: sourceIds(types),
-      lastValidActivityIds: sourceIds(activities),
+      lastValidTypeIds: sourceIds(types, 'type'),
+      lastValidActivityIds: sourceIds(activities, 'activity'),
       nextRowNumber: 0,
       blockingError: null,
       unconfiguredActivityNames: [],
@@ -413,8 +422,8 @@
     }
 
     sortRows(working.rows);
-    working.lastValidTypeIds = sourceIds(types);
-    working.lastValidActivityIds = sourceIds(activities);
+    working.lastValidTypeIds = sourceIds(types, 'type');
+    working.lastValidActivityIds = sourceIds(activities, 'activity');
     working.unconfiguredActivityNames = [
       ...resolution.unconfiguredActivityNames,
     ];
@@ -561,9 +570,9 @@
 
   function buildCatalog(types, activities) {
     const sources = [
-      ...sortSources(types)
+      ...sortSources(types, 'type')
         .map(item => ({kind: 'type', item})),
-      ...sortSources(activities)
+      ...sortSources(activities, 'activity')
         .map(item => ({kind: 'activity', item})),
     ];
     const merged = new Map();

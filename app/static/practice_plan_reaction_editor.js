@@ -20,6 +20,43 @@
     return REACTION_FIELDS.has(field);
   }
 
+  function isNamedReference(item) {
+    return Boolean(
+      item
+      && typeof item === 'object'
+      && !Array.isArray(item)
+      && Number.isInteger(item.id)
+      && item.id > 0
+      && typeof item.name === 'string'
+      && item.name.trim(),
+    );
+  }
+
+  function validateNamedReferences(items, key) {
+    if (items.some(item => !isNamedReference(item))) {
+      throw new Error(`${key} reference record is invalid`);
+    }
+    return items;
+  }
+
+  function validatePeople(items) {
+    if (items.some(person => (
+      !isNamedReference(person)
+      || (
+        person.tags != null
+        && (
+          !Array.isArray(person.tags)
+          || person.tags.some(tag => (
+            !tag || typeof tag !== 'object' || Array.isArray(tag)
+          ))
+        )
+      )
+    ))) {
+      throw new Error('people reference record is invalid');
+    }
+    return items;
+  }
+
   async function loadReferenceData(fetchImpl) {
     const specs = [
       ['locations', '/admin/practices/locations/data'],
@@ -36,11 +73,11 @@
       if (key === 'people') {
         const people = {};
         ['coaches', 'leads', 'assists'].forEach(role => {
-          const value = body[role] ?? [];
+          const value = body && body[role];
           if (!Array.isArray(value)) {
             throw new Error(`people ${role} response is invalid`);
           }
-          people[role] = value;
+          people[role] = validatePeople(value);
         });
         return people;
       }
@@ -48,7 +85,7 @@
       if (!Array.isArray(value)) {
         throw new Error(`${key} reference response is invalid`);
       }
-      return value;
+      return validateNamedReferences(value, key);
     }));
     const result = {
       locations: [],
