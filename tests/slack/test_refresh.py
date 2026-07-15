@@ -618,17 +618,40 @@ class TestTemporaryAnnouncementNotice:
         self,
     ):
         from app.slack.bolt_app import _handle_practice_edit_full_submission
+        from app.practices.plan_reaction_editor import (
+            build_plan_reaction_editor_state,
+        )
+        from app.slack.practice_reaction_editor import (
+            encode_practice_reaction_metadata,
+        )
 
         previous = [{"emoji": "old_choice", "label": "Old choice"}]
+        submitted = [{"emoji": "new_choice", "label": "New choice"}]
         practice = MagicMock(
             id=42,
             date=datetime(2026, 7, 14, 18, 15),
             location_id=10,
             plan_reactions=previous,
+            slack_message_ts=None,
         )
-        query = MagicMock()
-        query.get.return_value = practice
-        practice_model = SimpleNamespace(query=query)
+        state = build_plan_reaction_editor_state(
+            practice_types=[],
+            activities=[],
+            saved_snapshot=submitted,
+        ).state
+        catalog_source = SimpleNamespace(
+            id=1,
+            name="Configured options",
+            default_plan_reactions=submitted,
+        )
+        selected_sources = SimpleNamespace(
+            practice_types=(),
+            activities=(),
+        )
+        all_sources = SimpleNamespace(
+            practice_types=(catalog_source,),
+            activities=(),
+        )
         ack = MagicMock()
         values = {
             "location_block": {
@@ -638,8 +661,14 @@ class TestTemporaryAnnouncementNotice:
                 "workout_description": {"value": "6 x 3 minutes"}
             },
             "notes_block": {"logistics_notes": {"value": ""}},
-            "plan_reactions_block": {
-                "plan_reactions": {"value": ":new_choice: New choice"}
+            "activities_block": {
+                "activity_ids": {"selected_options": []}
+            },
+            "types_block": {
+                "type_ids": {"selected_options": []}
+            },
+            "practice_reaction_row_r0": {
+                "practice_reaction_description": {"value": "New choice"}
             },
             "flags_block": {"practice_flags": {"selected_options": []}},
             "notify_block": {"notify_update": {"selected_options": []}},
@@ -649,7 +678,13 @@ class TestTemporaryAnnouncementNotice:
             "app.slack.bolt_app.get_app_context",
             return_value=nullcontext(),
         ), patch(
-            "app.practices.models.Practice", practice_model
+            "app.models.db.session.get", return_value=practice
+        ), patch(
+            "app.slack.bolt_app.load_selected_plan_reaction_sources",
+            return_value=selected_sources,
+        ), patch(
+            "app.slack.bolt_app.load_all_plan_reaction_sources",
+            return_value=all_sources,
         ), patch(
             "app.models.db.session.commit"
         ), patch(
@@ -659,7 +694,12 @@ class TestTemporaryAnnouncementNotice:
                 ack=ack,
                 body={"user": {"id": "U123"}},
                 view={
-                    "private_metadata": "42",
+                    "callback_id": "practice_edit_full",
+                    "private_metadata": encode_practice_reaction_metadata(
+                        mode="edit",
+                        context={"practice_id": 42},
+                        state=state,
+                    ),
                     "state": {"values": values},
                 },
                 logger=MagicMock(),

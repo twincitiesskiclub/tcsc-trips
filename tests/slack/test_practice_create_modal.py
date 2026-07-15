@@ -4,30 +4,73 @@ Covers the coach/lead pickers added so coaches can assign people at creation
 time from the weekly coach-summary 'Add Practice' button.
 """
 
+import copy
 from datetime import datetime
 from types import SimpleNamespace
+from unittest.mock import MagicMock
 
+import pytest
+
+from app import create_app
+from app.models import db
 from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.models import (
+    Practice,
+    PracticeActivity,
+    PracticeLocation,
+    PracticeType,
+)
 from app.practices.plan_reactions import (
     EVERGREEN_PLAN_REACTION,
     build_plan_reaction_catalog,
 )
+import app.slack.bolt_app as bolt_module
 from app.slack.bolt_app import _parse_practice_authoring_values
 from app.slack.modals import build_practice_create_modal
 from app.slack.practice_reaction_editor import (
     decode_practice_reaction_metadata,
+    encode_practice_reaction_metadata,
 )
+
+
+CREATE_TEST_PREFIX = "Slack Create Structured Test"
+CREATE_BODY = {"user": {"id": "U-CREATE-TEST"}}
 
 
 def _blocks_by_id(modal):
     return {b.get("block_id"): b for b in modal["blocks"] if b.get("block_id")}
 
 
-def _authoring_values(workout="", plan_text=""):
+def _authoring_values(workout=""):
     return {
         "workout_block": {"workout_description": {"value": workout}},
-        "plan_reactions_block": {"plan_reactions": {"value": plan_text}},
     }
+
+
+def _view_values(modal):
+    values = {}
+    for block in modal["blocks"]:
+        block_id = block.get("block_id")
+        element = block.get("element")
+        if not block_id or not isinstance(element, dict):
+            continue
+        action_id = element.get("action_id")
+        if not action_id:
+            continue
+        if element["type"] == "plain_text_input":
+            action_value = {"value": element.get("initial_value", "")}
+        elif element["type"] == "timepicker":
+            action_value = {"selected_time": element.get("initial_time")}
+        elif element["type"] == "static_select":
+            action_value = {"selected_option": element.get("initial_option")}
+        else:
+            action_value = {
+                "selected_options": copy.deepcopy(
+                    element.get("initial_options", [])
+                )
+            }
+        values[block_id] = {action_id: action_value}
+    return values
 
 
 def _reaction_inputs():
@@ -45,6 +88,92 @@ def _reaction_inputs():
         "reaction_editor": editor,
         "reaction_catalog": build_plan_reaction_catalog([intervals], []),
     }
+
+
+def _cleanup_create_records():
+    for practice in Practice.query.filter(
+        Practice.slack_coach_summary_ts == CREATE_TEST_PREFIX
+    ).all():
+        practice.activities.clear()
+        practice.practice_types.clear()
+        db.session.delete(practice)
+    db.session.flush()
+    for model in (PracticeActivity, PracticeType, PracticeLocation):
+        for record in model.query.filter(
+            model.name.startswith(CREATE_TEST_PREFIX)
+        ).all():
+            db.session.delete(record)
+    db.session.commit()
+
+
+@pytest.fixture
+def app():
+    flask_app = create_app()
+    flask_app.config["TESTING"] = True
+    flask_app.config["SECRET_KEY"] = "test-secret-key"
+    flask_app.config["SQLALCHEMY_DATABASE_URI"] = (
+        "postgresql://tcsc:tcsc@localhost:5432/tcsc_trips"
+    )
+    return flask_app
+
+
+@pytest.fixture
+def db_session(app):
+    with app.app_context():
+        db.create_all()
+        _cleanup_create_records()
+        yield db
+        db.session.rollback()
+        _cleanup_create_records()
+
+
+@pytest.fixture
+def create_sources(db_session):
+    location = PracticeLocation(name=f"{CREATE_TEST_PREFIX} Location")
+    activity = PracticeActivity(
+        name=f"{CREATE_TEST_PREFIX} Run",
+        default_plan_reactions=[
+            {"emoji": "athletic_shoe", "label": "runner"}
+        ],
+    )
+    practice_type = PracticeType(
+        name=f"{CREATE_TEST_PREFIX} Intervals",
+        default_plan_reactions=[
+            {"emoji": "snowflake", "label": "shorter route"}
+        ],
+    )
+    db.session.add_all([location, activity, practice_type])
+    db.session.commit()
+    return location, activity, practice_type
+
+
+@pytest.fixture
+def create_view(create_sources):
+    location, activity, practice_type = create_sources
+    editor = build_plan_reaction_editor_state(
+        practice_types=[practice_type],
+        activities=[activity],
+        saved_snapshot=None,
+    ).state
+    catalog = build_plan_reaction_catalog([practice_type], [activity])
+    modal = build_practice_create_modal(
+        datetime(2026, 7, 21, 18, 15),
+        "18:15",
+        locations=[(location.id, location.name)],
+        channel_id="C-CREATE-TEST",
+        message_ts=CREATE_TEST_PREFIX,
+        all_activities=[(activity.id, activity.name)],
+        all_types=[(practice_type.id, practice_type.name)],
+        slot_defaults={
+            "location_id": location.id,
+            "activity_ids": [activity.id],
+            "type_ids": [practice_type.id],
+        },
+        reaction_editor=editor,
+        reaction_catalog=catalog,
+    )
+    modal["state"] = {"values": _view_values(modal)}
+    return modal
 
 
 def test_create_modal_has_coach_and_lead_pickers():
@@ -144,61 +273,276 @@ def test_create_ellipsizes_location_activity_and_type_option_text():
         assert option["text"]["text"].endswith("…")
 
 
-def test_create_submission_uses_edited_visible_plan_value():
+def test_authoring_parser_reads_only_workout():
     fields, errors = _parse_practice_authoring_values(
-        _authoring_values(
-            workout="5 x 4 minutes",
-            plan_text=":athletic_shoe: Run instead",
-        ),
-        include_plan_reactions=True,
+        _authoring_values(workout="5 x 4 minutes"),
     )
     assert errors == {}
-    assert fields == {
-        "workout_description": "5 x 4 minutes",
-        "plan_reactions": [{"emoji": "athletic_shoe", "label": "Run instead"}],
-    }
-
-
-def test_create_submission_preserves_full_skin_tone_reaction_name():
-    fields, errors = _parse_practice_authoring_values(
-        _authoring_values(
-            plan_text=":older_adult::skin-tone-4: experienced rollerskier"
-        ),
-        include_plan_reactions=True,
-    )
-    assert errors == {}
-    assert fields["plan_reactions"] == [{
-        "emoji": "older_adult::skin-tone-4",
-        "label": "experienced rollerskier",
-    }]
-
-
-def test_create_submission_can_clear_prefilled_plan_value():
-    fields, errors = _parse_practice_authoring_values(
-        _authoring_values(plan_text=""), include_plan_reactions=True
-    )
-    assert errors == {}
-    assert fields["plan_reactions"] == []
-
-
-def test_create_submission_maps_invalid_plan_to_its_slack_block():
-    fields, errors = _parse_practice_authoring_values(
-        _authoring_values(
-            plan_text=":evergreen_tree Endurance instead of intervals"
-        ),
-        include_plan_reactions=True,
-    )
-    assert "plan_reactions" not in fields
-    assert errors == {
-        "plan_reactions_block": "Line 1: use :emoji: Member-facing label"
-    }
+    assert fields == {"workout_description": "5 x 4 minutes"}
 
 
 def test_authoring_rejects_tampered_oversized_workout():
     fields, errors = _parse_practice_authoring_values(
-        _authoring_values(workout="x" * 2501), include_plan_reactions=False
+        _authoring_values(workout="x" * 2501)
     )
     assert len(fields["workout_description"]) == 2501
     assert errors == {
         "workout_block": "Workout must be 2,500 characters or fewer"
     }
+
+
+def test_authoring_rejects_malformed_scalar_workout_without_throwing():
+    fields, errors = _parse_practice_authoring_values({
+        "workout_block": {"workout_description": {"value": 7}}
+    })
+
+    assert fields == {"workout_description": ""}
+    assert errors == {"workout_block": "Workout must be text"}
+
+
+def test_create_submission_rejects_unknown_activity_before_persistence(
+    db_session,
+    create_view,
+):
+    create_view["state"]["values"]["activities_block"]["activity_ids"][
+        "selected_options"
+    ] = [{"value": "999999"}]
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert "activities_block" in ack.call_args.kwargs["errors"]
+    assert Practice.query.count() == before
+
+
+def test_create_submission_maps_malformed_activity_state_without_persistence(
+    db_session,
+    create_view,
+):
+    create_view["state"]["values"]["activities_block"]["activity_ids"][
+        "selected_options"
+    ] = "not-a-list"
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs == {
+        "response_action": "errors",
+        "errors": {
+            "activities_block": "Invalid Activity selection. Please try again."
+        },
+    }
+    assert Practice.query.count() == before
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        lambda values: values["flags_block"]["practice_flags"].update(
+            {"selected_options": "not-a-list"}
+        ),
+        lambda values: values.update({
+            "coaches_block": {
+                "coach_ids": {"selected_options": "not-a-list"}
+            }
+        }),
+        lambda values: values.update({"workout_block": 7}),
+        lambda values: values.pop("flags_block"),
+        lambda values: values.pop("location_block"),
+    ],
+)
+def test_create_submission_rejects_malformed_optional_state_without_persistence(
+    db_session,
+    create_view,
+    tamper,
+):
+    tamper(create_view["state"]["values"])
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert Practice.query.count() == before
+
+
+def test_create_submission_rejects_metadata_tampered_emoji(
+    db_session,
+    create_view,
+):
+    mode, context, state, _preview = decode_practice_reaction_metadata(
+        create_view["private_metadata"]
+    )
+    state.rows[0].emoji = "tampered"
+    create_view["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context=context,
+        state=state,
+    )
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert "not configured in Settings" in next(
+        iter(ack.call_args.kwargs["errors"].values())
+    )
+    assert Practice.query.count() == before
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        lambda view: view.update({"private_metadata": "{}"}),
+        lambda view: view.update({"callback_id": "practice_edit_full"}),
+    ],
+)
+def test_create_submission_rejects_malformed_context_without_persistence(
+    db_session,
+    create_view,
+    tamper,
+):
+    tamper(create_view)
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert Practice.query.count() == before
+
+
+def test_create_submission_maps_incomplete_structured_row_without_persistence(
+    db_session,
+    create_view,
+):
+    create_view["state"]["values"]["practice_reaction_row_r0"][
+        "practice_reaction_description"
+    ]["value"] = ""
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs == {
+        "response_action": "errors",
+        "errors": {
+            "practice_reaction_row_r0": (
+                "Enter a description for :snowflake:."
+            )
+        },
+    }
+    assert Practice.query.count() == before
+
+
+def test_create_reaction_action_reloads_settings_without_persisting(
+    db_session,
+    create_view,
+):
+    create_view["id"] = "V_CREATE"
+    create_view["hash"] = "HASH_CREATE"
+    create_view["state"]["values"]["workout_block"][
+        "workout_description"
+    ]["value"] = "Unsaved Create workout"
+    body = {
+        "type": "block_actions",
+        "user": {"id": "U-CREATE-TEST"},
+        "view": create_view,
+    }
+    before = Practice.query.count()
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    updated = client.views_update.call_args.kwargs["view"]
+    assert updated["callback_id"] == "practice_create"
+    assert _blocks_by_id(updated)["workout_block"]["element"][
+        "initial_value"
+    ] == "Unsaved Create workout"
+    assert Practice.query.count() == before
+
+
+def test_create_submission_persists_validated_structured_state(
+    db_session,
+    create_sources,
+    create_view,
+    monkeypatch,
+):
+    _location, activity, practice_type = create_sources
+    values = create_view["state"]["values"]
+    values["workout_block"]["workout_description"]["value"] = (
+        "Validated workout"
+    )
+    values["practice_reaction_row_r0"][
+        "practice_reaction_description"
+    ]["value"] = "Edited shorter-route label"
+    thread = MagicMock()
+    monkeypatch.setattr(bolt_module.threading, "Thread", thread)
+    ack = MagicMock()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    ack.assert_called_once_with()
+    practice = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+    assert practice.workout_description == "Validated workout"
+    assert practice.plan_reactions == [{
+        "emoji": "snowflake",
+        "label": "Edited shorter-route label",
+    }]
+    assert {item.id for item in practice.activities} == {activity.id}
+    assert {item.id for item in practice.practice_types} == {practice_type.id}
+    thread.return_value.start.assert_called_once_with()

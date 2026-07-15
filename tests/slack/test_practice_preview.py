@@ -1,9 +1,12 @@
 """Contracts for the discard-only Slack Practice Preview."""
 
+import copy
 from contextlib import nullcontext
 from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 import app.slack.bolt_app as bolt_module
 from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
@@ -35,6 +38,51 @@ def _preview_command(**overrides):
     }
     command.update(overrides)
     return command
+
+
+def _view_values(modal):
+    values = {}
+    for block in modal["blocks"]:
+        block_id = block.get("block_id")
+        element = block.get("element")
+        if not block_id or not isinstance(element, dict):
+            continue
+        action_id = element.get("action_id")
+        if not action_id:
+            continue
+        if element["type"] == "plain_text_input":
+            action_value = {"value": element.get("initial_value", "")}
+        elif element["type"] == "timepicker":
+            action_value = {"selected_time": element.get("initial_time")}
+        elif element["type"] == "static_select":
+            action_value = {"selected_option": element.get("initial_option")}
+        else:
+            action_value = {
+                "selected_options": copy.deepcopy(
+                    element.get("initial_options", [])
+                )
+            }
+        values[block_id] = {action_id: action_value}
+    return values
+
+
+def _action_body_from_view(modal, *, view_hash="HASH_PREVIEW"):
+    view = copy.deepcopy(modal)
+    view.update({
+        "id": "V_PREVIEW",
+        "hash": view_hash,
+        "state": {"values": _view_values(modal)},
+    })
+    return {
+        "type": "block_actions",
+        "user": {"id": "U_PREVIEWER"},
+        "view": view,
+    }
+
+
+@pytest.fixture
+def preview_action_body():
+    return _action_body_from_view(build_practice_preview_modal(PREVIEW_DATE))
 
 
 def test_preview_wraps_the_structured_production_create_modal():
@@ -144,6 +192,327 @@ def test_preview_metadata_fully_rebuilds_sources_and_catalog_without_database():
         "older_adult::skin-tone-4",
     ]
     assert "practice_id" not in modal["private_metadata"]
+
+
+def test_reaction_action_acks_first_and_updates_with_view_hash(
+    preview_action_body,
+):
+    events = []
+    client = MagicMock()
+    client.views_update.side_effect = lambda **kwargs: events.append(
+        ("update", kwargs)
+    )
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: events.append(("ack", None)),
+        body=preview_action_body,
+        action={"action_id": "practice_reaction_remove", "value": "r0"},
+        client=client,
+        logger=MagicMock(),
+    )
+
+    assert events[0] == ("ack", None)
+    update = events[1][1]
+    assert update["view_id"] == "V_PREVIEW"
+    assert update["hash"] == "HASH_PREVIEW"
+    assert "practice_reaction_removed_r0" in _blocks_by_id(update["view"])
+
+
+def test_preview_action_never_opens_application_context(
+    preview_action_body,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        bolt_module,
+        "get_app_context",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("Preview touched app context")
+        ),
+    )
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: None,
+        body=preview_action_body,
+        action={"action_id": "activity_ids"},
+        client=MagicMock(),
+        logger=MagicMock(),
+    )
+
+
+def test_remove_accepts_temporarily_blank_description(preview_action_body):
+    preview_action_body["view"]["state"]["values"][
+        "practice_reaction_row_r0"
+    ]["practice_reaction_description"]["value"] = ""
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: None,
+        body=preview_action_body,
+        action={"action_id": "practice_reaction_remove", "value": "r0"},
+        client=client,
+        logger=MagicMock(),
+    )
+
+    metadata = client.views_update.call_args.kwargs["view"]["private_metadata"]
+    state = decode_practice_reaction_metadata(metadata)[2]
+    assert state.rows[0].label == ""
+    assert state.rows[0].removed is True
+
+
+def test_views_update_failure_is_logged(preview_action_body):
+    logger = MagicMock()
+    client = MagicMock()
+    client.views_update.side_effect = RuntimeError("Slack unavailable")
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: None,
+        body=preview_action_body,
+        action={"action_id": "practice_reaction_remove", "value": "r0"},
+        client=client,
+        logger=logger,
+    )
+
+    logger.exception.assert_called_once()
+
+
+def test_preview_selector_transition_preserves_unrelated_values(
+    preview_action_body,
+):
+    values = preview_action_body["view"]["state"]["values"]
+    values["workout_block"]["workout_description"]["value"] = "Do not lose me"
+    values["activities_block"]["activity_ids"]["selected_options"] = [
+        {"value": "1"}
+    ]
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: None,
+        body=preview_action_body,
+        action={"action_id": "activity_ids"},
+        client=client,
+        logger=MagicMock(),
+    )
+
+    updated = client.views_update.call_args.kwargs["view"]
+    blocks = _blocks_by_id(updated)
+    assert blocks["workout_block"]["element"]["initial_value"] == (
+        "Do not lose me"
+    )
+    assert [
+        key for key in blocks if key.startswith("practice_reaction_row_")
+    ] == ["practice_reaction_row_r0"]
+
+
+def test_preview_selector_transition_one_two_three_one_matrix(
+    preview_action_body,
+):
+    client = MagicMock()
+    logger = MagicMock()
+    body = preview_action_body
+    expected_rows = (1, 4, 4, 1)
+
+    for index, (selected, row_count) in enumerate(zip(
+        (["1"], ["1", "2"], ["1", "2", "3"], ["1"]),
+        expected_rows,
+    )):
+        values = body["view"]["state"]["values"]
+        values["workout_block"]["workout_description"]["value"] = (
+            "Matrix workout"
+        )
+        values["activities_block"]["activity_ids"]["selected_options"] = [
+            {"value": value} for value in selected
+        ]
+        bolt_module._handle_practice_reaction_action(
+            lambda: None,
+            body,
+            {"action_id": "activity_ids"},
+            client,
+            logger,
+        )
+        updated = client.views_update.call_args.kwargs["view"]
+        blocks = _blocks_by_id(updated)
+        assert len([
+            key
+            for key in blocks
+            if key.startswith("practice_reaction_row_")
+        ]) == row_count
+        assert blocks["workout_block"]["element"]["initial_value"] == (
+            "Matrix workout"
+        )
+        body = _action_body_from_view(
+            updated,
+            view_hash=f"HASH_MATRIX_{index}",
+        )
+
+
+def test_nonselector_action_accepts_reordered_distinct_selector_ids(
+    preview_action_body,
+):
+    values = preview_action_body["view"]["state"]["values"]
+    values["activities_block"]["activity_ids"]["selected_options"] = [
+        {"value": "2"},
+        {"value": "1"},
+    ]
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        preview_action_body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        MagicMock(),
+    )
+
+    assert "practice_reaction_removed_r0" in _blocks_by_id(
+        client.views_update.call_args.kwargs["view"]
+    )
+
+
+def test_remove_then_undo_restores_the_same_fixed_key(preview_action_body):
+    client = MagicMock()
+    logger = MagicMock()
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        preview_action_body,
+        {"action_id": "practice_reaction_remove", "value": "r0"},
+        client,
+        logger,
+    )
+    removed = client.views_update.call_args.kwargs["view"]
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        _action_body_from_view(removed, view_hash="HASH_UNDO"),
+        {"action_id": "practice_reaction_undo", "value": "r0"},
+        client,
+        logger,
+    )
+
+    restored = client.views_update.call_args.kwargs["view"]
+    assert "practice_reaction_row_r0" in _blocks_by_id(restored)
+
+
+def test_add_then_catalog_select_appends_configured_fixed_key(
+    preview_action_body,
+):
+    values = preview_action_body["view"]["state"]["values"]
+    values["activities_block"]["activity_ids"]["selected_options"] = [
+        {"value": "1"}
+    ]
+    values["types_block"]["type_ids"]["selected_options"] = []
+    client = MagicMock()
+    logger = MagicMock()
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        preview_action_body,
+        {"action_id": "activity_ids"},
+        client,
+        logger,
+    )
+    reconciled = client.views_update.call_args.kwargs["view"]
+    add_body = _action_body_from_view(reconciled, view_hash="HASH_ADD")
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        add_body,
+        {"action_id": "practice_reaction_add"},
+        client,
+        logger,
+    )
+    opened = client.views_update.call_args.kwargs["view"]
+    picker = _blocks_by_id(opened)["practice_reaction_catalog_block"]
+    option = picker["elements"][0]["options"][0]
+    catalog_body = _action_body_from_view(opened, view_hash="HASH_CATALOG")
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        catalog_body,
+        {
+            "action_id": "practice_reaction_catalog_select",
+            "selected_option": {"value": option["value"]},
+        },
+        client,
+        logger,
+    )
+
+    final = client.views_update.call_args.kwargs["view"]
+    assert "practice_reaction_row_r4" in _blocks_by_id(final)
+    assert option["value"] not in str(final["blocks"])
+
+
+@pytest.mark.parametrize(
+    "tamper",
+    [
+        lambda body: body["view"].update({"private_metadata": "{}"}),
+        lambda body: body["view"].update({"callback_id": "practice_create"}),
+        lambda body: body["view"]["state"]["values"].pop("types_block"),
+        lambda body: body["view"]["state"]["values"]["activities_block"][
+            "activity_ids"
+        ].update({"selected_options": [{"value": "999"}]}),
+        lambda body: body["view"]["state"]["values"]["activities_block"][
+            "activity_ids"
+        ].update({
+            "selected_options": [{"value": "1"}, {"value": "1"}]
+        }),
+        lambda body: body["view"]["state"]["values"]["activities_block"][
+            "activity_ids"
+        ].update({"selected_options": [{"value": "01"}]}),
+    ],
+)
+def test_malformed_preview_action_has_no_update_or_persistence(
+    preview_action_body,
+    monkeypatch,
+    tamper,
+):
+    tamper(preview_action_body)
+    client = MagicMock()
+    monkeypatch.setattr(
+        bolt_module,
+        "get_app_context",
+        lambda: (_ for _ in ()).throw(
+            AssertionError("malformed Preview touched app context")
+        ),
+    )
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: None,
+        body=preview_action_body,
+        action={"action_id": "activity_ids"},
+        client=client,
+        logger=MagicMock(),
+    )
+
+    client.views_update.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "action",
+    [
+        {"action_id": "unknown_reaction_action"},
+        {"action_id": "practice_reaction_remove", "value": "r999"},
+        {"action_id": "practice_reaction_undo", "value": "r0"},
+        {
+            "action_id": "practice_reaction_catalog_select",
+            "selected_option": {"value": "forged-option"},
+        },
+        {"action_id": "practice_reaction_restore"},
+    ],
+)
+def test_unknown_or_impossible_preview_action_is_a_noop(
+    preview_action_body,
+    action,
+):
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        preview_action_body,
+        action,
+        client,
+        MagicMock(),
+    )
+
+    client.views_update.assert_not_called()
 
 
 def test_preview_command_rejects_every_other_channel_before_opening_a_view():

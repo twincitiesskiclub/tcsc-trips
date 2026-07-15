@@ -1,3 +1,4 @@
+import copy
 import logging
 from datetime import datetime
 from types import SimpleNamespace
@@ -9,6 +10,10 @@ from app import create_app
 from app.models import db
 from app.practices.interfaces import PracticeInfo, PracticeStatus
 from app.practices.plan_reaction_editor import build_plan_reaction_editor_state
+from app.practices.plan_reaction_queries import (
+    load_all_plan_reaction_sources,
+    load_selected_plan_reaction_sources,
+)
 from app.practices.models import (
     Practice,
     PracticeActivity,
@@ -16,12 +21,17 @@ from app.practices.models import (
     PracticeType,
 )
 from app.practices.plan_reactions import build_plan_reaction_catalog
+from app.practices.service import convert_practice_to_info
 import app.slack.bolt_app as bolt_module
 from app.slack.modals import build_practice_edit_full_modal
-from app.slack.practice_reaction_editor import decode_practice_reaction_metadata
+from app.slack.practice_reaction_editor import (
+    decode_practice_reaction_metadata,
+    encode_practice_reaction_metadata,
+)
 
 
 TEST_PREFIX = "Slack Full Edit Test"
+_CURRENT_PLAN_REACTIONS = object()
 
 
 class AckRecorder:
@@ -40,59 +50,180 @@ def _blocks_by_id(modal):
     }
 
 
-def _full_edit_values(
+def _view_values(modal):
+    values = {}
+    for block in modal["blocks"]:
+        block_id = block.get("block_id")
+        element = block.get("element")
+        if not block_id or not isinstance(element, dict):
+            continue
+        action_id = element.get("action_id")
+        if not action_id:
+            continue
+        if element["type"] == "plain_text_input":
+            action_value = {"value": element.get("initial_value", "")}
+        elif element["type"] == "static_select":
+            action_value = {"selected_option": element.get("initial_option")}
+        else:
+            action_value = {
+                "selected_options": copy.deepcopy(
+                    element.get("initial_options", [])
+                )
+            }
+        values[block_id] = {action_id: action_value}
+    return values
+
+
+def _full_edit_action_body(practice):
+    selected = load_selected_plan_reaction_sources(
+        db.session,
+        activity_ids=[item.id for item in practice.activities],
+        type_ids=[item.id for item in practice.practice_types],
+    )
+    all_sources = load_all_plan_reaction_sources(db.session)
+    editor = build_plan_reaction_editor_state(
+        practice_types=selected.practice_types,
+        activities=selected.activities,
+        saved_snapshot=practice.plan_reactions or [],
+    ).state
+    modal = build_practice_edit_full_modal(
+        convert_practice_to_info(practice),
+        locations=[
+            (item.id, item.name)
+            for item in PracticeLocation.query.order_by(
+                PracticeLocation.name
+            ).all()
+        ],
+        all_activities=[
+            (item.id, item.name)
+            for item in all_sources.activities
+        ],
+        all_types=[
+            (item.id, item.name)
+            for item in all_sources.practice_types
+        ],
+        reaction_editor=editor,
+        reaction_catalog=build_plan_reaction_catalog(
+            all_sources.practice_types,
+            all_sources.activities,
+        ),
+    )
+    view = copy.deepcopy(modal)
+    view.update({
+        "id": "V_FULL_EDIT",
+        "hash": "HASH_FULL_EDIT",
+        "state": {"values": _view_values(modal)},
+    })
+    return {
+        "type": "block_actions",
+        "user": {"id": "U-FULL-EDIT-TEST"},
+        "view": view,
+    }
+
+
+def _full_edit_submission_view(
+    practice,
     *,
     workout="5 x 4 minutes",
     notes="Meet by the flagpole",
-    plan_text=":athletic_shoe: Saved custom option",
+    plan_reactions=_CURRENT_PLAN_REACTIONS,
     location_id=None,
     activity_ids=None,
     type_ids=None,
     is_dark=False,
 ):
-    values = {
-        "workout_block": {"workout_description": {"value": workout}},
-        "notes_block": {"logistics_notes": {"value": notes}},
-        "plan_reactions_block": {"plan_reactions": {"value": plan_text}},
-        "flags_block": {
-            "practice_flags": {
-                "selected_options": (
-                    [{"value": "is_dark_practice"}] if is_dark else []
-                )
-            }
-        },
-    }
+    selected_activity_ids = (
+        [item.id for item in practice.activities]
+        if activity_ids is None
+        else list(activity_ids)
+    )
+    selected_type_ids = (
+        [item.id for item in practice.practice_types]
+        if type_ids is None
+        else list(type_ids)
+    )
+    selected = load_selected_plan_reaction_sources(
+        db.session,
+        activity_ids=selected_activity_ids,
+        type_ids=selected_type_ids,
+    )
+    all_sources = load_all_plan_reaction_sources(db.session)
+    snapshot = (
+        practice.plan_reactions or []
+        if plan_reactions is _CURRENT_PLAN_REACTIONS
+        else plan_reactions
+    )
+    editor = build_plan_reaction_editor_state(
+        practice_types=selected.practice_types,
+        activities=selected.activities,
+        saved_snapshot=snapshot,
+    ).state
+    modal = build_practice_edit_full_modal(
+        convert_practice_to_info(practice),
+        locations=[
+            (item.id, item.name)
+            for item in PracticeLocation.query.order_by(
+                PracticeLocation.name
+            ).all()
+        ],
+        all_activities=[
+            (item.id, item.name) for item in all_sources.activities
+        ],
+        all_types=[
+            (item.id, item.name) for item in all_sources.practice_types
+        ],
+        reaction_editor=editor,
+        reaction_catalog=build_plan_reaction_catalog(
+            all_sources.practice_types,
+            all_sources.activities,
+        ),
+    )
+    values = _view_values(modal)
+    values["workout_block"]["workout_description"]["value"] = workout
+    values["notes_block"]["logistics_notes"]["value"] = notes
+    values["activities_block"]["activity_ids"]["selected_options"] = [
+        {"value": str(item)} for item in selected_activity_ids
+    ]
+    values["types_block"]["type_ids"]["selected_options"] = [
+        {"value": str(item)} for item in selected_type_ids
+    ]
+    values["flags_block"]["practice_flags"]["selected_options"] = (
+        [{"value": "is_dark_practice"}] if is_dark else []
+    )
     if location_id is not None:
-        values["location_block"] = {
-            "location_id": {"selected_option": {"value": str(location_id)}}
+        values["location_block"]["location_id"]["selected_option"] = {
+            "value": str(location_id)
         }
-    if activity_ids is not None:
-        values["activities_block"] = {
-            "activity_ids": {
-                "selected_options": [
-                    {"value": str(activity_id)} for activity_id in activity_ids
-                ]
-            }
-        }
-    if type_ids is not None:
-        values["types_block"] = {
-            "type_ids": {
-                "selected_options": [
-                    {"value": str(type_id)} for type_id in type_ids
-                ]
-            }
-        }
-    return values
+    modal["state"] = {"values": values}
+    return modal
+
+
+def _full_edit_values(
+    *,
+    workout="5 x 4 minutes",
+    notes="Meet by the flagpole",
+    plan_reactions=_CURRENT_PLAN_REACTIONS,
+    location_id=None,
+    activity_ids=None,
+    type_ids=None,
+    is_dark=False,
+):
+    return {
+        "workout": workout,
+        "notes": notes,
+        "plan_reactions": plan_reactions,
+        "location_id": location_id,
+        "activity_ids": activity_ids,
+        "type_ids": type_ids,
+        "is_dark": is_dark,
+    }
 
 
 def _submit(practice, values, ack):
     return bolt_module._handle_practice_edit_full_submission(
         ack=ack,
         body={"user": {"id": "U-FULL-EDIT-TEST"}},
-        view={
-            "private_metadata": str(practice.id),
-            "state": {"values": values},
-        },
+        view=_full_edit_submission_view(practice, **values),
         logger=logging.getLogger(__name__),
     )
 
@@ -316,24 +447,208 @@ def test_full_edit_modal_wraps_skin_tone_name_once():
     )
 
 
+def test_full_edit_restore_preserves_every_nonreaction_value(
+    db_session,
+    practice_record,
+):
+    body = _full_edit_action_body(practice_record)
+    values = body["view"]["state"]["values"]
+    values["notes_block"]["logistics_notes"]["value"] = "Keep these notes"
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_restore"},
+        client,
+        MagicMock(),
+    )
+
+    updated = _blocks_by_id(client.views_update.call_args.kwargs["view"])
+    assert updated["notes_block"]["element"]["initial_value"] == (
+        "Keep these notes"
+    )
+    state = decode_practice_reaction_metadata(
+        client.views_update.call_args.kwargs["view"]["private_metadata"]
+    )[2]
+    assert all(row.emoji != "athletic_shoe" for row in state.rows)
+
+
+def test_restore_conflict_keeps_reaction_state_unchanged(
+    db_session,
+    practice_record,
+    source_records,
+):
+    source_records["current_type"].default_plan_reactions = [
+        {"emoji": "collision", "label": "Current label"}
+    ]
+    source_records["replacement_type"].default_plan_reactions = [
+        {"emoji": "collision", "label": "Conflicting label"}
+    ]
+    practice_record.practice_types = [
+        source_records["current_type"],
+        source_records["replacement_type"],
+    ]
+    db.session.commit()
+    body = _full_edit_action_body(practice_record)
+    before = decode_practice_reaction_metadata(
+        body["view"]["private_metadata"]
+    )[2]
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_restore"},
+        client,
+        MagicMock(),
+    )
+
+    after = decode_practice_reaction_metadata(
+        client.views_update.call_args.kwargs["view"]["private_metadata"]
+    )[2]
+    assert [
+        (row.emoji, row.label, row.removed) for row in after.rows
+    ] == [
+        (row.emoji, row.label, row.removed) for row in before.rows
+    ]
+    assert after.blocking_error
+
+
+def test_settings_lookup_failure_preserves_modal_and_surfaces_retry(
+    db_session,
+    practice_record,
+    monkeypatch,
+):
+    body = _full_edit_action_body(practice_record)
+    body["view"]["state"]["values"]["workout_block"][
+        "workout_description"
+    ]["value"] = "Unsaved workout"
+    monkeypatch.setattr(
+        bolt_module,
+        "load_all_plan_reaction_sources",
+        lambda _session: (_ for _ in ()).throw(
+            RuntimeError("database unavailable")
+        ),
+        raising=False,
+    )
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "practice_reaction_restore"},
+        client,
+        MagicMock(),
+    )
+
+    updated = _blocks_by_id(client.views_update.call_args.kwargs["view"])
+    assert "Try again" in updated["practice_reaction_lookup_error"]["text"][
+        "text"
+    ]
+    assert updated["workout_block"]["element"]["initial_value"] == (
+        "Unsaved workout"
+    )
+
+
+def test_unknown_full_edit_selector_has_no_update_or_persistence(
+    db_session,
+    practice_record,
+):
+    body = _full_edit_action_body(practice_record)
+    body["view"]["state"]["values"]["activities_block"]["activity_ids"][
+        "selected_options"
+    ] = [{"value": "999999"}]
+    original = [dict(item) for item in practice_record.plan_reactions]
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        body,
+        {"action_id": "activity_ids"},
+        client,
+        MagicMock(),
+    )
+
+    client.views_update.assert_not_called()
+    db.session.refresh(practice_record)
+    assert practice_record.plan_reactions == original
+
+
+def test_full_edit_accepts_saved_key_missing_from_settings(
+    db_session,
+    practice_record,
+    refresh_calls,
+):
+    ack = AckRecorder()
+
+    result = _submit(practice_record, _full_edit_values(), ack)
+
+    assert ack.calls == [{}]
+    assert result["practice_updated"] is True
+    assert practice_record.plan_reactions == [
+        {"emoji": "athletic_shoe", "label": "Saved custom option"}
+    ]
+
+
+def test_catalog_key_deleted_while_modal_open_preserves_text_but_blocks_save(
+    db_session,
+    practice_record,
+    source_records,
+    refresh_calls,
+):
+    submitted = [
+        {"emoji": "snowflake", "label": "Choose the shorter route"}
+    ]
+    view = _full_edit_submission_view(
+        practice_record,
+        plan_reactions=submitted,
+    )
+    source_records["replacement_activity"].default_plan_reactions = []
+    db.session.commit()
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls[0]["response_action"] == "errors"
+    assert any(
+        "not configured in Settings" in message
+        for message in ack.calls[0]["errors"].values()
+    )
+    assert view["state"]["values"]["practice_reaction_row_r0"][
+        "practice_reaction_description"
+    ]["value"] == "Choose the shorter route"
+    db.session.refresh(practice_record)
+    assert practice_record.plan_reactions == [
+        {"emoji": "athletic_shoe", "label": "Saved custom option"}
+    ]
+    assert refresh_calls == []
+
+
 @pytest.mark.parametrize(
-    ("plan_text", "expected"),
+    ("submitted", "expected"),
     [
         (
-            ":snowflake: Choose the shorter route",
+            [{"emoji": "snowflake", "label": "Choose the shorter route"}],
             [{"emoji": "snowflake", "label": "Choose the shorter route"}],
         ),
-        ("", []),
+        ([], []),
     ],
 )
 def test_full_edit_submission_persists_plan_edit_or_explicit_clear(
-    db_session, practice_record, refresh_calls, plan_text, expected
+    db_session, practice_record, refresh_calls, submitted, expected
 ):
     ack = AckRecorder()
 
     _submit(
         practice_record,
-        _full_edit_values(plan_text=plan_text),
+        _full_edit_values(plan_reactions=submitted),
         ack,
     )
 
@@ -360,6 +675,83 @@ def test_full_edit_submission_updates_or_clears_notes(
     assert len(refresh_calls) == 1
 
 
+def test_full_edit_rejects_scalar_notes_without_mutation(
+    db_session,
+    practice_record,
+    refresh_calls,
+):
+    view = _full_edit_submission_view(practice_record)
+    view["state"]["values"]["notes_block"]["logistics_notes"]["value"] = 7
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls == [{
+        "response_action": "errors",
+        "errors": {"notes_block": "Notes / Logistics must be text"},
+    }]
+    db.session.refresh(practice_record)
+    assert practice_record.logistics_notes == "Original notes"
+    assert refresh_calls == []
+
+
+@pytest.mark.parametrize(
+    ("tamper", "expected_block"),
+    [
+        (
+            lambda values: values["activities_block"]["activity_ids"].update(
+                {"selected_options": 7}
+            ),
+            "activities_block",
+        ),
+        (
+            lambda values: values["notify_block"]["notify_update"].update(
+                {"selected_options": 7}
+            ),
+            "location_block",
+        ),
+        (
+            lambda values: values.pop("notify_block"),
+            "location_block",
+        ),
+        (
+            lambda values: values.pop("location_block"),
+            "location_block",
+        ),
+    ],
+)
+def test_full_edit_rejects_malformed_required_or_optional_state(
+    db_session,
+    practice_record,
+    refresh_calls,
+    tamper,
+    expected_block,
+):
+    view = _full_edit_submission_view(practice_record)
+    tamper(view["state"]["values"])
+    ack = AckRecorder()
+
+    bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logging.getLogger(__name__),
+    )
+
+    assert ack.calls[0]["response_action"] == "errors"
+    assert expected_block in ack.calls[0]["errors"]
+    db.session.refresh(practice_record)
+    assert practice_record.workout_description == "Original workout"
+    assert refresh_calls == []
+
+
 @pytest.mark.parametrize(
     ("overrides", "expected_errors"),
     [
@@ -372,10 +764,14 @@ def test_full_edit_submission_updates_or_clears_notes(
             {"notes_block": "Notes / Logistics must be 2,500 characters or fewer"},
         ),
         (
-            {"plan_text": ":evergreen_tree Missing closing colon"},
             {
-                "plan_reactions_block": (
-                    "Line 1: use :emoji: Member-facing label"
+                "plan_reactions": [
+                    {"emoji": "tampered", "label": "Tampered option"}
+                ]
+            },
+            {
+                "practice_reaction_row_r0": (
+                    "Plan reactions: :tampered: is not configured in Settings"
                 )
             },
         ),
@@ -447,6 +843,39 @@ def test_full_edit_source_changes_preserve_submitted_plan_snapshot(
     assert len(refresh_calls) == 1
 
 
+def test_full_edit_commit_failure_rolls_back_without_refresh(
+    db_session,
+    practice_record,
+    refresh_calls,
+    monkeypatch,
+):
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    monkeypatch.setattr(
+        db.session,
+        "commit",
+        MagicMock(side_effect=RuntimeError("database unavailable")),
+    )
+    ack = AckRecorder()
+
+    result = _submit(
+        practice_record,
+        _full_edit_values(workout="Must roll back"),
+        ack,
+    )
+
+    assert ack.calls == [{}]
+    rollback.assert_called_once_with()
+    assert result == {
+        "success": False,
+        "practice_updated": False,
+        "error": "Could not save practice changes. Please try again.",
+    }
+    assert practice_record.workout_description == "Original workout"
+    assert refresh_calls == []
+
+
 def test_posted_full_edit_returns_saved_but_unsynced_result_and_dms_user(
     db_session, practice_record, monkeypatch
 ):
@@ -466,10 +895,10 @@ def test_posted_full_edit_returns_saved_but_unsynced_result_and_dms_user(
     result = bolt_module._handle_practice_edit_full_submission(
         ack=ack,
         body={"user": {"id": "U-FULL-EDIT-TEST"}},
-        view={
-            "private_metadata": str(practice_record.id),
-            "state": {"values": _full_edit_values(workout="Saved workout")},
-        },
+        view=_full_edit_submission_view(
+            practice_record,
+            workout="Saved workout",
+        ),
         client=client,
         logger=logging.getLogger(__name__),
     )
@@ -515,12 +944,10 @@ def test_full_edit_dm_failure_does_not_undo_saved_database_edit(
         result = bolt_module._handle_practice_edit_full_submission(
             ack=AckRecorder(),
             body={"user": {"id": "U-FULL-EDIT-TEST"}},
-            view={
-                "private_metadata": str(practice_record.id),
-                "state": {
-                    "values": _full_edit_values(workout="Still saved")
-                },
-            },
+            view=_full_edit_submission_view(
+                practice_record,
+                workout="Still saved",
+            ),
             client=client,
             logger=logging.getLogger(__name__),
         )
@@ -547,10 +974,7 @@ def test_unposted_full_edit_returns_structured_success_without_dm(
     result = bolt_module._handle_practice_edit_full_submission(
         ack=AckRecorder(),
         body={"user": {"id": "U-FULL-EDIT-TEST"}},
-        view={
-            "private_metadata": str(practice_record.id),
-            "state": {"values": _full_edit_values()},
-        },
+        view=_full_edit_submission_view(practice_record),
         client=client,
         logger=logging.getLogger(__name__),
     )
