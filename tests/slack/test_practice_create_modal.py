@@ -12,7 +12,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app import create_app
-from app.models import db
+from app.models import User, db
 from app.practices.plan_reaction_editor import (
     add_catalog_plan_reaction,
     build_plan_reaction_editor_state,
@@ -368,6 +368,73 @@ def test_create_source_query_outage_rolls_back_and_acks_retryable_error(
     assert Practice.query.count() == before
 
 
+@pytest.mark.parametrize("failure_kind", ["location_lookup", "user_lookup"])
+def test_create_authoritative_form_lookup_outage_is_retryable_before_mutation(
+    db_session,
+    create_view,
+    monkeypatch,
+    failure_kind,
+):
+    values = create_view["state"]["values"]
+    if failure_kind == "location_lookup":
+        original_get = db.session.get
+
+        def fail_location_lookup(model, identifier, **kwargs):
+            if model is PracticeLocation:
+                raise RuntimeError("location database unavailable")
+            return original_get(model, identifier, **kwargs)
+
+        monkeypatch.setattr(db.session, "get", fail_location_lookup)
+    else:
+        values["coaches_block"] = {
+            "coach_ids": {"selected_options": [{"value": "999999"}]}
+        }
+        original_query = db.session.query
+
+        def fail_user_lookup(*entities, **kwargs):
+            if entities == (User,):
+                raise RuntimeError("user database unavailable")
+            return original_query(*entities, **kwargs)
+
+        monkeypatch.setattr(db.session, "query", fail_user_lookup)
+
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    add = MagicMock()
+    flush = MagicMock()
+    commit = MagicMock()
+    thread = MagicMock()
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    monkeypatch.setattr(db.session, "add", add)
+    monkeypatch.setattr(db.session, "flush", flush)
+    monkeypatch.setattr(db.session, "commit", commit)
+    monkeypatch.setattr(bolt_module.threading, "Thread", thread)
+    ack = MagicMock()
+    logger = MagicMock()
+    before = Practice.query.count()
+
+    result = bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        logger,
+    )
+
+    assert result is None
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    ack.assert_called_once()
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    error_block = next(iter(ack.call_args.kwargs["errors"]))
+    assert _blocks_by_id(create_view)[error_block]["type"] == "input"
+    assert Practice.query.count() == before
+    add.assert_not_called()
+    flush.assert_not_called()
+    commit.assert_not_called()
+    thread.assert_not_called()
+
+
 @pytest.mark.parametrize(
     ("failure_kind", "expected_block"),
     [("deleted_activity", "activities_block"), ("malformed_type", "types_block")],
@@ -682,6 +749,69 @@ def test_create_submission_rejects_blocked_or_tampered_selector_transition(
     flush.assert_not_called()
     commit.assert_not_called()
     thread.assert_not_called()
+
+
+def test_initial_blocking_error_uses_authoritative_selector_attribution(
+    db_session,
+    create_sources,
+):
+    location, activity, selected_type = create_sources
+    overflow_type = PracticeType(
+        name=f"{CREATE_TEST_PREFIX} Initial overflow",
+        default_plan_reactions=[
+            {"emoji": f"overflow_{index}", "label": f"Overflow {index}"}
+            for index in range(4)
+        ],
+    )
+    db.session.add(overflow_type)
+    db.session.commit()
+    blocked = build_plan_reaction_editor_state(
+        practice_types=[overflow_type, selected_type],
+        activities=[activity],
+        saved_snapshot=None,
+    ).state
+    assert blocked.blocking_error and "more than 4" in blocked.blocking_error
+    assert set(blocked.last_valid_type_ids) == {
+        overflow_type.id,
+        selected_type.id,
+    }
+    modal = build_practice_create_modal(
+        datetime(2026, 7, 21, 18, 15),
+        "18:15",
+        locations=[(location.id, location.name)],
+        channel_id="C-CREATE-TEST",
+        message_ts=CREATE_TEST_PREFIX,
+        all_activities=[(activity.id, activity.name)],
+        all_types=[
+            (overflow_type.id, overflow_type.name),
+            (selected_type.id, selected_type.name),
+        ],
+        slot_defaults={
+            "location_id": location.id,
+            "activity_ids": [activity.id],
+            "type_ids": [overflow_type.id, selected_type.id],
+        },
+        reaction_editor=blocked,
+        reaction_catalog=build_plan_reaction_catalog(
+            [overflow_type, selected_type],
+            [activity],
+        ),
+    )
+    modal["state"] = {"values": _view_values(modal)}
+    ack = MagicMock()
+    before = Practice.query.count()
+
+    bolt_module._handle_practice_create_submission(
+        ack,
+        CREATE_BODY,
+        modal,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    assert ack.call_args.kwargs["response_action"] == "errors"
+    assert list(ack.call_args.kwargs["errors"]) == ["types_block"]
+    assert Practice.query.count() == before
 
 
 def test_create_submission_counts_duplicate_selector_ids_once(

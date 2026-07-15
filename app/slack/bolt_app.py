@@ -2217,6 +2217,7 @@ def _practice_reaction_submission_state_errors(
     *,
     activity_ids: tuple[int, ...],
     type_ids: tuple[int, ...],
+    include_blocking_without_mismatch: bool = True,
 ) -> dict[str, str]:
     """Reject blocked or stale selector metadata before authorization/mutation."""
     errors = {}
@@ -2235,7 +2236,7 @@ def _practice_reaction_submission_state_errors(
         errors["activities_block"] = message
     if type_mismatch and "types_block" in input_block_ids:
         errors["types_block"] = message
-    if state.blocking_error and not errors:
+    if include_blocking_without_mismatch and state.blocking_error and not errors:
         errors[_practice_submission_error_block(view, "location_block")] = message
     elif (activity_mismatch or type_mismatch) and not errors:
         errors[_practice_submission_error_block(view, "location_block")] = message
@@ -2371,6 +2372,7 @@ def _handle_practice_create_submission(
             view,
             activity_ids=activity_ids,
             type_ids=type_ids,
+            include_blocking_without_mismatch=False,
         )
         if state_errors:
             ack(response_action="errors", errors=state_errors)
@@ -2399,6 +2401,16 @@ def _handle_practice_create_submission(
                     "Could not load reaction Settings. Please try again."
                 )
             })
+            return None
+
+        state_errors = _practice_reaction_submission_state_errors(
+            state,
+            view,
+            activity_ids=activity_ids,
+            type_ids=type_ids,
+        )
+        if state_errors:
+            ack(response_action="errors", errors=state_errors)
             return None
 
         try:
@@ -2492,6 +2504,18 @@ def _handle_practice_create_submission(
                 "location_block": (
                     "Something went wrong reading the form. Please try again."
                 )
+            })
+            return None
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Could not validate practice Create location and people"
+            )
+            ack(response_action="errors", errors={
+                _practice_submission_error_block(
+                    view,
+                    "location_block",
+                ): "Could not validate practice details. Please try again."
             })
             return None
 
@@ -2835,6 +2859,7 @@ def _handle_practice_edit_full_submission(
             view,
             activity_ids=activity_ids,
             type_ids=type_ids,
+            include_blocking_without_mismatch=False,
         )
         if state_errors:
             ack(response_action="errors", errors=state_errors)
@@ -2863,6 +2888,16 @@ def _handle_practice_edit_full_submission(
                     "Could not load reaction Settings. Please try again."
                 )
             })
+            return None
+
+        state_errors = _practice_reaction_submission_state_errors(
+            state,
+            view,
+            activity_ids=activity_ids,
+            type_ids=type_ids,
+        )
+        if state_errors:
+            ack(response_action="errors", errors=state_errors)
             return None
 
         try:
@@ -2950,6 +2985,18 @@ def _handle_practice_edit_full_submission(
                 "location_block": (
                     "Something went wrong reading the form. Please try again."
                 )
+            })
+            return None
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Could not validate practice Full Edit location and people"
+            )
+            ack(response_action="errors", errors={
+                _practice_submission_error_block(
+                    view,
+                    "location_block",
+                ): "Could not validate practice details. Please try again."
             })
             return None
 

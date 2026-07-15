@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from app import create_app
-from app.models import db
+from app.models import User, db
 from app.practices.interfaces import PracticeInfo, PracticeStatus
 from app.practices.plan_reaction_editor import (
     build_plan_reaction_editor_state,
@@ -1559,6 +1559,75 @@ def test_full_edit_post_save_reload_failure_reports_saved_but_unsynced(
         "updated. Retry the edit or refresh the announcement."
     )
     client.chat_postMessage.assert_called_once()
+
+
+@pytest.mark.parametrize("failure_kind", ["location_lookup", "user_lookup"])
+def test_full_edit_authoritative_form_lookup_outage_is_retryable_before_mutation(
+    db_session,
+    practice_record,
+    refresh_calls,
+    monkeypatch,
+    failure_kind,
+):
+    view = _full_edit_submission_view(
+        practice_record,
+        workout="Must not save",
+    )
+    if failure_kind == "location_lookup":
+        original_get = db.session.get
+
+        def fail_location_lookup(model, identifier, **kwargs):
+            if model is PracticeLocation:
+                raise RuntimeError("location database unavailable")
+            return original_get(model, identifier, **kwargs)
+
+        monkeypatch.setattr(db.session, "get", fail_location_lookup)
+    else:
+        view["state"]["values"]["coaches_block"] = {
+            "coach_ids": {"selected_options": [{"value": "999999"}]}
+        }
+        original_query = db.session.query
+
+        def fail_user_lookup(*entities, **kwargs):
+            if entities == (User,):
+                raise RuntimeError("user database unavailable")
+            return original_query(*entities, **kwargs)
+
+        monkeypatch.setattr(db.session, "query", fail_user_lookup)
+
+    original_rollback = db.session.rollback
+    rollback = MagicMock(side_effect=original_rollback)
+    add = MagicMock()
+    commit = MagicMock()
+    dispatcher = MagicMock()
+    monkeypatch.setattr(db.session, "rollback", rollback)
+    monkeypatch.setattr(db.session, "add", add)
+    monkeypatch.setattr(db.session, "commit", commit)
+    ack = AckRecorder()
+    logger = MagicMock()
+
+    result = bolt_module._handle_practice_edit_full_submission(
+        ack=ack,
+        body={"user": {"id": "U-FULL-EDIT-TEST"}},
+        view=view,
+        client=MagicMock(),
+        logger=logger,
+        post_save_dispatcher=dispatcher,
+    )
+
+    assert result is None
+    rollback.assert_called_once_with()
+    logger.exception.assert_called_once()
+    assert len(ack.calls) == 1
+    assert ack.calls[0]["response_action"] == "errors"
+    error_block = next(iter(ack.calls[0]["errors"]))
+    assert _blocks_by_id(view)[error_block]["type"] == "input"
+    assert practice_record.workout_description == "Original workout"
+    assert practice_record.logistics_notes == "Original notes"
+    add.assert_not_called()
+    commit.assert_not_called()
+    assert refresh_calls == []
+    dispatcher.assert_not_called()
 
 
 @pytest.mark.parametrize("failure_kind", ["target_query", "source_query"])
