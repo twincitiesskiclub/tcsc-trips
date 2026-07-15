@@ -801,16 +801,31 @@ def test_edit_rejects_oversized_practice_text(
     assert response.get_json()["field"] == field
 
 
-def test_practice_editor_exposes_inline_plan_reaction_controls(admin_client, db_session):
+def test_practice_editor_exposes_structured_plan_reaction_controls(
+    admin_client, db_session
+):
     response = admin_client.get("/admin/practices/new")
 
     assert response.status_code == 200
     body = response.get_data(as_text=True)
+    assert 'id="plan-reaction-editor"' in body
     assert 'id="plan-reaction-rows"' in body
+    assert 'id="plan-reaction-empty"' in body
     assert 'id="add-plan-reaction"' in body
     assert 'id="restore-plan-reactions"' in body
+    assert 'for="plan-reaction-catalog"' in body
+    assert re.search(
+        r'<label[^>]*for="plan-reaction-catalog"[^>]*class="sr-only"', body
+    )
+    assert 'id="plan-reaction-catalog"' in body
+    assert 'id="plan-reaction-unconfigured"' in body
     assert 'id="plan-reaction-status" role="status" aria-live="polite"' in body
-    assert body.index("plan_reactions.js") < body.index("practice_editor.js")
+    assert (
+        body.index("practice_editor.js")
+        < body.index("practice_plan_reactions.js")
+        < body.index("practice_plan_reaction_editor.js")
+    )
+    assert re.search(r'src="[^"]*/plan_reactions\.js"', body) is None
 
 
 def test_practice_editor_textareas_share_server_length_limit():
@@ -827,36 +842,77 @@ def test_tag_pills_notify_derived_reaction_state_after_toggle():
     assert "if (onChange) onChange();" in editor
 
 
-def test_practice_editor_payload_distinguishes_derived_custom_and_restore_modes():
+def test_practice_editor_uses_one_structured_controller_and_explicit_snapshot():
     script = DETAIL_SCRIPT.read_text()
 
-    assert "let planReactionMode = practiceId ? 'snapshot' : 'derived';" in script
-    assert "if (planReactionMode === 'custom')" in script
-    assert "payload.plan_reactions = reactions;" in script
-    assert "else if (planReactionMode === 'restore')" in script
-    assert "payload.restore_plan_reaction_defaults = true;" in script
+    assert "let planReactionController = null;" in script
+    assert "PracticePlanReactionEditor.mount({" in script
+    assert "planReactionController.setSelection(" in script
+    assert "payload.plan_reactions = planReactionController.snapshot();" in script
+    assert "showToast(error.message || 'Check Plan reactions.', 'error');" in script
+    assert "planReactionMode" not in script
+    assert re.search(r"\bPlanReactionEditor\b", script) is None
+    assert ".plan-reaction-emoji" not in script
+    assert "restore_plan_reaction_defaults" not in script
+
+
+def test_practice_selectors_are_labelled_and_described_by_reaction_status():
+    template = DETAIL_TEMPLATE.read_text()
+
+    assert 'id="activities-label"' in template
+    assert re.search(
+        r'id="activities-pills"[^>]*role="group"'
+        r'[^>]*aria-labelledby="activities-label"'
+        r'[^>]*aria-describedby="plan-reaction-status"',
+        template,
+    )
+    assert 'id="types-label"' in template
+    assert re.search(
+        r'id="types-pills"[^>]*role="group"'
+        r'[^>]*aria-labelledby="types-label"'
+        r'[^>]*aria-describedby="plan-reaction-status"',
+        template,
+    )
 
 
 def test_practice_plan_reaction_controls_have_mobile_touch_targets():
     template = DETAIL_TEMPLATE.read_text()
 
     mobile_styles = template.split("@media(max-width:767px){", 1)[1]
-    assert ".plan-reaction-emoji" in mobile_styles
-    assert ".plan-reaction-label" in mobile_styles
-    assert ".plan-reaction-action" in mobile_styles
+    assert ".practice-reaction-label" in mobile_styles
+    assert ".practice-reaction-action" in mobile_styles
     assert "#add-plan-reaction" in mobile_styles
     assert "#restore-plan-reactions" in mobile_styles
-    assert mobile_styles.count("min-height:44px") >= 3
+    assert "#plan-reaction-catalog" in mobile_styles
+    assert "#plan-reaction-catalog{min-height:44px;width:100%}" in mobile_styles
 
 
-def test_removing_last_practice_reaction_returns_focus_to_add():
+def test_practice_reaction_css_targets_the_controller_row_class():
+    template = DETAIL_TEMPLATE.read_text()
+    editor = (REPO_ROOT / "app/static/practice_plan_reaction_editor.js").read_text()
+
+    assert "rowNode.className = 'practice-reaction-row';" in editor
+    assert "practice-reaction-label" in editor
+    assert "practice-reaction-action" in editor
+    assert "#workout-editor .practice-reaction-row{" in template
+    assert "#workout-editor .practice-reaction-row.is-removed{" in template
+    assert "#workout-editor .practice-reaction-action{" in template
+    assert "#workout-editor .practice-reaction-action:focus-visible{" in template
+    mobile_styles = template.split("@media(max-width:767px){", 1)[1]
+    assert "#workout-editor .practice-reaction-row{grid-template-columns:1fr}" in (
+        mobile_styles
+    )
+    assert "#workout-editor .plan-reaction-row{" not in template
+    assert "#workout-editor .plan-reaction-row.is-removed{" not in template
+    assert "#workout-editor .plan-reaction-action{" not in template
+
+
+def test_practice_reaction_script_never_renders_untrusted_html():
     script = DETAIL_SCRIPT.read_text()
-    callbacks = script.split("function planReactionCallbacks()", 1)[1].split(
-        "function updatePlanReactionAddState()", 1
-    )[0]
+    editor = (REPO_ROOT / "app/static/practice_plan_reaction_editor.js").read_text()
 
-    assert "onEmptyFocus()" in callbacks
-    assert "document.getElementById('add-plan-reaction').focus();" in callbacks
+    assert "innerHTML" not in editor
+    assert ".plan-reaction-emoji" not in script
 
 
 def test_create_activity_persists_default_plan_reactions(admin_client, db_session):

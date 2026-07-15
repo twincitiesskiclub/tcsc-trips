@@ -41,3 +41,22 @@ def test_complete_plan_reaction_keeps_success_and_server_error_states():
     assert "AdminUI.mutate(" in function_source
     assert "setStatus('Saved.', false);" in function_source
     assert "setStatus(error.message, true);" in function_source
+
+
+def test_settings_keeps_editable_reaction_controls_and_exact_helper_copy():
+    source = CONFIG_TEMPLATE.read_text()
+
+    assert "PlanReactionEditor.set(" in source
+    assert ".plan-reaction-emoji" in source
+    editor_source = (
+        Path(__file__).resolve().parents[2]
+        / "app"
+        / "static"
+        / "plan_reactions.js"
+    ).read_text()
+    assert "up.textContent = 'Up';" in editor_source
+    assert "down.textContent = 'Down';" in editor_source
+    assert (
+        "Used when this Activity is selected with another Activity." in source
+    )
+    assert "Applied when this Workout Type is selected." in source

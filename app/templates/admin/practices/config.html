@@ -1136,6 +1136,10 @@ function cfgRenderActivities() {
 }
 
 function cfgBuildPlanReactionDefaults(record, entityKey, responseKey) {
+    const helperText = entityKey === 'activities'
+      ? 'Used when this Activity is selected with another Activity.'
+      : 'Applied when this Workout Type is selected.';
+    const helper = AdminUI.el('p', {class: 'cfg-helper-text'}, [helperText]);
     const rows = AdminUI.el('div', {
         class: 'plan-reaction-rows',
         role: 'group',
@@ -1219,9 +1223,7 @@ function cfgBuildPlanReactionDefaults(record, entityKey, responseKey) {
         AdminUI.el('span', {
             class: 'text-xs font-medium text-gray-600'
         }, ['Plan reactions']),
-        AdminUI.el('span', {
-            class: 'text-xs text-gray-500'
-        }, ['Added automatically when this activity or workout type is selected.']),
+        helper,
         rows,
         addButton,
         status

@@ -9,126 +9,29 @@ const selAssists = {{ (practice.leads | selectattr('role','equalto','assist') | 
 const savedPlanReactions = {{ (practice.plan_reactions or []) | tojson if practice else '[]' }};
 let activitiesData = [];
 let typesData = [];
-let planReactionMode = practiceId ? 'snapshot' : 'derived';
-let planReactionError = null;
-
-function setPlanReactionError(message) {
-    planReactionError = message || null;
-    const status = document.getElementById('plan-reaction-status');
-    status.textContent = planReactionError || '';
-    status.classList.toggle('field-error', Boolean(planReactionError));
-}
+let planReactionController = null;
 
 function selectedTagIds(containerId) {
     return peCollectIds(containerId);
 }
 
-function resolveCurrentDefaults() {
-    const sources = [
-        ...typesData
-            .filter(item => selectedTagIds('types-pills').includes(item.id))
-            .sort((left, right) => left.name.localeCompare(right.name))
-            .map(item => ({...item, sourceLabel: `Workout Type ${item.name}`})),
-        ...activitiesData
-            .filter(item => selectedTagIds('activities-pills').includes(item.id))
-            .sort((left, right) => left.name.localeCompare(right.name))
-            .map(item => ({...item, sourceLabel: `Activity ${item.name}`})),
-    ];
-    const seen = new Map();
-    const merged = [];
-    for (const source of sources) {
-        for (const option of (source.default_plan_reactions || [])) {
-            const previous = seen.get(option.emoji);
-            if (previous && previous.label !== option.label) {
-                return {
-                    reactions: [],
-                    error: `:${option.emoji}: conflicts between ${previous.source} and ${source.sourceLabel}`,
-                };
-            }
-            if (!previous) {
-                seen.set(option.emoji, {
-                    label: option.label,
-                    source: source.sourceLabel,
-                });
-                merged.push({...option});
-            }
-        }
-    }
-    if (merged.length > PlanReactionEditor.MAX) {
-        return {
-            reactions: [],
-            error: 'Selected defaults produce more than 4 reactions',
-        };
-    }
-    return {reactions: merged, error: null};
-}
-
-function refreshDerivedPlanReactions() {
-    if (planReactionMode === 'derived' || planReactionMode === 'restore') {
-        const resolved = resolveCurrentDefaults();
-        setPlanReactionError(resolved.error);
-        PlanReactionEditor.set(
-            document.getElementById('plan-reaction-rows'),
-            resolved.reactions,
-            planReactionCallbacks(),
-        );
-        updatePlanReactionAddState();
-    }
-}
-
-function markCustomized() {
-    planReactionMode = 'custom';
-    setPlanReactionError(null);
-}
-
-function planReactionCallbacks() {
-    return {
-        onChange() {
-            markCustomized();
-            updatePlanReactionAddState();
-        },
-        onEmptyFocus() {
-            document.getElementById('add-plan-reaction').focus();
-        },
-    };
-}
-
-function updatePlanReactionAddState() {
-    const rows = document.getElementById('plan-reaction-rows');
-    const add = document.getElementById('add-plan-reaction');
-    const count = rows.querySelectorAll('.plan-reaction-row').length;
-    add.disabled = count >= PlanReactionEditor.MAX;
-    if (count >= PlanReactionEditor.MAX && !planReactionError) {
-        document.getElementById('plan-reaction-status').textContent =
-            'Maximum of 4 reactions.';
-    } else if (!planReactionError) {
-        document.getElementById('plan-reaction-status').textContent = '';
-    }
+function refreshPlanReactionSelection() {
+    if (!planReactionController) return;
+    planReactionController.setSelection(
+        selectedTagIds('types-pills'),
+        selectedTagIds('activities-pills'),
+    );
 }
 
 function initializePlanReactionEditor() {
-    const rows = document.getElementById('plan-reaction-rows');
-    if (practiceId) {
-        PlanReactionEditor.set(
-            rows, savedPlanReactions, planReactionCallbacks()
-        );
-    } else {
-        refreshDerivedPlanReactions();
-    }
-
-    document.getElementById('add-plan-reaction').addEventListener('click', () => {
-        if (PlanReactionEditor.add(rows, planReactionCallbacks())) {
-            rows.querySelector(
-                '.plan-reaction-row:last-child .plan-reaction-emoji'
-            ).focus();
-        }
-        updatePlanReactionAddState();
+    planReactionController = PracticePlanReactionEditor.mount({
+        root: document.getElementById('plan-reaction-editor'),
+        types: typesData,
+        activities: activitiesData,
+        selectedTypeIds: selectedTagIds('types-pills'),
+        selectedActivityIds: selectedTagIds('activities-pills'),
+        savedSnapshot: practiceId ? savedPlanReactions : null,
     });
-    document.getElementById('restore-plan-reactions').addEventListener('click', () => {
-        planReactionMode = practiceId ? 'restore' : 'derived';
-        refreshDerivedPlanReactions();
-    });
-    updatePlanReactionAddState();
 }
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -163,10 +66,10 @@ async function loadFormData() {
         typesData = types.types || [];
         peRenderTagPills(
             'activities-pills', activitiesData, selActivities,
-            refreshDerivedPlanReactions
+            refreshPlanReactionSelection
         );
         peRenderTagPills(
-            'types-pills', typesData, selTypes, refreshDerivedPlanReactions
+            'types-pills', typesData, selTypes, refreshPlanReactionSelection
         );
         initializePlanReactionEditor();
         peRenderPersonPills('coaches-pills', 'coaches-summary', people.coaches || [], selCoaches);
@@ -221,44 +124,11 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
     };
     if (practiceId) payload.status = fd.get('status');
 
-    if (
-        (planReactionMode === 'derived' || planReactionMode === 'restore') &&
-        planReactionError
-    ) {
-        showToast(planReactionError, 'error');
+    try {
+        payload.plan_reactions = planReactionController.snapshot();
+    } catch (error) {
+        showToast(error.message || 'Check Plan reactions.', 'error');
         return;
-    }
-
-    if (planReactionMode === 'custom') {
-        const reactions = PlanReactionEditor.get(
-            document.getElementById('plan-reaction-rows')
-        );
-        const incomplete = reactions.find(item => !item.emoji || !item.label);
-        if (incomplete) {
-            setPlanReactionError(
-                'Complete both fields or remove the unfinished reaction.'
-            );
-            const row = Array.from(document.querySelectorAll(
-                '#plan-reaction-rows .plan-reaction-row'
-            )).find(item => {
-                const emoji = item.querySelector(
-                    '.plan-reaction-emoji'
-                ).value.trim();
-                const label = item.querySelector(
-                    '.plan-reaction-label'
-                ).value.trim();
-                return !emoji || !label;
-            });
-            if (row) {
-                const emoji = row.querySelector('.plan-reaction-emoji');
-                const label = row.querySelector('.plan-reaction-label');
-                (!emoji.value.trim() ? emoji : label).focus();
-            }
-            return;
-        }
-        payload.plan_reactions = reactions;
-    } else if (planReactionMode === 'restore') {
-        payload.restore_plan_reaction_defaults = true;
     }
 
     form.classList.add('form-loading');
@@ -274,7 +144,9 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
             setTimeout(() => { window.location.href = '/admin/practices'; }, 800);
         } else {
             if (result.field === 'plan_reactions') {
-                setPlanReactionError(result.error);
+                const status = document.getElementById('plan-reaction-status');
+                status.textContent = result.error;
+                status.classList.add('field-error');
             }
             showToast(result.error || 'Failed to save practice', 'error');
             form.classList.remove('form-loading');
