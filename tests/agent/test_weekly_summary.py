@@ -104,6 +104,10 @@ def run_with_query(
         side_effect=channel_error,
     )
 
+    def stage_summary(*, message_ts, practices, **_kwargs):
+        for practice_item in practices:
+            practice_item.slack_weekly_summary_ts = message_ts
+
     with patch.object(routine, "Practice", model_for(query)), patch.object(
         routine, "load_skipper_config", return_value={"agent": {"dry_run": dry_run}}
     ), patch.object(routine, "now_central_naive", return_value=now, create=True), patch.object(
@@ -123,7 +127,12 @@ def run_with_query(
         routine, "_get_announcement_channel", return_value="C-WEEK", create=True
     ), patch.object(
         routine, "db", fake_db, create=True
-    ):
+    ), patch.object(
+        routine,
+        "stage_summary_post",
+        side_effect=stage_summary,
+        create=True,
+    ) as stage_summary_post:
         result = routine.run_weekly_summary(
             channel_override=channel_override,
             week_start=week_start,
@@ -138,6 +147,7 @@ def run_with_query(
         blocks=blocks,
         fallback=fallback,
         channel_lookup=channel_lookup,
+        stage_summary_post=stage_summary_post,
     )
 
 
@@ -350,6 +360,13 @@ def test_post_uses_complete_fallback_and_saves_timestamp_to_every_row():
     assert outcome.result["fallback"] == outcome.fallback
     assert outcome.result["slack_posted"] is True
     assert outcome.result["refresh_linked"] is True
+    outcome.stage_summary_post.assert_called_once_with(
+        value=date(2026, 7, 13),
+        surface="weekly_summary",
+        channel_id="C-WEEK",
+        message_ts="1783980000.000100",
+        practices=sessions,
+    )
 
 
 def test_channel_override_posts_preview_without_persisting_refresh_links():
@@ -374,6 +391,7 @@ def test_channel_override_posts_preview_without_persisting_refresh_links():
     assert outcome.result["refresh_linked"] is False
     assert [item.slack_weekly_summary_ts for item in sessions] == [None, None]
     outcome.db.session.commit.assert_not_called()
+    outcome.stage_summary_post.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -441,21 +459,38 @@ def test_production_link_commit_failure_compensates_or_recovers_once(
     assert outcome.db.session.rollback.call_count == (
         2 if expected_outcome == "ambiguous" else 1
     )
+    expected_stage_calls = 2 if cleanup_fails else 1
+    assert outcome.stage_summary_post.call_count == expected_stage_calls
+    assert outcome.stage_summary_post.call_args_list == [
+        call(
+            value=date(2026, 7, 13),
+            surface="weekly_summary",
+            channel_id="C-WEEK",
+            message_ts="1783980000.000100",
+            practices=sessions,
+        )
+    ] * expected_stage_calls
     outcome.client.chat_delete.assert_called_once_with(
         channel="C-WEEK", ts="1783980000.000100"
     )
 
 
-def test_empty_production_week_posts_without_claiming_refresh_linkage():
+def test_empty_production_week_registers_refresh_identity():
     outcome = run_with_query(
         FakeQuery([]),
         week_start=date(2026, 7, 13),
         dry_run=False,
     )
 
-    assert outcome.result["slack_posted"] is True
-    assert outcome.result["refresh_linked"] is False
-    outcome.db.session.commit.assert_not_called()
+    outcome.stage_summary_post.assert_called_once_with(
+        value=date(2026, 7, 13),
+        surface="weekly_summary",
+        channel_id="C-WEEK",
+        message_ts="1783980000.000100",
+        practices=[],
+    )
+    assert outcome.result["refresh_linked"] is True
+    outcome.db.session.commit.assert_called_once_with()
 
 
 def test_dry_run_builds_full_preview_but_writes_nothing():
@@ -468,6 +503,7 @@ def test_dry_run_builds_full_preview_but_writes_nothing():
     assert outcome.result["fallback"] == outcome.fallback
     outcome.client.chat_postMessage.assert_not_called()
     outcome.db.session.commit.assert_not_called()
+    outcome.stage_summary_post.assert_not_called()
     assert session.slack_weekly_summary_ts is None
 
 

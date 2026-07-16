@@ -18,6 +18,14 @@ from app.slack.practices._config import (
     ADMIN_SLACK_IDS,
     FALLBACK_COACH_IDS,
 )
+from app.slack.practices.announcements import (
+    _delete_slack_message,
+    _recover_ambiguous_link,
+)
+from app.slack.practices.summary_posts import (
+    COACH_SUMMARY,
+    stage_summary_post,
+)
 
 
 def post_48h_workout_reminder(
@@ -427,7 +435,7 @@ def post_coach_weekly_summary(
         - error: str (only if success=False)
     """
     from datetime import timedelta
-    from app.models import AppConfig, db, Tag, User
+    from app.models import AppConfig, Tag
     from app.practices.service import convert_practice_to_info
     from app.slack.blocks import build_coach_weekly_summary_blocks
 
@@ -486,21 +494,98 @@ def post_coach_weekly_summary(
             unfurl_links=False,
             unfurl_media=False
         )
-
-        message_ts = response.get('ts')
-        current_app.logger.info(f"Posted coach weekly summary (ts: {message_ts})")
-
-        # Save message_ts to each practice's slack_coach_summary_ts
-        for practice in practices:
-            practice.slack_coach_summary_ts = message_ts
-        db.session.commit()
-
-        return {'success': True, 'message_ts': message_ts, 'channel_id': channel_id}
-
     except SlackApiError as e:
         error_msg = e.response.get('error', str(e))
         current_app.logger.error(f"Error posting coach weekly summary: {error_msg}")
-        return {'success': False, 'error': error_msg}
+        return {
+            'success': False,
+            'error': error_msg,
+            'refresh_linked': False,
+        }
+
+    message_ts = response.get('ts')
+    if not message_ts:
+        return {
+            'success': False,
+            'error': 'Slack returned no message timestamp',
+            'refresh_linked': False,
+        }
+    current_app.logger.info(f"Posted coach weekly summary (ts: {message_ts})")
+
+    success = {
+        'success': True,
+        'message_ts': message_ts,
+        'channel_id': channel_id,
+    }
+    if channel_override:
+        return {**success, 'refresh_linked': False}
+
+    original_timestamps = {
+        practice.id: practice.slack_coach_summary_ts
+        for practice in practices
+    }
+
+    def apply_links():
+        stage_summary_post(
+            value=week_start,
+            surface=COACH_SUMMARY,
+            channel_id=channel_id,
+            message_ts=message_ts,
+            practices=practices,
+        )
+
+    def restore_originals():
+        for practice in practices:
+            practice.slack_coach_summary_ts = original_timestamps[practice.id]
+
+    try:
+        apply_links()
+        db.session.commit()
+    except Exception as exc:
+        try:
+            db.session.rollback()
+        except Exception:
+            current_app.logger.warning(
+                "Could not roll back coach weekly summary timestamp links",
+                exc_info=True,
+            )
+        restore_originals()
+        cleanup = _delete_slack_message(
+            client,
+            channel=channel_id,
+            ts=message_ts,
+        )
+        recovery = _recover_ambiguous_link(
+            initial_error=exc,
+            cleanup=cleanup,
+            channel_id=channel_id,
+            message_ts=message_ts,
+            apply_link=apply_links,
+            restore_originals=restore_originals,
+            commit=db.session.commit,
+            rollback=db.session.rollback,
+            logger=current_app.logger,
+            context="coach weekly summary links",
+        )
+        if recovery.get('recovered'):
+            return {
+                **success,
+                'refresh_linked': True,
+                'recovered': True,
+                'cleanup': cleanup,
+            }
+
+        failure = {
+            'success': False,
+            'error': recovery['error'],
+            'refresh_linked': False,
+            'cleanup': cleanup,
+        }
+        if recovery.get('ambiguous_orphan'):
+            failure['ambiguous_orphan'] = recovery['ambiguous_orphan']
+        return failure
+
+    return {**success, 'refresh_linked': True}
 
 
 def log_coach_summary_edit(practice: Practice, slack_user_id: str) -> dict:

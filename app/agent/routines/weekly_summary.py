@@ -16,6 +16,10 @@ from app.slack.blocks import (
 from app.slack.client import get_channel_id_by_name, get_slack_client
 from app.slack.practices._config import _get_announcement_channel
 from app.slack.practices.announcements import _delete_slack_message
+from app.slack.practices.summary_posts import (
+    WEEKLY_SUMMARY,
+    stage_summary_post,
+)
 from app.utils import now_central_naive
 
 
@@ -151,22 +155,19 @@ def run_weekly_summary(
                 "slack_message_ts": message_ts,
                 "refresh_linked": False,
             }
-        if not practices:
-            return {
-                **result,
-                "slack_posted": True,
-                "slack_message_ts": message_ts,
-                "refresh_linked": False,
-            }
-
         original_timestamps = {
             practice.id: practice.slack_weekly_summary_ts
             for practice in practices
         }
 
         def apply_links():
-            for practice in practices:
-                practice.slack_weekly_summary_ts = message_ts
+            stage_summary_post(
+                value=start.date(),
+                surface=WEEKLY_SUMMARY,
+                channel_id=channel_id,
+                message_ts=message_ts,
+                practices=practices,
+            )
 
         def restore_originals():
             for practice in practices:
