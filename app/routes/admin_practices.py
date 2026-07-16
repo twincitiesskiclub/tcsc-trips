@@ -9,7 +9,7 @@ from flask import (
     request,
     url_for,
 )
-from datetime import datetime
+from datetime import datetime, timedelta
 from ..auth import admin_required
 from ..models import db, User, Tag, AppConfig
 from ..practices.models import (
@@ -37,6 +37,97 @@ _EDIT_UNSYNCED_ERROR = (
     'Practice was updated, but its Slack announcement did not update. '
     'Retry the edit to refresh the announcement.'
 )
+
+
+def _failed_delete_response(recovery, *, status_code):
+    if recovery.get('outcome') == 'deleted':
+        return jsonify({
+            'success': True,
+            'practice_deleted': True,
+            'message': 'Practice deleted successfully',
+        }), 200
+    if recovery.get('success') is True:
+        return jsonify({
+            'success': False,
+            'practice_deleted': False,
+            'practice_restored': True,
+            'error': (
+                'Practice was not deleted. Its Slack posts were restored; '
+                'review and retry the delete.'
+            ),
+        }), status_code
+    return jsonify({
+        'success': False,
+        'practice_deleted': False,
+        'practice_restored': False,
+        'recovery_incomplete': True,
+        'error': (
+            'Practice was not deleted, and Slack recovery is incomplete. '
+            'Manual reconciliation is required.'
+        ),
+    }), status_code
+
+
+def _recover_failed_delete_once(
+    recover_delete,
+    practice_id,
+    *,
+    original_channel_id,
+    original_message_ts,
+    original_week_start,
+    initial_cause,
+):
+    try:
+        recovery = recover_delete(
+            practice_id,
+            original_channel_id=original_channel_id,
+            original_message_ts=original_message_ts,
+            original_week_start=original_week_start,
+        )
+    except Exception as recovery_error:
+        recovery = {
+            'success': False,
+            'outcome': 'incomplete',
+            'practice_deleted': False,
+            'practice_restored': False,
+            'recovery_incomplete': True,
+            'error': f'Delete recovery raised: {recovery_error}',
+        }
+
+    if not isinstance(recovery, dict):
+        recovery = {
+            'success': False,
+            'outcome': 'incomplete',
+            'practice_deleted': False,
+            'practice_restored': False,
+            'recovery_incomplete': True,
+            'error': 'Delete recovery returned an invalid result',
+        }
+
+    context = {
+        'practice_id': practice_id,
+        'original_channel_id': original_channel_id,
+        'original_message_ts': original_message_ts,
+        'original_week_start': original_week_start.isoformat(),
+        'initial_cause': initial_cause,
+        'recovery': recovery,
+    }
+    if recovery.get('outcome') == 'deleted':
+        current_app.logger.warning(
+            'Practice delete recovery confirmed the delete committed: %s',
+            context,
+        )
+    elif recovery.get('success') is True:
+        current_app.logger.warning(
+            'Practice delete recovery restored Slack state: %s',
+            context,
+        )
+    else:
+        current_app.logger.critical(
+            'Practice delete recovery is incomplete: %s',
+            context,
+        )
+    return recovery
 
 
 def _activity_json(activity):
@@ -526,17 +617,41 @@ def edit_practice(practice_id):
 def delete_practice(practice_id):
     """Delete a practice."""
     practice = Practice.query.get_or_404(practice_id)
-    had_root = bool(practice.slack_message_ts)
+    original_channel_id = practice.slack_channel_id
+    original_message_ts = practice.slack_message_ts
+    original_week_start = (
+        practice.date.date() - timedelta(days=practice.date.weekday())
+    )
+    had_root = bool(original_message_ts)
+    cleanup_started = False
 
     try:
         # Clean up Slack posts before deleting DB record
-        from app.slack.practices import refresh_practice_posts
+        from app.slack.practices import (
+            recover_failed_practice_delete,
+            refresh_practice_posts,
+        )
+
+        cleanup_started = True
         results = refresh_practice_posts(practice, change_type='delete')
         announcement = results.get('announcement') or {}
         safe = announcement.get('success') is True
         if not had_root:
             safe = safe or announcement.get('skipped') in {True, 'absent'}
         if not safe:
+            if had_root:
+                recovery = _recover_failed_delete_once(
+                    recover_failed_practice_delete,
+                    practice_id,
+                    original_channel_id=original_channel_id,
+                    original_message_ts=original_message_ts,
+                    original_week_start=original_week_start,
+                    initial_cause={
+                        'kind': 'unsafe_announcement_result',
+                        'announcement': announcement,
+                    },
+                )
+                return _failed_delete_response(recovery, status_code=502)
             return jsonify({
                 'success': False,
                 'error': (
@@ -553,9 +668,31 @@ def delete_practice(practice_id):
             'message': 'Practice deleted successfully'
         })
 
-    except Exception as e:
+    except Exception as error:
+        if cleanup_started:
+            recovery = _recover_failed_delete_once(
+                recover_failed_practice_delete,
+                practice_id,
+                original_channel_id=original_channel_id,
+                original_message_ts=original_message_ts,
+                original_week_start=original_week_start,
+                initial_cause={
+                    'kind': 'exception_after_cleanup_started',
+                    'exception_type': type(error).__name__,
+                    'error': str(error),
+                },
+            )
+            return _failed_delete_response(recovery, status_code=500)
+
         db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 500
+        current_app.logger.exception(
+            'Practice delete failed before Slack cleanup started: %s',
+            {'practice_id': practice_id},
+        )
+        return jsonify({
+            'success': False,
+            'error': 'Practice could not be deleted',
+        }), 500
 
 
 @admin_practices_bp.route('/<int:practice_id>/cancel', methods=['POST'])

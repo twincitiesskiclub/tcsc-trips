@@ -1,7 +1,8 @@
 """Admin practice deletion and cancellation Slack safety gates."""
 
+import logging
 from contextlib import nullcontext
-from datetime import datetime
+from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,41 @@ from app.models import db
 from app.practices.interfaces import CancellationStatus, PracticeStatus
 from app.practices.models import CancellationRequest, Practice
 import app.slack.bolt_app as bolt_module
+
+
+ORIGINAL_WEEK_START = date(2026, 7, 13)
+RESTORED_RECOVERY = {
+    'success': True,
+    'outcome': 'restored',
+    'practice_deleted': False,
+    'practice_restored': True,
+}
+INCOMPLETE_RECOVERY = {
+    'success': False,
+    'outcome': 'incomplete',
+    'practice_deleted': False,
+    'practice_restored': False,
+    'recovery_incomplete': True,
+}
+RESTORED_RESPONSE = {
+    'success': False,
+    'practice_deleted': False,
+    'practice_restored': True,
+    'error': (
+        'Practice was not deleted. Its Slack posts were restored; '
+        'review and retry the delete.'
+    ),
+}
+INCOMPLETE_RESPONSE = {
+    'success': False,
+    'practice_deleted': False,
+    'practice_restored': False,
+    'recovery_incomplete': True,
+    'error': (
+        'Practice was not deleted, and Slack recovery is incomplete. '
+        'Manual reconciliation is required.'
+    ),
+}
 
 
 @pytest.fixture
@@ -73,6 +109,32 @@ def practice_exists(app, practice_id):
         return db.session.get(Practice, practice_id) is not None
 
 
+def rollback_then(result):
+    def recover(*_args, **_kwargs):
+        db.session.rollback()
+        return result
+
+    return recover
+
+
+def assert_recovery_log(
+    caplog,
+    *,
+    practice_id,
+    cause,
+    outcome,
+    level,
+):
+    records = [record for record in caplog.records if record.levelno == level]
+    message = '\n'.join(record.getMessage() for record in records)
+    assert str(practice_id) in message
+    assert 'C-ONE' in message
+    assert 'root.1' in message
+    assert '2026-07-13' in message
+    assert cause in message
+    assert outcome in message
+
+
 def cancellation_proposal(app, practice_factory, *, posted=True):
     practice_id = practice_factory(
         slack_channel_id='C-POSTED' if posted else None,
@@ -94,11 +156,18 @@ def test_unposted_practice_remains_deletable(
 ):
     practice_id = practice_factory()
 
-    response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+    with patch(
+        'app.slack.practices.recover_failed_practice_delete'
+    ) as recover_delete:
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
 
     assert response.status_code == 200
-    assert response.get_json()['success'] is True
+    assert response.get_json() == {
+        'success': True,
+        'message': 'Practice deleted successfully',
+    }
     assert practice_exists(app, practice_id) is False
+    recover_delete.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -108,7 +177,7 @@ def test_unposted_practice_remains_deletable(
         ('details.1', 'Combined Details did not sync; root was not changed'),
     ],
 )
-def test_announcement_failure_keeps_row_and_original_retry_timestamps(
+def test_partial_slack_cleanup_restores_post_and_keeps_database_row(
     app, admin_client, practice_factory, details_ts, error,
 ):
     practice_id = practice_factory(
@@ -121,14 +190,21 @@ def test_announcement_failure_keeps_row_and_original_retry_timestamps(
         return_value={
             'announcement': {'success': False, 'error': error},
         },
-    ):
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=rollback_then(RESTORED_RECOVERY),
+    ) as recover_delete:
         response = admin_client.post(
             f'/admin/practices/{practice_id}/delete'
         )
 
     assert response.status_code == 502
-    assert response.get_json()['error'] == (
-        'Slack announcement could not be updated; practice was not deleted'
+    assert response.get_json() == RESTORED_RESPONSE
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
     )
     with app.app_context():
         practice = db.session.get(Practice, practice_id)
@@ -142,33 +218,336 @@ def test_missing_channel_for_posted_root_keeps_database_row(
 ):
     practice_id = practice_factory(slack_message_ts='root.1')
 
-    response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+    with patch(
+        'app.slack.practices.refresh_practice_posts',
+        return_value={
+            'announcement': {
+                'success': False,
+                'error': 'Original Slack channel is missing',
+            },
+        },
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=rollback_then(INCOMPLETE_RECOVERY),
+    ) as recover_delete:
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
 
     assert response.status_code == 502
+    assert response.get_json() == INCOMPLETE_RESPONSE
     assert practice_exists(app, practice_id) is True
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id=None,
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
 
 
-def test_had_root_is_captured_before_refresh_clears_timestamp(
+def test_partial_slack_cleanup_uses_immutable_original_snapshot(
     app, admin_client, practice_factory
 ):
     practice_id = practice_factory(
         slack_message_ts='root.1', slack_channel_id='C-ONE'
     )
 
-    def unexplained_skip(practice, **_kwargs):
+    def partial_cleanup(practice, **_kwargs):
+        practice.slack_channel_id = 'C-MUTATED'
         practice.slack_message_ts = None
-        return {'announcement': {'skipped': 'absent'}}
+        practice.date = datetime(2026, 7, 21, 18, 15)
+        return {
+            'announcement': {
+                'success': False,
+                'error': 'root cleanup was partial',
+            },
+        }
 
     with patch(
         'app.slack.practices.refresh_practice_posts',
-        side_effect=unexplained_skip,
-    ):
+        side_effect=partial_cleanup,
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=rollback_then(RESTORED_RECOVERY),
+    ) as recover_delete:
         response = admin_client.post(
             f'/admin/practices/{practice_id}/delete'
         )
 
     assert response.status_code == 502
+    assert response.get_json() == RESTORED_RESPONSE
     assert practice_exists(app, practice_id) is True
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
+
+
+@pytest.mark.parametrize('shared_root', [False, True], ids=['standalone', 'shared'])
+def test_failed_final_database_delete_restores_original_slack_root(
+    app,
+    admin_client,
+    practice_factory,
+    shared_root,
+    caplog,
+):
+    practice_id = practice_factory(
+        slack_channel_id='C-ONE',
+        slack_message_ts='root.1',
+        slack_session_emoji='six' if shared_root else None,
+    )
+    if shared_root:
+        practice_factory(
+            slack_channel_id='C-ONE',
+            slack_message_ts='root.1',
+            slack_session_emoji='seven',
+        )
+
+    with caplog.at_level(logging.WARNING), patch(
+        'app.slack.practices.refresh_practice_posts',
+        return_value={'announcement': {'success': True}},
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=rollback_then(RESTORED_RECOVERY),
+    ) as recover_delete, patch.object(
+        db.session,
+        'commit',
+        side_effect=RuntimeError('database commit failed'),
+    ):
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+
+    assert response.status_code == 500
+    assert response.get_json() == RESTORED_RESPONSE
+    assert 'database commit failed' not in response.get_data(as_text=True)
+    assert practice_exists(app, practice_id) is True
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
+    assert_recovery_log(
+        caplog,
+        practice_id=practice_id,
+        cause='database commit failed',
+        outcome='restored',
+        level=logging.WARNING,
+    )
+
+
+def test_failed_final_database_delete_recovers_cleanup_exception_once(
+    app,
+    admin_client,
+    practice_factory,
+):
+    practice_id = practice_factory(
+        slack_channel_id='C-ONE',
+        slack_message_ts='root.1',
+    )
+    with patch(
+        'app.slack.practices.refresh_practice_posts',
+        side_effect=RuntimeError('Slack cleanup transport failed'),
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=rollback_then(RESTORED_RECOVERY),
+    ) as recover_delete:
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+
+    assert response.status_code == 500
+    assert response.get_json() == RESTORED_RESPONSE
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
+
+
+def test_commit_exception_with_missing_row_reports_delete_committed(
+    app,
+    admin_client,
+    practice_factory,
+    caplog,
+):
+    practice_id = practice_factory(
+        slack_channel_id='C-ONE',
+        slack_message_ts='root.1',
+    )
+    real_commit = db.session.commit
+
+    def commit_then_raise():
+        real_commit()
+        raise RuntimeError('database acknowledgement was lost')
+
+    deleted_recovery = {
+        'success': True,
+        'outcome': 'deleted',
+        'practice_deleted': True,
+    }
+    with caplog.at_level(logging.WARNING), patch(
+        'app.slack.practices.refresh_practice_posts',
+        return_value={'announcement': {'success': True}},
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        return_value=deleted_recovery,
+    ) as recover_delete, patch.object(
+        db.session,
+        'commit',
+        side_effect=commit_then_raise,
+    ):
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+
+    assert response.status_code == 200
+    assert response.get_json() == {
+        'success': True,
+        'practice_deleted': True,
+        'message': 'Practice deleted successfully',
+    }
+    assert practice_exists(app, practice_id) is False
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
+    assert_recovery_log(
+        caplog,
+        practice_id=practice_id,
+        cause='database acknowledgement was lost',
+        outcome='deleted',
+        level=logging.WARNING,
+    )
+
+
+@pytest.mark.parametrize(
+    ('failure_kind', 'expected_status'),
+    [('unsafe-result', 502), ('commit-exception', 500)],
+)
+def test_incomplete_delete_recovery_requires_manual_reconciliation(
+    app,
+    admin_client,
+    practice_factory,
+    failure_kind,
+    expected_status,
+    caplog,
+):
+    practice_id = practice_factory(
+        slack_channel_id='C-ONE',
+        slack_message_ts='root.1',
+    )
+    if failure_kind == 'unsafe-result':
+        announcement = {
+            'success': False,
+            'error': 'root cleanup failed after deleting Details',
+        }
+        commit_failure = nullcontext()
+        cause = 'root cleanup failed after deleting Details'
+    else:
+        announcement = {'success': True}
+        commit_failure = patch.object(
+            db.session,
+            'commit',
+            side_effect=RuntimeError('database commit failed'),
+        )
+        cause = 'database commit failed'
+
+    with caplog.at_level(logging.CRITICAL), patch(
+        'app.slack.practices.refresh_practice_posts',
+        return_value={'announcement': announcement},
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=rollback_then(INCOMPLETE_RECOVERY),
+    ) as recover_delete, commit_failure:
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+
+    assert response.status_code == expected_status
+    assert response.get_json() == INCOMPLETE_RESPONSE
+    assert cause not in response.get_data(as_text=True)
+    assert practice_exists(app, practice_id) is True
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
+    assert_recovery_log(
+        caplog,
+        practice_id=practice_id,
+        cause=cause,
+        outcome='incomplete',
+        level=logging.CRITICAL,
+    )
+
+
+def test_incomplete_delete_recovery_when_recovery_raises_is_one_shot(
+    app,
+    admin_client,
+    practice_factory,
+):
+    practice_id = practice_factory(
+        slack_channel_id='C-ONE',
+        slack_message_ts='root.1',
+    )
+    with patch(
+        'app.slack.practices.refresh_practice_posts',
+        return_value={
+            'announcement': {
+                'success': False,
+                'error': 'partial Slack cleanup',
+            },
+        },
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=RuntimeError('recovery implementation failed'),
+    ) as recover_delete:
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+
+    assert response.status_code == 502
+    assert response.get_json() == INCOMPLETE_RESPONSE
+    assert 'recovery implementation failed' not in response.get_data(
+        as_text=True
+    )
+    assert practice_exists(app, practice_id) is True
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
+
+
+def test_incomplete_delete_recovery_for_invalid_result_is_one_shot(
+    app,
+    admin_client,
+    practice_factory,
+):
+    practice_id = practice_factory(
+        slack_channel_id='C-ONE',
+        slack_message_ts='root.1',
+    )
+    with patch(
+        'app.slack.practices.refresh_practice_posts',
+        return_value={
+            'announcement': {
+                'success': False,
+                'error': 'partial Slack cleanup',
+            },
+        },
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete',
+        side_effect=[None, INCOMPLETE_RECOVERY],
+    ) as recover_delete:
+        response = admin_client.post(f'/admin/practices/{practice_id}/delete')
+
+    assert response.status_code == 502
+    assert response.get_json() == INCOMPLETE_RESPONSE
+    assert practice_exists(app, practice_id) is True
+    recover_delete.assert_called_once_with(
+        practice_id,
+        original_channel_id='C-ONE',
+        original_message_ts='root.1',
+        original_week_start=ORIGINAL_WEEK_START,
+    )
 
 
 def test_later_summary_failure_does_not_block_delete_after_root_success(
@@ -184,13 +563,20 @@ def test_later_summary_failure_does_not_block_delete_after_root_success(
             'coach_summary': {'success': False, 'error': 'coach failed'},
             'weekly_summary': {'success': False, 'error': 'weekly failed'},
         },
-    ):
+    ), patch(
+        'app.slack.practices.recover_failed_practice_delete'
+    ) as recover_delete:
         response = admin_client.post(
             f'/admin/practices/{practice_id}/delete'
         )
 
     assert response.status_code == 200
+    assert response.get_json() == {
+        'success': True,
+        'message': 'Practice deleted successfully',
+    }
     assert practice_exists(app, practice_id) is False
+    recover_delete.assert_not_called()
 
 
 def test_cancel_refresh_failure_is_saved_but_unsynced(
