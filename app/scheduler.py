@@ -32,6 +32,7 @@ from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
 from flask import Flask
 
+from app.models import db
 from app.utils import now_central_naive
 
 
@@ -393,6 +394,61 @@ def _is_strength_practice(practice) -> bool:
     )
 
 
+def _normalized_shared_text(value):
+    return " ".join(str(value or "").split())
+
+
+def _tag_key(items):
+    pairs = [
+        (getattr(item, "id", None), _normalized_shared_text(item.name))
+        for item in (items or [])
+    ]
+    return tuple(sorted(
+        pairs, key=lambda pair: (pair[1].casefold(), pair[0] or -1)
+    ))
+
+
+def combined_compatibility_key(practice):
+    """Return only the content that must be shared on a new combined root."""
+    social = getattr(practice, "social_location", None)
+    reactions = tuple(
+        (item["emoji"], item["label"])
+        for item in (practice.plan_reactions or [])
+    )
+    return (
+        practice.location_id,
+        _normalized_shared_text(practice.workout_description),
+        _normalized_shared_text(practice.logistics_notes),
+        bool(practice.has_social),
+        getattr(practice, "social_location_id", None),
+        _normalized_shared_text(getattr(social, "name", None)),
+        _tag_key(practice.activities),
+        _tag_key(practice.practice_types),
+        reactions,
+    )
+
+
+def group_strength_announcements(practices, *, in_window_ids):
+    """Create only compatible two/three-session groups."""
+    buckets = {}
+    for practice in sorted(practices, key=lambda item: (item.date, item.id)):
+        buckets.setdefault(
+            combined_compatibility_key(practice), []
+        ).append(practice)
+
+    combined, standalone = [], []
+    for group in buckets.values():
+        if not any(item.id in in_window_ids for item in group):
+            continue
+        if 2 <= len(group) <= 3:
+            combined.append(group)
+        else:
+            standalone.extend(
+                item for item in group if item.id in in_window_ids
+            )
+    return combined, standalone
+
+
 def _get_upcoming_strength_practices(now, app) -> list:
     """Get all unannounced strength practices in the next 7 days.
 
@@ -441,7 +497,6 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
         from app.practices.models import Practice
         from app.practices.interfaces import PracticeStatus
         from app.slack.practices import post_practice_announcement, post_combined_lift_announcement
-        from app.integrations.weather import get_weather_for_location
 
         app.logger.info("=" * 60)
         app.logger.info("Starting practice announcements job")
@@ -505,78 +560,90 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
             announced = 0
             errors = 0
 
-            # Handle strength practices: combine if any are in this announcement window
+            # Handle Strength conservatively: only identical groups of two or three.
             if strength_in_window:
-                # Get ALL unannounced strength practices in next 7 days to combine
                 all_strength = _get_upcoming_strength_practices(now, app)
-
-                if len(all_strength) >= 2:
-                    # Combine multiple strength practices into one announcement
-                    app.logger.info(f"Combining {len(all_strength)} strength practices into single announcement")
+                window_ids = {practice.id for practice in strength_in_window}
+                combined_groups, standalone_strength = (
+                    group_strength_announcements(
+                        all_strength, in_window_ids=window_ids
+                    )
+                )
+                handled = set()
+                for group in combined_groups:
                     try:
                         result = post_combined_lift_announcement(
-                            all_strength,
-                            channel_override=channel_override
+                            group, channel_override=channel_override
                         )
-                        if result.get('success'):
-                            announced += len(all_strength)
-                            practice_ids = [p.id for p in all_strength]
-                            app.logger.info(f"Announced combined strength practices: {practice_ids}")
-                        else:
-                            errors += len(all_strength)
-                            app.logger.error(f"Failed to announce combined strength practices: {result.get('error')}")
-                    except Exception as e:
-                        errors += len(all_strength)
-                        app.logger.error(f"Error announcing combined strength practices: {e}", exc_info=True)
-                else:
-                    # Only one strength practice, post individually
-                    for practice in strength_in_window:
-                        try:
-                            # Fetch weather if location has coordinates
-                            weather = None
-                            if practice.location and practice.location.latitude and practice.location.longitude:
-                                try:
-                                    weather = get_weather_for_location(
-                                        lat=practice.location.latitude,
-                                        lon=practice.location.longitude,
-                                        target_datetime=practice.date
-                                    )
-                                except Exception as e:
-                                    app.logger.warning(f"Could not fetch weather for practice #{practice.id}: {e}")
-
-                            result = post_practice_announcement(
-                                practice,
-                                weather=weather,
-                                channel_override=channel_override
+                        if result.get("success"):
+                            announced += len(group)
+                            app.logger.info(
+                                "Announced combined Strength practices: %s",
+                                [item.id for item in group],
                             )
-                            if result.get('success'):
-                                announced += 1
-                                app.logger.info(f"Announced strength practice #{practice.id}")
-                            else:
-                                errors += 1
-                                app.logger.error(f"Failed to announce practice #{practice.id}: {result.get('error')}")
-                        except Exception as e:
+                        elif result.get("safe_to_fallback"):
+                            for practice in group:
+                                practice.slack_session_emoji = None
+                            db.session.commit()
+                            for practice in group:
+                                fallback = post_practice_announcement(
+                                    practice,
+                                    channel_override=channel_override,
+                                )
+                                if fallback.get("success"):
+                                    announced += 1
+                                else:
+                                    errors += 1
+                        else:
+                            errors += len(group)
+                            app.logger.error(
+                                "Failed to announce combined Strength practices: %s",
+                                result.get("error"),
+                            )
+                    except Exception as exc:
+                        errors += len(group)
+                        app.logger.error(
+                            "Error announcing combined Strength practices: %s",
+                            exc,
+                            exc_info=True,
+                        )
+                    handled.update(practice.id for practice in group)
+
+                for practice in standalone_strength:
+                    if practice.id in handled:
+                        continue
+                    practice.slack_session_emoji = None
+                    try:
+                        result = post_practice_announcement(
+                            practice,
+                            channel_override=channel_override,
+                        )
+                        if result.get("success"):
+                            announced += 1
+                            app.logger.info(
+                                "Announced Strength practice #%s", practice.id
+                            )
+                        else:
                             errors += 1
-                            app.logger.error(f"Error announcing practice #{practice.id}: {e}", exc_info=True)
+                            app.logger.error(
+                                "Failed to announce practice #%s: %s",
+                                practice.id,
+                                result.get("error"),
+                            )
+                    except Exception as exc:
+                        errors += 1
+                        app.logger.error(
+                            "Error announcing practice #%s: %s",
+                            practice.id,
+                            exc,
+                            exc_info=True,
+                        )
 
             # Announce regular (non-strength) practices individually
             for practice in regular_practices:
                 try:
-                    # Fetch weather if location has coordinates
-                    weather = None
-                    if practice.location and practice.location.latitude and practice.location.longitude:
-                        try:
-                            weather = get_weather_for_location(
-                                lat=practice.location.latitude,
-                                lon=practice.location.longitude,
-                                target_datetime=practice.date
-                            )
-                        except Exception as e:
-                            app.logger.warning(f"Could not fetch weather for practice #{practice.id}: {e}")
-
                     result = post_practice_announcement(
                         practice,
-                        weather=weather,
                         channel_override=channel_override
                     )
                     if result.get('success'):

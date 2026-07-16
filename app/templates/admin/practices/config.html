@@ -102,6 +102,67 @@
 .cfg-field.cfg-field-error {
     border-color: #dc2626;
 }
+.plan-reaction-defaults {
+    flex: 1 0 100%;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(28,44,68,.08);
+}
+.plan-reaction-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.plan-reaction-row {
+    display: grid;
+    grid-template-columns: minmax(120px,180px) minmax(220px,1fr) auto auto auto;
+    gap: 6px;
+    align-items: center;
+}
+.plan-reaction-action {
+    min-height: 32px;
+    padding: 0 8px;
+    border: 1px solid rgba(28,44,68,.12);
+    border-radius: 4px;
+    background: #fff;
+    color: #1c2c44;
+    cursor: pointer;
+}
+.plan-reaction-action:focus-visible {
+    outline: 2px solid #1c2c44;
+    outline-offset: 1px;
+}
+.plan-reaction-defaults > .tbl-btn:focus-visible {
+    outline: 2px solid #1c2c44;
+    outline-offset: 1px;
+}
+.plan-reaction-status {
+    min-height: 18px;
+    font-size: .75rem;
+    color: #64748b;
+}
+.cfg-field-error-text {
+    color: #dc2626;
+}
+@media(max-width: 767px) {
+    .plan-reaction-row {
+        grid-template-columns: repeat(3,1fr);
+    }
+    .plan-reaction-emoji,
+    .plan-reaction-label {
+        grid-column: 1/-1;
+        width: 100%;
+        min-height: 44px;
+    }
+    .plan-reaction-action {
+        min-height: 44px;
+    }
+    .plan-reaction-defaults > .tbl-btn {
+        min-height: 44px;
+    }
+}
 .cfg-rail {
     display: flex;
     align-items: center;
@@ -397,6 +458,7 @@
 {% endblock %}
 
 {% block extra_js %}
+<script src="{{ url_for('static', filename='plan_reactions.js') }}"></script>
 <script>
 // ============================================================================
 // State
@@ -1073,6 +1135,101 @@ function cfgRenderActivities() {
     });
 }
 
+function cfgBuildPlanReactionDefaults(record, entityKey, responseKey) {
+    const helperText = entityKey === 'activities'
+      ? 'Used when this Activity is selected with another Activity.'
+      : 'Applied when this Workout Type is selected.';
+    const helper = AdminUI.el('p', {class: 'cfg-helper-text'}, [helperText]);
+    const rows = AdminUI.el('div', {
+        class: 'plan-reaction-rows',
+        role: 'group',
+        'aria-label': 'Plan reaction defaults'
+    }, []);
+    const status = AdminUI.el('span', {
+        class: 'plan-reaction-status',
+        role: 'status',
+        'aria-live': 'polite'
+    }, []);
+    const addButton = AdminUI.el('button', {
+        type: 'button',
+        class: 'tbl-btn tbl-btn-secondary'
+    }, ['Add reaction']);
+
+    function setStatus(message, isError) {
+        status.textContent = message || '';
+        status.classList.toggle('cfg-field-error-text', Boolean(isError));
+    }
+
+    function updateAddState() {
+        const count = rows.querySelectorAll('.plan-reaction-row').length;
+        addButton.disabled = !record.id || count >= PlanReactionEditor.MAX;
+        if (!record.id) {
+            setStatus('Save the Activity or Workout Type name first.', false);
+        } else if (count >= PlanReactionEditor.MAX) {
+            setStatus('Maximum of 4 reactions.', false);
+        } else if (!status.classList.contains('cfg-field-error-text')) {
+            setStatus('', false);
+        }
+    }
+
+    function firstIncompleteRow() {
+        return Array.from(rows.querySelectorAll('.plan-reaction-row')).find(row => {
+            const emoji = row.querySelector('.plan-reaction-emoji').value.trim();
+            const label = row.querySelector('.plan-reaction-label').value.trim();
+            return !emoji || !label;
+        }) || null;
+    }
+
+    function savePlanReactions() {
+        if (!record.id) return;
+        const incomplete = firstIncompleteRow();
+        if (incomplete) {
+            setStatus('Complete both fields to save.', false);
+            return;
+        }
+
+        setStatus('Saving\u2026', false);
+        AdminUI.mutate(
+            `/admin/practices/${entityKey}/${record.id}/edit`,
+            {default_plan_reactions: PlanReactionEditor.get(rows)}
+        ).then(result => {
+            record.default_plan_reactions =
+                result[responseKey].default_plan_reactions || [];
+            updateAddState();
+            setStatus('Saved.', false);
+        }).catch(error => {
+            setStatus(error.message, true);
+        });
+    }
+
+    const callbacks = {
+        onChange: updateAddState,
+        onCommit: savePlanReactions,
+        onEmptyFocus: () => addButton.focus()
+    };
+    PlanReactionEditor.set(rows, record.default_plan_reactions || [], callbacks);
+
+    addButton.addEventListener('click', () => {
+        if (PlanReactionEditor.add(rows, callbacks)) {
+            rows.querySelector(
+                '.plan-reaction-row:last-child .plan-reaction-emoji'
+            ).focus();
+        }
+        updateAddState();
+    });
+    updateAddState();
+
+    return AdminUI.el('div', {class: 'plan-reaction-defaults'}, [
+        AdminUI.el('span', {
+            class: 'text-xs font-medium text-gray-600'
+        }, ['Plan reactions']),
+        helper,
+        rows,
+        addButton,
+        status
+    ]);
+}
+
 function cfgBuildActivityCard(record) {
     const isDraft = !record.id;
 
@@ -1159,7 +1316,8 @@ function cfgBuildActivityCard(record) {
         nameField,
         isDraft ? AdminUI.el('span', { class: 'cfg-draft-indicator text-xs text-gray-400 ml-1' }, ['(unsaved)']) : null,
         gearLabel,
-        chipMount
+        chipMount,
+        cfgBuildPlanReactionDefaults(record, 'activities', 'activity')
     ]);
 
     const rail = cfgBuildRail(record, 'activities', activitiesData, 'activity-count', cfgRefreshActivities);
@@ -1300,7 +1458,8 @@ function cfgBuildTypeCard(record) {
         isDraft ? AdminUI.el('span', { class: 'cfg-draft-indicator text-xs text-gray-400 ml-1' }, ['(unsaved)']) : null,
         goalsLabel,
         chipMount,
-        toggleLabel
+        toggleLabel,
+        cfgBuildPlanReactionDefaults(record, 'types', 'type')
     ]);
 
     const rail = cfgBuildRail(record, 'types', typesData, 'type-count', cfgRefreshTypes);
@@ -1448,14 +1607,14 @@ const CFG_ENTITIES = {
         data: activitiesData,
         mountId: 'cfg-activities-list',
         countId: 'activity-count',
-        emptyRecord: { name: '', gear_required: [] },
+        emptyRecord: { name: '', gear_required: [], default_plan_reactions: [] },
         renderFn: cfgRenderActivities
     },
     types: {
         data: typesData,
         mountId: 'cfg-types-list',
         countId: 'type-count',
-        emptyRecord: { name: '', fitness_goals: [], has_intervals: false },
+        emptyRecord: { name: '', fitness_goals: [], has_intervals: false, default_plan_reactions: [] },
         renderFn: cfgRenderTypes
     },
     social: {

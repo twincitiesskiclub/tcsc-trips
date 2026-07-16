@@ -7,8 +7,11 @@ continue to work without change.
 
 from app.slack.blocks.announcements import (
     build_practice_announcement_blocks,
+    build_combined_fallback_text,
     build_combined_lift_blocks,
     build_practice_details_blocks,
+    build_practice_fallback_text,
+    build_practice_details_fallback_text,
     _get_day_suffix,
 )
 from app.slack.blocks.cancellations import (
@@ -31,6 +34,7 @@ from app.slack.blocks.rsvp import (
 )
 from app.slack.blocks.summary import (
     build_weekly_summary_blocks,
+    build_weekly_summary_fallback_text,
 )
 from app.slack.blocks.app_home import (
     build_app_home_blocks,
@@ -42,12 +46,26 @@ from app.slack.blocks.recap import (
 from app.slack.blocks.dispatch import (
     build_dispatch_submission_section,
 )
+from app.slack.blocks.text import (
+    BLOCKS_MAX,
+    CONTEXT_TEXT_MAX,
+    FALLBACK_TEXT_MAX,
+    HEADER_TEXT_MAX,
+    SECTION_FIELD_TEXT_MAX,
+    SECTION_TEXT_MAX,
+    guard_fallback_text,
+    guard_slack_blocks,
+    truncate_slack_text,
+)
 
 __all__ = [
     # announcements
     "build_practice_announcement_blocks",
+    "build_combined_fallback_text",
     "build_combined_lift_blocks",
     "build_practice_details_blocks",
+    "build_practice_fallback_text",
+    "build_practice_details_fallback_text",
     "_get_day_suffix",
     # cancellations
     "build_cancellation_proposal_blocks",
@@ -65,6 +83,7 @@ __all__ = [
     "build_rsvp_summary_context",
     # summary
     "build_weekly_summary_blocks",
+    "build_weekly_summary_fallback_text",
     # app_home
     "build_app_home_blocks",
     "_build_practice_card",
@@ -72,4 +91,14 @@ __all__ = [
     "build_daily_practice_recap_blocks",
     # dispatch
     "build_dispatch_submission_section",
+    # text
+    "BLOCKS_MAX",
+    "CONTEXT_TEXT_MAX",
+    "FALLBACK_TEXT_MAX",
+    "HEADER_TEXT_MAX",
+    "SECTION_FIELD_TEXT_MAX",
+    "SECTION_TEXT_MAX",
+    "guard_fallback_text",
+    "guard_slack_blocks",
+    "truncate_slack_text",
 ]

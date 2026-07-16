@@ -61,11 +61,17 @@ from app.slack.practices.rsvp import (
     update_practice_rsvp_counts,
     log_rsvp_action,
 )
+from app.slack.practices.reactions import (
+    handle_attendance_reaction,
+)
 from app.slack.practices.app_home import (
     publish_app_home,
 )
 from app.slack.practices.refresh import (
     refresh_practice_posts,
+)
+from app.slack.practices.delete_recovery import (
+    recover_failed_practice_delete,
 )
 
 __all__ = [
@@ -119,8 +125,12 @@ __all__ = [
     "update_going_list_thread",
     "update_practice_rsvp_counts",
     "log_rsvp_action",
+    # reactions
+    "handle_attendance_reaction",
     # app_home
     "publish_app_home",
     # refresh
     "refresh_practice_posts",
+    # delete recovery
+    "recover_failed_practice_delete",
 ]

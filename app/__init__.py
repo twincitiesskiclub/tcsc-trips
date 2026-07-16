@@ -47,6 +47,10 @@ def create_app(environment=None):
     init_security(app, environment)
 
     db.init_app(app)
+    # Bolt lazy listeners and deferred post-save jobs run outside the HTTP
+    # request thread, so they need an explicitly bound application context.
+    from .slack.bolt_app import bind_flask_app
+    bind_flask_app(app)
     migrate = Migrate(app, db)
 
     app.register_blueprint(main)

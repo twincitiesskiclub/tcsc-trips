@@ -13,24 +13,29 @@ function peRoleEmoji(person) {
 }
 
 /* Activity / Type pills, selected by id. Toggles `.selected` on click. */
-function peRenderTagPills(containerId, data, selectedIds) {
+function peRenderTagPills(containerId, data, selectedIds, onChange = null) {
     const container = document.getElementById(containerId);
     if (!container) return;
-    container.innerHTML = '';
+    container.replaceChildren();
     if (!data || data.length === 0) {
-        container.innerHTML = '<span class="pe-empty">None defined</span>';
+        const empty = document.createElement('span');
+        empty.className = 'pe-empty';
+        empty.textContent = 'None defined';
+        container.appendChild(empty);
         return;
     }
     for (const item of data) {
         const label = document.createElement('button');
+        const selected = selectedIds.includes(item.id);
         label.type = 'button';
-        label.className = 'pe-pill' + (selectedIds.includes(item.id) ? ' selected' : '');
+        label.className = 'pe-pill' + (selected ? ' selected' : '');
         label.dataset.value = item.id;
-        label.setAttribute('aria-pressed', selectedIds.includes(item.id) ? 'true' : 'false');
+        label.setAttribute('aria-pressed', selected ? 'true' : 'false');
         label.textContent = item.name;
         label.onclick = () => {
             const on = label.classList.toggle('selected');
             label.setAttribute('aria-pressed', on ? 'true' : 'false');
+            if (onChange) onChange();
         };
         container.appendChild(label);
     }

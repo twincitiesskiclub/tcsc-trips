@@ -6,11 +6,19 @@ summary, weekly summary, edit logs).
 """
 
 import logging
-from datetime import timedelta
+from datetime import date, datetime, time, timedelta
 
-from flask import current_app
+from sqlalchemy import update
+from sqlalchemy.orm.attributes import set_committed_value
 
-from app.practices.models import Practice
+from app.practices.models import Practice, PracticeSummaryPost
+from app.slack.practices.summary_posts import (
+    COACH_SUMMARY,
+    WEEKLY_SUMMARY,
+    find_summary_post,
+    summary_post_channel,
+    week_start_date,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -32,29 +40,36 @@ class PracticeSurface:
         self._refresh_fn = refresh_fn
 
     def is_present(self, practice):
-        return bool(getattr(practice, self.ts_field, None))
+        return self.ts_field is None or bool(
+            getattr(practice, self.ts_field, None)
+        )
 
-    def refresh(self, practice, change_type):
+    def refresh(self, practice, change_type, **context):
+        if change_type not in self.applies_to:
+            return {"skipped": "not_applicable"}
         if not self.is_present(practice):
             # The post exists in Slack but this practice isn't linked to it
             # (e.g. created out-of-band after the post). Distinguished from a
             # not-applicable change type so it can be logged as a real gap.
             return {"skipped": "absent"}
-        if change_type not in self.applies_to:
-            return {"skipped": "not_applicable"}
-        return self._refresh_fn(practice, change_type)
+        return self._refresh_fn(practice, change_type, **context)
 
 
-def _week_bounds(practice_date):
-    """Return (week_start, week_end) Monday-anchored bounds for a practice date."""
-    days_since_monday = practice_date.weekday()
-    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    return week_start, week_start + timedelta(days=7)
+def _week_bounds(value):
+    """Return Monday-anchored datetime bounds for a date or datetime."""
+    start = datetime.combine(week_start_date(value), time.min)
+    return start, start + timedelta(days=7)
 
 
-def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, notify=True):
+def refresh_practice_posts(
+    practice,
+    change_type='edit',
+    actor_slack_id=None,
+    notify=True,
+    announcement_notice=None,
+    previous_plan_reactions=None,
+    previous_date=None,
+):
     """Update all Slack posts for a practice after DB changes.
 
     Args:
@@ -62,6 +77,8 @@ def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, no
         change_type: 'edit' | 'cancel' | 'delete' | 'rsvp' | 'workout' | 'create'
         actor_slack_id: Slack UID of person who made the change (for edit logs)
         notify: Whether to post thread notifications (edit logs)
+        previous_date: Date before an edit, used to refresh a distinct source
+            week when the practice crosses a Monday boundary
 
     Returns:
         dict with results per post type, e.g.:
@@ -72,14 +89,81 @@ def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, no
             'weekly_summary': {'skipped': True},
         }
     """
+    context = {
+        "announcement_notice": announcement_notice,
+        "previous_plan_reactions": previous_plan_reactions,
+    }
     results = {}
+    had_announcement = bool(practice.slack_message_ts)
+    for index, surface in enumerate(PRACTICE_SURFACES):
+        result = surface.refresh(practice, change_type, **context)
+        results[surface.name] = result
+        if (
+            change_type == "delete"
+            and surface.name == "announcement"
+            and had_announcement
+            and result.get("success") is not True
+        ):
+            for blocked in PRACTICE_SURFACES[index + 1:]:
+                results[blocked.name] = {
+                    "skipped": "blocked_by_announcement"
+                }
+            break
 
-    for surface in PRACTICE_SURFACES:
-        results[surface.name] = surface.refresh(practice, change_type)
+    if (
+        change_type == "edit"
+        and previous_date is not None
+        and week_start_date(previous_date) != week_start_date(practice.date)
+    ):
+        previous_results = refresh_registered_practice_summaries(
+            previous_date
+        )
+        results["previous_coach_summary"] = previous_results[
+            "coach_summary"
+        ]
+        results["previous_weekly_summary"] = previous_results[
+            "weekly_summary"
+        ]
+
+    safety_note_posted = False
+    announcement_result = results.get("announcement", {})
+    if (
+        announcement_notice
+        and announcement_result.get("success") is True
+        and practice.slack_message_ts
+        and practice.slack_channel_id
+    ):
+        from app.slack.practices.rsvp import post_thread_reply
+        try:
+            note_result = post_thread_reply(
+                practice,
+                announcement_notice,
+                user_mention=actor_slack_id,
+            )
+            if (
+                not isinstance(note_result, dict)
+                or not isinstance(note_result.get("success"), bool)
+            ):
+                raise ValueError(
+                    "Invalid result from announcement change note post"
+                )
+        except Exception as exc:
+            logger.warning(
+                "Practice #%s: announcement change note failed: %s",
+                practice.id,
+                exc,
+            )
+            note_result = {"success": False, "error": str(exc)}
+        results["announcement_change_note"] = note_result
+        safety_note_posted = note_result.get("success") is True
 
     # Edit logging (thread replies) remains a post-pass keyed on notify + type
     if notify and actor_slack_id and change_type in ('edit', 'workout'):
-        results['edit_logs'] = _post_edit_logs(practice, actor_slack_id)
+        results['edit_logs'] = _post_edit_logs(
+            practice,
+            actor_slack_id,
+            skip_announcement=safety_note_posted,
+        )
 
     _log_refresh_results(practice, change_type, results)
 
@@ -89,11 +173,9 @@ def refresh_practice_posts(practice, change_type='edit', actor_slack_id=None, no
 def _log_refresh_results(practice, change_type, results):
     """Surface skipped/failed refreshes instead of letting them pass silently.
 
-    A surface that errors (`success: False`) or is skipped because the
-    practice isn't linked to an existing post (`skipped: "absent"`) means a
-    Slack post that should have updated did not. Those are logged loudly so an
-    out-of-sync post is diagnosable; legitimate skips (no such post, or change
-    type not applicable) stay quiet.
+    A surface that errors (`success: False`) or has no registered/linked post
+    (`skipped: "absent"`) is surfaced for diagnosis. Legitimate applicability
+    skips stay quiet.
     """
     errored = [
         name for name, r in results.items()
@@ -112,8 +194,8 @@ def _log_refresh_results(practice, change_type, results):
         )
     if absent:
         logger.warning(
-            "Practice #%s (%s): refresh skipped for %s — practice not linked to "
-            "the post (missing ts); that post was not updated.",
+            "Practice #%s (%s): refresh skipped for %s — no linked or "
+            "registered post was found.",
             practice.id, change_type, ", ".join(absent),
         )
     if not errored and not absent:
@@ -125,24 +207,49 @@ def _log_refresh_results(practice, change_type, results):
         )
 
 
-def _refresh_announcement(practice, change_type):
+def _refresh_announcement(
+    practice,
+    change_type,
+    *,
+    announcement_notice=None,
+    previous_plan_reactions=None,
+    **_context,
+):
     """Update the main practice announcement post."""
-    if not practice.slack_message_ts or not practice.slack_channel_id:
-        return {'skipped': True}
+    if not practice.slack_message_ts:
+        return {"success": True, "skipped": "absent"}
+    if not practice.slack_channel_id:
+        return {"success": False, "error": "Slack message has no channel"}
 
     try:
         if change_type == 'cancel':
-            from app.slack.practices.cancellations import update_practice_as_cancelled
+            from app.slack.practices.announcements import (
+                is_combined_lift_practice,
+                update_combined_lift_post,
+            )
+            from app.slack.practices.cancellations import (
+                post_combined_cancellation_thread_notice,
+                update_practice_as_cancelled,
+            )
+            if is_combined_lift_practice(practice):
+                result = update_combined_lift_post(practice)
+                if result.get("success"):
+                    notice = post_combined_cancellation_thread_notice(practice)
+                    if not notice.get("success"):
+                        logger.warning(
+                            "Combined cancellation root updated but thread note "
+                            "failed for #%s: %s",
+                            practice.id,
+                            notice,
+                        )
+                return result
             return update_practice_as_cancelled(practice, 'Admin')
 
         if change_type == 'delete':
-            from app.slack.client import get_slack_client
-            client = get_slack_client()
-            client.chat_delete(
-                channel=practice.slack_channel_id,
-                ts=practice.slack_message_ts
+            from app.slack.practices.announcements import (
+                remove_practice_from_announcement,
             )
-            return {'success': True}
+            return remove_practice_from_announcement(practice)
 
         if change_type == 'rsvp':
             from app.slack.practices.rsvp import update_practice_rsvp_counts
@@ -153,14 +260,18 @@ def _refresh_announcement(practice, change_type):
         # threaded "Practice Details" reply transitively, so no separate
         # surface registration is needed for the details thread.
         from app.slack.practices.announcements import update_practice_slack_post
-        return update_practice_slack_post(practice)
+        return update_practice_slack_post(
+            practice,
+            announcement_notice=announcement_notice,
+            previous_plan_reactions=previous_plan_reactions,
+        )
 
     except Exception as e:
         logger.warning(f"Failed to refresh announcement for practice #{practice.id}: {e}")
         return {'success': False, 'error': str(e)}
 
 
-def _refresh_collab(practice, change_type):
+def _refresh_collab(practice, change_type, **_context):
     """Update the collab review post in #collab-coaches-practices."""
     if not practice.slack_collab_message_ts:
         return {'skipped': True}
@@ -173,168 +284,316 @@ def _refresh_collab(practice, change_type):
         return {'success': False, 'error': str(e)}
 
 
-def _refresh_coach_summary(practice, change_type):
-    """Rebuild and update the coach weekly summary post."""
-    if not practice.slack_coach_summary_ts:
-        return {'skipped': True}
+def _persist_summary_channel(record, channel_id):
+    """Best-effort legacy channel repair without committing the app session."""
+    if record.id is None:
+        return
+
+    from app.models import db
 
     try:
-        from app.models import AppConfig, db
+        with db.engine.begin() as connection:
+            result = connection.execute(
+                update(PracticeSummaryPost)
+                .where(
+                    PracticeSummaryPost.id == record.id,
+                    PracticeSummaryPost.channel_id.is_(None),
+                )
+                .values(channel_id=channel_id)
+            )
+        if result.rowcount:
+            set_committed_value(record, "channel_id", channel_id)
+    except Exception as exc:
+        logger.warning(
+            "Could not persist legacy summary channel for record #%s: %s",
+            record.id,
+            exc,
+        )
+
+
+def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
+    """Rebuild the registered Coach summary for one calendar week."""
+    try:
+        from app.models import AppConfig
         from app.practices.service import convert_practice_to_info
         from app.slack.blocks import build_coach_weekly_summary_blocks
-        from app.slack.practices._config import (
-            COLLAB_CHANNEL_ID,
-            COACH_SUMMARY_FALLBACK_CHANNEL_ID,
-        )
         from app.slack.client import get_slack_client
+        from app.slack.practices._config import (
+            COACH_SUMMARY_FALLBACK_CHANNEL_ID,
+            COLLAB_CHANNEL_ID,
+        )
 
-        week_start, week_end = _week_bounds(practice.date)
+        record = find_summary_post(value, COACH_SUMMARY)
+        if record is None:
+            return {"skipped": "absent"}
 
-        # Get all practices for the week. On delete the row is still in the
-        # session (the route refreshes before committing the delete), so drop
-        # it explicitly — otherwise its now-dead Edit button gets rebuilt back
-        # into the post and the next click hits "Practice not found".
+        week_start, week_end = _week_bounds(value)
         week_query = Practice.query.filter(
             Practice.date >= week_start,
             Practice.date < week_end,
         )
-        if change_type == 'delete':
-            week_query = week_query.filter(Practice.id != practice.id)
+        if exclude_practice_id is not None:
+            week_query = week_query.filter(
+                Practice.id != exclude_practice_id
+            )
         practices_for_week = week_query.order_by(Practice.date).all()
 
-        # Get expected days from config
         expected_days = AppConfig.get('practice_days', [
             {"day": "tuesday", "time": "18:00", "active": True},
             {"day": "thursday", "time": "18:00", "active": True},
             {"day": "saturday", "time": "09:00", "active": True}
         ])
+        practice_infos = [
+            convert_practice_to_info(practice)
+            for practice in practices_for_week
+        ]
+        blocks = build_coach_weekly_summary_blocks(
+            practice_infos,
+            expected_days,
+            week_start,
+        )
 
-        # Rebuild blocks
-        practice_infos = [convert_practice_to_info(p) for p in practices_for_week]
-        blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
+        resolved_channel = summary_post_channel(record)
+        if record.channel_id:
+            channels_to_try = [resolved_channel] if resolved_channel else []
+        else:
+            channels_to_try = []
+            for channel in (
+                resolved_channel,
+                COLLAB_CHANNEL_ID,
+                COACH_SUMMARY_FALLBACK_CHANNEL_ID,
+            ):
+                if channel and channel not in channels_to_try:
+                    channels_to_try.append(channel)
 
-        # Try to update — try collab channel first, then fallback
         client = get_slack_client()
-        channels_to_try = [COLLAB_CHANNEL_ID, COACH_SUMMARY_FALLBACK_CHANNEL_ID]
         for channel in channels_to_try:
             try:
                 client.chat_update(
                     channel=channel,
-                    ts=practice.slack_coach_summary_ts,
+                    ts=record.message_ts,
                     blocks=blocks,
-                    text=f"Coach Review: Week of {week_start.strftime('%B %-d')}"
+                    text=(
+                        "Coach Review: Week of "
+                        f"{week_start.strftime('%B %-d')}"
+                    ),
                 )
-                return {'success': True}
             except Exception:
                 continue
+            if record.channel_id is None:
+                _persist_summary_channel(record, channel)
+            return {'success': True}
 
         return {'success': False, 'error': 'Could not update in any channel'}
+    except Exception as exc:
+        logger.warning(
+            "Failed to refresh registered Coach summary for %s: %s",
+            value,
+            exc,
+        )
+        return {'success': False, 'error': str(exc)}
 
-    except Exception as e:
-        logger.warning(f"Failed to refresh coach summary for practice #{practice.id}: {e}")
-        return {'success': False, 'error': str(e)}
 
-
-def _refresh_weekly_summary(practice, change_type):
-    """Rebuild and update the weekly summary post in #announcements-practices."""
-    if not practice.slack_weekly_summary_ts:
-        return {'skipped': True}
-
+def _refresh_weekly_summary_for_week(value, *, exclude_practice_id=None):
+    """Rebuild the registered public summary for one calendar week."""
     try:
-        from app.practices.service import convert_practice_to_info
-        from app.practices.interfaces import PracticeStatus
-        from app.slack.blocks import build_weekly_summary_blocks
-        from app.slack.client import get_slack_client
         from app.integrations.weather import get_weather_for_location
+        from app.practices.interfaces import PracticeStatus
+        from app.practices.service import convert_practice_to_info
+        from app.slack.blocks import (
+            build_weekly_summary_blocks,
+            build_weekly_summary_fallback_text,
+        )
+        from app.slack.client import get_slack_client
 
-        week_start, week_end = _week_bounds(practice.date)
+        record = find_summary_post(value, WEEKLY_SUMMARY)
+        if record is None:
+            return {"skipped": "absent"}
 
-        # Get all scheduled/confirmed practices for the week. On delete the row
-        # is still in the session, so exclude it (see _refresh_coach_summary).
+        week_start, week_end = _week_bounds(value)
         week_query = Practice.query.filter(
             Practice.date >= week_start,
             Practice.date < week_end,
             Practice.status.in_([
                 PracticeStatus.SCHEDULED.value,
-                PracticeStatus.CONFIRMED.value
+                PracticeStatus.CONFIRMED.value,
+                PracticeStatus.CANCELLED.value,
             ])
         )
-        if change_type == 'delete':
-            week_query = week_query.filter(Practice.id != practice.id)
-        practices_for_week = week_query.order_by(Practice.date).all()
+        if exclude_practice_id is not None:
+            week_query = week_query.filter(
+                Practice.id != exclude_practice_id
+            )
+        practices_for_week = week_query.order_by(
+            Practice.date,
+            Practice.id,
+        ).all()
 
-        # Build weather data
         weather_data = {}
-        for p in practices_for_week:
-            if p.location and p.location.latitude and p.location.longitude:
+        for item in practices_for_week:
+            location = item.location
+            if (
+                item.status != PracticeStatus.CANCELLED.value
+                and location
+                and location.latitude is not None
+                and location.longitude is not None
+            ):
                 try:
                     weather = get_weather_for_location(
-                        lat=p.location.latitude,
-                        lon=p.location.longitude,
-                        target_datetime=p.date
+                        lat=location.latitude,
+                        lon=location.longitude,
+                        target_datetime=item.date,
                     )
-                    weather_data[p.id] = {
-                        'temp_f': int(weather.temperature_f),
-                        'feels_like_f': int(weather.feels_like_f),
-                        'conditions': weather.conditions_summary,
-                        'precipitation_chance': int(weather.precipitation_chance)
+                    weather_data[item.id] = {
+                        "temp_f": weather.temperature_f,
+                        "conditions": weather.conditions_summary,
                     }
-                except Exception as e:
-                    logger.warning(f"Weather fetch failed for practice {p.id}: {e}")
+                except Exception as exc:
+                    logger.warning(
+                        "Weekly weather refresh failed for practice #%s: %s",
+                        item.id,
+                        exc,
+                    )
 
-        # Rebuild blocks
-        practice_infos = [convert_practice_to_info(p) for p in practices_for_week]
-        blocks = build_weekly_summary_blocks(practice_infos, weather_data=weather_data)
+        practice_infos = [
+            convert_practice_to_info(practice)
+            for practice in practices_for_week
+        ]
+        blocks = build_weekly_summary_blocks(
+            practice_infos,
+            week_start=week_start.date(),
+            weather_data=weather_data,
+        )
+        fallback = build_weekly_summary_fallback_text(
+            practice_infos,
+            week_start=week_start.date(),
+            weather_data=weather_data,
+        )
 
-        # Find the channel — use the practice's slack_channel_id if available,
-        # otherwise fall back to the announcement channel
-        channel_id = practice.slack_channel_id
+        channel_id = summary_post_channel(record)
         if not channel_id:
-            from app.slack.practices._config import _get_announcement_channel
-            channel_id = _get_announcement_channel()
+            return {
+                'success': False,
+                'error': 'Announcement channel is not configured',
+            }
 
         client = get_slack_client()
         client.chat_update(
             channel=channel_id,
-            ts=practice.slack_weekly_summary_ts,
+            ts=record.message_ts,
             blocks=blocks,
-            text="Weekly Practice Summary"
+            text=fallback,
         )
-
+        if record.channel_id is None:
+            _persist_summary_channel(record, channel_id)
         return {'success': True}
+    except Exception as exc:
+        logger.warning(
+            "Failed to refresh registered weekly summary for %s: %s",
+            value,
+            exc,
+        )
+        return {'success': False, 'error': str(exc)}
 
-    except Exception as e:
-        logger.warning(f"Failed to refresh weekly summary for practice #{practice.id}: {e}")
-        return {'success': False, 'error': str(e)}
+
+def refresh_registered_practice_summaries(
+    value: date | datetime,
+    *,
+    exclude_practice_id: int | None = None,
+) -> dict[str, dict]:
+    """Refresh only the two registered weekly summary surfaces."""
+    return {
+        "coach_summary": _refresh_coach_summary_for_week(
+            value,
+            exclude_practice_id=exclude_practice_id,
+        ),
+        "weekly_summary": _refresh_weekly_summary_for_week(
+            value,
+            exclude_practice_id=exclude_practice_id,
+        ),
+    }
+
+
+def _refresh_coach_summary(
+    practice,
+    change_type,
+    *,
+    summary_date=None,
+    **_context,
+):
+    """Refresh the registered Coach summary containing this practice."""
+    return _refresh_coach_summary_for_week(
+        summary_date or practice.date,
+        exclude_practice_id=(
+            practice.id if change_type == 'delete' else None
+        ),
+    )
+
+
+def _refresh_weekly_summary(
+    practice,
+    change_type,
+    *,
+    summary_date=None,
+    **_context,
+):
+    """Refresh the registered public summary containing this practice."""
+    return _refresh_weekly_summary_for_week(
+        summary_date or practice.date,
+        exclude_practice_id=(
+            practice.id if change_type == 'delete' else None
+        ),
+    )
+
+
+WEEKLY_CHANGE_TYPES = tuple(
+    change_type for change_type in ALL_CHANGE_TYPES if change_type != "rsvp"
+)
 
 
 PRACTICE_SURFACES = [
     PracticeSurface("announcement", "slack_message_ts", ALL_CHANGE_TYPES, _refresh_announcement),
     PracticeSurface("collab", "slack_collab_message_ts", ALL_CHANGE_TYPES, _refresh_collab),
-    PracticeSurface("coach_summary", "slack_coach_summary_ts", ALL_CHANGE_TYPES, _refresh_coach_summary),
-    PracticeSurface("weekly_summary", "slack_weekly_summary_ts", ALL_CHANGE_TYPES, _refresh_weekly_summary),
+    PracticeSurface(
+        "coach_summary",
+        None,
+        ALL_CHANGE_TYPES,
+        _refresh_coach_summary,
+    ),
+    PracticeSurface(
+        "weekly_summary",
+        None,
+        WEEKLY_CHANGE_TYPES,
+        _refresh_weekly_summary,
+    ),
 ]
 
 
-def _post_edit_logs(practice, actor_slack_id):
+def _post_edit_logs(practice, actor_slack_id, *, skip_announcement=False):
     """Post edit notification thread replies."""
     results = {}
 
     # Log to announcement thread
-    if practice.slack_message_ts:
+    if practice.slack_message_ts and not skip_announcement:
         try:
             from app.slack.practices.coach_review import log_practice_edit
             results['announcement_log'] = log_practice_edit(practice, actor_slack_id)
         except Exception as e:
             results['announcement_log'] = {'success': False, 'error': str(e)}
 
-    # Log to coach summary thread
-    if practice.slack_coach_summary_ts:
-        try:
+    # Log to the current week's registered Coach summary thread.
+    try:
+        coach_record = find_summary_post(practice.date, COACH_SUMMARY)
+        if coach_record is not None:
             from app.slack.practices.coach_review import log_coach_summary_edit
-            results['coach_summary_log'] = log_coach_summary_edit(practice, actor_slack_id)
-        except Exception as e:
-            results['coach_summary_log'] = {'success': False, 'error': str(e)}
+            results['coach_summary_log'] = log_coach_summary_edit(
+                practice,
+                actor_slack_id,
+                channel_id=summary_post_channel(coach_record),
+                message_ts=coach_record.message_ts,
+            )
+    except Exception as e:
+        results['coach_summary_log'] = {'success': False, 'error': str(e)}
 
     # Log to collab thread
     if practice.slack_collab_message_ts:

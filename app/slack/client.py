@@ -439,51 +439,62 @@ def _hour_emoji_for(dt) -> str | None:
     return _HOUR_EMOJI.get(h)
 
 
-def get_combined_practice_emojis(practices) -> list[str]:
-    """Pick the per-practice RSVP emoji list for a combined post.
+def assign_combined_session_emojis(practices):
+    """Persist one stable, unique attendance reaction per combined session."""
+    from app.models import db
 
-    Strategy: hour-based number emojis (e.g. 6:10 PM → :six:, 7:20 PM → :seven:)
-    when every practice's hour resolves to a unique digit. If hours collide or
-    any hour falls outside 1-10 (12-hour clock), fall back to the position-based
-    checkmark sequence so the post is internally consistent.
+    ordered = sorted(practices, key=lambda item: (item.date, item.id))
+    assignments = {}
+    used = {}
+    for practice in ordered:
+        saved = (practice.slack_session_emoji or "").strip()
+        if not saved:
+            continue
+        if saved in used:
+            return {
+                "success": False,
+                "error": (
+                    f"Duplicate combined-session emoji :{saved}: on "
+                    f"practices #{used[saved]} and #{practice.id}"
+                ),
+            }
+        used[saved] = practice.id
+        assignments[practice.id] = saved
 
-    Args:
-        practices: list of Practice models, in display order (usually by date).
+    for practice in ordered:
+        if practice.id in assignments:
+            continue
+        candidates = []
+        preferred = _hour_emoji_for(practice.date)
+        if preferred:
+            candidates.append(preferred)
+        candidates.extend(COMBINED_PRACTICE_FALLBACK_EMOJIS)
+        choice = next((name for name in candidates if name not in used), None)
+        if choice is None:
+            return {
+                "success": False,
+                "error": "Could not assign unique combined-session reactions",
+            }
+        assignments[practice.id] = choice
+        used[choice] = practice.id
 
-    Returns:
-        List of emoji names, parallel to practices.
-    """
-    if not practices:
-        return []
-    hour_emojis = [_hour_emoji_for(p.date) for p in practices]
-    if all(hour_emojis) and len(set(hour_emojis)) == len(hour_emojis):
-        return hour_emojis
-    return list(COMBINED_PRACTICE_FALLBACK_EMOJIS[:len(practices)])
+    try:
+        for practice in ordered:
+            practice.slack_session_emoji = assignments[practice.id]
+        db.session.commit()
+    except Exception as exc:
+        db.session.rollback()
+        return {"success": False, "error": str(exc)}
+    return {"success": True, "emojis": assignments}
 
 
 def get_lead_confirmation_emoji_for_practice(practice) -> list[str]:
     """Get the emoji name(s) that count as a lead confirmation for a practice.
 
-    Standalone practice → ['white_check_mark'].
-    Combined practice → the single emoji for this practice's slot in the
-    combined post (hour-based when possible, position-based otherwise).
+    Stored combined assignments are authoritative and never re-derived from
+    sibling order. Standalone practices retain the checkmark contract.
     """
-    if practice.slack_message_ts:
-        from app.practices.models import Practice as PracticeModel
-
-        sibling_practices = PracticeModel.query.filter(
-            PracticeModel.slack_message_ts == practice.slack_message_ts
-        ).order_by(PracticeModel.date).all()
-
-        if len(sibling_practices) > 1:
-            emojis = get_combined_practice_emojis(sibling_practices)
-            try:
-                idx = sibling_practices.index(practice)
-                return [emojis[idx]]
-            except (ValueError, IndexError):
-                pass
-
-    return ['white_check_mark']
+    return [practice.slack_session_emoji or "white_check_mark"]
 
 
 # =============================================================================

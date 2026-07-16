@@ -9,6 +9,7 @@ from app.slack.client import get_channel_id_by_name
 
 # Module-level config cache (loaded once per process)
 _config_cache = None
+_practice_config_cache = None
 
 
 def _load_config() -> dict:
@@ -21,10 +22,39 @@ def _load_config() -> dict:
     return _config_cache
 
 
+def _load_practice_config():
+    global _practice_config_cache
+    if _practice_config_cache is None:
+        path = os.path.join(
+            os.path.dirname(__file__), "..", "..", "..", "config", "practices.yaml"
+        )
+        with open(path, "r", encoding="utf-8") as handle:
+            _practice_config_cache = yaml.safe_load(handle) or {}
+    return _practice_config_cache
+
+
+def get_default_duration_minutes():
+    try:
+        value = int(
+            _load_practice_config()
+            .get("practices", {})
+            .get("default_duration_minutes", 90)
+        )
+        if value <= 0:
+            raise ValueError("duration must be positive")
+        return value
+    except (TypeError, ValueError) as exc:
+        current_app.logger.warning(
+            "Invalid practice duration; using 90 minutes: %s", exc
+        )
+        return 90
+
+
 def reload_config():
     """Force reload of config from disk (useful for testing or config changes)."""
-    global _config_cache
+    global _config_cache, _practice_config_cache
     _config_cache = None
+    _practice_config_cache = None
     return _load_config()
 
 

@@ -132,6 +132,20 @@
 #workout-editor .btn-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #workout-editor .btn-sm{padding:7px 14px;font-size:13px;min-height:0}
 
+/* ── per-practice Plan reactions ── */
+#workout-editor .plan-reaction-rows{display:flex;flex-direction:column;gap:8px;margin:12px 0}
+#workout-editor .practice-reaction-row{display:grid;grid-template-columns:minmax(9rem,auto) minmax(0,1fr) auto;gap:.625rem;align-items:center}
+#workout-editor .practice-reaction-key{overflow-wrap:anywhere;font-weight:600}
+#workout-editor .practice-reaction-row.is-removed{background:#f8fafb;border:1px solid #cbd5e1;color:#1c2c44;border-radius:8px;padding:.625rem}
+#workout-editor .practice-reaction-removed-label{font-weight:600}
+#workout-editor .practice-reaction-label-static{min-width:0;overflow-wrap:anywhere}
+#workout-editor .practice-reaction-action{min-height:40px;padding:0 10px;border:1.5px solid #e5e7eb;border-radius:8px;background:#fff;color:#475569;cursor:pointer}
+#workout-editor .practice-reaction-action:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#workout-editor .practice-reaction-error{color:#c53030;font-size:12px}
+#workout-editor #plan-reaction-empty,#workout-editor #plan-reaction-unconfigured{font-size:12px;color:#64748b}
+#workout-editor #plan-reaction-status{display:block;min-height:18px;font-size:12px;color:#64748b}
+#workout-editor #plan-reaction-status.field-error{color:#c53030}
+
 /* ── loading state ── */
 #workout-editor .form-loading{opacity:.6;pointer-events:none}
 
@@ -141,6 +155,10 @@
   #workout-editor .field-row{grid-template-columns:1fr}
   #workout-editor .sticky-bar{flex-direction:row;margin-left:-24px;margin-right:-24px}
   #workout-editor .rail-col{position:static}
+  #workout-editor .practice-reaction-row{grid-template-columns:1fr}
+  #workout-editor .practice-reaction-label,#workout-editor .practice-reaction-action,
+  #workout-editor #restore-plan-reactions,#workout-editor #add-plan-reaction,
+  #workout-editor #plan-reaction-catalog{min-height:44px;width:100%}
 }
 
 /* ── rail: Skipper evaluation ── */
@@ -247,12 +265,12 @@
       <section class="card">
         <h2 class="section-label">Activity &amp; Type</h2>
         <div class="field">
-          <label>Activities</label>
-          <div id="activities-pills" class="pe-pill-group"></div>
+          <span class="label-text" id="activities-label">Activities</span>
+          <div id="activities-pills" class="pe-pill-group" role="group" aria-labelledby="activities-label" aria-describedby="plan-reaction-status"></div>
         </div>
         <div class="field">
-          <label>Practice Types</label>
-          <div id="types-pills" class="pe-pill-group"></div>
+          <span class="label-text" id="types-label">Practice Types</span>
+          <div id="types-pills" class="pe-pill-group" role="group" aria-labelledby="types-label" aria-describedby="plan-reaction-status"></div>
         </div>
       </section>
 
@@ -289,12 +307,27 @@
         <h2 class="section-label">Workout Plan</h2>
         <div class="field">
           <label for="workout_description">Workout</label>
-          <textarea id="workout_description" name="workout_description" class="workout-main" placeholder="e.g., 4 × 6 min @ threshold, 3 min easy between. Cue: relaxed tempo, strong kick.">{{ practice.workout_description if practice else '' }}</textarea>
+          <textarea id="workout_description" name="workout_description" class="workout-main" maxlength="2500" placeholder="e.g., 4 × 6 min @ threshold, 3 min easy between. Cue: relaxed tempo, strong kick.">{{ practice.workout_description if practice else '' }}</textarea>
         </div>
         <div class="field">
           <label for="logistics_notes">Notes / Logistics</label>
-          <textarea id="logistics_notes" name="logistics_notes" placeholder="e.g., Meet at the flagpole. Cold out, warm up extra. Newer skiers grab a lead for waxing.">{{ practice.logistics_notes if practice else '' }}</textarea>
+          <textarea id="logistics_notes" name="logistics_notes" maxlength="2500" placeholder="e.g., Meet at the flagpole. Cold out, warm up extra. Newer skiers grab a lead for waxing.">{{ practice.logistics_notes if practice else '' }}</textarea>
         </div>
+      </section>
+
+      <section class="card" id="plan-reaction-editor">
+        <div class="section-head">
+          <h2 class="section-label">Plan reactions</h2>
+          <button type="button" id="restore-plan-reactions" class="btn-ghost btn-sm">Restore defaults</button>
+        </div>
+        <p class="field-hint">✅ is attendance. These reactions describe a member's practice plan.</p>
+        <div id="plan-reaction-rows" class="plan-reaction-rows"></div>
+        <p id="plan-reaction-empty">No Plan reactions yet.</p>
+        <button type="button" id="add-plan-reaction" class="btn-ghost btn-sm" aria-controls="plan-reaction-catalog" aria-expanded="false">Add reaction</button>
+        <label for="plan-reaction-catalog" class="sr-only">Choose a configured reaction</label>
+        <select id="plan-reaction-catalog" hidden></select>
+        <p id="plan-reaction-unconfigured" hidden></p>
+        <span id="plan-reaction-status" role="status" aria-live="polite"></span>
       </section>
     </div>
 
@@ -346,6 +379,8 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='practice_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='practice_plan_reactions.js') }}"></script>
+<script src="{{ url_for('static', filename='practice_plan_reaction_editor.js') }}"></script>
 <script>
 {% include 'admin/practices/_detail_script.js' %}
 </script>

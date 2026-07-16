@@ -66,6 +66,7 @@ class PracticeActivity(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(255), nullable=False, unique=True)
     gear_required = db.Column(db.JSON)  # List of required gear as JSON array
+    default_plan_reactions = db.Column(db.JSON, nullable=False, default=list)
     airtable_id = db.Column(db.String(50), unique=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -82,6 +83,7 @@ class PracticeType(db.Model):
     name = db.Column(db.String(255), nullable=False, unique=True)
     fitness_goals = db.Column(db.JSON)  # List of fitness goals as JSON array
     has_intervals = db.Column(db.Boolean, default=False, nullable=False)
+    default_plan_reactions = db.Column(db.JSON, nullable=False, default=list)
     airtable_id = db.Column(db.String(50), unique=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -113,6 +115,37 @@ practice_types_junction = db.Table(
 # Practice Model
 # =============================================================================
 
+class PracticeSummaryPost(db.Model):
+    """Canonical Slack identity for one weekly practice-summary surface."""
+
+    __tablename__ = "practice_summary_posts"
+
+    id = db.Column(db.Integer, primary_key=True)
+    week_start = db.Column(db.Date, nullable=False)
+    surface = db.Column(db.String(32), nullable=False)
+    channel_id = db.Column(db.String(50))
+    message_ts = db.Column(db.String(50), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint(
+            "week_start",
+            "surface",
+            name="uq_practice_summary_post_week_surface",
+        ),
+        db.CheckConstraint(
+            "surface IN ('coach_summary', 'weekly_summary')",
+            name="ck_practice_summary_post_surface",
+        ),
+    )
+
+
 class Practice(db.Model):
     """Individual practice/workout session."""
     __tablename__ = 'practices'
@@ -133,12 +166,14 @@ class Practice(db.Model):
 
     # Freeform logistics/commentary shown in the announcement (separate from workout)
     logistics_notes = db.Column(db.Text)
+    plan_reactions = db.Column(db.JSON, nullable=False, default=list)
 
     # Flags
     is_dark_practice = db.Column(db.Boolean, default=False, nullable=False)
 
     # Slack integration
     slack_message_ts = db.Column(db.String(50))  # Message timestamp for updates
+    slack_session_emoji = db.Column(db.String(80))
     slack_details_ts = db.Column(db.String(50))  # Threaded "Practice Details" reply ts
     slack_channel_id = db.Column(db.String(50))
     slack_log_message_ts = db.Column(db.String(50))  # Logging thread in #tcsc-logging

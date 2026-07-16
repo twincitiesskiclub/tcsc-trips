@@ -1,6 +1,14 @@
 """Admin routes for Practice Management CRUD."""
 
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for
+from flask import (
+    Blueprint,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
 from datetime import datetime, timedelta
 from ..auth import admin_required
 from ..models import db, User, Tag, AppConfig
@@ -10,36 +18,192 @@ from ..practices.models import (
     practice_types_junction
 )
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
+from ..practices.plan_reaction_queries import (
+    PlanReactionSourceSelectionError,
+    load_all_plan_reaction_sources,
+    load_selected_plan_reaction_sources,
+)
+from ..practices.plan_reactions import (
+    PlanReactionValidationError,
+    build_plan_reaction_catalog,
+    normalize_plan_reactions,
+    resolve_plan_reaction_defaults,
+    validate_authorized_plan_reactions,
+)
 from sqlalchemy.orm import joinedload
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
+_EDIT_UNSYNCED_ERROR = (
+    'Practice was updated, but its Slack announcement did not update. '
+    'Retry the edit to refresh the announcement.'
+)
 
 
-def _week_coach_summary_ts(practice_date, exclude_id=None):
-    """Return the Coach Review post ts already linked to this practice's week.
+def _failed_delete_response(recovery, *, status_code):
+    if recovery.get('outcome') == 'deleted':
+        return jsonify({
+            'success': True,
+            'practice_deleted': True,
+            'message': 'Practice deleted successfully',
+        }), 200
+    if recovery.get('success') is True:
+        return jsonify({
+            'success': False,
+            'practice_deleted': False,
+            'practice_restored': True,
+            'error': (
+                'Practice was not deleted. Its Slack posts were restored; '
+                'review and retry the delete.'
+            ),
+        }), status_code
+    return jsonify({
+        'success': False,
+        'practice_deleted': False,
+        'practice_restored': False,
+        'recovery_incomplete': True,
+        'error': (
+            'Practice was not deleted, and Slack recovery is incomplete. '
+            'Manual reconciliation is required.'
+        ),
+    }), status_code
 
-    The weekly Coach Review summary is one Slack post per week, and the
-    refresh dispatcher updates it via each practice's slack_coach_summary_ts.
-    A practice created out-of-band (admin UI) after the summary was posted has
-    no ts of its own, so editing it silently skips the refresh. Copying a
-    sibling's ts at create time keeps the whole week linked to the same post.
-    """
-    days_since_monday = practice_date.weekday()
-    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-        hour=0, minute=0, second=0, microsecond=0
+
+def _recover_failed_delete_once(
+    recover_delete,
+    practice_id,
+    *,
+    original_channel_id,
+    original_message_ts,
+    original_week_start,
+    initial_cause,
+):
+    try:
+        recovery = recover_delete(
+            practice_id,
+            original_channel_id=original_channel_id,
+            original_message_ts=original_message_ts,
+            original_week_start=original_week_start,
+        )
+    except Exception as recovery_error:
+        recovery = {
+            'success': False,
+            'outcome': 'incomplete',
+            'practice_deleted': False,
+            'practice_restored': False,
+            'recovery_incomplete': True,
+            'error': f'Delete recovery raised: {recovery_error}',
+        }
+
+    if not isinstance(recovery, dict):
+        recovery = {
+            'success': False,
+            'outcome': 'incomplete',
+            'practice_deleted': False,
+            'practice_restored': False,
+            'recovery_incomplete': True,
+            'error': 'Delete recovery returned an invalid result',
+        }
+
+    context = {
+        'practice_id': practice_id,
+        'original_channel_id': original_channel_id,
+        'original_message_ts': original_message_ts,
+        'original_week_start': original_week_start.isoformat(),
+        'initial_cause': initial_cause,
+        'recovery': recovery,
+    }
+    if recovery.get('outcome') == 'deleted':
+        current_app.logger.warning(
+            'Practice delete recovery confirmed the delete committed: %s',
+            context,
+        )
+    elif recovery.get('success') is True:
+        current_app.logger.warning(
+            'Practice delete recovery restored Slack state: %s',
+            context,
+        )
+    else:
+        current_app.logger.critical(
+            'Practice delete recovery is incomplete: %s',
+            context,
+        )
+    return recovery
+
+
+def _activity_json(activity):
+    return {
+        'id': activity.id,
+        'name': activity.name,
+        'plan_reaction_sort_key': activity.name.casefold(),
+        'gear_required': activity.gear_required or [],
+        'default_plan_reactions': activity.default_plan_reactions or [],
+        'practice_count': len(activity.practices),
+    }
+
+
+def _type_json(practice_type):
+    return {
+        'id': practice_type.id,
+        'name': practice_type.name,
+        'plan_reaction_sort_key': practice_type.name.casefold(),
+        'fitness_goals': practice_type.fitness_goals or [],
+        'has_intervals': practice_type.has_intervals,
+        'default_plan_reactions': practice_type.default_plan_reactions or [],
+        'practice_count': len(practice_type.practices),
+    }
+
+
+def _prepare_plan_reaction_submission(data, *, existing_practice=None):
+    activity_ids = (
+        data['activity_ids']
+        if 'activity_ids' in data
+        else (
+            [item.id for item in existing_practice.activities]
+            if existing_practice is not None
+            else []
+        )
     )
-    week_end = week_start + timedelta(days=7)
-
-    query = Practice.query.filter(
-        Practice.date >= week_start,
-        Practice.date < week_end,
-        Practice.slack_coach_summary_ts.isnot(None),
+    type_ids = (
+        data['type_ids']
+        if 'type_ids' in data
+        else (
+            [item.id for item in existing_practice.practice_types]
+            if existing_practice is not None
+            else []
+        )
     )
-    if exclude_id is not None:
-        query = query.filter(Practice.id != exclude_id)
-
-    sibling = query.first()
-    return sibling.slack_coach_summary_ts if sibling else None
+    selected = load_selected_plan_reaction_sources(
+        db.session,
+        activity_ids=activity_ids,
+        type_ids=type_ids,
+    )
+    resolution = resolve_plan_reaction_defaults(
+        selected.practice_types,
+        selected.activities,
+    )
+    all_sources = load_all_plan_reaction_sources(db.session)
+    catalog = build_plan_reaction_catalog(
+        all_sources.practice_types,
+        all_sources.activities,
+    )
+    protected = (
+        existing_practice.plan_reactions or []
+        if existing_practice
+        else []
+    )
+    if data.get('restore_plan_reaction_defaults') is True:
+        plan_reactions = resolution.snapshot
+    elif 'plan_reactions' in data:
+        plan_reactions = validate_authorized_plan_reactions(
+            data['plan_reactions'],
+            catalog=catalog,
+            protected_snapshot=protected,
+        )
+    elif existing_practice is None:
+        plan_reactions = resolution.snapshot
+    else:
+        plan_reactions = None
+    return selected, plan_reactions
 
 
 @admin_practices_bp.route('/')
@@ -163,6 +327,31 @@ def create_practice():
     if not data.get('location_id'):
         return jsonify({'error': 'Location is required'}), 400
 
+    for field, label in (
+        ('workout_description', 'Workout'),
+        ('logistics_notes', 'Notes / Logistics'),
+    ):
+        value = data.get(field)
+        if value is not None and len(value) > 2500:
+            return jsonify({
+                'error': f'{label} must be 2,500 characters or fewer',
+                'field': field,
+            }), 400
+
+    try:
+        selected, plan_reactions = _prepare_plan_reaction_submission(data)
+    except PlanReactionSourceSelectionError as exc:
+        field = {
+            'activities': 'activity_ids',
+            'types': 'type_ids',
+        }[exc.field]
+        return jsonify({'error': str(exc), 'field': field}), 400
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'plan_reactions',
+        }), 400
+
     try:
         # Parse date
         date = datetime.fromisoformat(data['date'])
@@ -176,30 +365,13 @@ def create_practice():
             status=PracticeStatus.SCHEDULED.value,
             workout_description=data.get('workout_description'),
             logistics_notes=data.get('logistics_notes') or None,
+            plan_reactions=plan_reactions,
             is_dark_practice=data.get('is_dark_practice', False),
         )
+        practice.activities = list(selected.activities)
+        practice.practice_types = list(selected.practice_types)
         db.session.add(practice)
         db.session.flush()
-
-        # Link to the week's existing Coach Review post (if one was already
-        # posted) so later edits refresh that post instead of silently skipping.
-        practice.slack_coach_summary_ts = _week_coach_summary_ts(
-            practice.date, exclude_id=practice.id
-        )
-
-        # Add activities (many-to-many)
-        if data.get('activity_ids'):
-            activities = PracticeActivity.query.filter(
-                PracticeActivity.id.in_(data['activity_ids'])
-            ).all()
-            practice.activities.extend(activities)
-
-        # Add practice types (many-to-many)
-        if data.get('type_ids'):
-            types = PracticeType.query.filter(
-                PracticeType.id.in_(data['type_ids'])
-            ).all()
-            practice.practice_types.extend(types)
 
         # Add coaches (now using user_id)
         if data.get('coach_ids'):
@@ -233,6 +405,32 @@ def create_practice():
 
         db.session.commit()
 
+        # The row is already committed, so summary refresh is best-effort and
+        # must not turn a successful create into a false failure response.
+        try:
+            from app.slack.practices import refresh_practice_posts
+
+            refresh_results = refresh_practice_posts(
+                practice,
+                change_type='create',
+            )
+            for surface, result in (refresh_results or {}).items():
+                if (
+                    isinstance(result, dict)
+                    and result.get('success') is False
+                ):
+                    current_app.logger.warning(
+                        'Practice #%s was created but %s refresh failed: %s',
+                        practice.id,
+                        surface,
+                        result.get('error', 'unknown error'),
+                    )
+        except Exception:
+            current_app.logger.exception(
+                'Practice #%s was created but summary refresh raised',
+                practice.id,
+            )
+
         return jsonify({
             'success': True,
             'practice_id': practice.id,
@@ -249,11 +447,54 @@ def create_practice():
 def edit_practice(practice_id):
     """Update an existing practice."""
     practice = Practice.query.get_or_404(practice_id)
+    had_root = bool(practice.slack_message_ts)
+    practice_updated = False
 
     try:
         data = request.get_json()
         if not data:
             return jsonify({'error': 'JSON body required'}), 400
+
+        previous_date = practice.date
+        previous_location_id = practice.location_id
+        previous_plan_reactions = [
+            dict(item) for item in (practice.plan_reactions or [])
+        ]
+
+        for field, label in (
+            ('workout_description', 'Workout'),
+            ('logistics_notes', 'Notes / Logistics'),
+        ):
+            value = data.get(field)
+            if value is not None and len(value) > 2500:
+                return jsonify({
+                    'error': f'{label} must be 2,500 characters or fewer',
+                    'field': field,
+                }), 400
+
+        try:
+            selected, plan_reactions = _prepare_plan_reaction_submission(
+                data,
+                existing_practice=practice,
+            )
+        except PlanReactionSourceSelectionError as exc:
+            field = {
+                'activities': 'activity_ids',
+                'types': 'type_ids',
+            }[exc.field]
+            return jsonify({'error': str(exc), 'field': field}), 400
+        except PlanReactionValidationError as exc:
+            field = {
+                'activities': 'activity_ids',
+                'types': 'type_ids',
+            }.get(exc.field, 'plan_reactions')
+            return jsonify({
+                'error': str(exc),
+                'field': field,
+            }), 400
+
+        if plan_reactions is not None:
+            practice.plan_reactions = plan_reactions
 
         # Update fields if provided
         if 'date' in data:
@@ -281,21 +522,11 @@ def edit_practice(practice_id):
 
         # Update activities if provided
         if 'activity_ids' in data:
-            practice.activities = []
-            if data['activity_ids']:
-                activities = PracticeActivity.query.filter(
-                    PracticeActivity.id.in_(data['activity_ids'])
-                ).all()
-                practice.activities = activities
+            practice.activities = list(selected.activities)
 
         # Update types if provided
         if 'type_ids' in data:
-            practice.practice_types = []
-            if data['type_ids']:
-                types = PracticeType.query.filter(
-                    PracticeType.id.in_(data['type_ids'])
-                ).all()
-                practice.practice_types = types
+            practice.practice_types = list(selected.practice_types)
 
         # Update coaches, leads, and assistants if provided (now using user_id)
         if 'coach_ids' in data or 'lead_ids' in data or 'assist_ids' in data:
@@ -333,10 +564,32 @@ def edit_practice(practice_id):
                     db.session.add(assist)
 
         db.session.commit()
+        practice_updated = True
 
         # Update all Slack posts
         from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='edit')
+        from app.slack.practices.announcements import (
+            build_announcement_change_notice,
+        )
+        announcement_notice = build_announcement_change_notice(
+            previous_date=previous_date,
+            previous_location_id=previous_location_id,
+            practice=practice,
+        )
+        results = refresh_practice_posts(
+            practice,
+            change_type='edit',
+            previous_date=previous_date,
+            announcement_notice=announcement_notice,
+            previous_plan_reactions=previous_plan_reactions,
+        )
+        announcement = (results or {}).get('announcement') or {}
+        if had_root and announcement.get('success') is not True:
+            return jsonify({
+                'success': False,
+                'practice_updated': True,
+                'error': _EDIT_UNSYNCED_ERROR,
+            }), 502
 
         return jsonify({
             'success': True,
@@ -345,6 +598,17 @@ def edit_practice(practice_id):
 
     except Exception as e:
         db.session.rollback()
+        if practice_updated:
+            if had_root:
+                return jsonify({
+                    'success': False,
+                    'practice_updated': True,
+                    'error': _EDIT_UNSYNCED_ERROR,
+                }), 502
+            return jsonify({
+                'success': True,
+                'message': 'Practice updated successfully',
+            })
         return jsonify({'error': str(e)}), 500
 
 
@@ -353,11 +617,48 @@ def edit_practice(practice_id):
 def delete_practice(practice_id):
     """Delete a practice."""
     practice = Practice.query.get_or_404(practice_id)
+    original_channel_id = practice.slack_channel_id
+    original_message_ts = practice.slack_message_ts
+    original_week_start = (
+        practice.date.date() - timedelta(days=practice.date.weekday())
+    )
+    had_root = bool(original_message_ts)
+    cleanup_started = False
 
     try:
         # Clean up Slack posts before deleting DB record
-        from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='delete')
+        from app.slack.practices import (
+            recover_failed_practice_delete,
+            refresh_practice_posts,
+        )
+
+        cleanup_started = True
+        results = refresh_practice_posts(practice, change_type='delete')
+        announcement = results.get('announcement') or {}
+        safe = announcement.get('success') is True
+        if not had_root:
+            safe = safe or announcement.get('skipped') in {True, 'absent'}
+        if not safe:
+            if had_root:
+                recovery = _recover_failed_delete_once(
+                    recover_failed_practice_delete,
+                    practice_id,
+                    original_channel_id=original_channel_id,
+                    original_message_ts=original_message_ts,
+                    original_week_start=original_week_start,
+                    initial_cause={
+                        'kind': 'unsafe_announcement_result',
+                        'announcement': announcement,
+                    },
+                )
+                return _failed_delete_response(recovery, status_code=502)
+            return jsonify({
+                'success': False,
+                'error': (
+                    'Slack announcement could not be updated; '
+                    'practice was not deleted'
+                ),
+            }), 502
 
         db.session.delete(practice)
         db.session.commit()
@@ -367,9 +668,31 @@ def delete_practice(practice_id):
             'message': 'Practice deleted successfully'
         })
 
-    except Exception as e:
+    except Exception as error:
+        if cleanup_started:
+            recovery = _recover_failed_delete_once(
+                recover_failed_practice_delete,
+                practice_id,
+                original_channel_id=original_channel_id,
+                original_message_ts=original_message_ts,
+                original_week_start=original_week_start,
+                initial_cause={
+                    'kind': 'exception_after_cleanup_started',
+                    'exception_type': type(error).__name__,
+                    'error': str(error),
+                },
+            )
+            return _failed_delete_response(recovery, status_code=500)
+
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        current_app.logger.exception(
+            'Practice delete failed before Slack cleanup started: %s',
+            {'practice_id': practice_id},
+        )
+        return jsonify({
+            'success': False,
+            'error': 'Practice could not be deleted',
+        }), 500
 
 
 @admin_practices_bp.route('/<int:practice_id>/cancel', methods=['POST'])
@@ -377,18 +700,30 @@ def delete_practice(practice_id):
 def cancel_practice(practice_id):
     """Cancel a practice with a reason."""
     practice = Practice.query.get_or_404(practice_id)
+    data = request.get_json() or {}
+    had_root = bool(practice.slack_message_ts)
 
     try:
-        data = request.get_json() or {}
-
         practice.status = PracticeStatus.CANCELLED.value
-        practice.cancellation_reason = data.get('reason', 'Cancelled by admin')
+        practice.cancellation_reason = (
+            data.get('reason') or 'Cancelled by admin'
+        )
 
         db.session.commit()
 
         # Update all Slack posts to show cancelled status
         from app.slack.practices import refresh_practice_posts
-        refresh_practice_posts(practice, change_type='cancel')
+        results = refresh_practice_posts(practice, change_type='cancel')
+        announcement = results.get('announcement') or {}
+        if had_root and announcement.get('success') is not True:
+            return jsonify({
+                'success': False,
+                'practice_cancelled': True,
+                'error': (
+                    'Practice was cancelled, but its Slack announcement '
+                    'did not update'
+                ),
+            }), 502
 
         return jsonify({
             'success': True,
@@ -397,7 +732,7 @@ def cancel_practice(practice_id):
 
     except Exception as e:
         db.session.rollback()
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 @admin_practices_bp.route('/config')
@@ -435,13 +770,7 @@ def types_data():
     types = PracticeType.query.order_by(PracticeType.name).all()
 
     return jsonify({
-        'types': [{
-            'id': t.id,
-            'name': t.name,
-            'fitness_goals': t.fitness_goals or [],
-            'has_intervals': t.has_intervals,
-            'practice_count': len(t.practices)
-        } for t in types]
+        'types': [_type_json(practice_type) for practice_type in types]
     })
 
 
@@ -452,12 +781,7 @@ def activities_data():
     activities = PracticeActivity.query.order_by(PracticeActivity.name).all()
 
     return jsonify({
-        'activities': [{
-            'id': a.id,
-            'name': a.name,
-            'gear_required': a.gear_required or [],
-            'practice_count': len(a.practices)
-        } for a in activities]
+        'activities': [_activity_json(activity) for activity in activities]
     })
 
 
@@ -758,6 +1082,19 @@ def create_activity():
     if PracticeActivity.query.filter_by(name=name).first():
         return jsonify({'error': f'Activity "{name}" already exists'}), 400
 
+    try:
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+        else:
+            defaults = []
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
+
     # Handle gear_required - can be string (comma-separated) or array
     gear_required = request.json.get('gear_required')
     if isinstance(gear_required, str):
@@ -767,19 +1104,15 @@ def create_activity():
 
     activity = PracticeActivity(
         name=name,
-        gear_required=gear_required or None
+        gear_required=gear_required or None,
+        default_plan_reactions=defaults,
     )
     db.session.add(activity)
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'activity': {
-            'id': activity.id,
-            'name': activity.name,
-            'gear_required': activity.gear_required or [],
-            'practice_count': 0
-        }
+        'activity': _activity_json(activity),
     })
 
 
@@ -791,6 +1124,18 @@ def edit_activity(activity_id):
 
     if not request.json:
         return jsonify({'error': 'JSON body required'}), 400
+
+    try:
+        defaults = None
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
 
     # Update name with duplicate check
     if 'name' in request.json:
@@ -808,16 +1153,14 @@ def edit_activity(activity_id):
             gear_required = None
         activity.gear_required = gear_required or None
 
+    if defaults is not None:
+        activity.default_plan_reactions = defaults
+
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'activity': {
-            'id': activity.id,
-            'name': activity.name,
-            'gear_required': activity.gear_required or [],
-            'practice_count': len(activity.practices)
-        }
+        'activity': _activity_json(activity),
     })
 
 
@@ -861,6 +1204,19 @@ def create_type():
     if PracticeType.query.filter_by(name=name).first():
         return jsonify({'error': f'Type "{name}" already exists'}), 400
 
+    try:
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+        else:
+            defaults = []
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
+
     # Handle fitness_goals - can be string (comma-separated) or array
     fitness_goals = request.json.get('fitness_goals')
     if isinstance(fitness_goals, str):
@@ -871,20 +1227,15 @@ def create_type():
     practice_type = PracticeType(
         name=name,
         fitness_goals=fitness_goals or None,
-        has_intervals=request.json.get('has_intervals', False)
+        has_intervals=request.json.get('has_intervals', False),
+        default_plan_reactions=defaults,
     )
     db.session.add(practice_type)
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'type': {
-            'id': practice_type.id,
-            'name': practice_type.name,
-            'fitness_goals': practice_type.fitness_goals or [],
-            'has_intervals': practice_type.has_intervals,
-            'practice_count': 0
-        }
+        'type': _type_json(practice_type),
     })
 
 
@@ -896,6 +1247,18 @@ def edit_type(type_id):
 
     if not request.json:
         return jsonify({'error': 'JSON body required'}), 400
+
+    try:
+        defaults = None
+        if 'default_plan_reactions' in request.json:
+            defaults = normalize_plan_reactions(
+                request.json['default_plan_reactions'], source='Plan reactions'
+            )
+    except PlanReactionValidationError as exc:
+        return jsonify({
+            'error': str(exc),
+            'field': 'default_plan_reactions',
+        }), 400
 
     # Update name with duplicate check
     if 'name' in request.json:
@@ -916,17 +1279,14 @@ def edit_type(type_id):
     if 'has_intervals' in request.json:
         practice_type.has_intervals = request.json['has_intervals']
 
+    if defaults is not None:
+        practice_type.default_plan_reactions = defaults
+
     db.session.commit()
 
     return jsonify({
         'success': True,
-        'type': {
-            'id': practice_type.id,
-            'name': practice_type.name,
-            'fitness_goals': practice_type.fitness_goals or [],
-            'has_intervals': practice_type.has_intervals,
-            'practice_count': len(practice_type.practices)
-        }
+        'type': _type_json(practice_type),
     })
 
 

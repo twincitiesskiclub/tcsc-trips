@@ -67,6 +67,7 @@ def convert_activity_to_info(activity: PracticeActivity) -> PracticeActivityInfo
         id=activity.id,
         name=activity.name,
         gear_required=activity.gear_required or [],
+        default_plan_reactions=activity.default_plan_reactions or [],
         airtable_id=activity.airtable_id
     )
 
@@ -78,6 +79,7 @@ def convert_type_to_info(practice_type: PracticeType) -> PracticeTypeInfo:
         name=practice_type.name,
         fitness_goals=practice_type.fitness_goals or [],
         has_intervals=practice_type.has_intervals,
+        default_plan_reactions=practice_type.default_plan_reactions or [],
         airtable_id=practice_type.airtable_id
     )
 
@@ -186,12 +188,14 @@ def convert_practice_to_info(practice: Practice) -> PracticeInfo:
         workout_description=practice.workout_description,
         cooldown_description=practice.cooldown_description,
         logistics_notes=practice.logistics_notes,
+        plan_reactions=practice.plan_reactions or [],
         slack_details_ts=practice.slack_details_ts,
         has_social=practice.has_social,
         is_dark_practice=practice.is_dark_practice,
         leads=converted_leads,
         slack_message_ts=practice.slack_message_ts,
         slack_channel_id=practice.slack_channel_id,
+        slack_session_emoji=practice.slack_session_emoji,
         cancellation_reason=practice.cancellation_reason,
         airtable_id=practice.airtable_id,
         created_at=practice.created_at,
