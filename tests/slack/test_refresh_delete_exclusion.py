@@ -8,15 +8,35 @@ dead Edit button) gets rendered back into the post, and the next click hits
 "Practice not found". These tests pin the exclusion.
 """
 
-from datetime import datetime
+from datetime import date, datetime
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from app import create_app
 from app.models import db
-from app.practices.models import Practice, PracticeLocation
+from app.practices.models import (
+    Practice,
+    PracticeLocation,
+    PracticeSummaryPost,
+)
 from app.slack.practices import refresh as refreshmod
+from app.slack.practices._config import (
+    COACH_SUMMARY_FALLBACK_CHANNEL_ID,
+    COLLAB_CHANNEL_ID,
+)
+from app.slack.practices.summary_posts import (
+    COACH_SUMMARY,
+    WEEKLY_SUMMARY,
+)
+
+
+WEEK_START = date(2026, 6, 8)
+COACH_CHANNEL = "C-REGISTERED-COACH"
+COACH_TS = "coach-registered-ts"
+WEEKLY_CHANNEL = "C-REGISTERED-WEEKLY"
+WEEKLY_TS = "weekly-registered-ts"
 
 
 @pytest.fixture
@@ -31,106 +51,162 @@ def app():
 
 @pytest.fixture
 def week(app):
-    """Two scheduled practices in the same week, both linked to the summary."""
+    """Two scheduled practices and canonical summary identities for the week."""
     with app.app_context():
+        PracticeSummaryPost.query.filter_by(week_start=WEEK_START).delete(
+            synchronize_session=False
+        )
         # Create our own location: the test DB may be empty and this test
         # must not depend on ambient dev data.
         loc = PracticeLocation(name='Delete Exclusion Test Park')
         db.session.add(loc)
         db.session.commit()
-        ts = '1780837200.000001'
+        coach_record = PracticeSummaryPost(
+            week_start=WEEK_START,
+            surface=COACH_SUMMARY,
+            channel_id=COACH_CHANNEL,
+            message_ts=COACH_TS,
+        )
+        weekly_record = PracticeSummaryPost(
+            week_start=WEEK_START,
+            surface=WEEKLY_SUMMARY,
+            channel_id=WEEKLY_CHANNEL,
+            message_ts=WEEKLY_TS,
+        )
         keep = Practice(date=datetime(2026, 6, 9, 18, 15), day_of_week='Tuesday',
                         status='scheduled', location_id=loc.id,
-                        slack_coach_summary_ts=ts, slack_weekly_summary_ts=ts,
+                        slack_coach_summary_ts='stale-coach-row-ts',
+                        slack_weekly_summary_ts='stale-weekly-row-ts',
                         slack_channel_id='C1')
         dup = Practice(date=datetime(2026, 6, 9, 18, 15), day_of_week='Tuesday',
                        status='scheduled', location_id=loc.id,
-                       slack_coach_summary_ts=ts, slack_weekly_summary_ts=ts,
+                       slack_coach_summary_ts='other-stale-coach-row-ts',
+                       slack_weekly_summary_ts='other-stale-weekly-row-ts',
                        slack_channel_id='C1')
-        db.session.add_all([keep, dup])
+        db.session.add_all([coach_record, weekly_record, keep, dup])
         db.session.commit()
-        yield keep, dup
-        for p in (keep, dup):
-            obj = db.session.get(Practice, p.id)
-            if obj:
-                db.session.delete(obj)
+        location_id = loc.id
+        yield SimpleNamespace(
+            keep=keep,
+            dup=dup,
+            coach_record=coach_record,
+            weekly_record=weekly_record,
+        )
+        db.session.rollback()
+        Practice.query.filter_by(location_id=location_id).delete(
+            synchronize_session=False
+        )
+        PracticeSummaryPost.query.filter_by(week_start=WEEK_START).delete(
+            synchronize_session=False
+        )
         db.session.commit()
-        loc_obj = db.session.get(PracticeLocation, loc.id)
+        loc_obj = db.session.get(PracticeLocation, location_id)
         if loc_obj:
             db.session.delete(loc_obj)
         db.session.commit()
 
 
-def _capture_ids(builder_path, target, change_type):
+def _capture_refresh(builder_path, target, change_type):
     captured = {}
+    client = MagicMock()
 
     def fake_build(infos, *a, **k):
         captured['ids'] = [getattr(i, 'id', None) for i in infos]
         return [{"type": "section", "text": {"type": "mrkdwn", "text": "x"}}]
 
     with patch(builder_path, side_effect=fake_build), \
-            patch('app.slack.client.get_slack_client', return_value=MagicMock()), \
+            patch('app.slack.blocks.build_weekly_summary_fallback_text',
+                  return_value='weekly fallback'), \
+            patch('app.slack.client.get_slack_client', return_value=client), \
             patch(
                 'app.slack.practices._config._get_announcement_channel',
-                return_value='C-WEEKLY-ANNOUNCEMENTS',
+                return_value='C-LEGACY-CONFIGURED-WEEKLY',
             ), \
             patch('app.integrations.weather.get_weather_for_location',
                   side_effect=Exception("skip weather")):
-        target(change_type)
-    return captured.get('ids', [])
+        result = target(change_type)
+    return SimpleNamespace(
+        ids=captured.get('ids', []),
+        client=client,
+        result=result,
+    )
 
 
 def test_coach_summary_excludes_deleted_practice(app, week):
-    keep, dup = week
     with app.app_context():
-        dup_obj = db.session.get(Practice, dup.id)
-        ids = _capture_ids(
+        dup_obj = db.session.get(Practice, week.dup.id)
+        outcome = _capture_refresh(
             'app.slack.blocks.build_coach_weekly_summary_blocks',
             lambda ct: refreshmod._refresh_coach_summary(dup_obj, ct),
             'delete',
         )
-        assert dup.id not in ids, "deleted practice must be excluded from coach summary"
-        assert keep.id in ids, "surviving practice must remain"
+        assert week.dup.id not in outcome.ids, (
+            "deleted practice must be excluded from coach summary"
+        )
+        assert week.keep.id in outcome.ids, "surviving practice must remain"
 
 
 def test_coach_summary_edit_keeps_all(app, week):
-    keep, dup = week
     with app.app_context():
-        keep_obj = db.session.get(Practice, keep.id)
-        ids = _capture_ids(
+        keep_obj = db.session.get(Practice, week.keep.id)
+        outcome = _capture_refresh(
             'app.slack.blocks.build_coach_weekly_summary_blocks',
             lambda ct: refreshmod._refresh_coach_summary(keep_obj, ct),
             'edit',
         )
-        assert keep.id in ids and dup.id in ids, "edit rebuilds the full week"
+        assert week.keep.id in outcome.ids
+        assert week.dup.id in outcome.ids
 
 
 def test_weekly_summary_excludes_deleted_practice(app, week):
-    keep, dup = week
     with app.app_context():
-        dup_obj = db.session.get(Practice, dup.id)
-        ids = _capture_ids(
+        dup_obj = db.session.get(Practice, week.dup.id)
+        outcome = _capture_refresh(
             'app.slack.blocks.build_weekly_summary_blocks',
             lambda ct: refreshmod._refresh_weekly_summary(dup_obj, ct),
             'delete',
         )
-        assert dup.id not in ids, "deleted practice must be excluded from weekly summary"
-        assert keep.id in ids, "surviving practice must remain"
+        assert week.dup.id not in outcome.ids, (
+            "deleted practice must be excluded from weekly summary"
+        )
+        assert week.keep.id in outcome.ids, "surviving practice must remain"
+
+
+def test_registered_channel_and_timestamp_override_legacy_row_mirrors(app, week):
+    with app.app_context():
+        keep_obj = db.session.get(Practice, week.keep.id)
+
+        coach = _capture_refresh(
+            'app.slack.blocks.build_coach_weekly_summary_blocks',
+            lambda ct: refreshmod._refresh_coach_summary(keep_obj, ct),
+            'edit',
+        )
+        weekly = _capture_refresh(
+            'app.slack.blocks.build_weekly_summary_blocks',
+            lambda ct: refreshmod._refresh_weekly_summary(keep_obj, ct),
+            'edit',
+        )
+
+        assert keep_obj.slack_coach_summary_ts != COACH_TS
+        assert keep_obj.slack_weekly_summary_ts != WEEKLY_TS
+        assert coach.client.chat_update.call_args.kwargs["channel"] == COACH_CHANNEL
+        assert coach.client.chat_update.call_args.kwargs["ts"] == COACH_TS
+        assert weekly.client.chat_update.call_args.kwargs["channel"] == WEEKLY_CHANNEL
+        assert weekly.client.chat_update.call_args.kwargs["ts"] == WEEKLY_TS
 
 
 def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
     app, week,
 ):
-    keep, _dup = week
     with app.app_context():
-        keep_obj = db.session.get(Practice, keep.id)
+        keep_obj = db.session.get(Practice, week.keep.id)
         cancelled = Practice(
             date=datetime(2026, 6, 11, 18, 15),
             day_of_week='Thursday',
             status='cancelled',
             cancellation_reason='Heat warning',
             location_id=keep_obj.location_id,
-            slack_weekly_summary_ts=keep_obj.slack_weekly_summary_ts,
+            slack_weekly_summary_ts='cancelled-stale-row-ts',
             slack_channel_id='C1',
         )
         db.session.add(cancelled)
@@ -177,8 +253,8 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
         assert captured['fallback_week_start'] == captured['block_week_start']
         assert captured['block_weather'] == captured['fallback_weather'] == {}
         client.chat_update.assert_called_once_with(
-            channel='C-WEEKLY-ANNOUNCEMENTS',
-            ts=keep_obj.slack_weekly_summary_ts,
+            channel=WEEKLY_CHANNEL,
+            ts=WEEKLY_TS,
             blocks=blocks,
             text=fallback,
         )
@@ -188,12 +264,20 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
 
 
 def test_weekly_summary_refresh_fails_without_configured_channel(app, week):
-    keep, _dup = week
     with app.app_context():
-        keep_obj = db.session.get(Practice, keep.id)
+        keep_obj = db.session.get(Practice, week.keep.id)
+        weekly_record = db.session.get(
+            PracticeSummaryPost,
+            week.weekly_record.id,
+        )
+        weekly_record.channel_id = None
+        db.session.commit()
         client = MagicMock()
 
         with patch(
+            'app.slack.practices.summary_posts._get_announcement_channel',
+            return_value=None,
+        ), patch(
             'app.slack.practices._config._get_announcement_channel',
             return_value=None,
         ), patch(
@@ -206,3 +290,45 @@ def test_weekly_summary_refresh_fails_without_configured_channel(app, week):
             'error': 'Announcement channel is not configured',
         }
         client.chat_update.assert_not_called()
+
+
+def test_legacy_null_coach_channel_persists_successful_fallback_only(app, week):
+    with app.app_context():
+        keep_obj = db.session.get(Practice, week.keep.id)
+        coach_record = db.session.get(
+            PracticeSummaryPost,
+            week.coach_record.id,
+        )
+        coach_record.channel_id = None
+        db.session.commit()
+
+        keep_obj.day_of_week = "UNCOMMITTED MUTATION"
+        client = MagicMock()
+        client.chat_update.side_effect = [
+            RuntimeError("not in primary coach channel"),
+            None,
+        ]
+
+        with patch(
+            'app.slack.blocks.build_coach_weekly_summary_blocks',
+            return_value=[],
+        ), patch(
+            'app.slack.client.get_slack_client',
+            return_value=client,
+        ):
+            result = refreshmod._refresh_coach_summary(keep_obj, 'edit')
+
+        assert result == {'success': True}
+        assert [
+            call.kwargs['channel'] for call in client.chat_update.call_args_list
+        ] == [COLLAB_CHANNEL_ID, COACH_SUMMARY_FALLBACK_CHANNEL_ID]
+
+        db.session.rollback()
+        db.session.expire_all()
+        persisted_record = db.session.get(
+            PracticeSummaryPost,
+            week.coach_record.id,
+        )
+        persisted_practice = db.session.get(Practice, week.keep.id)
+        assert persisted_record.channel_id == COACH_SUMMARY_FALLBACK_CHANNEL_ID
+        assert persisted_practice.day_of_week == 'Tuesday'

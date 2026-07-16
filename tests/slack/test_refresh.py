@@ -15,6 +15,7 @@ from app.slack.practices.refresh import (
     _refresh_weekly_summary,
     _post_edit_logs,
 )
+from app.slack.practices import refresh as refreshmod
 from app.slack.practices.rsvp import update_practice_rsvp_counts
 
 
@@ -39,7 +40,13 @@ class TestRefreshDispatch:
 
     def test_skips_all_when_no_slack_fields(self):
         practice = FakePractice()
-        results = refresh_practice_posts(practice)
+        with patch.object(
+            refreshmod,
+            "find_summary_post",
+            return_value=None,
+            create=True,
+        ):
+            results = refresh_practice_posts(practice)
         assert results['announcement']['skipped'] == 'absent'
         assert results['collab']['skipped'] == 'absent'
         assert results['coach_summary']['skipped'] == 'absent'
@@ -66,6 +73,58 @@ class TestRefreshDispatch:
         )
 
         assert results["weekly_summary"] == {"skipped": "not_applicable"}
+
+    def test_same_week_edit_does_not_refresh_previous_week(self):
+        practice = FakePractice(date=datetime(2026, 7, 14, 18, 15))
+
+        with patch(
+            "app.slack.practices.refresh.PRACTICE_SURFACES", []
+        ), patch.object(
+            refreshmod,
+            "refresh_registered_practice_summaries",
+            create=True,
+        ) as refresh_previous:
+            results = refresh_practice_posts(
+                practice,
+                change_type="edit",
+                notify=False,
+                previous_date=datetime(2026, 7, 16, 18, 15),
+            )
+
+        refresh_previous.assert_not_called()
+        assert "previous_coach_summary" not in results
+        assert "previous_weekly_summary" not in results
+
+    def test_cross_week_edit_maps_previous_results_without_rerunning_surfaces(
+        self,
+    ):
+        practice = FakePractice(date=datetime(2026, 7, 14, 18, 15))
+        previous_date = datetime(2026, 7, 7, 18, 15)
+        previous_results = {
+            "coach_summary": {"success": True},
+            "weekly_summary": {"skipped": "absent"},
+        }
+
+        with patch(
+            "app.slack.practices.refresh.PRACTICE_SURFACES", []
+        ), patch.object(
+            refreshmod,
+            "refresh_registered_practice_summaries",
+            return_value=previous_results,
+            create=True,
+        ) as refresh_previous:
+            results = refresh_practice_posts(
+                practice,
+                change_type="edit",
+                notify=False,
+                previous_date=previous_date,
+            )
+
+        refresh_previous.assert_called_once_with(previous_date)
+        assert results == {
+            "previous_coach_summary": {"success": True},
+            "previous_weekly_summary": {"skipped": "absent"},
+        }
 
 
 class TestRefreshAnnouncement:
@@ -459,6 +518,177 @@ class TestSurfaceRegistry:
             "ct": "edit",
             "context": {"notice": "temporary"},
         }
+
+    def test_surface_without_row_timestamp_gate_runs_when_applicable(self):
+        calls = []
+        surface = refreshmod.PracticeSurface(
+            "registered_week",
+            None,
+            ["edit"],
+            lambda practice, change_type: calls.append(
+                (practice.id, change_type)
+            ) or {"success": True},
+        )
+        practice = FakePractice(id=42)
+
+        assert surface.refresh(practice, "edit") == {"success": True}
+        assert calls == [(42, "edit")]
+
+
+class TestRegisteredSummaryRefresh:
+    def test_independent_helper_refreshes_only_the_two_week_surfaces(self):
+        value = datetime(2026, 7, 13)
+
+        with patch.object(
+            refreshmod,
+            "_refresh_coach_summary_for_week",
+            return_value={"success": True},
+            create=True,
+        ) as refresh_coach, patch.object(
+            refreshmod,
+            "_refresh_weekly_summary_for_week",
+            return_value={"skipped": "absent"},
+            create=True,
+        ) as refresh_weekly, patch.object(
+            refreshmod,
+            "_refresh_announcement",
+        ) as refresh_announcement, patch.object(
+            refreshmod,
+            "_refresh_collab",
+        ) as refresh_collab:
+            result = refreshmod.refresh_registered_practice_summaries(
+                value,
+                exclude_practice_id=91,
+            )
+
+        assert result == {
+            "coach_summary": {"success": True},
+            "weekly_summary": {"skipped": "absent"},
+        }
+        refresh_coach.assert_called_once_with(
+            value,
+            exclude_practice_id=91,
+        )
+        refresh_weekly.assert_called_once_with(
+            value,
+            exclude_practice_id=91,
+        )
+        refresh_announcement.assert_not_called()
+        refresh_collab.assert_not_called()
+
+
+class TestCoachSummaryEditLogs:
+    def test_edit_log_uses_destination_registry_identity(self):
+        practice = FakePractice(
+            slack_coach_summary_ts="stale-row-ts",
+            date=datetime(2026, 7, 14, 18, 15),
+        )
+        record = SimpleNamespace(
+            surface="coach_summary",
+            channel_id="C-REGISTERED",
+            message_ts="registered-ts",
+        )
+
+        with patch.object(
+            refreshmod,
+            "find_summary_post",
+            return_value=record,
+            create=True,
+        ) as find_post, patch.object(
+            refreshmod,
+            "summary_post_channel",
+            return_value="C-REGISTERED",
+            create=True,
+        ), patch(
+            "app.slack.practices.coach_review.log_coach_summary_edit",
+            return_value={"success": True},
+        ) as log_coach:
+            result = _post_edit_logs(practice, "U123")
+
+        assert result == {"coach_summary_log": {"success": True}}
+        find_post.assert_called_once_with(
+            practice.date,
+            refreshmod.COACH_SUMMARY,
+        )
+        log_coach.assert_called_once_with(
+            practice,
+            "U123",
+            channel_id="C-REGISTERED",
+            message_ts="registered-ts",
+        )
+
+    def test_edit_log_skips_stale_row_mirror_without_registry_record(self):
+        practice = FakePractice(slack_coach_summary_ts="stale-row-ts")
+
+        with patch.object(
+            refreshmod,
+            "find_summary_post",
+            return_value=None,
+            create=True,
+        ), patch(
+            "app.slack.practices.coach_review.log_coach_summary_edit",
+        ) as log_coach:
+            result = _post_edit_logs(practice, "U123")
+
+        assert result == {}
+        log_coach.assert_not_called()
+
+    def test_log_function_prefers_explicit_registry_identity(self):
+        from app.slack.practices import coach_review
+
+        practice = FakePractice(slack_coach_summary_ts="stale-row-ts")
+        client = MagicMock()
+
+        with patch.object(
+            coach_review,
+            "get_slack_client",
+            return_value=client,
+        ), patch.object(
+            coach_review,
+            "current_app",
+            SimpleNamespace(logger=MagicMock()),
+        ):
+            result = coach_review.log_coach_summary_edit(
+                practice,
+                "U123",
+                channel_id="C-REGISTERED",
+                message_ts="registered-ts",
+            )
+
+        assert result == {"success": True}
+        client.chat_postMessage.assert_called_once_with(
+            channel="C-REGISTERED",
+            thread_ts="registered-ts",
+            text=":pencil2: <@U123> updated *Tuesday, Jul 14* practice",
+            unfurl_links=False,
+            unfurl_media=False,
+        )
+
+    def test_log_function_retains_legacy_identity_fallback(self):
+        from app.slack.practices import coach_review
+
+        practice = FakePractice(slack_coach_summary_ts="legacy-row-ts")
+        client = MagicMock()
+
+        with patch.object(
+            coach_review,
+            "get_slack_client",
+            return_value=client,
+        ), patch.object(
+            coach_review,
+            "current_app",
+            SimpleNamespace(logger=MagicMock()),
+        ):
+            result = coach_review.log_coach_summary_edit(practice, "U123")
+
+        assert result == {"success": True}
+        client.chat_postMessage.assert_called_once_with(
+            channel=coach_review.COLLAB_CHANNEL_ID,
+            thread_ts="legacy-row-ts",
+            text=":pencil2: <@U123> updated *Tuesday, Jul 14* practice",
+            unfurl_links=False,
+            unfurl_media=False,
+        )
 
 
 class TestTemporaryAnnouncementNotice:

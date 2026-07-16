@@ -588,19 +588,34 @@ def post_coach_weekly_summary(
     return {**success, 'refresh_linked': True}
 
 
-def log_coach_summary_edit(practice: Practice, slack_user_id: str) -> dict:
+def log_coach_summary_edit(
+    practice: Practice,
+    slack_user_id: str,
+    channel_id: str | None = None,
+    message_ts: str | None = None,
+) -> dict:
     """Log an edit action to the coach weekly summary thread.
 
     Args:
-        practice: Practice SQLAlchemy model with slack_coach_summary_ts set
+        practice: Practice SQLAlchemy model
         slack_user_id: Slack user ID who made the edit
+        channel_id: Canonical Coach summary channel, when available
+        message_ts: Canonical Coach summary timestamp, when available
 
     Returns:
         dict with keys:
         - success: bool
         - error: str (only if success=False)
     """
-    if not practice.slack_coach_summary_ts:
+    target_channel = (
+        COLLAB_CHANNEL_ID if channel_id is None else channel_id
+    )
+    target_ts = (
+        practice.slack_coach_summary_ts
+        if message_ts is None
+        else message_ts
+    )
+    if not target_ts:
         return {'success': False, 'error': 'No summary message to add thread to'}
 
     client = get_slack_client()
@@ -609,8 +624,8 @@ def log_coach_summary_edit(practice: Practice, slack_user_id: str) -> dict:
 
     try:
         client.chat_postMessage(
-            channel=COLLAB_CHANNEL_ID,
-            thread_ts=practice.slack_coach_summary_ts,
+            channel=target_channel,
+            thread_ts=target_ts,
             text=log_text,
             unfurl_links=False,
             unfurl_media=False
