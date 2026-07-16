@@ -252,7 +252,9 @@ def test_cleared_standalone_root_is_reposted_once_to_exact_channel(
 
     calls.update_root.assert_not_called()
     calls.post_root.assert_called_once_with(
-        practice, channel_id_override=ORIGINAL_CHANNEL
+        practice,
+        channel_id_override=ORIGINAL_CHANNEL,
+        create_log_thread=False,
     )
     calls.refresh_summaries.assert_called_once_with(
         ORIGINAL_WEEK_START, exclude_practice_id=None
@@ -276,7 +278,9 @@ def test_message_not_found_on_standalone_clears_identity_then_reposts_once(
 
     calls.update_root.assert_called_once_with(practice)
     calls.post_root.assert_called_once_with(
-        practice, channel_id_override=ORIGINAL_CHANNEL
+        practice,
+        channel_id_override=ORIGINAL_CHANNEL,
+        create_log_thread=False,
     )
     calls.refresh_summaries.assert_called_once_with(
         ORIGINAL_WEEK_START, exclude_practice_id=None
@@ -481,7 +485,9 @@ def test_sibling_lookup_requires_exact_channel_and_root(practice_factory):
 
     calls.update_root.assert_not_called()
     calls.post_root.assert_called_once_with(
-        target, channel_id_override=ORIGINAL_CHANNEL
+        target,
+        channel_id_override=ORIGINAL_CHANNEL,
+        create_log_thread=False,
     )
     assert result["outcome"] == "restored"
     assert_one_shot(calls)

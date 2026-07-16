@@ -737,6 +737,67 @@ class TestPostPracticeAnnouncementWiring:
         }
         get_client.assert_not_called()
 
+    @pytest.mark.parametrize(
+        ("post_kwargs", "expected_log_calls"),
+        [
+            pytest.param({}, 1, id="default-creates-log-thread"),
+            pytest.param(
+                {"create_log_thread": False},
+                0,
+                id="suppressed-preserves-existing-log-thread",
+            ),
+        ],
+    )
+    def test_log_thread_creation_can_be_suppressed_without_skipping_secondary_work(
+        self,
+        app_context,
+        post_kwargs,
+        expected_log_calls,
+    ):
+        from app.slack.practices.announcements import (
+            post_practice_announcement,
+        )
+
+        practice = self._practice()
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "200.1"}
+
+        with patch(
+            "app.slack.practices.announcements.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.slack.practices.announcements._get_announcement_channel",
+            return_value="CTEST",
+        ), patch(
+            "app.slack.practices.announcements._conditions_for_render",
+            return_value=None,
+        ), patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements.build_practice_announcement_blocks",
+            return_value=[],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_fallback_text",
+            return_value="complete fallback",
+        ), patch(
+            "app.slack.practices.announcements._upsert_details_reply",
+            return_value={"success": True},
+        ) as details, patch(
+            "app.slack.practices.announcements._seed_plan_reactions",
+        ) as reactions, patch(
+            "app.slack.practices.announcements.db",
+        ), patch(
+            "app.slack.practices.coach_review.create_practice_log_thread",
+        ) as create_log:
+            result = post_practice_announcement(practice, **post_kwargs)
+
+        assert result["success"] is True
+        client.chat_postMessage.assert_called_once()
+        details.assert_called_once()
+        reactions.assert_called_once()
+        assert create_log.call_count == expected_log_calls
+
     def test_gathers_once_and_surfaces_failed_details_result(
         self, app_context, caplog
     ):

@@ -15,6 +15,7 @@ def _repost_to_original_channel(practice, original_channel_id):
     result = post_practice_announcement(
         practice,
         channel_id_override=original_channel_id,
+        create_log_thread=False,
     )
     if result.get("success") is True:
         return {**result, "action": "reposted"}

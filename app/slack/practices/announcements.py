@@ -784,6 +784,7 @@ def post_practice_announcement(
     channel_override: Optional[str] = None,
     *,
     channel_id_override: Optional[str] = None,
+    create_log_thread: bool = True,
 ) -> dict:
     """Post practice announcement to #practices channel.
 
@@ -796,6 +797,7 @@ def post_practice_announcement(
         trail_conditions: Trail conditions (optional)
         channel_override: Optional channel name to override default (e.g., 'general')
         channel_id_override: Optional exact Slack channel ID
+        create_log_thread: Whether to create a new coach logging thread
 
     Returns:
         dict with keys:
@@ -919,12 +921,13 @@ def post_practice_announcement(
         )
     _seed_plan_reactions(client, practice)
 
-    # Create logging thread in #tcsc-logging
-    try:
-        from app.slack.practices.coach_review import create_practice_log_thread
-        create_practice_log_thread(practice)
-    except Exception as e:
-        current_app.logger.warning(f"Could not create practice log thread: {e}")
+    if create_log_thread:
+        # Create logging thread in #tcsc-logging
+        try:
+            from app.slack.practices.coach_review import create_practice_log_thread
+            create_practice_log_thread(practice)
+        except Exception as e:
+            current_app.logger.warning(f"Could not create practice log thread: {e}")
 
     return {
         'success': True,
