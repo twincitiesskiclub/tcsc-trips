@@ -940,6 +940,7 @@ class TestTemporaryAnnouncementNotice:
             change_type="edit",
             actor_slack_id="U123",
             notify=False,
+            previous_date=datetime(2026, 7, 14, 18, 15),
             announcement_notice="📍 Location updated, check Where below.",
             previous_plan_reactions=previous,
         )
