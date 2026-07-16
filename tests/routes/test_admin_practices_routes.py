@@ -71,11 +71,22 @@ def admin_create_records(db_session):
     yield records
 
     db.session.rollback()
-    if records.practice_id is not None:
-        practice = db.session.get(Practice, records.practice_id)
-        if practice is not None:
-            db.session.delete(practice)
-            db.session.flush()
+    owned_practices = Practice.query.filter(
+        Practice.location_id == records.location_id,
+        Practice.date == ADMIN_CREATE_REFRESH_DATE,
+    ).all()
+    assert len(owned_practices) <= 1, (
+        "Admin Create refresh fixture found multiple practices for its exact "
+        "location and date; refusing ambiguous teardown deletion"
+    )
+    if records.practice_id is not None and owned_practices:
+        assert owned_practices[0].id == records.practice_id, (
+            "Admin Create refresh fixture practice ID does not match its "
+            "exact location-and-date-owned row; refusing teardown deletion"
+        )
+    for practice in owned_practices:
+        db.session.delete(practice)
+        db.session.flush()
     owned_location = db.session.get(PracticeLocation, records.location_id)
     if owned_location is not None:
         db.session.delete(owned_location)
@@ -106,6 +117,48 @@ def test_practices_list_renders_new_shell(admin_client, db_session):
     assert 'id="practice-list"' in body
     assert 'id="pl-drawer"' in body
     assert 'practices-table' not in body
+
+
+def test_admin_create_records_teardown_finds_practice_when_id_is_unset(
+    db_session,
+):
+    fixture_generator = admin_create_records.__wrapped__(db_session)
+    records = next(fixture_generator)
+    practice = Practice(
+        date=ADMIN_CREATE_REFRESH_DATE,
+        day_of_week=ADMIN_CREATE_REFRESH_DATE.strftime("%A"),
+        location_id=records.location_id,
+    )
+    db.session.add(practice)
+    db.session.commit()
+    practice_id = practice.id
+    teardown_error = None
+
+    try:
+        try:
+            next(fixture_generator)
+        except StopIteration:
+            pass
+        except Exception as exc:
+            teardown_error = exc
+            db.session.rollback()
+
+        assert records.practice_id is None
+        assert db.session.get(Practice, practice_id) is None
+        assert teardown_error is None
+    finally:
+        db.session.rollback()
+        surviving_practice = db.session.get(Practice, practice_id)
+        if surviving_practice is not None:
+            db.session.delete(surviving_practice)
+            db.session.flush()
+        surviving_location = db.session.get(
+            PracticeLocation,
+            records.location_id,
+        )
+        if surviving_location is not None:
+            db.session.delete(surviving_location)
+        db.session.commit()
 
 
 def test_admin_create_refreshes_summaries_after_commit(
