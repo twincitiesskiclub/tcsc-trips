@@ -13,6 +13,7 @@ import app.slack.bolt_app as bolt_module
 ACTION_IDS = (
     "activity_ids",
     "type_ids",
+    "practice_reaction_edit",
     "practice_reaction_remove",
     "practice_reaction_undo",
     "practice_reaction_add",
@@ -150,7 +151,7 @@ def test_installed_bolt_returns_ack_before_delayed_reaction_worker_finishes():
     assert worker_finished.wait(1)
 
 
-def test_all_seven_reaction_actions_share_ack_and_lazy_worker_registration():
+def test_all_eight_reaction_actions_share_ack_and_lazy_worker_registration():
     app = _installed_bolt_app()
     observed = []
     lock = threading.Lock()

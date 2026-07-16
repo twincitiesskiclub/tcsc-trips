@@ -28,6 +28,14 @@ def _blocks_by_id(modal):
     }
 
 
+def _block_index(modal, block_id):
+    return next(
+        index
+        for index, block in enumerate(modal["blocks"])
+        if block.get("block_id") == block_id
+    )
+
+
 def _preview_command(**overrides):
     command = {
         "text": "practice-preview",
@@ -85,6 +93,21 @@ def preview_action_body():
     return _action_body_from_view(build_practice_preview_modal(PREVIEW_DATE))
 
 
+def _expanded_preview_action_body(preview_action_body):
+    client = MagicMock()
+    bolt_module._handle_practice_reaction_action(
+        lambda: None,
+        preview_action_body,
+        {"action_id": "practice_reaction_edit"},
+        client,
+        MagicMock(),
+    )
+    return _action_body_from_view(
+        client.views_update.call_args.kwargs["view"],
+        view_hash="HASH_EXPANDED",
+    )
+
+
 def test_preview_wraps_the_structured_production_create_modal():
     modal = build_practice_preview_modal(PREVIEW_DATE)
 
@@ -98,8 +121,8 @@ def test_preview_wraps_the_structured_production_create_modal():
         "text": "Close Preview",
     }
     assert modal["callback_id"] == "practice_preview"
-    assert len(modal["blocks"]) == 22
-    assert len(modal["private_metadata"]) == 1849
+    assert len(modal["blocks"]) == 11
+    assert len(modal["private_metadata"]) == 1939
     options = [
         option
         for block in modal["blocks"]
@@ -109,8 +132,20 @@ def test_preview_wraps_the_structured_production_create_modal():
     assert all(len(option["value"]) <= 150 for option in options)
 
 
-def test_preview_derives_four_rows_from_interval_run_and_rollerski_sources():
+def test_preview_starts_with_collapsed_summary_as_final_region():
     modal = build_practice_preview_modal(PREVIEW_DATE)
+    blocks = _blocks_by_id(modal)
+    assert "practice_reaction_summary" in blocks
+    assert "practice_reaction_row_r0" not in blocks
+    assert _block_index(modal, "practice_reaction_summary") > _block_index(
+        modal, "flags_block"
+    )
+
+
+def test_preview_derives_four_rows_from_interval_run_and_rollerski_sources(
+    preview_action_body,
+):
+    modal = _expanded_preview_action_body(preview_action_body)["view"]
     blocks = _blocks_by_id(modal)
 
     assert blocks["time_block"]["element"]["initial_time"] == "18:15"
@@ -197,6 +232,7 @@ def test_preview_metadata_fully_rebuilds_sources_and_catalog_without_database():
 def test_reaction_action_acks_first_and_updates_with_view_hash(
     preview_action_body,
 ):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     events = []
     client = MagicMock()
     client.views_update.side_effect = lambda **kwargs: events.append(
@@ -214,8 +250,37 @@ def test_reaction_action_acks_first_and_updates_with_view_hash(
     assert events[0] == ("ack", None)
     update = events[1][1]
     assert update["view_id"] == "V_PREVIEW"
-    assert update["hash"] == "HASH_PREVIEW"
+    assert update["hash"] == "HASH_EXPANDED"
     assert "practice_reaction_removed_r0" in _blocks_by_id(update["view"])
+
+
+def test_preview_edit_reactions_expands_in_place_and_preserves_values(
+    preview_action_body,
+):
+    values = preview_action_body["view"]["state"]["values"]
+    values["workout_block"]["workout_description"]["value"] = (
+        "Unsaved interval workout"
+    )
+    client = MagicMock()
+
+    bolt_module._handle_practice_reaction_action(
+        ack=lambda: None,
+        body=preview_action_body,
+        action={"action_id": "practice_reaction_edit"},
+        client=client,
+        logger=MagicMock(),
+    )
+
+    updated = client.views_update.call_args.kwargs["view"]
+    blocks = _blocks_by_id(updated)
+    assert blocks["workout_block"]["element"]["initial_value"] == (
+        "Unsaved interval workout"
+    )
+    assert "practice_reaction_summary" not in blocks
+    assert "practice_reaction_row_r0" in blocks
+    assert decode_practice_reaction_metadata(
+        updated["private_metadata"]
+    )[2].editor_expanded is True
 
 
 def test_preview_action_never_opens_application_context(
@@ -240,6 +305,7 @@ def test_preview_action_never_opens_application_context(
 
 
 def test_remove_accepts_temporarily_blank_description(preview_action_body):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     preview_action_body["view"]["state"]["values"][
         "practice_reaction_row_r0"
     ]["practice_reaction_description"]["value"] = ""
@@ -260,6 +326,7 @@ def test_remove_accepts_temporarily_blank_description(preview_action_body):
 
 
 def test_views_update_failure_is_logged(preview_action_body):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     logger = MagicMock()
     client = MagicMock()
     client.views_update.side_effect = RuntimeError("Slack unavailable")
@@ -278,6 +345,7 @@ def test_views_update_failure_is_logged(preview_action_body):
 def test_preview_selector_transition_preserves_unrelated_values(
     preview_action_body,
 ):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     values = preview_action_body["view"]["state"]["values"]
     values["workout_block"]["workout_description"]["value"] = "Do not lose me"
     values["activities_block"]["activity_ids"]["selected_options"] = [
@@ -306,6 +374,7 @@ def test_preview_selector_transition_preserves_unrelated_values(
 def test_preview_selector_transition_one_two_three_one_matrix(
     preview_action_body,
 ):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     client = MagicMock()
     logger = MagicMock()
     body = preview_action_body
@@ -348,6 +417,7 @@ def test_preview_selector_transition_one_two_three_one_matrix(
 def test_nonselector_action_deduplicates_selector_ids_in_first_seen_order(
     preview_action_body,
 ):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     values = preview_action_body["view"]["state"]["values"]
     values["activities_block"]["activity_ids"]["selected_options"] = [
         {"value": "2"},
@@ -375,6 +445,7 @@ def test_nonselector_action_deduplicates_selector_ids_in_first_seen_order(
 
 
 def test_remove_then_undo_restores_the_same_fixed_key(preview_action_body):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     client = MagicMock()
     logger = MagicMock()
     bolt_module._handle_practice_reaction_action(
@@ -401,6 +472,7 @@ def test_remove_then_undo_restores_the_same_fixed_key(preview_action_body):
 def test_add_then_catalog_select_appends_configured_fixed_key(
     preview_action_body,
 ):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     values = preview_action_body["view"]["state"]["values"]
     values["activities_block"]["activity_ids"]["selected_options"] = [
         {"value": "1"}
@@ -503,6 +575,7 @@ def test_unknown_or_impossible_preview_action_is_a_noop(
     preview_action_body,
     action,
 ):
+    preview_action_body = _expanded_preview_action_body(preview_action_body)
     client = MagicMock()
 
     bolt_module._handle_practice_reaction_action(

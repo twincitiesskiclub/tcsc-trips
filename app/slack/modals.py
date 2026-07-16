@@ -629,14 +629,6 @@ def build_practice_edit_full_modal(
             }
         }
     ])
-    blocks.extend(
-        build_practice_reaction_blocks(
-            reaction_editor,
-            reaction_catalog,
-            allow_restore=True,
-        )
-    )
-
     # Add flags and notification blocks
     blocks.extend([
         {
@@ -671,6 +663,13 @@ def build_practice_edit_full_modal(
             }
         }
     ])
+    blocks.extend(
+        build_practice_reaction_blocks(
+            reaction_editor,
+            reaction_catalog,
+            allow_restore=True,
+        )
+    )
 
     modal = {
         "type": "modal",
@@ -855,14 +854,6 @@ def build_practice_create_modal(
             )
         })
 
-    blocks.extend(
-        build_practice_reaction_blocks(
-            reaction_editor,
-            reaction_catalog,
-            allow_restore=False,
-        )
-    )
-
     # Coaches multi-select, pre-selected from slot defaults (coach_ids)
     if eligible_coaches:
         default_coaches = [SimpleNamespace(user_id=cid, display_name=None)
@@ -900,6 +891,13 @@ def build_practice_create_modal(
         "label": {"type": "plain_text", "text": "Options"},
         "element": _build_practice_flags_element(is_dark_practice=default_is_dark)
     })
+    blocks.extend(
+        build_practice_reaction_blocks(
+            reaction_editor,
+            reaction_catalog,
+            allow_restore=False,
+        )
+    )
 
     modal = {
         "type": "modal",

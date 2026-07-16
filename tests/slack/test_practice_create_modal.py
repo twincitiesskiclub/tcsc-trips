@@ -14,6 +14,7 @@ import pytest
 from app import create_app
 from app.models import User, db
 from app.practices.plan_reaction_editor import (
+    active_plan_reaction_snapshot,
     add_catalog_plan_reaction,
     build_plan_reaction_editor_state,
     reconcile_plan_reaction_editor_state,
@@ -33,8 +34,10 @@ import app.slack.bolt_app as bolt_module
 from app.slack.bolt_app import _parse_practice_authoring_values
 from app.slack.modals import build_practice_create_modal
 from app.slack.practice_reaction_editor import (
+    build_practice_reaction_blocks,
     decode_practice_reaction_metadata,
     encode_practice_reaction_metadata,
+    merge_practice_reaction_inputs,
 )
 
 
@@ -44,6 +47,14 @@ CREATE_BODY = {"user": {"id": "U-CREATE-TEST"}}
 
 def _blocks_by_id(modal):
     return {b.get("block_id"): b for b in modal["blocks"] if b.get("block_id")}
+
+
+def _block_index(modal, block_id):
+    return next(
+        index
+        for index, block in enumerate(modal["blocks"])
+        if block.get("block_id") == block_id
+    )
 
 
 def _authoring_values(workout=""):
@@ -85,7 +96,7 @@ def _omit_selector(modal, block_id):
     modal["state"]["values"].pop(block_id, None)
 
 
-def _reaction_inputs():
+def _reaction_inputs(*, editor_expanded=False):
     intervals = SimpleNamespace(
         id=1,
         name="Intervals",
@@ -96,6 +107,7 @@ def _reaction_inputs():
         activities=[],
         saved_snapshot=None,
     ).state
+    editor.editor_expanded = editor_expanded
     return {
         "reaction_editor": editor,
         "reaction_catalog": build_plan_reaction_catalog([intervals], []),
@@ -167,6 +179,7 @@ def create_view(create_sources):
         activities=[activity],
         saved_snapshot=None,
     ).state
+    editor.editor_expanded = True
     catalog = build_plan_reaction_catalog([practice_type], [activity])
     modal = build_practice_create_modal(
         datetime(2026, 7, 21, 18, 15),
@@ -234,6 +247,23 @@ def test_create_modal_omits_pickers_when_no_people():
     assert "leads_block" not in blocks
 
 
+def test_create_reaction_summary_is_collapsed_and_last():
+    modal = build_practice_create_modal(
+        datetime(2026, 7, 14, 18, 15),
+        "18:15",
+        locations=[(10, "Theodore Wirth")],
+        eligible_coaches=[(1, "Coach", "U1")],
+        eligible_leads=[(2, "Lead", "U2")],
+        **_reaction_inputs(),
+    )
+    blocks = _blocks_by_id(modal)
+    assert "practice_reaction_summary" in blocks
+    assert "practice_reaction_row_r0" not in blocks
+    assert _block_index(modal, "practice_reaction_summary") > _block_index(
+        modal, "flags_block"
+    )
+
+
 def test_create_uses_structured_reactions_and_dispatching_selectors():
     modal = build_practice_create_modal(
         datetime(2026, 7, 14, 18, 15),
@@ -242,7 +272,7 @@ def test_create_uses_structured_reactions_and_dispatching_selectors():
         all_activities=[(1, "Run"), (2, "Rollerski")],
         all_types=[(1, "Intervals")],
         slot_defaults={"activity_ids": [1, 2], "type_ids": [1]},
-        **_reaction_inputs(),
+        **_reaction_inputs(editor_expanded=True),
     )
     blocks = _blocks_by_id(modal)
 
@@ -1074,3 +1104,52 @@ def test_create_submission_persists_validated_structured_state(
     assert {item.id for item in practice.activities} == {activity.id}
     assert {item.id for item in practice.practice_types} == {practice_type.id}
     thread.return_value.start.assert_called_once_with()
+
+
+def test_create_submission_without_expanding_preserves_summary_snapshot(
+    db_session,
+    create_sources,
+    create_view,
+    monkeypatch,
+):
+    _location, activity, practice_type = create_sources
+    collapsed = copy.deepcopy(create_view)
+    mode, context, state, preview = decode_practice_reaction_metadata(
+        collapsed["private_metadata"]
+    )
+    state = merge_practice_reaction_inputs(
+        state,
+        collapsed["state"]["values"],
+    )
+    state.editor_expanded = False
+    expected = active_plan_reaction_snapshot(state)
+    collapsed["private_metadata"] = encode_practice_reaction_metadata(
+        mode=mode,
+        context=context,
+        state=state,
+        preview_config=preview,
+    )
+    collapsed["blocks"] = [
+        block
+        for block in collapsed["blocks"]
+        if not block.get("block_id", "").startswith("practice_reaction_")
+    ] + build_practice_reaction_blocks(
+        state,
+        build_plan_reaction_catalog([practice_type], [activity]),
+        allow_restore=False,
+    )
+    collapsed["state"] = {"values": _view_values(collapsed)}
+    monkeypatch.setattr(bolt_module.threading, "Thread", MagicMock())
+
+    bolt_module._handle_practice_create_submission(
+        MagicMock(),
+        CREATE_BODY,
+        collapsed,
+        MagicMock(),
+        MagicMock(),
+    )
+
+    practice = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+    assert practice.plan_reactions == expected

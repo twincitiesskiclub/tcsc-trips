@@ -56,6 +56,14 @@ def _blocks_by_id(modal):
     }
 
 
+def _block_index(modal, block_id):
+    return next(
+        index
+        for index, block in enumerate(modal["blocks"])
+        if block.get("block_id") == block_id
+    )
+
+
 def _view_values(modal):
     values = {}
     for block in modal["blocks"]:
@@ -99,6 +107,7 @@ def _full_edit_action_body(practice):
         activities=selected.activities,
         saved_snapshot=practice.plan_reactions or [],
     ).state
+    editor.editor_expanded = True
     modal = build_practice_edit_full_modal(
         convert_practice_to_info(practice),
         locations=[
@@ -171,6 +180,7 @@ def _full_edit_submission_view(
         activities=selected.activities,
         saved_snapshot=snapshot,
     ).state
+    editor.editor_expanded = True
     modal = build_practice_edit_full_modal(
         convert_practice_to_info(practice),
         locations=[
@@ -365,7 +375,7 @@ def _practice_info():
     )
 
 
-def _edit_reaction_inputs(practice):
+def _edit_reaction_inputs(practice, *, editor_expanded=False):
     settings_source = SimpleNamespace(
         id=1,
         name="Configured options",
@@ -382,6 +392,7 @@ def _edit_reaction_inputs(practice):
         activities=[],
         saved_snapshot=practice.plan_reactions or [],
     ).state
+    editor.editor_expanded = editor_expanded
     return {
         "reaction_editor": editor,
         "reaction_catalog": build_plan_reaction_catalog(
@@ -391,12 +402,23 @@ def _edit_reaction_inputs(practice):
     }
 
 
+def test_full_edit_reaction_summary_follows_notification():
+    practice = _practice_info()
+    modal = build_practice_edit_full_modal(
+        practice,
+        **_edit_reaction_inputs(practice),
+    )
+    assert _block_index(modal, "practice_reaction_summary") > _block_index(
+        modal, "notify_block"
+    )
+
+
 def test_full_edit_modal_limits_all_authoring_fields():
     practice = _practice_info()
     blocks = _blocks_by_id(
         build_practice_edit_full_modal(
             practice,
-            **_edit_reaction_inputs(practice),
+            **_edit_reaction_inputs(practice, editor_expanded=True),
         )
     )
 
@@ -410,7 +432,7 @@ def test_full_edit_modal_prefills_saved_notes_and_plan_snapshot():
     practice = _practice_info()
     modal = build_practice_edit_full_modal(
         practice,
-        **_edit_reaction_inputs(practice),
+        **_edit_reaction_inputs(practice, editor_expanded=True),
     )
     blocks = _blocks_by_id(modal)
 
@@ -449,7 +471,7 @@ def test_full_edit_modal_wraps_skin_tone_name_once():
     blocks = _blocks_by_id(
         build_practice_edit_full_modal(
             practice,
-            **_edit_reaction_inputs(practice),
+            **_edit_reaction_inputs(practice, editor_expanded=True),
         )
     )
     assert blocks["practice_reaction_key_r0"]["text"]["text"] == (
@@ -810,6 +832,7 @@ def test_edit_action_accepts_legitimately_omitted_empty_selectors(
         activities=selected_activities,
         saved_snapshot=practice_record.plan_reactions,
     ).state
+    state.editor_expanded = True
     body = _full_edit_action_body(practice_record)
     body["view"]["private_metadata"] = encode_practice_reaction_metadata(
         mode="edit",
@@ -935,6 +958,7 @@ def test_full_edit_submission_accepts_legitimately_omitted_empty_selectors(
         activities=selected_activities,
         saved_snapshot=practice_record.plan_reactions,
     ).state
+    state.editor_expanded = True
     view = _full_edit_submission_view(practice_record)
     view["private_metadata"] = encode_practice_reaction_metadata(
         mode="edit",
@@ -1345,6 +1369,7 @@ def test_full_edit_rejects_blocked_or_tampered_selector_transition(
         activities=selected.activities,
         saved_snapshot=practice_record.plan_reactions,
     ).state
+    state.editor_expanded = True
     blocked = reconcile_plan_reaction_editor_state(
         state,
         practice_types=[source_records["replacement_type"]],

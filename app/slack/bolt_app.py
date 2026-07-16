@@ -54,6 +54,7 @@ _flask_app = None  # Reference for background HTTP/lazy and Socket Mode workers
 _PRACTICE_REACTION_ACTION_ID_ORDER = (
     "activity_ids",
     "type_ids",
+    "practice_reaction_edit",
     "practice_reaction_remove",
     "practice_reaction_undo",
     "practice_reaction_add",
@@ -86,7 +87,7 @@ def _run_practice_reaction_action_lazy(body, action, client, logger) -> None:
 
 
 def _register_practice_reaction_action_listeners(app, *, worker=None) -> None:
-    """Register seven ack-only actions with one shared Bolt lazy worker."""
+    """Register eight ack-only actions with one shared Bolt lazy worker."""
     lazy_worker = worker or _run_practice_reaction_action_lazy
     for action_id in _PRACTICE_REACTION_ACTION_ID_ORDER:
         app.action(action_id)(
@@ -1567,6 +1568,12 @@ def _apply_practice_reaction_action(
         raise PlanReactionValidationError(
             "Stale practice reaction selector state"
         )
+
+    if action_id == "practice_reaction_edit":
+        working = copy.deepcopy(state)
+        working.editor_expanded = True
+        working.add_open = False
+        return working
 
     if action_id == "practice_reaction_remove":
         row_id = action.get("value")
