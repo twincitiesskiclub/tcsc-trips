@@ -1103,7 +1103,160 @@ def test_create_submission_persists_validated_structured_state(
     }]
     assert {item.id for item in practice.activities} == {activity.id}
     assert {item.id for item in practice.practice_types} == {practice_type.id}
+    assert thread.call_args.args == ()
+    worker_args = thread.call_args.kwargs["args"]
+    assert worker_args[1] == practice.id
+    assert worker_args[2:] == (
+        "C-CREATE-TEST",
+        "U-CREATE-TEST",
+        ":white_check_mark: Created practice for Tuesday, July 21 at 6:15 PM",
+    )
     thread.return_value.start.assert_called_once_with()
+
+
+def test_create_post_save_worker_reloads_row_and_refreshes_before_confirmation(
+    db_session,
+    create_view,
+    monkeypatch,
+):
+    monkeypatch.setattr(bolt_module.threading, "Thread", MagicMock())
+    bolt_module._handle_practice_create_submission(
+        MagicMock(),
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+    practice = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+    events = []
+
+    def record_refresh(reloaded, **kwargs):
+        events.append(("refresh", reloaded.id, kwargs))
+        return {"coach_summary": {"success": True}}
+
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        record_refresh,
+    )
+    client = MagicMock()
+    client.chat_postEphemeral.side_effect = lambda **kwargs: events.append(
+        ("confirmation", kwargs)
+    )
+
+    bolt_module._post_practice_create_updates(
+        client,
+        practice.id,
+        "C-CREATE-TEST",
+        "U-CREATE-TEST",
+        "Practice created",
+    )
+
+    assert events == [
+        (
+            "refresh",
+            practice.id,
+            {"change_type": "create", "notify": False},
+        ),
+        (
+            "confirmation",
+            {
+                "channel": "C-CREATE-TEST",
+                "user": "U-CREATE-TEST",
+                "text": "Practice created",
+            },
+        ),
+    ]
+
+
+def test_create_post_save_worker_logs_refresh_failure_and_still_confirms(
+    db_session,
+    create_view,
+    monkeypatch,
+):
+    monkeypatch.setattr(bolt_module.threading, "Thread", MagicMock())
+    bolt_module._handle_practice_create_submission(
+        MagicMock(),
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+    practice = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *_args, **_kwargs: {
+            "coach_summary": {
+                "success": False,
+                "error": "summary unavailable",
+            }
+        },
+    )
+    worker_logger = MagicMock()
+    monkeypatch.setattr(bolt_module, "logger", worker_logger)
+    client = MagicMock()
+
+    bolt_module._post_practice_create_updates(
+        client,
+        practice.id,
+        "C-CREATE-TEST",
+        "U-CREATE-TEST",
+        "Practice created",
+    )
+
+    worker_logger.warning.assert_called_once()
+    client.chat_postEphemeral.assert_called_once_with(
+        channel="C-CREATE-TEST",
+        user="U-CREATE-TEST",
+        text="Practice created",
+    )
+
+
+def test_create_post_save_worker_refresh_exception_still_confirms(
+    db_session,
+    create_view,
+    monkeypatch,
+):
+    monkeypatch.setattr(bolt_module.threading, "Thread", MagicMock())
+    bolt_module._handle_practice_create_submission(
+        MagicMock(),
+        CREATE_BODY,
+        create_view,
+        MagicMock(),
+        MagicMock(),
+    )
+    practice = Practice.query.filter_by(
+        slack_coach_summary_ts=CREATE_TEST_PREFIX
+    ).one()
+
+    def fail_refresh(*_args, **_kwargs):
+        raise RuntimeError("refresh crashed")
+
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        fail_refresh,
+    )
+    worker_logger = MagicMock()
+    monkeypatch.setattr(bolt_module, "logger", worker_logger)
+    client = MagicMock()
+
+    bolt_module._post_practice_create_updates(
+        client,
+        practice.id,
+        "C-CREATE-TEST",
+        "U-CREATE-TEST",
+        "Practice created",
+    )
+
+    worker_logger.exception.assert_called_once()
+    client.chat_postEphemeral.assert_called_once_with(
+        channel="C-CREATE-TEST",
+        user="U-CREATE-TEST",
+        text="Practice created",
+    )
 
 
 def test_create_submission_without_expanding_preserves_summary_snapshot(

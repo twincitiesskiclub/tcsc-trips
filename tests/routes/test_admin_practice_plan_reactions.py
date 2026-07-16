@@ -440,7 +440,7 @@ def test_editing_tags_without_plan_key_preserves_snapshot(
     assert practice_with_plan_reactions.plan_reactions == original
 
 
-def test_date_edit_passes_temporary_notice_and_previous_plan_snapshot(
+def test_cross_week_date_edit_passes_previous_date_and_notice(
     admin_client,
     practice_with_plan_reactions,
     second_activity,
@@ -455,7 +455,7 @@ def test_date_edit_passes_temporary_notice_and_previous_plan_snapshot(
     response = admin_client.post(
         f"/admin/practices/{practice_with_plan_reactions.id}/edit",
         json={
-            "date": "2026-07-14T19:15",
+            "date": "2026-07-21T19:15",
             "plan_reactions": [
                 {"emoji": "snowflake", "label": "New shorter route"}
             ],
@@ -468,6 +468,7 @@ def test_date_edit_passes_temporary_notice_and_previous_plan_snapshot(
     assert args == (practice_with_plan_reactions,)
     assert kwargs == {
         "change_type": "edit",
+        "previous_date": datetime(2026, 7, 14, 18, 15),
         "announcement_notice": (
             "🕒 Date or time updated, check the heading above."
         ),

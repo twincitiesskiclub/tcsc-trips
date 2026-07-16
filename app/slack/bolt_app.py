@@ -842,35 +842,12 @@ if _bot_token:
     @bolt_app.view("practice_edit")
     def handle_practice_edit_submission(ack, body, view, client, logger):
         """Handle practice edit modal submission."""
-        ack()
-
-        user_id = body["user"]["id"]
-        practice_id = int(view.get("private_metadata") or "0")
-        values = _safe_get(view, "state", "values", default={})
-
-        with get_app_context():
-            from app.practices.models import Practice
-            from app.models import db
-
-            practice = Practice.query.get(practice_id)
-            if not practice:
-                logger.error(f"Practice {practice_id} not found")
-                return
-
-            date_value = _safe_get(values, "date_block", "practice_date", "selected_date_time")
-            workout = _safe_get(values, "workout_block", "workout_description", "value", default="")
-
-            if date_value:
-                practice.date = datetime.fromtimestamp(date_value)
-                practice.day_of_week = practice.date.strftime("%A")
-
-            practice.workout_description = workout
-
-            db.session.commit()
-            logger.info(f"Practice {practice_id} updated by {user_id}")
-
-            from app.slack.practices import refresh_practice_posts
-            refresh_practice_posts(practice, change_type='edit', actor_slack_id=user_id)
+        return _handle_practice_quick_edit_submission(
+            ack=ack,
+            body=body,
+            view=view,
+            logger=logger,
+        )
 
     @bolt_app.view("practice_edit_full")
     def handle_practice_edit_full_submission(ack, body, view, client, logger):
@@ -2250,6 +2227,57 @@ def _practice_reaction_submission_state_errors(
     return errors
 
 
+def _handle_practice_quick_edit_submission(*, ack, body, view, logger):
+    """Persist the legacy Quick Edit modal and refresh its Slack surfaces."""
+    ack()
+
+    user_id = body["user"]["id"]
+    practice_id = int(view.get("private_metadata") or "0")
+    values = _safe_get(view, "state", "values", default={})
+
+    with get_app_context():
+        from app.models import db
+        from app.practices.models import Practice
+
+        practice = Practice.query.get(practice_id)
+        if not practice:
+            logger.error(f"Practice {practice_id} not found")
+            return
+
+        previous_date = practice.date
+        date_value = _safe_get(
+            values,
+            "date_block",
+            "practice_date",
+            "selected_date_time",
+        )
+        workout = _safe_get(
+            values,
+            "workout_block",
+            "workout_description",
+            "value",
+            default="",
+        )
+
+        if date_value:
+            practice.date = datetime.fromtimestamp(date_value)
+            practice.day_of_week = practice.date.strftime("%A")
+
+        practice.workout_description = workout
+
+        db.session.commit()
+        logger.info(f"Practice {practice_id} updated by {user_id}")
+
+        from app.slack.practices import refresh_practice_posts
+
+        refresh_practice_posts(
+            practice,
+            change_type="edit",
+            actor_slack_id=user_id,
+            previous_date=previous_date,
+        )
+
+
 def _handle_practice_create_submission(
     ack,
     body,
@@ -2594,9 +2622,8 @@ def _handle_practice_create_submission(
         target=_post_practice_create_updates,
         args=(
             client,
+            practice_id,
             channel_id,
-            message_ts,
-            practice_date,
             user_id,
             confirm_text,
         ),
@@ -2662,6 +2689,7 @@ def _run_practice_edit_full_post_save(
                     change_type="edit",
                     actor_slack_id=user_id,
                     notify=should_notify,
+                    previous_date=previous_date,
                     announcement_notice=announcement_notice,
                     previous_plan_reactions=previous_plan_reactions,
                 )
@@ -3125,52 +3153,55 @@ def _load_eligible_people():
     return _people(coach_tag_ids), _people(lead_tag_ids)
 
 
-def _post_practice_create_updates(client, channel_id, message_ts, practice_date,
-                                  user_id, confirm_text):
-    """Refresh the weekly coach-summary post and post a confirmation.
+def _post_practice_create_updates(
+    client,
+    practice_id,
+    channel_id,
+    user_id,
+    confirm_text,
+):
+    """Refresh a committed practice's summaries and post a confirmation.
 
     Runs in a background thread (see handle_practice_create_submission) so the
     slow Slack API calls stay off the view_submission request path and the ack
     returns within Slack's ~3s limit. All work is best-effort.
     """
-    from datetime import timedelta
+    from app.models import db
     from app.practices.models import Practice
-    from app.practices.service import convert_practice_to_info
-    from app.models import AppConfig
-    from app.slack.blocks import build_coach_weekly_summary_blocks
+    from app.slack.practices import refresh_practice_posts
 
     with get_app_context():
-        if channel_id and message_ts:
-            try:
-                # Week starts on Monday
-                days_since_monday = practice_date.weekday()
-                week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-                    hour=0, minute=0, second=0, microsecond=0)
-                week_end = week_start + timedelta(days=7)
-
-                practices = Practice.query.filter(
-                    Practice.date >= week_start,
-                    Practice.date < week_end,
-                ).order_by(Practice.date).all()
-
-                expected_days = AppConfig.get('practice_days', [
-                    {"day": "tuesday", "time": "18:00", "active": True},
-                    {"day": "thursday", "time": "18:00", "active": True},
-                    {"day": "saturday", "time": "09:00", "active": True},
-                ])
-
-                practice_infos = [convert_practice_to_info(p) for p in practices]
-                blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
-
-                client.chat_update(
-                    channel=channel_id,
-                    ts=message_ts,
-                    blocks=blocks,
-                    text=f"Coach Review: Week of {week_start.strftime('%B %-d')}",
+        try:
+            practice = db.session.get(Practice, practice_id)
+            if practice is None:
+                logger.error(
+                    "Practice %s was created but could not be reloaded for "
+                    "summary refresh",
+                    practice_id,
                 )
-                logger.info(f"Updated summary post in {channel_id}")
-            except Exception as e:
-                logger.error(f"Failed to update summary post: {e}")
+            else:
+                refresh_results = refresh_practice_posts(
+                    practice,
+                    change_type="create",
+                    notify=False,
+                )
+                for surface, result in (refresh_results or {}).items():
+                    if (
+                        isinstance(result, dict)
+                        and result.get("success") is False
+                    ):
+                        logger.warning(
+                            "Practice %s create refresh failed for %s: %s",
+                            practice_id,
+                            surface,
+                            result.get("error", "unknown error"),
+                        )
+        except Exception:
+            db.session.rollback()
+            logger.exception(
+                "Practice %s was created but summary refresh raised",
+                practice_id,
+            )
 
         if channel_id:
             try:

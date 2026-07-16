@@ -1543,6 +1543,9 @@ def test_full_edit_injected_post_save_dispatcher_defers_refresh(
     dispatcher.call_args.args[0]()
 
     assert len(refresh_calls) == 1
+    args, kwargs = refresh_calls[0]
+    assert args[0].id == practice_record.id
+    assert kwargs["previous_date"] == datetime(2026, 7, 14, 18, 15)
 
 
 def test_full_edit_post_save_reload_failure_reports_saved_but_unsynced(

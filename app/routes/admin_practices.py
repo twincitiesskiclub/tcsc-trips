@@ -1,7 +1,15 @@
 """Admin routes for Practice Management CRUD."""
 
-from flask import Blueprint, render_template, jsonify, request, redirect, url_for
-from datetime import datetime, timedelta
+from flask import (
+    Blueprint,
+    current_app,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    url_for,
+)
+from datetime import datetime
 from ..auth import admin_required
 from ..models import db, User, Tag, AppConfig
 from ..practices.models import (
@@ -105,33 +113,6 @@ def _prepare_plan_reaction_submission(data, *, existing_practice=None):
     else:
         plan_reactions = None
     return selected, plan_reactions
-
-
-def _week_coach_summary_ts(practice_date, exclude_id=None):
-    """Return the Coach Review post ts already linked to this practice's week.
-
-    The weekly Coach Review summary is one Slack post per week, and the
-    refresh dispatcher updates it via each practice's slack_coach_summary_ts.
-    A practice created out-of-band (admin UI) after the summary was posted has
-    no ts of its own, so editing it silently skips the refresh. Copying a
-    sibling's ts at create time keeps the whole week linked to the same post.
-    """
-    days_since_monday = practice_date.weekday()
-    week_start = (practice_date - timedelta(days=days_since_monday)).replace(
-        hour=0, minute=0, second=0, microsecond=0
-    )
-    week_end = week_start + timedelta(days=7)
-
-    query = Practice.query.filter(
-        Practice.date >= week_start,
-        Practice.date < week_end,
-        Practice.slack_coach_summary_ts.isnot(None),
-    )
-    if exclude_id is not None:
-        query = query.filter(Practice.id != exclude_id)
-
-    sibling = query.first()
-    return sibling.slack_coach_summary_ts if sibling else None
 
 
 @admin_practices_bp.route('/')
@@ -301,12 +282,6 @@ def create_practice():
         db.session.add(practice)
         db.session.flush()
 
-        # Link to the week's existing Coach Review post (if one was already
-        # posted) so later edits refresh that post instead of silently skipping.
-        practice.slack_coach_summary_ts = _week_coach_summary_ts(
-            practice.date, exclude_id=practice.id
-        )
-
         # Add coaches (now using user_id)
         if data.get('coach_ids'):
             for user_id in data['coach_ids']:
@@ -338,6 +313,32 @@ def create_practice():
                 db.session.add(assist)
 
         db.session.commit()
+
+        # The row is already committed, so summary refresh is best-effort and
+        # must not turn a successful create into a false failure response.
+        try:
+            from app.slack.practices import refresh_practice_posts
+
+            refresh_results = refresh_practice_posts(
+                practice,
+                change_type='create',
+            )
+            for surface, result in (refresh_results or {}).items():
+                if (
+                    isinstance(result, dict)
+                    and result.get('success') is False
+                ):
+                    current_app.logger.warning(
+                        'Practice #%s was created but %s refresh failed: %s',
+                        practice.id,
+                        surface,
+                        result.get('error', 'unknown error'),
+                    )
+        except Exception:
+            current_app.logger.exception(
+                'Practice #%s was created but summary refresh raised',
+                practice.id,
+            )
 
         return jsonify({
             'success': True,
@@ -487,6 +488,7 @@ def edit_practice(practice_id):
         results = refresh_practice_posts(
             practice,
             change_type='edit',
+            previous_date=previous_date,
             announcement_notice=announcement_notice,
             previous_plan_reactions=previous_plan_reactions,
         )
