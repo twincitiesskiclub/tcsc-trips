@@ -1,6 +1,6 @@
 # Collapsed Slack Practice Reactions
 
-**Date:** 2026-07-16  
+**Date:** 2026-07-16
 **Status:** Approved interaction design
 
 ## Context
