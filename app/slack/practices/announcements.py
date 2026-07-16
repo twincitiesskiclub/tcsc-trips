@@ -781,7 +781,9 @@ def post_practice_announcement(
     practice: Practice,
     weather: Optional[WeatherConditions] = _UNSET,
     trail_conditions: Optional[TrailCondition] = _UNSET,
-    channel_override: Optional[str] = None
+    channel_override: Optional[str] = None,
+    *,
+    channel_id_override: Optional[str] = None,
 ) -> dict:
     """Post practice announcement to #practices channel.
 
@@ -793,6 +795,7 @@ def post_practice_announcement(
         weather: Weather conditions (optional)
         trail_conditions: Trail conditions (optional)
         channel_override: Optional channel name to override default (e.g., 'general')
+        channel_id_override: Optional exact Slack channel ID
 
     Returns:
         dict with keys:
@@ -800,16 +803,19 @@ def post_practice_announcement(
         - message_ts: str (only if success=True)
         - error: str (only if success=False)
     """
-    client = get_slack_client()
-
-    # Determine channel - use override if provided
-    if channel_override:
+    if channel_override and channel_id_override:
+        return {"success": False, "error": "Choose one channel override"}
+    if channel_id_override:
+        channel_id = channel_id_override
+    elif channel_override:
         channel_id = get_channel_id_by_name(channel_override.lstrip('#'))
     else:
         channel_id = _get_announcement_channel()
 
     if not channel_id:
         return {'success': False, 'error': 'Could not find announcement channel'}
+
+    client = get_slack_client()
 
     conditions = _conditions_for_render(
         practice,

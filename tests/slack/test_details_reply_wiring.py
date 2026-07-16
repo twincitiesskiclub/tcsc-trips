@@ -661,6 +661,82 @@ class TestUpsertDetailsReply:
 class TestPostPracticeAnnouncementWiring:
     """post_practice_announcement calls _upsert_details_reply after the hero commit."""
 
+    @staticmethod
+    def _practice():
+        return _make_practice(slack_message_ts=None, slack_details_ts=None)
+
+    def test_exact_channel_id_override_bypasses_name_lookup(
+        self, app_context
+    ):
+        from app.slack.practices.announcements import (
+            post_practice_announcement,
+        )
+
+        practice = self._practice()
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ts": "200.1"}
+
+        with patch(
+            "app.slack.practices.announcements.get_slack_client",
+            return_value=client,
+        ), patch(
+            "app.slack.practices.announcements.get_channel_id_by_name",
+        ) as resolve_name, patch(
+            "app.slack.practices.announcements._get_announcement_channel",
+        ) as resolve_default, patch(
+            "app.slack.practices.announcements._conditions_for_render",
+            return_value=None,
+        ), patch(
+            "app.slack.practices.announcements.convert_practice_to_info",
+            return_value=_make_practice_info(),
+        ), patch(
+            "app.slack.practices.announcements.build_practice_announcement_blocks",
+            return_value=[],
+        ), patch(
+            "app.slack.practices.announcements.build_practice_fallback_text",
+            return_value="complete fallback",
+        ), patch(
+            "app.slack.practices.announcements._upsert_details_reply",
+            return_value={"success": True},
+        ), patch(
+            "app.slack.practices.announcements._seed_plan_reactions",
+        ), patch(
+            "app.slack.practices.announcements.db",
+        ), patch(
+            "app.slack.practices.coach_review.create_practice_log_thread",
+        ):
+            result = post_practice_announcement(
+                practice,
+                channel_id_override="C-ORIGINAL",
+            )
+
+        assert result["success"] is True
+        assert client.chat_postMessage.call_args.kwargs["channel"] == (
+            "C-ORIGINAL"
+        )
+        resolve_name.assert_not_called()
+        resolve_default.assert_not_called()
+
+    def test_channel_name_and_id_overrides_are_mutually_exclusive(self):
+        from app.slack.practices.announcements import (
+            post_practice_announcement,
+        )
+
+        with patch(
+            "app.slack.practices.announcements.get_slack_client",
+        ) as get_client:
+            result = post_practice_announcement(
+                self._practice(),
+                channel_override="#replacement",
+                channel_id_override="C-ORIGINAL",
+            )
+
+        assert result == {
+            "success": False,
+            "error": "Choose one channel override",
+        }
+        get_client.assert_not_called()
+
     def test_gathers_once_and_surfaces_failed_details_result(
         self, app_context, caplog
     ):

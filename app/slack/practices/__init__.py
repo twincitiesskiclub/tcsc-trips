@@ -70,6 +70,9 @@ from app.slack.practices.app_home import (
 from app.slack.practices.refresh import (
     refresh_practice_posts,
 )
+from app.slack.practices.delete_recovery import (
+    recover_failed_practice_delete,
+)
 
 __all__ = [
     # _config
@@ -128,4 +131,6 @@ __all__ = [
     "publish_app_home",
     # refresh
     "refresh_practice_posts",
+    # delete recovery
+    "recover_failed_practice_delete",
 ]
