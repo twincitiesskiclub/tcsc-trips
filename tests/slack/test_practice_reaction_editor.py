@@ -24,6 +24,7 @@ from app.slack.practice_reaction_editor import (
     ADD_ACTION_ID,
     CATALOG_ACTION_ID,
     DESCRIPTION_ACTION_ID,
+    EDIT_ACTION_ID,
     REMOVE_ACTION_ID,
     RESTORE_ACTION_ID,
     UNDO_ACTION_ID,
@@ -153,16 +154,18 @@ def editor_state():
         name="Intervals",
         default_plan_reactions=[EVERGREEN_PLAN_REACTION],
     )
-    return build_plan_reaction_editor_state(
+    state = build_plan_reaction_editor_state(
         practice_types=[intervals],
         activities=[],
         saved_snapshot=None,
     ).state
+    state.editor_expanded = True
+    return state
 
 
 @pytest.fixture
 def empty_state():
-    return PlanReactionEditorState()
+    return PlanReactionEditorState(editor_expanded=True)
 
 
 @pytest.fixture
@@ -235,6 +238,140 @@ def create_blocks():
             },
         },
     ]
+
+
+def test_collapsed_summary_lists_only_active_rows_in_order(editor_state):
+    editor_state.editor_expanded = False
+    second = PlanReactionEditorRow(
+        row_id="r1",
+        emoji="athletic_shoe",
+        label="runner",
+        catalog_order=0,
+    )
+    removed = PlanReactionEditorRow(
+        row_id="r2",
+        emoji="hatching_chick",
+        label="new rollerskier",
+        removed=True,
+        catalog_order=1,
+    )
+    editor_state.rows.extend([second, removed])
+    editor_state.next_row_number = 3
+
+    blocks = build_practice_reaction_blocks(
+        editor_state,
+        CATALOG,
+        allow_restore=True,
+    )
+    summary = _blocks_by_id(blocks)["practice_reaction_summary"]
+
+    assert summary["text"]["text"] == (
+        "*Plan reactions*\n"
+        ":evergreen_tree: Endurance instead of intervals\n"
+        ":athletic_shoe: runner"
+    )
+    assert summary["accessory"]["action_id"] == EDIT_ACTION_ID
+    assert summary["accessory"]["text"]["text"] == "Edit reactions"
+    assert not any(
+        block.get("block_id", "").startswith("practice_reaction_row_")
+        for block in blocks
+    )
+
+
+def test_collapsed_empty_summary_uses_add_reactions(empty_state):
+    empty_state.editor_expanded = False
+    summary = _blocks_by_id(build_practice_reaction_blocks(
+        empty_state,
+        CATALOG,
+        allow_restore=False,
+    ))["practice_reaction_summary"]
+
+    assert summary["text"]["text"] == "*Plan reactions*\nNo Plan reactions"
+    assert summary["accessory"]["text"]["text"] == "Add reactions"
+
+
+def test_collapsed_summary_escapes_labels_and_keeps_status_blocks(editor_state):
+    editor_state.editor_expanded = False
+    editor_state.rows[0].label = "Use <short> & steady"
+    editor_state.unconfigured_activity_names = ("Skate <Rollerski>",)
+    editor_state.blocking_error = "Resolve <conflict> & retry"
+
+    blocks = _blocks_by_id(build_practice_reaction_blocks(
+        editor_state,
+        CATALOG,
+        allow_restore=True,
+    ))
+
+    assert "Use &lt;short&gt; &amp; steady" in (
+        blocks["practice_reaction_summary"]["text"]["text"]
+    )
+    assert "Skate &lt;Rollerski&gt;" in (
+        blocks["practice_reaction_unconfigured"]["elements"][0]["text"]
+    )
+    assert blocks["practice_reaction_error"]["text"]["text"] == (
+        "Resolve &lt;conflict&gt; &amp; retry"
+    )
+
+
+def test_collapsed_metadata_retains_labels_while_expanded_omits_them():
+    state = PlanReactionEditorState(
+        rows=[PlanReactionEditorRow(
+            row_id="r0",
+            emoji="hatching_chick",
+            label="Ny skiløper 🐣",
+            catalog_order=0,
+        )],
+        next_row_number=1,
+        editor_expanded=False,
+    )
+    context = {
+        "date": "2026-07-14",
+        "channel_id": None,
+        "message_ts": None,
+    }
+
+    collapsed_raw = encode_practice_reaction_metadata(
+        mode="create",
+        context=context,
+        state=state,
+    )
+    assert len(collapsed_raw) <= 3000
+    assert decode_practice_reaction_metadata(collapsed_raw)[2].rows[0].label == (
+        "Ny skiløper 🐣"
+    )
+    assert "\\u00f8" not in collapsed_raw
+
+    state.editor_expanded = True
+    expanded_raw = encode_practice_reaction_metadata(
+        mode="create",
+        context=context,
+        state=state,
+    )
+    assert json.loads(expanded_raw)["s"]["rows"][0]["label"] is None
+
+
+def test_collapsed_metadata_rejects_blank_active_label():
+    state = PlanReactionEditorState(
+        rows=[PlanReactionEditorRow(
+            row_id="r0",
+            emoji="athletic_shoe",
+            label="",
+            catalog_order=0,
+        )],
+        next_row_number=1,
+        editor_expanded=False,
+    )
+
+    with pytest.raises(PlanReactionValidationError):
+        encode_practice_reaction_metadata(
+            mode="create",
+            context={
+                "date": "2026-07-14",
+                "channel_id": None,
+                "message_ts": None,
+            },
+            state=state,
+        )
 
 
 def test_active_row_has_fixed_key_single_line_description_and_remove(editor_state):

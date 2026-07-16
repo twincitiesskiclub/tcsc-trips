@@ -39,6 +39,7 @@ DESCRIPTION_ACTION_ID = "practice_reaction_description"
 REMOVE_ACTION_ID = "practice_reaction_remove"
 UNDO_ACTION_ID = "practice_reaction_undo"
 ADD_ACTION_ID = "practice_reaction_add"
+EDIT_ACTION_ID = "practice_reaction_edit"
 CATALOG_ACTION_ID = "practice_reaction_catalog_select"
 RESTORE_ACTION_ID = "practice_reaction_restore"
 
@@ -140,6 +141,84 @@ def _distinct_catalog(catalog) -> tuple:
     return tuple(result)
 
 
+def _practice_reaction_status_blocks(
+    state: PlanReactionEditorState,
+) -> list[dict]:
+    blocks = []
+    if state.unconfigured_activity_names:
+        names = ", ".join(state.unconfigured_activity_names)
+        message = _mrkdwn_escape(
+            "No reaction pairs are configured for selected "
+            f"Activities: {names}."
+        )
+        blocks.append(
+            {
+                "type": "context",
+                "block_id": "practice_reaction_unconfigured",
+                "elements": [
+                    {
+                        "type": "mrkdwn",
+                        "text": _ellipsize(
+                            message,
+                            SLACK_TEXT_OBJECT_MAX_CHARS,
+                        ),
+                    }
+                ],
+            }
+        )
+    if state.blocking_error:
+        blocks.append(
+            {
+                "type": "section",
+                "block_id": "practice_reaction_error",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": _ellipsize(
+                        _mrkdwn_escape(state.blocking_error),
+                        SLACK_TEXT_OBJECT_MAX_CHARS,
+                    ),
+                },
+            }
+        )
+    return blocks
+
+
+def _build_collapsed_practice_reaction_blocks(
+    state: PlanReactionEditorState,
+) -> list[dict]:
+    active = [row for row in state.rows if not row.removed]
+    lines = ["*Plan reactions*"]
+    if active:
+        lines.extend(
+            f":{row.emoji}: {_mrkdwn_escape(row.label)}"
+            for row in active
+        )
+        button_text = "Edit reactions"
+    else:
+        lines.append("No Plan reactions")
+        button_text = "Add reactions"
+    blocks = [
+        {
+            "type": "section",
+            "block_id": "practice_reaction_summary",
+            "text": {
+                "type": "mrkdwn",
+                "text": _ellipsize(
+                    "\n".join(lines),
+                    SLACK_TEXT_OBJECT_MAX_CHARS,
+                ),
+            },
+            "accessory": _button(
+                action_id=EDIT_ACTION_ID,
+                text=button_text,
+                accessibility_label=button_text,
+            ),
+        }
+    ]
+    blocks.extend(_practice_reaction_status_blocks(state))
+    return blocks
+
+
 def build_practice_reaction_blocks(
     state: PlanReactionEditorState,
     catalog,
@@ -149,6 +228,9 @@ def build_practice_reaction_blocks(
     """Render validated reaction working state as bounded Block Kit blocks."""
 
     _validate_slack_row_block_ids(state)
+    if not state.editor_expanded:
+        return _build_collapsed_practice_reaction_blocks(state)
+
     blocks = []
     for row in state.rows:
         shortcode = f":{row.emoji}:"
@@ -233,42 +315,7 @@ def build_practice_reaction_blocks(
             }
         )
 
-    if state.unconfigured_activity_names:
-        names = ", ".join(state.unconfigured_activity_names)
-        message = _mrkdwn_escape(
-            "No reaction pairs are configured for selected "
-            f"Activities: {names}."
-        )
-        blocks.append(
-            {
-                "type": "context",
-                "block_id": "practice_reaction_unconfigured",
-                "elements": [
-                    {
-                        "type": "mrkdwn",
-                        "text": _ellipsize(
-                            message,
-                            SLACK_TEXT_OBJECT_MAX_CHARS,
-                        ),
-                    }
-                ],
-            }
-        )
-
-    if state.blocking_error:
-        blocks.append(
-            {
-                "type": "section",
-                "block_id": "practice_reaction_error",
-                "text": {
-                    "type": "mrkdwn",
-                    "text": _ellipsize(
-                        _mrkdwn_escape(state.blocking_error),
-                        SLACK_TEXT_OBJECT_MAX_CHARS,
-                    ),
-                },
-            }
-        )
+    blocks.extend(_practice_reaction_status_blocks(state))
 
     add_allowed = (
         (
@@ -655,9 +702,17 @@ def _validate_mode(mode) -> str:
 
 
 def _validated_serialized_state(state: PlanReactionEditorState) -> dict:
+    if not state.editor_expanded:
+        raw_active = [
+            {"emoji": row.emoji, "label": row.label}
+            for row in state.rows
+            if not row.removed
+        ]
+        if active_plan_reaction_snapshot(state) != raw_active:
+            raise _metadata_error()
     payload = serialize_plan_reaction_editor_state(
         state,
-        omit_active_labels=True,
+        omit_active_labels=state.editor_expanded,
     )
     deserialize_plan_reaction_editor_state(payload)
     return payload
@@ -692,7 +747,7 @@ def encode_practice_reaction_metadata(
         }
         if preview_config is not None:
             envelope["p"] = copy.deepcopy(preview_config)
-        raw = json.dumps(envelope, separators=(",", ":"), ensure_ascii=True)
+        raw = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
     except (TypeError, ValueError, RecursionError):
         raise _metadata_error() from None
     if len(raw) > SLACK_PRIVATE_METADATA_MAX_CHARS:
@@ -755,6 +810,14 @@ def decode_practice_reaction_metadata(raw: str):
         _validate_preview_config(preview_config)
     state = deserialize_plan_reaction_editor_state(envelope["s"])
     _validate_slack_row_block_ids(state)
+    if not state.editor_expanded:
+        raw_active = [
+            {"emoji": row.emoji, "label": row.label}
+            for row in state.rows
+            if not row.removed
+        ]
+        if active_plan_reaction_snapshot(state) != raw_active:
+            raise _metadata_error()
     return mode, copy.deepcopy(dict(context)), state, copy.deepcopy(preview_config)
 
 
@@ -947,6 +1010,7 @@ __all__ = [
     "ADD_ACTION_ID",
     "CATALOG_ACTION_ID",
     "DESCRIPTION_ACTION_ID",
+    "EDIT_ACTION_ID",
     "PRACTICE_REACTION_METADATA_VERSION",
     "REMOVE_ACTION_ID",
     "RESTORE_ACTION_ID",
