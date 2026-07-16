@@ -1,6 +1,6 @@
 """Registered weekly summaries follow practices across calendar weeks."""
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -16,9 +16,16 @@ from app.slack.practices.summary_posts import (
 )
 
 
-SOURCE_WEEK = date(2026, 7, 6)
-DESTINATION_WEEK = date(2026, 7, 13)
+SOURCE_WEEK = date(2126, 7, 8)
+DESTINATION_WEEK = date(2126, 7, 15)
+RESERVED_WEEK_STARTS = (SOURCE_WEEK, DESTINATION_WEEK)
 TEST_AIRTABLE_PREFIX = "cross-week-summary-refresh-"
+TEST_SUMMARY_IDENTITIES = {
+    (SOURCE_WEEK, COACH_SUMMARY, "C-coach-A", "coach-A"),
+    (SOURCE_WEEK, WEEKLY_SUMMARY, "C-public-A", "public-A"),
+    (DESTINATION_WEEK, COACH_SUMMARY, "C-coach-B", "coach-B"),
+    (DESTINATION_WEEK, WEEKLY_SUMMARY, "C-public-B", "public-B"),
+}
 
 
 @pytest.fixture
@@ -30,25 +37,82 @@ def app():
 
 @pytest.fixture(autouse=True)
 def clear_cross_week_rows(app):
-    def clear_rows():
-        db.session.rollback()
-        Practice.query.filter(
-            Practice.airtable_id.like(f"{TEST_AIRTABLE_PREFIX}%")
-        ).delete(synchronize_session=False)
-        PracticeSummaryPost.query.filter(
-            PracticeSummaryPost.week_start.in_(
-                [SOURCE_WEEK, DESTINATION_WEEK]
-            )
-        ).delete(synchronize_session=False)
-        db.session.commit()
-
     with app.app_context():
-        clear_rows()
+        db.session.rollback()
+        _refuse_if_reserved_weeks_occupied()
     try:
         yield
     finally:
         with app.app_context():
-            clear_rows()
+            db.session.rollback()
+            practices, summary_posts = _assert_reserved_rows_owned()
+            for summary_post in summary_posts:
+                db.session.delete(summary_post)
+            for practice in practices:
+                db.session.delete(practice)
+            db.session.commit()
+
+
+def _reserved_practices():
+    start = datetime.combine(SOURCE_WEEK, time.min)
+    end = datetime.combine(DESTINATION_WEEK + timedelta(days=7), time.min)
+    return (
+        Practice.query.filter(Practice.date >= start, Practice.date < end)
+        .order_by(Practice.id)
+        .all()
+    )
+
+
+def _reserved_summary_posts():
+    return (
+        PracticeSummaryPost.query.filter(
+            PracticeSummaryPost.week_start.in_(RESERVED_WEEK_STARTS)
+        )
+        .order_by(PracticeSummaryPost.id)
+        .all()
+    )
+
+
+def _refuse_if_reserved_weeks_occupied():
+    practices = _reserved_practices()
+    summary_posts = _reserved_summary_posts()
+    if practices or summary_posts:
+        pytest.fail(
+            "Reserved 2126 cross-week test weeks contain existing rows; "
+            "refusing to mutate persistent local PostgreSQL "
+            f"(practice_ids={[row.id for row in practices]}, "
+            f"summary_post_ids={[row.id for row in summary_posts]})"
+        )
+
+
+def _assert_reserved_rows_owned():
+    practices = _reserved_practices()
+    summary_posts = _reserved_summary_posts()
+    ambient_practices = [
+        row
+        for row in practices
+        if not (row.airtable_id or "").startswith(TEST_AIRTABLE_PREFIX)
+    ]
+    ambient_summary_posts = [
+        row
+        for row in summary_posts
+        if (
+            row.week_start,
+            row.surface,
+            row.channel_id,
+            row.message_ts,
+        )
+        not in TEST_SUMMARY_IDENTITIES
+    ]
+    if ambient_practices or ambient_summary_posts:
+        pytest.fail(
+            "Reserved 2126 cross-week test weeks contain rows not owned by "
+            "this fixture; refusing teardown deletion "
+            f"(practice_ids={[row.id for row in ambient_practices]}, "
+            "summary_post_ids="
+            f"{[row.id for row in ambient_summary_posts]})"
+        )
+    return practices, summary_posts
 
 
 def make_practice(label, value):
@@ -118,7 +182,7 @@ def run_refresh(practice, *, previous_date):
 
 
 def move_to_destination(practice):
-    practice.date = datetime(2026, 7, 16, 18, 15)
+    practice.date = datetime(2126, 7, 18, 18, 15)
     practice.day_of_week = "Thursday"
     db.session.commit()
 
@@ -126,11 +190,11 @@ def move_to_destination(practice):
 def test_cross_week_edit_refreshes_registered_source_and_destination(app):
     with app.app_context():
         remaining_a = make_practice(
-            "remaining-a", datetime(2026, 7, 7, 18, 15)
+            "remaining-a", datetime(2126, 7, 9, 18, 15)
         )
-        moved = make_practice("moved", datetime(2026, 7, 9, 18, 15))
+        moved = make_practice("moved", datetime(2126, 7, 11, 18, 15))
         existing_b = make_practice(
-            "existing-b", datetime(2026, 7, 14, 18, 15)
+            "existing-b", datetime(2126, 7, 16, 18, 15)
         )
         register_week(SOURCE_WEEK, "A")
         register_week(DESTINATION_WEEK, "B")
@@ -139,7 +203,7 @@ def test_cross_week_edit_refreshes_registered_source_and_destination(app):
 
         outcome = run_refresh(
             moved,
-            previous_date=datetime(2026, 7, 7, 18, 15),
+            previous_date=datetime(2126, 7, 9, 18, 15),
         )
 
         assert outcome.updates["coach-A"] == [remaining_a.id]
@@ -176,13 +240,13 @@ def test_cross_week_edit_refreshes_whichever_week_is_registered(
     with app.app_context():
         practices = {
             "remaining": make_practice(
-                "remaining", datetime(2026, 7, 7, 18, 15)
+                "remaining", datetime(2126, 7, 9, 18, 15)
             ),
             "moved": make_practice(
-                "moved", datetime(2026, 7, 9, 18, 15)
+                "moved", datetime(2126, 7, 11, 18, 15)
             ),
             "existing": make_practice(
-                "existing", datetime(2026, 7, 14, 18, 15)
+                "existing", datetime(2126, 7, 16, 18, 15)
             ),
         }
         if registered_week == "source":
@@ -194,7 +258,7 @@ def test_cross_week_edit_refreshes_whichever_week_is_registered(
 
         outcome = run_refresh(
             practices["moved"],
-            previous_date=datetime(2026, 7, 7, 18, 15),
+            previous_date=datetime(2126, 7, 9, 18, 15),
         )
 
         expected_ids = {
@@ -218,9 +282,9 @@ def test_cross_week_edit_refreshes_whichever_week_is_registered(
 
 def test_cross_week_edit_updates_empty_source_without_deleting_registry(app):
     with app.app_context():
-        moved = make_practice("moved", datetime(2026, 7, 9, 18, 15))
+        moved = make_practice("moved", datetime(2126, 7, 11, 18, 15))
         existing_b = make_practice(
-            "existing-b", datetime(2026, 7, 14, 18, 15)
+            "existing-b", datetime(2126, 7, 16, 18, 15)
         )
         source_records = register_week(SOURCE_WEEK, "A")
         register_week(DESTINATION_WEEK, "B")
@@ -230,7 +294,7 @@ def test_cross_week_edit_updates_empty_source_without_deleting_registry(app):
 
         outcome = run_refresh(
             moved,
-            previous_date=datetime(2026, 7, 7, 18, 15),
+            previous_date=datetime(2126, 7, 9, 18, 15),
         )
 
         assert outcome.updates["coach-A"] == []
@@ -246,7 +310,7 @@ def test_cross_week_edit_updates_empty_source_without_deleting_registry(app):
 def test_independent_refresh_accepts_canonical_monday_date(app):
     with app.app_context():
         practice = make_practice(
-            "source-only", datetime(2026, 7, 7, 18, 15)
+            "source-only", datetime(2126, 7, 9, 18, 15)
         )
         register_week(SOURCE_WEEK, "A")
         db.session.commit()

@@ -8,7 +8,7 @@ dead Edit button) gets rendered back into the post, and the next click hits
 "Practice not found". These tests pin the exclusion.
 """
 
-from datetime import date, datetime
+from datetime import date, datetime, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -32,7 +32,8 @@ from app.slack.practices.summary_posts import (
 )
 
 
-WEEK_START = date(2026, 6, 8)
+WEEK_START = date(2126, 6, 10)
+WEEK_END = WEEK_START + timedelta(days=7)
 COACH_CHANNEL = "C-REGISTERED-COACH"
 COACH_TS = "coach-registered-ts"
 WEEKLY_CHANNEL = "C-REGISTERED-WEEKLY"
@@ -49,13 +50,62 @@ def app():
     return app
 
 
+def _reserved_practices():
+    start = datetime.combine(WEEK_START, time.min)
+    end = datetime.combine(WEEK_END, time.min)
+    return (
+        Practice.query.filter(Practice.date >= start, Practice.date < end)
+        .order_by(Practice.id)
+        .all()
+    )
+
+
+def _reserved_summary_posts():
+    return (
+        PracticeSummaryPost.query.filter_by(week_start=WEEK_START)
+        .order_by(PracticeSummaryPost.id)
+        .all()
+    )
+
+
+def _refuse_if_reserved_week_occupied():
+    practices = _reserved_practices()
+    summary_posts = _reserved_summary_posts()
+    if practices or summary_posts:
+        pytest.fail(
+            "Reserved 2126 delete-exclusion test week contains existing rows; "
+            "refusing to mutate persistent local PostgreSQL "
+            f"(practice_ids={[row.id for row in practices]}, "
+            f"summary_post_ids={[row.id for row in summary_posts]})"
+        )
+
+
+def _assert_fixture_owns_reserved_week(location_id, summary_post_ids):
+    practices = _reserved_practices()
+    summary_posts = _reserved_summary_posts()
+    ambient_practices = [
+        row for row in practices if row.location_id != location_id
+    ]
+    ambient_summary_posts = [
+        row for row in summary_posts if row.id not in summary_post_ids
+    ]
+    if ambient_practices or ambient_summary_posts:
+        pytest.fail(
+            "Reserved 2126 delete-exclusion test week contains rows not owned "
+            "by this fixture; refusing teardown deletion "
+            f"(practice_ids={[row.id for row in ambient_practices]}, "
+            "summary_post_ids="
+            f"{[row.id for row in ambient_summary_posts]})"
+        )
+    return practices, summary_posts
+
+
 @pytest.fixture
 def week(app):
     """Two scheduled practices and canonical summary identities for the week."""
     with app.app_context():
-        PracticeSummaryPost.query.filter_by(week_start=WEEK_START).delete(
-            synchronize_session=False
-        )
+        db.session.rollback()
+        _refuse_if_reserved_week_occupied()
         # Create our own location: the test DB may be empty and this test
         # must not depend on ambient dev data.
         loc = PracticeLocation(name='Delete Exclusion Test Park')
@@ -73,12 +123,12 @@ def week(app):
             channel_id=WEEKLY_CHANNEL,
             message_ts=WEEKLY_TS,
         )
-        keep = Practice(date=datetime(2026, 6, 9, 18, 15), day_of_week='Tuesday',
+        keep = Practice(date=datetime(2126, 6, 11, 18, 15), day_of_week='Tuesday',
                         status='scheduled', location_id=loc.id,
                         slack_coach_summary_ts='stale-coach-row-ts',
                         slack_weekly_summary_ts='stale-weekly-row-ts',
                         slack_channel_id='C1')
-        dup = Practice(date=datetime(2026, 6, 9, 18, 15), day_of_week='Tuesday',
+        dup = Practice(date=datetime(2126, 6, 11, 18, 15), day_of_week='Tuesday',
                        status='scheduled', location_id=loc.id,
                        slack_coach_summary_ts='other-stale-coach-row-ts',
                        slack_weekly_summary_ts='other-stale-weekly-row-ts',
@@ -86,6 +136,7 @@ def week(app):
         db.session.add_all([coach_record, weekly_record, keep, dup])
         db.session.commit()
         location_id = loc.id
+        summary_post_ids = {coach_record.id, weekly_record.id}
         yield SimpleNamespace(
             keep=keep,
             dup=dup,
@@ -93,12 +144,14 @@ def week(app):
             weekly_record=weekly_record,
         )
         db.session.rollback()
-        Practice.query.filter_by(location_id=location_id).delete(
-            synchronize_session=False
+        practices, summary_posts = _assert_fixture_owns_reserved_week(
+            location_id,
+            summary_post_ids,
         )
-        PracticeSummaryPost.query.filter_by(week_start=WEEK_START).delete(
-            synchronize_session=False
-        )
+        for summary_post in summary_posts:
+            db.session.delete(summary_post)
+        for practice in practices:
+            db.session.delete(practice)
         db.session.commit()
         loc_obj = db.session.get(PracticeLocation, location_id)
         if loc_obj:
@@ -201,7 +254,7 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
     with app.app_context():
         keep_obj = db.session.get(Practice, week.keep.id)
         cancelled = Practice(
-            date=datetime(2026, 6, 11, 18, 15),
+            date=datetime(2126, 6, 13, 18, 15),
             day_of_week='Thursday',
             status='cancelled',
             cancellation_reason='Heat warning',
@@ -249,7 +302,7 @@ def test_weekly_summary_keeps_cancellation_and_uses_shared_builder_contract(
         assert result == {'success': True}
         assert cancelled_id in captured['block_ids']
         assert captured['block_ids'] == captured['fallback_ids']
-        assert captured['block_week_start'] == datetime(2026, 6, 8).date()
+        assert captured['block_week_start'] == WEEK_START
         assert captured['fallback_week_start'] == captured['block_week_start']
         assert captured['block_weather'] == captured['fallback_weather'] == {}
         client.chat_update.assert_called_once_with(
