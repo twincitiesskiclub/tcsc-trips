@@ -748,6 +748,7 @@ def encode_practice_reaction_metadata(
         if preview_config is not None:
             envelope["p"] = copy.deepcopy(preview_config)
         raw = json.dumps(envelope, separators=(",", ":"), ensure_ascii=False)
+        raw.encode("utf-8")
     except (TypeError, ValueError, RecursionError):
         raise _metadata_error() from None
     if len(raw) > SLACK_PRIVATE_METADATA_MAX_CHARS:
@@ -810,7 +811,13 @@ def decode_practice_reaction_metadata(raw: str):
         _validate_preview_config(preview_config)
     state = deserialize_plan_reaction_editor_state(envelope["s"])
     _validate_slack_row_block_ids(state)
-    if not state.editor_expanded:
+    if state.editor_expanded:
+        if any(
+            not row["removed"] and row["label"] is not None
+            for row in envelope["s"]["rows"]
+        ):
+            raise _metadata_error()
+    else:
         raw_active = [
             {"emoji": row.emoji, "label": row.label}
             for row in state.rows

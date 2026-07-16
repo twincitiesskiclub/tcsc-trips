@@ -374,6 +374,50 @@ def test_collapsed_metadata_rejects_blank_active_label():
         )
 
 
+def test_expanded_metadata_decode_rejects_nonnull_active_label(editor_state):
+    encoded = encode_practice_reaction_metadata(
+        mode="create",
+        context={
+            "date": "2026-07-14",
+            "channel_id": None,
+            "message_ts": None,
+        },
+        state=editor_state,
+    )
+    envelope = json.loads(encoded)
+    assert envelope["s"]["rows"][0]["label"] is None
+    envelope["s"]["rows"][0]["label"] = "INJECTED"
+
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        decode_practice_reaction_metadata(
+            json.dumps(envelope, separators=(",", ":"))
+        )
+
+
+def test_collapsed_metadata_rejects_unpaired_surrogate():
+    state = PlanReactionEditorState(
+        rows=[PlanReactionEditorRow(
+            row_id="r0",
+            emoji="athletic_shoe",
+            label="\ud800",
+            catalog_order=0,
+        )],
+        next_row_number=1,
+        editor_expanded=False,
+    )
+
+    with pytest.raises(PlanReactionValidationError, match="metadata"):
+        encode_practice_reaction_metadata(
+            mode="create",
+            context={
+                "date": "2026-07-14",
+                "channel_id": None,
+                "message_ts": None,
+            },
+            state=state,
+        )
+
+
 def test_active_row_has_fixed_key_single_line_description_and_remove(editor_state):
     blocks = _blocks_by_id(
         build_practice_reaction_blocks(
