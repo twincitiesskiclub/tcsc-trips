@@ -618,6 +618,23 @@ def test_restore_allocates_fresh_row_ids_that_stale_values_cannot_target(sources
     )
 
 
+def test_restore_defaults_keeps_expanded_editor_open(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[],
+        saved_snapshot=[EVERGREEN_PLAN_REACTION],
+    ).state
+    state.editor_expanded = True
+
+    restored = restore_plan_reaction_defaults(
+        state,
+        practice_types=[sources.intervals],
+        activities=[],
+    ).state
+
+    assert restored.editor_expanded is True
+
+
 def test_failed_restore_keeps_original_working_state_atomically(sources):
     original = build_plan_reaction_editor_state(
         practice_types=[],
@@ -683,6 +700,38 @@ def test_metadata_round_trip_preserves_removed_labels_and_rejects_unknown_versio
         deserialize_plan_reaction_editor_state({"version": 99, "rows": []})
 
 
+def test_editor_expansion_defaults_false_and_round_trips(sources):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[],
+        saved_snapshot=None,
+    ).state
+    assert state.editor_expanded is False
+
+    state.editor_expanded = True
+    payload = serialize_plan_reaction_editor_state(state)
+    assert payload["version"] == 2
+    assert payload["editor_expanded"] is True
+    assert deserialize_plan_reaction_editor_state(deepcopy(payload)) == state
+
+
+@pytest.mark.parametrize("invalid", [None, 0, 1, "true", [], {}])
+def test_metadata_rejects_nonboolean_editor_expanded(sources, invalid):
+    state = build_plan_reaction_editor_state(
+        practice_types=[sources.intervals],
+        activities=[],
+        saved_snapshot=None,
+    ).state
+    payload = serialize_plan_reaction_editor_state(state)
+    payload["editor_expanded"] = invalid
+
+    with pytest.raises(
+        PlanReactionValidationError,
+        match="^Invalid reaction editor metadata$",
+    ):
+        deserialize_plan_reaction_editor_state(payload)
+
+
 def test_serialization_uses_complete_json_primitive_schema_and_omits_only_active_labels(
     sources,
 ):
@@ -705,6 +754,7 @@ def test_serialization_uses_complete_json_primitive_schema_and_omits_only_active
         "unconfigured_activity_names",
         "effective_inherited_count",
         "add_open",
+        "editor_expanded",
     }
     assert set(payload["rows"][0]) == {
         "row_id",
@@ -873,6 +923,7 @@ def _empty_metadata(**changes):
         "unconfigured_activity_names": [],
         "effective_inherited_count": 0,
         "add_open": False,
+        "editor_expanded": False,
     }
     payload.update(changes)
     return payload

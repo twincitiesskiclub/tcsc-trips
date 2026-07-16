@@ -17,7 +17,7 @@ from app.practices.plan_reactions import (
     resolve_plan_reaction_defaults,
 )
 
-PLAN_REACTION_EDITOR_VERSION = 1
+PLAN_REACTION_EDITOR_VERSION = 2
 
 _EDITOR_METADATA_ERROR = "Invalid reaction editor metadata"
 _EDITOR_KEYS = {
@@ -31,6 +31,7 @@ _EDITOR_KEYS = {
     "unconfigured_activity_names",
     "effective_inherited_count",
     "add_open",
+    "editor_expanded",
 }
 _ROW_KEYS = {
     "row_id",
@@ -79,6 +80,7 @@ class PlanReactionEditorState:
     unconfigured_activity_names: tuple[str, ...] = ()
     effective_inherited_count: int = 0
     add_open: bool = False
+    editor_expanded: bool = False
 
 
 @dataclass(frozen=True)
@@ -448,6 +450,7 @@ def restore_plan_reaction_defaults(
         row.row_id = f"r{next_row_number}"
         next_row_number += 1
     restored.state.next_row_number = next_row_number
+    restored.state.editor_expanded = state.editor_expanded
     return restored
 
 
@@ -508,6 +511,7 @@ def serialize_plan_reaction_editor_state(
         ),
         "effective_inherited_count": state.effective_inherited_count,
         "add_open": state.add_open,
+        "editor_expanded": state.editor_expanded,
     }
 
 
@@ -627,6 +631,9 @@ def _deserialize_plan_reaction_editor_state(
     if blocking_error is not None and not isinstance(blocking_error, str):
         raise _metadata_error()
     if not isinstance(payload["add_open"], bool):
+        raise _metadata_error()
+    editor_expanded = payload["editor_expanded"]
+    if not isinstance(editor_expanded, bool):
         raise _metadata_error()
 
     names = _require_json_list(payload["unconfigured_activity_names"])
@@ -781,6 +788,7 @@ def _deserialize_plan_reaction_editor_state(
         unconfigured_activity_names=tuple(names),
         effective_inherited_count=effective_inherited_count,
         add_open=payload["add_open"],
+        editor_expanded=editor_expanded,
     )
 
 
