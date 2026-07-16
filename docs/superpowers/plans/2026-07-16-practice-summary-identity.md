@@ -220,7 +220,7 @@ Legacy `channel_id` is nullable because the old row model never stored a summary
 
 ```bash
 env/bin/pytest tests/practices/test_practice_summary_posts.py tests/practices/test_practice_summary_post_migration.py -q
-DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips env/bin/flask db heads
+SLACK_BOT_TOKEN= SLACK_APP_TOKEN= SLACK_SIGNING_SECRET= DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips env/bin/flask db heads
 ```
 
 Expected: both tests pass and the only head is `d8b2c6f4a901`.
@@ -727,7 +727,7 @@ Expected: all pass.
 - [ ] **Step 2: Check the migration graph and source hygiene**
 
 ```bash
-DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips env/bin/flask db heads
+SLACK_BOT_TOKEN= SLACK_APP_TOKEN= SLACK_SIGNING_SECRET= DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips env/bin/flask db heads
 git diff --check
 rg -n "slack_(coach|weekly)_summary_ts" app/slack/practices/refresh.py
 ```

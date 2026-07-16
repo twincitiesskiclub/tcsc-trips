@@ -70,7 +70,7 @@ Expected: all Node and Python tests pass.
 npm run tailwind:build
 git diff --exit-code -- app/static/css/tailwind-output.css
 git diff --check
-DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips env/bin/flask db heads
+SLACK_BOT_TOKEN= SLACK_APP_TOKEN= SLACK_SIGNING_SECRET= DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips env/bin/flask db heads
 git status --short
 ```
 

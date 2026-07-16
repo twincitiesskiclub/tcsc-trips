@@ -738,7 +738,7 @@ Before changing the local application database, clone its current `e36bbec59bde`
 
 ```bash
 DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips \
-  SLACK_BOT_TOKEN= SLACK_SIGNING_SECRET= env/bin/flask db current
+  SLACK_BOT_TOKEN= SLACK_APP_TOKEN= SLACK_SIGNING_SECRET= env/bin/flask db current
 PGPASSWORD=tcsc createdb -h localhost -U tcsc \
   -T tcsc_trips tcsc_practice_announcement_migration
 DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_practice_announcement_migration \
