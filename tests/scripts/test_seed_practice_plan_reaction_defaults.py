@@ -5,6 +5,7 @@ import copy
 import inspect
 import json
 import os
+from dataclasses import replace
 from datetime import datetime
 from pathlib import Path
 import subprocess
@@ -562,6 +563,130 @@ def test_repeat_after_commit_is_idempotent_but_snapshot_mismatch_remains_report_
     assert result.verified
     assert all(change.status == "exact" for change in repeat.changes)
     assert repeat.upcoming_snapshot_mismatches
+
+
+@pytest.mark.parametrize(
+    ("readback_outcome", "expected_message"),
+    [
+        ("mismatch", "did not match the approved defaults"),
+        ("error", "could not complete"),
+    ],
+)
+def test_post_commit_verification_failure_is_distinct_after_writes_are_durable(
+    seed_engine,
+    complete_targets,
+    monkeypatch,
+    readback_outcome,
+    expected_message,
+):
+    manifest = seed.load_manifest(MANIFEST_PATH)
+    with Session(seed_engine) as session:
+        plan = seed.build_seed_plan(session, manifest, lock=False)
+    digest = seed.render_seed_plan(plan, environment="test").digest
+
+    real_build_seed_plan = seed.build_seed_plan
+    call_count = 0
+
+    def controlled_build(session, loaded_manifest, *, lock=False):
+        nonlocal call_count
+        call_count += 1
+        if call_count == 2 and readback_outcome == "error":
+            raise RuntimeError("simulated read-back outage")
+        built = real_build_seed_plan(
+            session,
+            loaded_manifest,
+            lock=lock,
+        )
+        if call_count == 2:
+            return replace(
+                built,
+                changes=(
+                    replace(built.changes[0], status="fill"),
+                    *built.changes[1:],
+                ),
+            )
+        return built
+
+    monkeypatch.setattr(seed, "build_seed_plan", controlled_build)
+
+    with pytest.raises(
+        seed.SeedPostCommitVerificationError,
+        match=expected_message,
+    ) as raised:
+        seed.commit_seed_plan(
+            seed_engine,
+            manifest,
+            approved_digest=digest,
+            environment="test",
+        )
+
+    assert call_count == 2
+    if readback_outcome == "error":
+        assert isinstance(raised.value.__cause__, RuntimeError)
+
+    with Session(seed_engine) as session:
+        durable = real_build_seed_plan(session, manifest, lock=False)
+    assert all(change.status == "exact" for change in durable.changes)
+
+
+def test_cli_reports_post_commit_verification_without_claiming_abort(
+    seed_engine,
+    complete_targets,
+    monkeypatch,
+    capsys,
+):
+    monkeypatch.setenv("DATABASE_URL", str(seed_engine.url))
+
+    def committed_but_unverified(*_args, **_kwargs):
+        raise seed.SeedPostCommitVerificationError(
+            "simulated read-back outage"
+        )
+
+    monkeypatch.setattr(
+        seed,
+        "commit_seed_plan",
+        committed_but_unverified,
+    )
+    exit_code = seed.main([
+        "--environment", "local",
+        "--commit", "--approve", "approved-digest",
+    ])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.splitlines() == [
+        "COMMIT SUCCEEDED; VERIFICATION FAILED OR UNKNOWN",
+        "Verification error: simulated read-back outage",
+        (
+            "Run a new dry run/read-back with "
+            "--environment local --dry-run before taking further action."
+        ),
+    ]
+    assert "Seed aborted" not in captured.err
+
+
+def test_cli_pre_commit_digest_failure_still_aborts_without_writes(
+    seed_engine,
+    complete_targets,
+    monkeypatch,
+    capsys,
+):
+    before = _reference_values(seed_engine)
+    monkeypatch.setenv("DATABASE_URL", str(seed_engine.url))
+
+    exit_code = seed.main([
+        "--environment", "local",
+        "--commit", "--approve", "wrong-digest",
+    ])
+    captured = capsys.readouterr()
+
+    assert exit_code == 1
+    assert captured.out == ""
+    assert captured.err.startswith("Seed aborted: ")
+    assert "approval digest" in captured.err
+    assert "COMMIT SUCCEEDED" not in captured.err
+    assert _reference_values(seed_engine) == before
 
 
 def test_import_and_help_never_initialize_app_or_slack_modules():

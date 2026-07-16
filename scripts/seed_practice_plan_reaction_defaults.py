@@ -142,6 +142,10 @@ class SeedPlanError(RuntimeError):
     """Raised before a seed operation can make an unsafe change."""
 
 
+class SeedPostCommitVerificationError(RuntimeError):
+    """Raised after seed writes commit when read-back is not verified."""
+
+
 @dataclass(frozen=True)
 class SeedChange:
     kind: str
@@ -804,14 +808,23 @@ def commit_seed_plan(
                 )
         session.flush()
 
-    with Session(engine) as verification:
-        verified_plan = build_seed_plan(
-            verification,
-            manifest,
-            lock=False,
+    try:
+        with Session(engine) as verification:
+            verified_plan = build_seed_plan(
+                verification,
+                manifest,
+                lock=False,
+            )
+    except Exception as exc:
+        raise SeedPostCommitVerificationError(
+            f"Independent read-back could not complete: {exc}"
+        ) from exc
+
+    if any(item.status != "exact" for item in verified_plan.changes):
+        raise SeedPostCommitVerificationError(
+            "Committed values did not match the approved defaults "
+            "during independent read-back"
         )
-        if any(item.status != "exact" for item in verified_plan.changes):
-            raise SeedPlanError("Committed values failed read-back verification")
     return SeedCommitResult(verified=True, plan=verified_plan)
 
 
@@ -895,6 +908,19 @@ def main(argv: list[str] | None = None) -> int:
             )
         print(f"Verified {len(result.plan.changes)} targets.")
         return 0
+    except SeedPostCommitVerificationError as exc:
+        print(
+            "COMMIT SUCCEEDED; VERIFICATION FAILED OR UNKNOWN",
+            file=sys.stderr,
+        )
+        print(f"Verification error: {exc}", file=sys.stderr)
+        print(
+            "Run a new dry run/read-back with "
+            f"--environment {args.environment} --dry-run "
+            "before taking further action.",
+            file=sys.stderr,
+        )
+        return 1
     except SeedPlanError as exc:
         print(f"Seed aborted: {exc}", file=sys.stderr)
         return 1
