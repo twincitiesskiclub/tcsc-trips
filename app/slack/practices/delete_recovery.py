@@ -1,5 +1,7 @@
 """One-shot recovery after an ambiguous practice delete commit."""
 
+from collections.abc import Mapping
+
 from app.models import db
 from app.practices.models import Practice
 from app.slack.practices.announcements import (
@@ -11,11 +13,32 @@ from app.slack.practices.refresh import (
 )
 
 
+def _require_successful_details(result):
+    if result.get("success") is not True or "details" not in result:
+        return result
+
+    details = result["details"]
+    if isinstance(details, Mapping) and details.get("success") is True:
+        return result
+
+    if isinstance(details, Mapping):
+        error = "Practice announcement Details recovery failed"
+        if details.get("error"):
+            error = f"{error}: {details['error']}"
+    else:
+        error = (
+            "Practice announcement Details recovery returned an invalid result"
+        )
+    return {**result, "success": False, "error": error}
+
+
 def _repost_to_original_channel(practice, original_channel_id):
-    result = post_practice_announcement(
-        practice,
-        channel_id_override=original_channel_id,
-        create_log_thread=False,
+    result = _require_successful_details(
+        post_practice_announcement(
+            practice,
+            channel_id_override=original_channel_id,
+            create_log_thread=False,
+        )
     )
     if result.get("success") is True:
         return {**result, "action": "reposted"}
@@ -48,7 +71,9 @@ def _restore_practice_announcement(
     )
 
     if current_is_original:
-        result = update_practice_slack_post(practice)
+        result = _require_successful_details(
+            update_practice_slack_post(practice)
+        )
         if result.get("success") is True:
             return {**result, "action": "rebuilt"}
         if result.get("error") == "message_not_found" and not shared:

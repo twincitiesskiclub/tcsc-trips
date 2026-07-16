@@ -238,6 +238,38 @@ def test_linked_original_root_is_rebuilt_then_summaries_include_row(
     assert_one_shot(calls)
 
 
+def test_linked_root_failed_details_is_incomplete_without_retry(
+    standalone_practice,
+):
+    failed_details = {
+        "success": False,
+        "error": "message_not_found",
+    }
+
+    with recovery_harness() as calls:
+        calls.update_root.return_value = {
+            "success": True,
+            "details": failed_details,
+        }
+        result = recover(calls, standalone_practice.id)
+
+    calls.update_root.assert_called_once_with(standalone_practice)
+    calls.post_root.assert_not_called()
+    calls.refresh_summaries.assert_called_once_with(
+        ORIGINAL_WEEK_START, exclude_practice_id=None
+    )
+    assert result["success"] is False
+    assert result["outcome"] == "incomplete"
+    assert result["practice_deleted"] is False
+    assert result["practice_restored"] is False
+    assert result["recovery_incomplete"] is True
+    assert result["announcement"]["success"] is False
+    assert result["announcement"]["details"] == failed_details
+    assert "Details" in result["announcement"]["error"]
+    assert "message_not_found" in result["announcement"]["error"]
+    assert_one_shot(calls)
+
+
 def test_cleared_standalone_root_is_reposted_once_to_exact_channel(
     standalone_practice,
 ):
@@ -261,6 +293,44 @@ def test_cleared_standalone_root_is_reposted_once_to_exact_channel(
     )
     assert result["outcome"] == "restored"
     assert result["announcement"]["action"] == "reposted"
+    assert_one_shot(calls)
+
+
+def test_exact_channel_repost_invalid_details_is_incomplete_without_retry(
+    standalone_practice,
+):
+    practice = standalone_practice
+    practice.slack_channel_id = None
+    practice.slack_message_ts = None
+    practice.slack_details_ts = None
+    db.session.commit()
+
+    with recovery_harness() as calls:
+        calls.post_root.return_value = {
+            "success": True,
+            "message_ts": "delete-recovery-reposted.1",
+            "channel_id": ORIGINAL_CHANNEL,
+            "details": "invalid Details result",
+        }
+        result = recover(calls, practice.id)
+
+    calls.update_root.assert_not_called()
+    calls.post_root.assert_called_once_with(
+        practice,
+        channel_id_override=ORIGINAL_CHANNEL,
+        create_log_thread=False,
+    )
+    calls.refresh_summaries.assert_called_once_with(
+        ORIGINAL_WEEK_START, exclude_practice_id=None
+    )
+    assert result["success"] is False
+    assert result["outcome"] == "incomplete"
+    assert result["practice_deleted"] is False
+    assert result["practice_restored"] is False
+    assert result["recovery_incomplete"] is True
+    assert result["announcement"]["success"] is False
+    assert result["announcement"]["details"] == "invalid Details result"
+    assert "invalid" in result["announcement"]["error"].lower()
     assert_one_shot(calls)
 
 
