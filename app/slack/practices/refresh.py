@@ -305,7 +305,7 @@ def _persist_summary_channel(record, channel_id):
             set_committed_value(record, "channel_id", channel_id)
     except Exception as exc:
         logger.warning(
-            "Could not persist legacy Coach summary channel for record #%s: %s",
+            "Could not persist legacy summary channel for record #%s: %s",
             record.id,
             exc,
         )
@@ -484,6 +484,8 @@ def _refresh_weekly_summary_for_week(value, *, exclude_practice_id=None):
             blocks=blocks,
             text=fallback,
         )
+        if record.channel_id is None:
+            _persist_summary_channel(record, channel_id)
         return {'success': True}
     except Exception as exc:
         logger.warning(

@@ -54,9 +54,18 @@ def upgrade():
                      slack_weekly_summary_ts
               FROM practices WHERE slack_weekly_summary_ts IS NOT NULL
             )
-            SELECT 1 FROM legacy
-            GROUP BY week_start, surface
-            HAVING count(DISTINCT message_ts) > 1
+            SELECT 1
+            FROM (
+              SELECT 1
+              FROM legacy
+              GROUP BY week_start, surface
+              HAVING count(DISTINCT message_ts) > 1
+              UNION ALL
+              SELECT 1
+              FROM legacy
+              GROUP BY surface, message_ts
+              HAVING count(DISTINCT week_start) > 1
+            ) AS conflicts
           ) THEN
             RAISE EXCEPTION
               'conflicting legacy practice summary timestamps';

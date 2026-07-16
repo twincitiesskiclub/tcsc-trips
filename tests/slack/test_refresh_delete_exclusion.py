@@ -385,3 +385,64 @@ def test_legacy_null_coach_channel_persists_successful_fallback_only(app, week):
         persisted_practice = db.session.get(Practice, week.keep.id)
         assert persisted_record.channel_id == COACH_SUMMARY_FALLBACK_CHANNEL_ID
         assert persisted_practice.day_of_week == 'Tuesday'
+
+
+def test_migrated_null_public_channel_stays_bound_after_config_change(
+    app,
+    week,
+):
+    with app.app_context():
+        keep_obj = db.session.get(Practice, week.keep.id)
+        weekly_record = db.session.get(
+            PracticeSummaryPost,
+            week.weekly_record.id,
+        )
+        weekly_record.channel_id = None
+        db.session.commit()
+
+        keep_obj.day_of_week = "UNCOMMITTED MUTATION"
+        client = MagicMock()
+
+        with patch(
+            'app.slack.blocks.build_weekly_summary_blocks',
+            return_value=[],
+        ), patch(
+            'app.slack.blocks.build_weekly_summary_fallback_text',
+            return_value='weekly fallback',
+        ), patch(
+            'app.slack.client.get_slack_client',
+            return_value=client,
+        ):
+            with patch(
+                'app.slack.practices.summary_posts._get_announcement_channel',
+                return_value='C-PUBLIC-A',
+            ) as configured_a:
+                first_result = refreshmod._refresh_weekly_summary(
+                    keep_obj,
+                    'edit',
+                )
+            with patch(
+                'app.slack.practices.summary_posts._get_announcement_channel',
+                return_value='C-PUBLIC-B',
+            ) as configured_b:
+                second_result = refreshmod._refresh_weekly_summary(
+                    keep_obj,
+                    'edit',
+                )
+
+        assert first_result == second_result == {'success': True}
+        assert [
+            call.kwargs['channel'] for call in client.chat_update.call_args_list
+        ] == ['C-PUBLIC-A', 'C-PUBLIC-A']
+        configured_a.assert_called_once_with()
+        configured_b.assert_not_called()
+
+        db.session.rollback()
+        db.session.expire_all()
+        persisted_record = db.session.get(
+            PracticeSummaryPost,
+            week.weekly_record.id,
+        )
+        persisted_practice = db.session.get(Practice, week.keep.id)
+        assert persisted_record.channel_id == 'C-PUBLIC-A'
+        assert persisted_practice.day_of_week == 'Tuesday'

@@ -54,10 +54,10 @@ def test_upgrade_backfills_one_identity_per_linked_week_and_surface_and_downgrad
                 slack_coach_summary_ts,
                 slack_weekly_summary_ts
             ) VALUES
-                (1, '2026-07-13 18:00', 'coach-1', 'public-1'),
-                (2, '2026-07-15 18:00', 'coach-1', 'public-1'),
+                (1, '2026-07-13 18:00', 'shared-ts', 'public-1'),
+                (2, '2026-07-15 18:00', 'shared-ts', 'public-1'),
                 (3, '2026-07-20 18:00', 'coach-2', NULL),
-                (4, '2026-07-22 18:00', NULL, 'public-2')
+                (4, '2026-07-22 18:00', NULL, 'shared-ts')
         """)
 
         context = MigrationContext.configure(connection)
@@ -70,10 +70,10 @@ def test_upgrade_backfills_one_identity_per_linked_week_and_surface_and_downgrad
             ORDER BY week_start, surface
         """).all()
         assert rows == [
-            (date(2026, 7, 13), "coach_summary", None, "coach-1"),
+            (date(2026, 7, 13), "coach_summary", None, "shared-ts"),
             (date(2026, 7, 13), "weekly_summary", None, "public-1"),
             (date(2026, 7, 20), "coach_summary", None, "coach-2"),
-            (date(2026, 7, 20), "weekly_summary", None, "public-2"),
+            (date(2026, 7, 20), "weekly_summary", None, "shared-ts"),
         ]
 
         revision.downgrade()
@@ -105,6 +105,39 @@ def test_upgrade_rejects_conflicting_legacy_summary_timestamps(
             ) VALUES
                 (1, '2026-07-13 18:00', 'public-1'),
                 (2, '2026-07-15 18:00', 'public-2')
+        """)
+
+        context = MigrationContext.configure(connection)
+        monkeypatch.setattr(revision, "op", Operations(context))
+        with pytest.raises(
+            DBAPIError,
+            match="conflicting legacy practice summary timestamps",
+        ):
+            revision.upgrade()
+    finally:
+        transaction.rollback()
+        connection.close()
+
+
+def test_upgrade_rejects_one_summary_timestamp_mapped_to_multiple_weeks(
+    db_session,
+    monkeypatch,
+):
+    schema = f"practice_summary_cross_week_conflict_{uuid4().hex}"
+    connection = db_session.engine.connect()
+    transaction = connection.begin()
+    try:
+        connection.exec_driver_sql(f'CREATE SCHEMA "{schema}"')
+        connection.exec_driver_sql(f'SET LOCAL search_path TO "{schema}"')
+        _create_legacy_practices_table(connection)
+        connection.exec_driver_sql("""
+            INSERT INTO practices (
+                id,
+                date,
+                slack_weekly_summary_ts
+            ) VALUES
+                (1, '2026-07-13 18:00', 'public-source-week'),
+                (2, '2026-07-20 18:00', 'public-source-week')
         """)
 
         context = MigrationContext.configure(connection)
