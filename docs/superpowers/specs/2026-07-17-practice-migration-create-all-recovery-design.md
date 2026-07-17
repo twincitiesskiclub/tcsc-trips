@@ -1,7 +1,7 @@
 # Practice Migration `create_all` Recovery Design
 
 **Date:** 2026-07-17
-**Status:** Approved in principle; awaiting written-spec review
+**Status:** Approved
 
 ## Context
 
