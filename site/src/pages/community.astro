@@ -55,7 +55,7 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
 <InnerPageLayout
   title="Community · Twin Cities Ski Club"
   description={community.data.intro && metaDescription(community.data.intro)}
-  headline={community.data.headline ?? 'A welcoming community'}
+  headline={community.data.headline ?? 'What members do beyond practice'}
   subhead={community.data.intro}
   facts={[
     { value: '2020', label: 'Founded' },
@@ -85,9 +85,8 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   {takeaways.length > 0 && (
     <SectionBand
       variant="paper"
-      seam="Club record"
-      heading="What we've done"
-      subhead="A few seasons of volunteering, coaching, socials, and member-led training."
+      seam="Member-led"
+      heading="How members pitch in"
     >
       <div class="space-y-14">
         {takeaways.map((g) => (
