@@ -240,6 +240,7 @@ def test_upgrade_adopts_exact_empty_orm_orphan_and_backfills(
         before = summary_catalog_snapshot(connection)
         old_oid = revision._visible_summary_table_oid(connection)
         assert before["row_count"] == 0
+        assert before["external_dependency_count"] == 0
         assert dict(
             (row[1], row[6]) for row in before["columns"]
         )["created_at"] is None
@@ -278,7 +279,11 @@ def test_upgrade_adopts_exact_empty_orm_orphan_and_backfills(
         ]
 
 
-def _assert_upgrade_refused_without_mutation(connection, monkeypatch):
+def _assert_upgrade_refused_without_mutation(
+    connection,
+    monkeypatch,
+    expected_invariant=None,
+):
     before = summary_catalog_snapshot(connection)
     configure_revision(connection, monkeypatch)
     drop_table = Mock(wraps=revision.op.drop_table)
@@ -294,7 +299,7 @@ def _assert_upgrade_refused_without_mutation(connection, monkeypatch):
     finally:
         savepoint.rollback()
 
-    assert str(refusal.value) in {
+    allowed_messages = {
         "practice_summary_posts orphan recovery refused: " + invariant
         for invariant in (
             "relation changed before lock",
@@ -308,9 +313,17 @@ def _assert_upgrade_refused_without_mutation(connection, monkeypatch):
             "owned serial sequence mismatch",
             "constraint mismatch",
             "index mismatch",
+            "external dependency mismatch",
             "table contains rows",
         )
     }
+    if expected_invariant is None:
+        assert str(refusal.value) in allowed_messages
+    else:
+        assert str(refusal.value) == (
+            "practice_summary_posts orphan recovery refused: "
+            + expected_invariant
+        )
     drop_table.assert_not_called()
     assert summary_catalog_snapshot(connection) == before
 
@@ -381,6 +394,83 @@ def test_upgrade_refuses_partition_child_without_mutation(
         """)
 
         _assert_upgrade_refused_without_mutation(connection, monkeypatch)
+
+
+def test_upgrade_refuses_empty_orphan_with_inheritance_child_without_mutation(
+    engine,
+    monkeypatch,
+):
+    with migration_schema(engine, "summary_inheritance_child") as (
+        connection,
+        _schema,
+    ):
+        create_legacy_practices_table(connection)
+        create_exact_summary_orphan(connection)
+        connection.exec_driver_sql("""
+            CREATE TABLE dependent_summary_child ()
+            INHERITS (practice_summary_posts)
+        """)
+        assert summary_catalog_snapshot(connection)[
+            "external_dependency_count"
+        ] > 0
+
+        _assert_upgrade_refused_without_mutation(
+            connection,
+            monkeypatch,
+            expected_invariant="external dependency mismatch",
+        )
+
+
+def test_upgrade_refuses_empty_orphan_with_dependent_view_without_mutation(
+    engine,
+    monkeypatch,
+):
+    with migration_schema(engine, "summary_dependent_view") as (
+        connection,
+        _schema,
+    ):
+        create_legacy_practices_table(connection)
+        create_exact_summary_orphan(connection)
+        connection.exec_driver_sql("""
+            CREATE VIEW dependent_summary_view AS
+            SELECT id, week_start
+            FROM practice_summary_posts
+        """)
+        assert summary_catalog_snapshot(connection)[
+            "external_dependency_count"
+        ] > 0
+
+        _assert_upgrade_refused_without_mutation(
+            connection,
+            monkeypatch,
+            expected_invariant="external dependency mismatch",
+        )
+
+
+def test_upgrade_refuses_empty_orphan_with_inbound_foreign_key_without_mutation(
+    engine,
+    monkeypatch,
+):
+    with migration_schema(engine, "summary_inbound_fk") as (
+        connection,
+        _schema,
+    ):
+        create_legacy_practices_table(connection)
+        create_exact_summary_orphan(connection)
+        connection.exec_driver_sql("""
+            CREATE TABLE dependent_summary_fk (
+                summary_id INTEGER REFERENCES practice_summary_posts(id)
+            )
+        """)
+        assert summary_catalog_snapshot(connection)[
+            "external_dependency_count"
+        ] > 0
+
+        _assert_upgrade_refused_without_mutation(
+            connection,
+            monkeypatch,
+            expected_invariant="external dependency mismatch",
+        )
 
 
 def test_upgrade_checks_rows_on_locked_schema_despite_temp_shadow(

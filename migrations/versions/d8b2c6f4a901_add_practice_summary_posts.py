@@ -226,6 +226,22 @@ def _summary_table_fingerprint(bind, relation_oid):
                  default_dep.refclassid, default_dep.refobjsubid,
                  default_dep.deptype
     """), {"oid": relation_oid}).all()
+    has_external_dependencies = bind.execute(sa.text("""
+        SELECT EXISTS (
+            SELECT 1
+            FROM pg_depend AS dependency
+            LEFT JOIN pg_constraint AS dependent_constraint
+              ON dependency.classid = 'pg_constraint'::regclass
+             AND dependent_constraint.oid = dependency.objid
+            WHERE dependency.refclassid = 'pg_class'::regclass
+              AND dependency.refobjid = :oid
+              AND dependency.deptype = 'n'
+              AND NOT (
+                dependency.classid = 'pg_constraint'::regclass
+                AND dependent_constraint.conrelid = :oid
+              )
+        )
+    """), {"oid": relation_oid}).scalar_one()
     qualified = _qualified_summary_table(bind, relation["schema_name"])
     has_rows = bind.exec_driver_sql(
         f"SELECT EXISTS (SELECT 1 FROM {qualified} LIMIT 1)"
@@ -247,6 +263,7 @@ def _summary_table_fingerprint(bind, relation_oid):
             for row in indexes
         ),
         "sequence": [tuple(row) for row in sequence],
+        "has_external_dependencies": has_external_dependencies,
         "has_rows": has_rows,
     }
 
@@ -286,6 +303,8 @@ def _assert_exact_empty_create_all_orphan(bind, relation_oid):
         _refuse_orphan_recovery("constraint mismatch")
     if fingerprint["indexes"] != _EXPECTED_INDEXES:
         _refuse_orphan_recovery("index mismatch")
+    if fingerprint["has_external_dependencies"] is not False:
+        _refuse_orphan_recovery("external dependency mismatch")
     if fingerprint["has_rows"]:
         _refuse_orphan_recovery("table contains rows")
 

@@ -116,6 +116,20 @@ def summary_catalog_snapshot(connection):
                  default_dep.refclassid, default_dep.refobjsubid,
                  default_dep.deptype
     """), {"oid": oid}).all()
+    external_dependency_count = connection.execute(text("""
+        SELECT count(*)
+        FROM pg_depend AS dependency
+        LEFT JOIN pg_constraint AS dependent_constraint
+          ON dependency.classid = 'pg_constraint'::regclass
+         AND dependent_constraint.oid = dependency.objid
+        WHERE dependency.refclassid = 'pg_class'::regclass
+          AND dependency.refobjid = :oid
+          AND dependency.deptype = 'n'
+          AND NOT (
+            dependency.classid = 'pg_constraint'::regclass
+            AND dependent_constraint.conrelid = :oid
+          )
+    """), {"oid": oid}).scalar_one()
     quote = connection.dialect.identifier_preparer.quote
     qualified = (
         f"{quote(relation['schema_name'])}."
@@ -142,5 +156,6 @@ def summary_catalog_snapshot(connection):
             for row in indexes
         ],
         "sequence": [tuple(row) for row in sequence],
+        "external_dependency_count": external_dependency_count,
         "row_count": row_count,
     }
