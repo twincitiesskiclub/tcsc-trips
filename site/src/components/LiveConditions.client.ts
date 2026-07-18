@@ -75,7 +75,7 @@ function renderInto(root: HTMLElement, data: Resp) {
     // non-placeholder band changing to a different band.
     const prevBand = el.dataset.waxBand;
     if (prevBand && loc.wax_band && loc.wax_band !== prevBand && loc.wax_label) {
-      announcements.push(`${loc.name} wax changed to ${loc.wax_label}`);
+      announcements.push(`${loc.name} wax recommendation changed: ${loc.wax_label}`);
     }
     el.dataset.waxBand = loc.wax_band ?? '';
   });
