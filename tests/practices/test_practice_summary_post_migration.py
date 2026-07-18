@@ -315,6 +315,7 @@ def _assert_upgrade_refused_without_mutation(
             "index mismatch",
             "external dependency mismatch",
             "attached behavior mismatch",
+            "publication membership mismatch",
             "table contains rows",
         )
     }
@@ -529,6 +530,35 @@ def test_upgrade_refuses_empty_orphan_with_policy_without_mutation(
             connection,
             monkeypatch,
             expected_invariant="attached behavior mismatch",
+        )
+
+
+def test_upgrade_refuses_empty_orphan_with_publication_membership_without_mutation(
+    engine,
+    monkeypatch,
+):
+    with migration_schema(engine, "summary_publication") as (
+        connection,
+        schema,
+    ):
+        create_legacy_practices_table(connection)
+        create_exact_summary_orphan(connection)
+        quote = connection.dialect.identifier_preparer.quote
+        qualified = (
+            f"{quote(schema)}.{quote(revision.SUMMARY_TABLE)}"
+        )
+        connection.exec_driver_sql(f"""
+            CREATE PUBLICATION unexpected_summary_publication
+            FOR TABLE {qualified}
+        """)
+        assert summary_catalog_snapshot(connection)[
+            "publication_membership_count"
+        ] == 1
+
+        _assert_upgrade_refused_without_mutation(
+            connection,
+            monkeypatch,
+            expected_invariant="publication membership mismatch",
         )
 
 

@@ -13,7 +13,7 @@
 - Alembic is the only application schema authority. Remove runtime `db.create_all()` rather than hiding it behind an environment flag.
 - Only literal `TCSC_MIGRATION_ONLY=1` suppresses background startup; normal Render web workers retain their existing scheduler and Slack behavior.
 - `scripts/release.sh` must blank `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, and `SLACK_SIGNING_SECRET` before Python imports `app.slack.bolt_app`.
-- Recover only a permanent, row-security-disabled, exact seven-column ORM-shaped `practice_summary_posts` table with its expected serial sequence, constraints, indexes, no timestamp defaults, and zero rows.
+- Recover only a permanent, row-security-disabled, exact seven-column ORM-shaped `practice_summary_posts` table with its expected serial sequence, constraints, indexes, no timestamp defaults, no user triggers, row-security policies, or explicit publication memberships, and zero rows.
 - Acquire `ACCESS EXCLUSIVE` before fingerprint and emptiness validation and hold it through orphan replacement.
 - Any populated, canonical-looking, or structurally different pre-existing relation fails before `DROP TABLE`; errors identify invariants but never include Slack timestamps or practice data.
 - The `c4f1a8e2d9b7` changes, orphan replacement, legacy conflict checks, backfill, and revision update remain in one PostgreSQL transaction. A failure from the audited starting shape must restore the orphan, roll back all four `c4` columns, and leave revision `e36bbec59bde`.
@@ -31,9 +31,9 @@
   base tables; repairing that legacy chain remains separate work.
 - Keep `create_app()` schema-neutral despite that known local-bootstrap gap.
 - Before dropping the audited empty orphan, also reject behavior-bearing
-  attached metadata: user triggers and row-security policies. Cover each with
-  a fixed invariant error, a direct no-`drop_table` assertion, and unchanged
-  catalog state.
+  attached metadata: user triggers, row-security policies, and explicit
+  PostgreSQL publication membership. Cover each with a fixed invariant error,
+  a direct no-`drop_table` assertion, and unchanged catalog state.
 - Offline Alembic SQL generation and test-only process-group timeout cleanup
   are review Minors outside the Render online migration path and are deferred.
 

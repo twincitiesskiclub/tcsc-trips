@@ -140,6 +140,11 @@ def summary_catalog_snapshot(connection):
            FROM pg_policy AS policy
            WHERE policy.polrelid = :oid) AS policy_count
     """), {"oid": oid}).one()
+    publication_membership_count = connection.execute(text("""
+        SELECT count(*)
+        FROM pg_publication_rel AS publication_relation
+        WHERE publication_relation.prrelid = :oid
+    """), {"oid": oid}).scalar_one()
     quote = connection.dialect.identifier_preparer.quote
     qualified = (
         f"{quote(relation['schema_name'])}."
@@ -168,5 +173,6 @@ def summary_catalog_snapshot(connection):
         "sequence": [tuple(row) for row in sequence],
         "external_dependency_count": external_dependency_count,
         "attached_behavior": tuple(attached_behavior),
+        "publication_membership_count": publication_membership_count,
         "row_count": row_count,
     }

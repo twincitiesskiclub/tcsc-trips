@@ -94,7 +94,8 @@ If it exists, the migration validates all of the following before mutation:
   while the remaining non-timestamp columns have no defaults;
 - its primary key, named `(week_start, surface)` unique constraint, named
   surface check constraint, indexes, and lack of foreign keys match;
-- it has no user triggers or row-security policies attached to it;
+- it has no user triggers, row-security policies, or explicit PostgreSQL
+  publication memberships attached to it;
 - `created_at` and `updated_at` have no server defaults, distinguishing the
   ORM-created shape from the canonical Alembic shape; and
 - it contains zero rows.

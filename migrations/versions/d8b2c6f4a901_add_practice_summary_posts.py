@@ -252,6 +252,11 @@ def _summary_table_fingerprint(bind, relation_oid):
            FROM pg_policy AS policy
            WHERE policy.polrelid = :oid) AS policy_count
     """), {"oid": relation_oid}).one()
+    publication_membership_count = bind.execute(sa.text("""
+        SELECT count(*)
+        FROM pg_publication_rel AS publication_relation
+        WHERE publication_relation.prrelid = :oid
+    """), {"oid": relation_oid}).scalar_one()
     qualified = _qualified_summary_table(bind, relation["schema_name"])
     has_rows = bind.exec_driver_sql(
         f"SELECT EXISTS (SELECT 1 FROM {qualified} LIMIT 1)"
@@ -275,6 +280,7 @@ def _summary_table_fingerprint(bind, relation_oid):
         "sequence": [tuple(row) for row in sequence],
         "has_external_dependencies": has_external_dependencies,
         "attached_behavior": tuple(attached_behavior),
+        "publication_membership_count": publication_membership_count,
         "has_rows": has_rows,
     }
 
@@ -318,6 +324,8 @@ def _assert_exact_empty_create_all_orphan(bind, relation_oid):
         _refuse_orphan_recovery("external dependency mismatch")
     if fingerprint["attached_behavior"] != (0, 0):
         _refuse_orphan_recovery("attached behavior mismatch")
+    if fingerprint["publication_membership_count"] != 0:
+        _refuse_orphan_recovery("publication membership mismatch")
     if fingerprint["has_rows"]:
         _refuse_orphan_recovery("table contains rows")
 

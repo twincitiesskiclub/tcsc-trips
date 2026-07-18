@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Finish the production migration recovery by refusing to replace an otherwise matching empty summary table when user triggers or row-security policies are attached.
+**Goal:** Finish the production migration recovery by refusing to replace an otherwise matching empty summary table when user triggers, row-security policies, or explicit publication membership are attached.
 
-**Architecture:** Extend the already locked `d8` catalog fingerprint with one behavior tuple: non-internal trigger count and policy count for the captured relation OID. Both counts must be zero before `DROP TABLE`; independent PostgreSQL tests prove the fixed refusal occurs before the drop. Fresh local-database bootstrap, offline SQL generation, and test process-group cleanup remain outside this production rollout by explicit user direction.
+**Architecture:** Extend the already locked `d8` catalog fingerprint with one behavior tuple and one independent publication-membership count for the captured relation OID. The non-internal trigger count, policy count, and `pg_publication_rel` count must all be zero before `DROP TABLE`; independent PostgreSQL tests prove each fixed refusal occurs before the drop. Fresh local-database bootstrap, offline SQL generation, and test process-group cleanup remain outside this production rollout by explicit user direction.
 
 **Tech Stack:** Python 3.11+, Flask-Migrate/Alembic, SQLAlchemy 2, PostgreSQL 18, pytest, Bash, Git/GitHub, Render.
 
@@ -13,13 +13,25 @@
 - Keep `create_app()` schema-neutral; do not restore runtime `db.create_all()`.
 - Do not repair or work around clean local-database bootstrap in this rollout.
 - Acquire `ACCESS EXCLUSIVE` before every orphan fingerprint query and hold it through replacement.
-- Reject user triggers and policies with a fixed invariant-only error before `op.drop_table` is called.
-- Do not include trigger names, policy names, Slack timestamps, or practice data in errors.
+- Reject user triggers, policies, and explicit publication membership with fixed invariant-only errors before `op.drop_table` is called.
+- Do not include trigger names, policy names, publication names, catalog values, Slack timestamps, or practice data in errors.
 - Preserve all existing exact column/default/sequence/constraint/index/dependency/row checks.
 - Run PostgreSQL tests serially against the suite-pinned localhost database with `SLACK_BOT_TOKEN`, `SLACK_APP_TOKEN`, and `SLACK_SIGNING_SECRET` blank.
 - Do not access or write Slack while implementing or testing.
 - Preserve the untracked `env` symlink and unrelated user changes.
 - Defer offline Alembic SQL support and test-only process-group timeout cleanup.
+
+### Approved final-review amendment (2026-07-18)
+
+- Extend the independent test snapshot and locked production fingerprint with
+  `publication_membership_count`, queried by captured relation OID from
+  `pg_publication_rel.prrelid`.
+- After the trigger/policy invariant and before the row invariant, refuse any
+  nonzero membership count with exactly `practice_summary_posts orphan
+  recovery refused: publication membership mismatch`.
+- Cover one real explicit table publication with the existing no-drop and
+  unchanged-catalog helper. With no unrelated inventory change, the focused
+  migration file contains 29 tests and the adjacent hotfix set contains 37.
 
 ---
 
@@ -180,7 +192,7 @@ SLACK_BOT_TOKEN= SLACK_APP_TOKEN= SLACK_SIGNING_SECRET= \
   env/bin/pytest tests/practices/test_practice_summary_post_migration.py -q
 ```
 
-Expected: `28 passed`.
+Expected: `29 passed`.
 
 Then run:
 
@@ -195,7 +207,7 @@ SLACK_BOT_TOKEN= SLACK_APP_TOKEN= SLACK_SIGNING_SECRET= \
     tests/practices/test_practice_migration_release.py -q
 ```
 
-Expected: `36 passed`.
+Expected: `37 passed`.
 
 - [ ] **Step 6: Commit the guard**
 
