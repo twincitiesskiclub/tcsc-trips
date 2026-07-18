@@ -74,11 +74,10 @@ def create_app(environment=None):
     # Register template filters
     register_template_filters(app)
 
-    with app.app_context():
-        db.create_all()
-
-    # Initialize background scheduler for channel sync jobs
-    init_scheduler(app)
+    # Schema changes belong exclusively to Alembic. Migration commands still
+    # need the Flask-Migrate extension, but must not start background workers.
+    if os.getenv("TCSC_MIGRATION_ONLY") != "1":
+        init_scheduler(app)
 
     return app
 
