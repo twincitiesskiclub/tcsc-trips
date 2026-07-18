@@ -34,7 +34,7 @@ In `site/src/content/pages/about.mdoc`:
 
 - Replace the age paragraph with:
 
-  > TCSC is for young adults in the Twin Cities. New registration is currently limited to skiers ages 21-35.
+  > New registration is currently limited to skiers ages 21-35.
 
 - Replace the ability paragraph with:
 
@@ -50,9 +50,6 @@ In `site/src/content/pages/about.mdoc`:
 
 ### Home page and shared metadata
 
-In `site/src/content/pages/home.yaml`, replace the mission paragraph with:
-
-> Twin Cities Ski Club is a 501(c)(3) nonprofit for cross-country skiers ages 21-35 in the Twin Cities. The club offers coached training through the dryland and snow seasons, optional racing, and member-led workouts, trips, volunteer projects, and social events.
 
 In `site/src/layouts/BaseLayout.astro`, replace the corporate fallback description with the existing plain site description:
 
@@ -62,32 +59,7 @@ In `site/src/pages/index.astro`:
 
 - Change the photo-mosaic heading from `A welcoming community` to `Beyond practice`.
 - Change its link label from `More from the community` to `See what members do`.
-- Use these exact registration-strip subheads:
-  - Open: `Open to intermediate and advanced skiers. Racing is optional.`
-  - Coming soon: `Returning members Aug 28; new members Sep 3. Open to intermediate and advanced skiers. Racing is optional.`
-  - Closed: `Registration is closed for this season. Open to intermediate and advanced skiers. Racing is optional.`
 - Keep `Come ski with us.` and the factual hero subline unchanged.
-
-### Racing page
-
-In `site/src/content/pages/racing.mdoc`:
-
-- Replace the intro with:
-
-  > TCSC race weekends include skiers on the start line and teammates cheering from Techno Corner.
-
-- Replace `Two TCSC teams participated this year.` with `Two TCSC teams raced the 2026 series.`
-- Replace the first two body paragraphs with:
-
-  > Racing is optional. Some members enter their first citizen race; others ski at the front of the field. Members who do not race can still join the weekend, share cabins, and cheer along the course.
-
-- Split and tighten the Birkie paragraph:
-
-  > At the 2026 American Birkebeiner, more than 80 TCSC skiers raced the Birkebeiner or Korteloppet. Some were at their first race; others finished in the top 20. TCSC had skiers in every wave, from Elite through Wave 8.
-
-- Replace the regional race logistics paragraph with:
-
-  > For regional races, TCSC coordinates food, rides, and lodging. Race entry fees are separate from the seasonal fee. Members can also order a custom TCSC race suit.
 
 ### Community page
 
