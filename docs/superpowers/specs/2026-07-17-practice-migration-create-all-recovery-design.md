@@ -42,6 +42,10 @@ it.
 - Preserving data from an unexpected populated summary table.
 - Adding retries, an outbox, maintenance mode, or a new deployment framework.
 - Changing practice announcement, reaction, or authoring behavior.
+- Repairing the historical migration root so a brand-new empty local database
+  can reach head. The existing production database is already versioned at
+  `e36bbec59bde`; empty-database bootstrap is separate legacy work and is not a
+  gate for this production recovery.
 
 ## Design
 
@@ -49,9 +53,11 @@ it.
 
 Remove the unconditional `db.create_all()` call from `create_app()`.
 Application and Flask CLI startup must never create or alter schema objects.
-New local databases must be initialized with `flask db upgrade`; tests that
-own disposable schemas may continue to call `db.create_all()` explicitly in
-their fixtures.
+This recovery targets existing versioned databases, including production.
+Tests that own disposable schemas may continue to call `db.create_all()`
+explicitly in their fixtures. The repository's pre-existing incomplete root
+migration means clean local bootstrap requires separate follow-up work; this
+hotfix does not reintroduce runtime schema creation to mask that legacy gap.
 
 This is preferred over an environment flag in `scripts/release.sh`. A flag
 would protect only one command while leaving web startup, Flask shell, and
@@ -88,6 +94,7 @@ If it exists, the migration validates all of the following before mutation:
   while the remaining non-timestamp columns have no defaults;
 - its primary key, named `(week_start, surface)` unique constraint, named
   surface check constraint, indexes, and lack of foreign keys match;
+- it has no user triggers or row-security policies attached to it;
 - `created_at` and `updated_at` have no server defaults, distinguishing the
   ORM-created shape from the canonical Alembic shape; and
 - it contains zero rows.

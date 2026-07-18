@@ -23,6 +23,20 @@
 - Run PostgreSQL tests serially against the suite-pinned local database, with all Slack credentials explicitly blank.
 - Preserve the untracked `env` symlink and unrelated user changes.
 
+### Approved production-only review amendment (2026-07-18)
+
+- The user explicitly prioritized restoring the existing production database
+  and removed clean local-database bootstrap from this rollout's acceptance
+  criteria. The repository's historical root migration assumes pre-existing
+  base tables; repairing that legacy chain remains separate work.
+- Keep `create_app()` schema-neutral despite that known local-bootstrap gap.
+- Before dropping the audited empty orphan, also reject behavior-bearing
+  attached metadata: user triggers and row-security policies. Cover each with
+  a fixed invariant error, a direct no-`drop_table` assertion, and unchanged
+  catalog state.
+- Offline Alembic SQL generation and test-only process-group timeout cleanup
+  are review Minors outside the Render online migration path and are deferred.
+
 ---
 
 ## File Map
