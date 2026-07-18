@@ -314,6 +314,7 @@ def _assert_upgrade_refused_without_mutation(
             "constraint mismatch",
             "index mismatch",
             "external dependency mismatch",
+            "attached behavior mismatch",
             "table contains rows",
         )
     }
@@ -470,6 +471,64 @@ def test_upgrade_refuses_empty_orphan_with_inbound_foreign_key_without_mutation(
             connection,
             monkeypatch,
             expected_invariant="external dependency mismatch",
+        )
+
+
+def test_upgrade_refuses_empty_orphan_with_user_trigger_without_mutation(
+    engine,
+    monkeypatch,
+):
+    with migration_schema(engine, "summary_user_trigger") as (
+        connection,
+        _schema,
+    ):
+        create_legacy_practices_table(connection)
+        create_exact_summary_orphan(connection)
+        connection.exec_driver_sql("""
+            CREATE FUNCTION keep_summary_row()
+            RETURNS trigger
+            LANGUAGE plpgsql
+            AS $$ BEGIN RETURN NEW; END $$
+        """)
+        connection.exec_driver_sql("""
+            CREATE TRIGGER unexpected_summary_trigger
+            BEFORE INSERT ON practice_summary_posts
+            FOR EACH ROW EXECUTE FUNCTION keep_summary_row()
+        """)
+        assert summary_catalog_snapshot(connection)[
+            "attached_behavior"
+        ] == (1, 0)
+
+        _assert_upgrade_refused_without_mutation(
+            connection,
+            monkeypatch,
+            expected_invariant="attached behavior mismatch",
+        )
+
+
+def test_upgrade_refuses_empty_orphan_with_policy_without_mutation(
+    engine,
+    monkeypatch,
+):
+    with migration_schema(engine, "summary_policy") as (
+        connection,
+        _schema,
+    ):
+        create_legacy_practices_table(connection)
+        create_exact_summary_orphan(connection)
+        connection.exec_driver_sql("""
+            CREATE POLICY unexpected_summary_policy
+            ON practice_summary_posts
+            USING (true)
+        """)
+        assert summary_catalog_snapshot(connection)[
+            "attached_behavior"
+        ] == (0, 1)
+
+        _assert_upgrade_refused_without_mutation(
+            connection,
+            monkeypatch,
+            expected_invariant="attached behavior mismatch",
         )
 
 

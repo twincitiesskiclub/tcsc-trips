@@ -130,6 +130,16 @@ def summary_catalog_snapshot(connection):
             AND dependent_constraint.conrelid = :oid
           )
     """), {"oid": oid}).scalar_one()
+    attached_behavior = connection.execute(text("""
+        SELECT
+          (SELECT count(*)
+           FROM pg_trigger AS trigger
+           WHERE trigger.tgrelid = :oid
+             AND NOT trigger.tgisinternal) AS user_trigger_count,
+          (SELECT count(*)
+           FROM pg_policy AS policy
+           WHERE policy.polrelid = :oid) AS policy_count
+    """), {"oid": oid}).one()
     quote = connection.dialect.identifier_preparer.quote
     qualified = (
         f"{quote(relation['schema_name'])}."
@@ -157,5 +167,6 @@ def summary_catalog_snapshot(connection):
         ],
         "sequence": [tuple(row) for row in sequence],
         "external_dependency_count": external_dependency_count,
+        "attached_behavior": tuple(attached_behavior),
         "row_count": row_count,
     }
