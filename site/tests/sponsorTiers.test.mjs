@@ -14,6 +14,11 @@ test('defines the three public tiers in recognition order', () => {
   assert.equal(SPONSOR_TIERS.some(({ tier }) => tier === 'friend'), false);
 });
 
+test('freezes the public tier array and every tier record', () => {
+  assert.equal(Object.isFrozen(SPONSOR_TIERS), true);
+  assert.equal(SPONSOR_TIERS.every((tier) => Object.isFrozen(tier)), true);
+});
+
 test('omits empty tiers and sorts sponsors by order then id', () => {
   const groups = groupSponsorsByTier([
     sponsor('zeta', 'supporter', 4),
