@@ -25,7 +25,7 @@
 
 - Modify `site/src/lib/conditionsDisplayMode.ts`: make payload health take precedence over the seasonal failure choice.
 - Modify `site/src/components/LiveConditions.client.ts`: correct the `renderQuiet()` comment so it documents the new failure-only off-season path. Do not alter rendering logic.
-- Modify `site/tests/conditionsDisplayMode.test.mjs`: update the July unit contract and add one healthy-summer rendered-DOM regression.
+- Modify `site/tests/conditionsDisplayMode.test.mjs`: update the July unit contract and add one healthy-summer live-to-failure rendered-DOM regression.
 - Leave `site/src/components/LiveConditions.astro`, `site/package.json`, and every backend file unchanged.
 
 ### Task 1: Render Healthy Conditions Year Round
@@ -53,10 +53,10 @@ test('uses live mode for a healthy, non-empty July payload', () => {
 });
 ```
 
-Then insert this test immediately before `restores venue cells when November unavailable follows October off-season`:
+Then insert this sequential live-to-failure regression immediately before `restores venue cells when November unavailable follows October off-season`:
 
 ```js
-test('renders real temperatures and wax recommendations from a healthy July payload', async () => {
+test('renders healthy July data then clears it for a failed July refresh', async () => {
   const builtHome = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
   const assetPath = builtHome.match(
     /<script\b[^>]*\bsrc="(\/_astro\/LiveConditions\.[^"]+\.js)"[^>]*><\/script>/i,
@@ -78,6 +78,7 @@ test('renders real temperatures and wax recommendations from a healthy July payl
     window: globalThis.window,
   };
   const now = '2026-07-19T15:14:56-05:00';
+  let refresh;
   const payload = {
     updated_at: now,
     locations: [
@@ -85,13 +86,13 @@ test('renders real temperatures and wax recommendations from a healthy July payl
         id: 'wirth',
         name: 'Theo',
         temp_f: 88,
-        wind_chill_f: 88,
+        wind_chill_f: 84,
         snow_conditions: null,
         wax_band: 'red',
         wax_label: 'Red wax · klister conditions',
-        source_url: null,
-        report_date: null,
-        groomed_for: null,
+        source_url: 'https://www.skinnyski.com/trails/report.asp?id=123',
+        report_date: '2026-07-18',
+        groomed_for: 'skate',
       },
     ],
     birkie: {
@@ -100,6 +101,7 @@ test('renders real temperatures and wax recommendations from a healthy July payl
       detail: 'No fever yet. Birkie 2027 talk starts in November.',
     },
   };
+  const responses = [payload, errorPayload];
 
   class TestDate extends original.Date {
     constructor(...args) {
@@ -117,10 +119,13 @@ test('renders real temperatures and wax recommendations from a healthy July payl
     globalThis.window = dom.window;
     globalThis.fetch = async () => ({
       ok: true,
-      json: async () => payload,
+      json: async () => responses.shift(),
     });
     globalThis.setTimeout = () => 1;
-    globalThis.setInterval = () => 1;
+    globalThis.setInterval = (callback) => {
+      refresh = callback;
+      return 1;
+    };
 
     const assetUrl = new URL(`../dist${assetPath}`, import.meta.url);
     await import(`${assetUrl.href}?healthy-summer-regression`);
@@ -131,9 +136,21 @@ test('renders real temperatures and wax recommendations from a healthy July payl
     assert.equal(wirth.hidden, false);
     assert.equal(wirth.style.display, '');
     assert.equal(wirth.querySelector('[data-temp]')?.textContent, '88°F');
+    assert.equal(wirth.querySelector('[data-feels]')?.textContent, 'feels 84°');
     assert.equal(
       wirth.querySelector('[data-wax]')?.textContent,
       'Red wax · klister conditions',
+    );
+
+    const sourceLink = wirth.querySelector('a[data-source-link]');
+    assert.ok(sourceLink, 'healthy payload must render its trail report link');
+    assert.equal(
+      sourceLink.getAttribute('href'),
+      'https://www.skinnyski.com/trails/report.asp?id=123',
+    );
+    assert.equal(
+      wirth.querySelector('[data-groomed]')?.textContent,
+      'Groomed skate · Jul 18',
     );
 
     const chip = wirth.querySelector('[data-wax-chip]');
@@ -143,6 +160,30 @@ test('renders real temperatures and wax recommendations from a healthy July payl
     assert.equal(root.querySelector('[data-dryland-label]'), null);
     assert.match(root.querySelector('[data-updated]')?.textContent ?? '', /^● Live · updated /);
     assert.equal(root.querySelector('[data-birkie-word]')?.textContent, '98.6°');
+    assert.equal(root.dataset.updatedAt, now);
+
+    assert.equal(typeof refresh, 'function', 'client must register its refresh interval');
+    refresh();
+    await new Promise((resolve) => original.setTimeout(resolve, 0));
+
+    const venueCells = [...root.querySelectorAll('[data-location]')];
+    assert.equal(venueCells.length, 4);
+    for (const cell of venueCells) {
+      assert.equal(cell.hidden, true, 'summer failure must hide each venue');
+      assert.equal(cell.style.display, 'none', 'summer failure must hide each venue inline');
+      assert.equal(cell.querySelector('[data-temp]')?.textContent, '');
+      assert.equal(cell.querySelector('[data-feels]')?.textContent, '');
+      assert.equal(cell.querySelector('[data-wax]')?.textContent, 'Dryland season');
+      assert.equal(cell.querySelector('[data-wax-chip]')?.hidden, true);
+      assert.equal(cell.querySelector('[data-source-link]'), null);
+      assert.equal(cell.querySelector('[data-groomed]'), null);
+    }
+    assert.equal(root.querySelectorAll('[data-dryland-label]').length, 1);
+    assert.equal(root.dataset.updatedAt, undefined);
+    assert.equal(
+      root.querySelector('[data-updated]')?.textContent,
+      '● Trail reports come back with the snow',
+    );
   } finally {
     globalThis.Date = original.Date;
     globalThis.document = original.document;
@@ -218,7 +259,7 @@ npm run build -- --force
 node --test tests/conditionsDisplayMode.test.mjs
 ```
 
-Expected: 6 tests pass, 0 fail. Confirm that the healthy and failed July cases now select different modes and that the October-to-November regression remains green.
+Expected: 6 tests pass, 0 fail. Confirm that the healthy and failed July cases now select different modes, the healthy-July-to-failed-July refresh clears every live artifact into the off-season fallback, and the October-to-November regression remains green.
 
 - [ ] **Step 5: Run the full automated regression suite**
 
@@ -294,6 +335,16 @@ with sync_playwright() as playwright:
         page = context.new_page()
         page.add_init_script(
             """
+            const NativeDate = window.Date;
+            const frozenNow = "2026-07-19T15:14:56-05:00";
+            window.Date = class TestDate extends NativeDate {
+              constructor(...args) {
+                super(...(args.length > 0 ? args : [frozenNow]));
+              }
+              static now() {
+                return new NativeDate(frozenNow).getTime();
+              }
+            };
             window.__tcscConditionsCls = 0;
             window.__tcscLayoutObserver = new PerformanceObserver((list) => {
               for (const entry of list.getEntries()) {
@@ -358,6 +409,7 @@ PY
 Expected:
 
 - Home and About return 200 at 390px and 1440px.
+- The browser clock is frozen to the July fixture before the conditions client initializes.
 - Theo shows `88°F` and `Red wax · klister conditions` on both variants.
 - Desktop shows all four venues and Birkie Fever; mobile shows Theo only.
 - No dryland label or summer-specific copy appears with healthy data.

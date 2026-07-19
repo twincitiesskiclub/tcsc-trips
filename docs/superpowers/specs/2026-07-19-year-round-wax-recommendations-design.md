@@ -1,7 +1,7 @@
 # Year-Round Wax Recommendations Design
 
 **Date:** 2026-07-19
-**Status:** Approved direction, awaiting written-spec review
+**Status:** Approved
 
 ## Context
 
