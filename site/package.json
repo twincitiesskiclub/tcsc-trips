@@ -10,7 +10,8 @@
     "dev": "astro dev --port 4321",
     "build": "astro build",
     "preview": "astro preview --port 4321",
-    "check": "astro check"
+    "check": "astro check",
+    "test:sponsors": "npm run build && node --test tests/sponsorTiers.test.mjs tests/sponsorSchemaContracts.test.mjs tests/sponsorWallBuild.test.mjs tests/sponsors-page.test.mjs"
   },
   "dependencies": {
     "@astrojs/markdoc": "^2.0.3",

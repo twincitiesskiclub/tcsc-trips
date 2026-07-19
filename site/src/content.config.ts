@@ -285,12 +285,33 @@ const racing = defineCollection({
     .strict(),
 });
 
+const sponsorPageItem = z
+  .object({
+    title: z.string().min(1),
+    detail: z.string().min(1),
+  })
+  .strict();
+
 const sponsors_page = defineCollection({
   loader: singletonLoader('sponsors_page.yaml'),
   schema: z
     .object({
-      headline: z.string().optional(),
-      intro: z.string().optional(),
+      headline: z.string().min(1),
+      intro: z.string().min(1),
+      impact_heading: z.string().min(1),
+      impact_intro: z.string().min(1),
+      impact_items: z.array(sponsorPageItem).min(1),
+      recognition_heading: z.string().min(1),
+      recognition_body: z.string().min(1),
+      recognition_caption: z.string().min(1),
+      priorities_heading: z.string().min(1),
+      priorities_intro: z.string().min(1),
+      priority_items: z.array(sponsorPageItem).min(1),
+      contact_heading: z.string().min(1),
+      contact_body: z.string().min(1),
+      contact_email: z.email(),
+      contact_cta_label: z.string().min(1),
+      disclosure: z.string().min(1),
     })
     .strict(),
 });

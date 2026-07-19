@@ -1,5 +1,52 @@
-# intro: verbatim from the live sponsors page (migration/pages/sponsors.txt),
-# which carries only the Trailblazer-level sentence as prose.
-headline: Meet our sponsors
+headline: Our sponsors
 intro: >-
-  We're grateful to these organizations for supporting TCSC.
+  Support from our sponsors strengthens the shared resources behind training,
+  team waxing, travel, and race support while helping TCSC keep participation
+  costs in reach.
+impact_heading: Sponsor support helped TCSC...
+impact_intro: >-
+  Recent investments strengthened everyday team activities as well as travel,
+  with shared resources available to racers and non-racers.
+impact_items:
+  - title: Host team waxing sessions
+    detail: >-
+      Two team drills support organized waxing sessions, and shared waxing
+      supplies remain available to members whether or not they race.
+  - title: Make team travel easier
+    detail: >-
+      Rental vans carried food, equipment, and team supplies to the Pre-Birkie
+      and Great Bear Chase, reducing the logistics handled by volunteer trip
+      leaders.
+  - title: Build a useful team base
+    detail: >-
+      A team tent and Birkie start parking created space for waxing, warming up,
+      testing skis, cheering, and moving people and gear.
+recognition_heading: Visible support at team events
+recognition_body: >-
+  TCSC purchased six team jackets featuring sponsor logos for use at races and
+  podium photos.
+recognition_caption: A sponsor-logo team jacket at the Great Bear Chase.
+priorities_heading: What continued support makes possible
+priorities_intro: >-
+  As the team grows, sponsor support gives TCSC flexibility to invest where it
+  can have the most impact.
+priority_items:
+  - title: Shared wax resources
+    detail: >-
+      Move the team's shared wax collection away from products containing PFAS,
+      often called forever chemicals.
+  - title: Coaching and training capacity
+    detail: Add coaches and secure larger training spaces as the team grows.
+  - title: Shared team equipment
+    detail: >-
+      Invest in equipment that lowers the upfront cost of participating and
+      helps new members get up to speed.
+contact_heading: Interested in supporting TCSC?
+contact_body: >-
+  Contact club leadership to discuss sponsorship opportunities and current team
+  needs.
+contact_email: contact@twincitiesskiclub.org
+contact_cta_label: Email club leadership
+disclosure: >-
+  Sponsor recognition acknowledges support and does not constitute endorsement
+  of a sponsor's products or services.

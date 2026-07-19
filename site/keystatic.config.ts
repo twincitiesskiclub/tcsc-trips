@@ -148,8 +148,34 @@ export default config({
       label: 'Sponsors page',
       path: 'src/content/pages/sponsors_page',
       schema: {
-        headline: fields.text({ label: 'Headline' }),
-        intro: fields.text({ label: 'Intro', multiline: true }),
+        headline: fields.text({ label: 'Headline', validation: { isRequired: true } }),
+        intro: fields.text({ label: 'Intro', multiline: true, validation: { isRequired: true } }),
+        impact_heading: fields.text({ label: 'Impact heading', validation: { isRequired: true } }),
+        impact_intro: fields.text({ label: 'Impact intro', multiline: true, validation: { isRequired: true } }),
+        impact_items: fields.array(
+          fields.object({
+            title: fields.text({ label: 'Title', validation: { isRequired: true } }),
+            detail: fields.text({ label: 'Detail', multiline: true, validation: { isRequired: true } }),
+          }),
+          { label: 'Completed impact', itemLabel: (p) => p.fields.title.value || 'Impact item' },
+        ),
+        recognition_heading: fields.text({ label: 'Recognition heading', validation: { isRequired: true } }),
+        recognition_body: fields.text({ label: 'Recognition body', multiline: true, validation: { isRequired: true } }),
+        recognition_caption: fields.text({ label: 'Recognition photo caption', validation: { isRequired: true } }),
+        priorities_heading: fields.text({ label: 'Priorities heading', validation: { isRequired: true } }),
+        priorities_intro: fields.text({ label: 'Priorities intro', multiline: true, validation: { isRequired: true } }),
+        priority_items: fields.array(
+          fields.object({
+            title: fields.text({ label: 'Title', validation: { isRequired: true } }),
+            detail: fields.text({ label: 'Detail', multiline: true, validation: { isRequired: true } }),
+          }),
+          { label: 'Future priorities', itemLabel: (p) => p.fields.title.value || 'Priority' },
+        ),
+        contact_heading: fields.text({ label: 'Contact heading', validation: { isRequired: true } }),
+        contact_body: fields.text({ label: 'Contact body', multiline: true, validation: { isRequired: true } }),
+        contact_email: fields.text({ label: 'Contact email', validation: { isRequired: true } }),
+        contact_cta_label: fields.text({ label: 'Contact CTA label', validation: { isRequired: true } }),
+        disclosure: fields.text({ label: 'Sponsor disclosure', multiline: true, validation: { isRequired: true } }),
       },
     }),
 
