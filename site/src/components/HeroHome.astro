@@ -23,7 +23,7 @@ const props = Astro.props;
 // width itself as a candidate, so it never upscales (see imageWidths.ts).
 ---
 <section class="relative bg-navy overflow-hidden">
-  <div class="relative h-[74vh] min-h-[540px]">
+  <div class="hero-frame relative">
     {props.image && (
       <Picture
         src={props.image}
@@ -40,7 +40,7 @@ const props = Astro.props;
     {/* Functional scrim: heavy only at the text zone, light by 45% up so
         the photograph actually shows. */}
     <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
-    <div class="relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-14 md:pb-20 text-paper">
+    <div class="safe-inline-6 relative h-full mx-auto max-w-7xl px-6 flex flex-col justify-end pb-14 md:pb-20 text-paper">
       <h1 class="hero-headline font-display font-semibold text-4xl sm:text-5xl md:text-7xl leading-[1.02] text-mint max-w-5xl text-balance">{props.headline}</h1>
       {props.subline && (
         <p class="hero-headline mt-4 text-base md:text-lg text-paper/85 max-w-prose-narrow">{props.subline}</p>
@@ -58,6 +58,20 @@ const props = Astro.props;
 </section>
 
 <style>
+  /* svh is stable while mobile browser chrome expands and retracts. The
+     bounded minimum keeps the composition usable in short landscape views
+     without forcing the old 540px frame beyond the visible screen. */
+  .hero-frame {
+    height: 74vh;
+    min-height: min(540px, 100vh);
+  }
+  @supports (height: 100svh) {
+    .hero-frame {
+      height: 74svh;
+      min-height: min(540px, 100svh);
+    }
+  }
+
   /* The single orchestrated page-load: photo fades in, headline rises 8px
      just behind it. One entrance per load, then total stillness (no scroll
      animation anywhere on the site). Transform/opacity only; the global

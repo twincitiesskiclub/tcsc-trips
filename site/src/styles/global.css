@@ -31,12 +31,37 @@
   font-display: swap;
 }
 
+/* Mobile Safari exposes the root canvas during overscroll and around its
+   safe areas. Navy matches every route's nav and footer, so neither edge can
+   flash a white strip even when the page content itself is paper. */
 html {
   font-family: 'ArchivoVariable', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: oklch(0.985 0.003 90);
+  background: oklch(0.25 0.06 260);
   color: oklch(0.18 0.04 260);
+}
+
+/* 100vh is the compatibility fallback. dvh tracks retracting mobile browser
+   chrome so short pages continue to cover the visible viewport. */
+.site-shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+}
+
+/* Shared content gutters that expand only when a device cutout needs more
+   room. Full-bleed surface backgrounds remain untouched. */
+.safe-inline-6,
+.safe-inline-6-10 {
+  --safe-inline-gutter: 1.5rem;
+  padding-left: max(var(--safe-inline-gutter), calc(env(safe-area-inset-left, 0px) + 0.75rem));
+  padding-right: max(var(--safe-inline-gutter), calc(env(safe-area-inset-right, 0px) + 0.75rem));
+}
+
+@media (min-width: 48rem) {
+  .safe-inline-6-10 {
+    --safe-inline-gutter: 2.5rem;
+  }
 }
 
 /* Focus-visible baseline (DESIGN.md): always-visible 2px ring, mint on navy

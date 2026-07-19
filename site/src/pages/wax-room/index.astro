@@ -15,7 +15,7 @@ const entries = (await getCollection('wax_entries')).sort(
   headline="The Wax Room"
   subhead="Conditions, wax notes, race-day prep, technique. Field reports from TCSC coaches and members."
 >
-  <div class="mx-auto max-w-3xl px-6 py-12 md:py-16">
+  <div class="safe-inline-6 mx-auto max-w-3xl px-6 py-12 md:py-16">
     {entries.length === 0 ? (
       <p class="text-slate">No entries yet.</p>
     ) : (

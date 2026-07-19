@@ -8,8 +8,8 @@ const cta = await getRegistrationCta();
 const pathname = Astro.url.pathname;
 ---
 <header class="bg-navy text-paper border-b border-mint/10">
-  <div class="mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-6">
-    <a href="/" class="flex items-center gap-3.5" aria-label="Twin Cities Ski Club home">
+  <div class="nav-inner safe-inline-6 mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-6">
+    <a href="/" class="flex min-h-11 items-center gap-3.5" aria-label="Twin Cities Ski Club home">
       <svg width="145" height="22" viewBox="0 0 358.78 54.47" aria-hidden="true">
         <!-- Heritage club logo (from app/static/images/tcsc-logo.svg), recolored
              for the navy bar. Fills are hardcoded on purpose: this mark must
@@ -68,3 +68,12 @@ const pathname = Astro.url.pathname;
     </button>
   </div>
 </header>
+
+<style>
+  /* In standalone mode the nav reaches behind the status bar. Keep its
+     controls below the cutout while preserving the normal 16px rhythm. */
+  .nav-inner {
+    padding-top: max(1rem, calc(env(safe-area-inset-top, 0px) + 0.75rem));
+    padding-bottom: 1rem;
+  }
+</style>

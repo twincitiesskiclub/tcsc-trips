@@ -10,6 +10,8 @@
 // src/currentSrc here; that is the small grid-optimized variant, which is
 // exactly the prior shipped bug (305px images stretched fullscreen).
 
+import { lockPageScroll, unlockPageScroll } from '@/lib/pageScrollLock';
+
 type Item = { full: string; fullSrcset: string; alt: string; caption: string };
 
 let bound = false;
@@ -79,7 +81,7 @@ export function init() {
     box!.classList.remove('hidden');
     box!.classList.add('flex');
     box!.setAttribute('aria-hidden', 'false');
-    document.body.style.overflow = 'hidden';
+    lockPageScroll();
     closeBtn!.focus();
   }
 
@@ -87,8 +89,8 @@ export function init() {
     box!.classList.add('hidden');
     box!.classList.remove('flex');
     box!.setAttribute('aria-hidden', 'true');
-    document.body.style.overflow = '';
-    invoker?.focus();
+    unlockPageScroll();
+    invoker?.focus({ preventScroll: true });
     invoker = null;
   }
 
