@@ -20,39 +20,127 @@ const toText = (html) =>
 
 const sponsorText = toText(sponsorsHtml);
 const homeText = toText(homeHtml);
-const anchorTags = sponsorsHtml.match(/<a\b[^>]*>/gi) ?? [];
-const anchorFor = (href) => anchorTags.find((tag) => tag.includes(`href="${href}"`));
+const completedRows = [
+  [
+    'Host team waxing sessions',
+    'Two team drills support organized waxing sessions, and shared waxing supplies remain available to members whether or not they race.',
+  ],
+  [
+    'Make team travel easier',
+    'Rental vans carried food, equipment, and team supplies to the Pre-Birkie and Great Bear Chase, reducing the logistics handled by volunteer trip leaders.',
+  ],
+  [
+    'Build a useful team base',
+    'A team tent and Birkie start parking created space for waxing, warming up, testing skis, cheering, and moving people and gear.',
+  ],
+];
+const futureRows = [
+  [
+    'Shared wax resources',
+    "Move the team's shared wax collection away from products containing PFAS, often called forever chemicals.",
+  ],
+  [
+    'Coaching and training capacity',
+    'Add coaches and secure larger training spaces as the team grows.',
+  ],
+  [
+    'Shared team equipment',
+    'Invest in equipment that lowers the upfront cost of participating and helps new members get up to speed.',
+  ],
+];
+
+function anchorBlockFor(href) {
+  const marker = `href="${href}"`;
+  const markerIndex = sponsorsHtml.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `missing sponsor link: ${href}`);
+
+  const start = sponsorsHtml.lastIndexOf('<a', markerIndex);
+  assert.notEqual(start, -1, `missing anchor start for: ${href}`);
+
+  const end = sponsorsHtml.indexOf('</a>', markerIndex);
+  assert.notEqual(end, -1, `missing anchor end for: ${href}`);
+
+  return sponsorsHtml.slice(start, end + '</a>'.length);
+}
+
+function textPosition(marker) {
+  const position = sponsorText.indexOf(marker);
+  assert.notEqual(position, -1, `missing ordered page copy: ${marker}`);
+  return position;
+}
 
 test('renders the approved recognition and impact copy', () => {
-  for (const phrase of [
+  for (const approvedCopy of [
     'Our sponsors',
     'Trailblazer Partners',
+    'Support from our sponsors strengthens the shared resources behind training, team waxing, travel, and race support while helping TCSC keep participation costs in reach.',
     'Sponsor support helped TCSC...',
-    'Host team waxing sessions',
-    'Pre-Birkie and Great Bear Chase',
-    'Build a useful team base',
+    'Recent investments strengthened everyday team activities as well as travel, with shared resources available to racers and non-racers.',
+    ...completedRows.flat(),
     'Visible support at team events',
-    'six team jackets featuring sponsor logos',
+    'TCSC purchased six team jackets featuring sponsor logos for use at races and podium photos.',
+    'A sponsor-logo team jacket at the Great Bear Chase.',
     'What continued support makes possible',
-    'products containing PFAS',
-    'Coaching and training capacity',
-    'Shared team equipment',
+    'As the team grows, sponsor support gives TCSC flexibility to invest where it can have the most impact.',
+    ...futureRows.flat(),
     'Interested in supporting TCSC?',
-    'Sponsor recognition acknowledges support and does not constitute endorsement',
+    'Contact club leadership to discuss sponsorship opportunities and current team needs.',
+    'Email club leadership',
+    "Sponsor recognition acknowledges support and does not constitute endorsement of a sponsor's products or services.",
   ]) {
-    assert.ok(sponsorText.includes(phrase), `missing page copy: ${phrase}`);
+    assert.ok(sponsorText.includes(approvedCopy), `missing exact page copy: ${approvedCopy}`);
   }
 });
 
+test('keeps completed impact, recognition, future priorities, and contact in order', () => {
+  const impactHeading = textPosition('Sponsor support helped TCSC...');
+  const recognitionHeading = textPosition('Visible support at team events');
+  const jacketSentence = textPosition(
+    'TCSC purchased six team jackets featuring sponsor logos for use at races and podium photos.',
+  );
+  const futureHeading = textPosition('What continued support makes possible');
+  const disclosure = textPosition(
+    "Sponsor recognition acknowledges support and does not constitute endorsement of a sponsor's products or services.",
+  );
+  const contactHeading = textPosition('Interested in supporting TCSC?');
+
+  let previousPosition = impactHeading;
+  for (const [title, detail] of completedRows) {
+    const titlePosition = textPosition(title);
+    const detailPosition = textPosition(detail);
+    assert.ok(titlePosition > previousPosition, `${title} is outside the completed-impact rows`);
+    assert.ok(detailPosition > titlePosition, `${title} detail is not attached to its row`);
+    assert.ok(detailPosition < recognitionHeading, `${title} is not before recognition`);
+    previousPosition = detailPosition;
+  }
+
+  assert.ok(recognitionHeading > previousPosition, 'recognition must follow completed impact');
+  assert.ok(jacketSentence > recognitionHeading, 'jacket copy must remain in recognition');
+  assert.ok(jacketSentence < futureHeading, 'jacket copy must precede future priorities');
+
+  previousPosition = futureHeading;
+  for (const [title, detail] of futureRows) {
+    const titlePosition = textPosition(title);
+    const detailPosition = textPosition(detail);
+    assert.ok(titlePosition > previousPosition, `${title} is outside the future-priority rows`);
+    assert.ok(detailPosition > titlePosition, `${title} detail is not attached to its row`);
+    assert.ok(detailPosition < contactHeading, `${title} is not before the contact section`);
+    previousPosition = detailPosition;
+  }
+
+  assert.ok(disclosure > previousPosition, 'disclosure must follow future priorities');
+  assert.ok(disclosure < contactHeading, 'disclosure must precede the contact section');
+});
+
 test('keeps current sponsor links accessible and qualified', () => {
-  for (const [href, name] of [
-    ['https://tcomn.com/', 'Twin Cities Orthopedics'],
-    ['https://www.kwiktrip.com/', 'Kwik Trip'],
+  for (const [href, expectedAlt] of [
+    ['https://tcomn.com/', 'Twin Cities Orthopedics website'],
+    ['https://www.kwiktrip.com/', 'Kwik Trip website'],
   ]) {
-    const anchor = anchorFor(href);
-    assert.ok(anchor, `missing sponsor link: ${href}`);
+    const anchor = anchorBlockFor(href);
     assert.match(anchor, /\brel="sponsored"/);
-    assert.ok(sponsorsHtml.includes(`alt="${name} website"`));
+    assert.doesNotMatch(anchor, /\btarget=/);
+    assert.deepEqual(anchor.match(/\balt="[^"]*"/gi) ?? [], [`alt="${expectedAlt}"`]);
   }
 
   assert.ok(sponsorsHtml.includes('href="mailto:contact@twincitiesskiclub.org"'));
@@ -68,9 +156,25 @@ test('keeps current sponsor links accessible and qualified', () => {
   );
 });
 
-test('keeps prices and highest-level claims off the public page', () => {
+test('keeps commercial terms and sponsor-specific purchase attribution off the public page', () => {
   assert.doesNotMatch(sponsorText, /highest level/i);
-  assert.doesNotMatch(sponsorText, /\$(?:2|4|6)(?:,?000|k)\b/i);
+  assert.doesNotMatch(sponsorText, /\$\s*\d[\d,]*(?:\.\d{1,2})?(?:\s*[km])?\b/i);
+  assert.doesNotMatch(sponsorText, /\b(?:package|packages|rate|rates|benefit|benefits)\b/i);
+  assert.doesNotMatch(
+    sponsorText,
+    /\b(?:tax[- ]deductible|tax deduction|deductible contribution|charitable deduction)\b/i,
+  );
+
+  const sponsorName = String.raw`(?:TCO|Twin Cities Orthopedics|Kwik Trip)`;
+  const purchaseVerb = String.raw`(?:funded|paid(?:\s+for)?|bought|purchased|provided|donated|supplied)`;
+  assert.doesNotMatch(
+    sponsorText,
+    new RegExp(`\\b${sponsorName}\\b[^.!?]{0,100}\\b${purchaseVerb}\\b`, 'i'),
+  );
+  assert.doesNotMatch(
+    sponsorText,
+    new RegExp(`\\b${purchaseVerb}\\b[^.!?]{0,100}\\b(?:by|from)\\s+${sponsorName}\\b`, 'i'),
+  );
 });
 
 test('keeps the home sponsor strip compact and unheaded', () => {
