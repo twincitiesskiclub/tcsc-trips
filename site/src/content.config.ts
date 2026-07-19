@@ -185,7 +185,9 @@ const sponsors = defineCollection({
       .object({
         slug: z.string(), // display name ("Sponsor name")
         logo: image(),
-        tier: z.enum(['trailblazer', 'supporter', 'friend']).default('supporter'),
+        tier: z
+          .enum(['trailblazer', 'community_partner', 'supporter'])
+          .default('supporter'),
         url: z.url().optional(),
         order: z.number().int().default(0),
       })

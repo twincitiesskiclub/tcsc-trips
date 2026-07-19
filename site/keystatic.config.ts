@@ -342,8 +342,8 @@ export default config({
           label: 'Tier',
           options: [
             { label: 'Trailblazer', value: 'trailblazer' },
+            { label: 'Community Partner', value: 'community_partner' },
             { label: 'Supporter', value: 'supporter' },
-            { label: 'Friend', value: 'friend' },
           ],
           defaultValue: 'supporter',
         }),

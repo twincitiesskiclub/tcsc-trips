@@ -1,9 +1,9 @@
 ---
 // SponsorWall: sponsor logos grouped by tier. Tiers with no sponsors render
 // nothing (no orphan headings). A sponsor without a url gets a plain <div>
-// wrapper, never a dead `<a href="#">` (dynamic Wrapper tag below). Logo alt
-// text is the sponsor's display name (entry.data.slug, see content.config.ts
-// header).
+// wrapper, never a dead `<a href="#">` (dynamic Wrapper tag below). Linked
+// logo alt text names the website destination; unlinked logos use the sponsor's
+// display name (entry.data.slug, see content.config.ts header).
 //
 // headingLevel keeps the document outline contiguous: the sponsors page
 // mounts the wall directly under its h1, so it passes 'h2'; the default
@@ -13,6 +13,7 @@
 import { getCollection } from 'astro:content';
 import { Image } from 'astro:assets';
 import { THUMB } from '@/components/imageWidths';
+import { groupSponsorsByTier } from '@/lib/sponsorTiers.js';
 
 interface Props {
   headingLevel?: 'h2' | 'h3';
@@ -23,21 +24,7 @@ interface Props {
 const { headingLevel: Heading = 'h3', variant = 'wall' } = Astro.props;
 
 const sponsors = await getCollection('sponsors');
-
-const tiers: Array<{ tier: 'trailblazer' | 'supporter' | 'friend'; label: string }> = [
-  { tier: 'trailblazer', label: 'Trailblazer' },
-  { tier: 'supporter', label: 'Supporter' },
-  { tier: 'friend', label: 'Friend' },
-];
-
-const tierGroups = tiers
-  .map(({ tier, label }) => ({
-    label,
-    items: sponsors
-      .filter((s) => s.data.tier === tier)
-      .sort((a, b) => a.data.order - b.data.order || a.id.localeCompare(b.id)),
-  }))
-  .filter((g) => g.items.length > 0);
+const tierGroups = groupSponsorsByTier(sponsors);
 ---
 {variant === 'strip' ? (
   <div class="flex flex-wrap items-center gap-x-14 gap-y-8">
@@ -47,7 +34,7 @@ const tierGroups = tiers
         <Wrapper {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}>
           <Image
             src={s.data.logo}
-            alt={s.data.slug}
+            alt={s.data.url ? `${s.data.slug} website` : s.data.slug}
             widths={THUMB}
             width={Math.min(400, s.data.logo.width)}
             sizes="200px"
@@ -59,40 +46,46 @@ const tierGroups = tiers
     })}
   </div>
 ) : (
-  tierGroups.map(({ label, items }) => {
-    // Scale the layout to the content: small groups (fewer than 4) render
-    // larger logos in a flex row; 4+ items use the standard 4-col grid.
-    // Tier headings are suppressed when only one tier group exists.
-    const showHeading = tierGroups.length > 1;
-    const isSmall = items.length < 4;
+  tierGroups.map(({ tier, label, items }) => {
+    const logoClass =
+      tier === 'trailblazer'
+        ? 'max-h-24 max-w-[280px]'
+        : tier === 'community_partner'
+          ? 'max-h-20 max-w-[240px]'
+          : 'max-h-16 max-w-[200px]';
+    const footprintClass =
+      tier === 'trailblazer'
+        ? 'h-28 sm:w-[320px]'
+        : tier === 'community_partner'
+          ? 'h-24 sm:w-[280px]'
+          : 'h-20 sm:w-[240px]';
+
     return (
-      <section class="mt-12 first:mt-0">
-        {showHeading && (
-          <Heading class="font-display font-semibold text-2xl text-navy">{label}</Heading>
-        )}
-        <div
-          class={
-            isSmall
-              ? (showHeading ? 'mt-6' : '') + ' flex flex-wrap gap-12 items-center'
-              : (showHeading ? 'mt-6' : '') + ' grid grid-cols-2 md:grid-cols-4 gap-8 items-center'
-          }
-        >
+      <section class="mt-14 first:mt-0">
+        <Heading class="font-display font-semibold text-2xl md:text-3xl text-navy">
+          {label}
+        </Heading>
+        <div class="mt-7 flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-start gap-x-12 gap-y-8">
           {items.map((s) => {
             const Wrapper = s.data.url ? 'a' : 'div';
-            // Small groups: taller max-h and a generous max-w so wide lockups
-            // get proportional optical weight alongside square marks.
-            const imgClass = isSmall
-              ? 'max-h-20 max-w-[280px] h-auto w-auto'
-              : 'max-h-16 max-w-full h-auto w-auto';
             return (
-              <Wrapper {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}>
+              <Wrapper
+                class={`w-full ${footprintClass} inline-flex items-center justify-center sm:justify-start`}
+                {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}
+              >
                 <Image
                   src={s.data.logo}
-                  alt={s.data.slug}
+                  alt={s.data.url ? `${s.data.slug} website` : s.data.slug}
                   widths={THUMB}
                   width={Math.min(600, s.data.logo.width)}
-                  sizes={isSmall ? '280px' : '(min-width: 768px) 200px, 40vw'}
-                  class={imgClass}
+                  sizes={
+                    tier === 'trailblazer'
+                      ? '(min-width: 640px) 280px, 80vw'
+                      : tier === 'community_partner'
+                        ? '(min-width: 640px) 240px, 75vw'
+                        : '(min-width: 640px) 200px, 70vw'
+                  }
+                  class={`${logoClass} h-auto w-auto`}
                   loading="lazy"
                 />
               </Wrapper>
