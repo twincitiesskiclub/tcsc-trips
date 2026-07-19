@@ -41,6 +41,7 @@
 // EXCEPTION: site_meta.og_image stays in `public/og/` — og:image needs a
 // stable absolute URL and no transformation.
 import { config, fields, collection, singleton } from '@keystatic/core';
+import { SPONSOR_CONTACT_EMAIL_PATTERN } from './src/lib/sponsorPageContract.js';
 
 // Content images routed through astro:assets (see image note above).
 const imagePaths = (kind: string) => ({
@@ -186,7 +187,7 @@ export default config({
           validation: {
             isRequired: true,
             pattern: {
-              regex: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              regex: SPONSOR_CONTACT_EMAIL_PATTERN,
               message: 'Enter a valid email address.',
             },
           },

@@ -54,11 +54,11 @@ Future populated tiers use these headings in this order:
 
 Impact rows:
 
-1. **Host team waxing sessions**  
+1. **Host team waxing sessions**
    `Two team drills support organized waxing sessions, and shared waxing supplies remain available to members whether or not they race.`
-2. **Make team travel easier**  
+2. **Make team travel easier**
    `Rental vans carried food, equipment, and team supplies to the Pre-Birkie and Great Bear Chase, reducing the logistics handled by volunteer trip leaders.`
-3. **Build a useful team base**  
+3. **Build a useful team base**
    `A team tent and Birkie start parking created space for waxing, warming up, testing skis, cheering, and moving people and gear.`
 
 ### Recognition in use
@@ -76,11 +76,11 @@ This is recognition delivered to sponsors, not shared member equipment. It must 
 
 Priority rows:
 
-1. **Shared wax resources**  
+1. **Shared wax resources**
    `Move the team's shared wax collection away from products containing PFAS, often called forever chemicals.`
-2. **Coaching and training capacity**  
+2. **Coaching and training capacity**
    `Add coaches and secure larger training spaces as the team grows.`
-3. **Shared team equipment**  
+3. **Shared team equipment**
    `Invest in equipment that lowers the upfront cost of participating and helps new members get up to speed.`
 
 These are forward-looking priorities, not restricted-use promises or claims about completed spending.

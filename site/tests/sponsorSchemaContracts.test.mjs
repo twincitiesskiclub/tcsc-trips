@@ -25,6 +25,18 @@ const SPONSOR_PAGE_ITEM_FIELDS = ['title', 'detail'];
 
 const astroSource = readFileSync(new URL('../src/content.config.ts', import.meta.url), 'utf8');
 const keystaticSource = readFileSync(new URL('../keystatic.config.ts', import.meta.url), 'utf8');
+const sponsorPageSource = readFileSync(
+  new URL('../src/content/pages/sponsors_page.yaml', import.meta.url),
+  'utf8',
+);
+const sponsorPageContractUrl = new URL('../src/lib/sponsorPageContract.js', import.meta.url);
+const MALFORMED_EMAILS = [
+  'a@b.c',
+  'x@y..com',
+  'a@-b.com',
+  'a@b.com.',
+  'a..b@example.com',
+];
 
 function blockBetween(source, startMarker, endMarker) {
   const start = source.indexOf(startMarker);
@@ -107,7 +119,15 @@ function readAstroSponsorPageContract() {
       impact_items: /impact_items:\s*z\.array\(sponsorPageItem\)\.min\(1\)/.test(pageBlock),
       priority_items: /priority_items:\s*z\.array\(sponsorPageItem\)\.min\(1\)/.test(pageBlock),
     },
-    emailValidation: /contact_email:\s*z\.email\(\)/.test(pageBlock),
+    emailValidation: {
+      sharedPatternImport: astroSource.includes(
+        "import { SPONSOR_CONTACT_EMAIL_PATTERN } from './lib/sponsorPageContract.js';",
+      ),
+      sharedPatternUse:
+        /contact_email:\s*z\s*\.string\(\)\s*\.regex\(\s*SPONSOR_CONTACT_EMAIL_PATTERN,\s*'Enter a valid email address\.'\s*\)/s.test(
+          pageBlock,
+        ),
+    },
   };
 }
 
@@ -142,9 +162,7 @@ function readKeystaticSponsorPageContract() {
     '        contact_email: fields.text({',
     '        contact_cta_label:',
   );
-  const patternMatch = emailBlock.match(
-    /pattern:\s*\{\s*regex:\s*([^,\n]+),\s*message:\s*'([^']+)'/s,
-  );
+  const messageMatch = emailBlock.match(/message:\s*'([^']+)'/);
 
   return {
     fields: propertyNamesAtIndent(pageBlock, 8),
@@ -160,8 +178,11 @@ function readKeystaticSponsorPageContract() {
     },
     emailValidation: {
       isRequired: /isRequired:\s*true/.test(emailBlock),
-      regex: patternMatch?.[1].trim(),
-      message: patternMatch?.[2],
+      sharedPatternImport: keystaticSource.includes(
+        "import { SPONSOR_CONTACT_EMAIL_PATTERN } from './src/lib/sponsorPageContract.js';",
+      ),
+      sharedPatternUse: /regex:\s*SPONSOR_CONTACT_EMAIL_PATTERN/.test(emailBlock),
+      message: messageMatch?.[1],
     },
   };
 }
@@ -225,11 +246,31 @@ test('requires non-empty impact and priority arrays in both schemas', () => {
   });
 });
 
-test('validates the sponsor contact email in both schemas', () => {
-  assert.equal(readAstroSponsorPageContract().emailValidation, true);
+test('uses the shared sponsor contact email contract in both schemas', () => {
+  assert.deepEqual(readAstroSponsorPageContract().emailValidation, {
+    sharedPatternImport: true,
+    sharedPatternUse: true,
+  });
   assert.deepEqual(readKeystaticSponsorPageContract().emailValidation, {
     isRequired: true,
-    regex: '/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/',
+    sharedPatternImport: true,
+    sharedPatternUse: true,
     message: 'Enter a valid email address.',
   });
+});
+
+test('rejects malformed sponsor emails and accepts the configured address', async () => {
+  const { SPONSOR_CONTACT_EMAIL_PATTERN } = await import(sponsorPageContractUrl.href);
+  const configuredEmail = sponsorPageSource.match(/^contact_email:\s*(\S+)\s*$/m)?.[1];
+
+  assert.ok(configuredEmail, 'missing configured sponsor contact email');
+  assert.equal(SPONSOR_CONTACT_EMAIL_PATTERN.test(configuredEmail), true);
+
+  for (const malformedEmail of MALFORMED_EMAILS) {
+    assert.equal(
+      SPONSOR_CONTACT_EMAIL_PATTERN.test(malformedEmail),
+      false,
+      `accepted malformed sponsor email: ${malformedEmail}`,
+    );
+  }
 });

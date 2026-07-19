@@ -57,6 +57,7 @@
 import { defineCollection } from 'astro:content';
 import { glob } from 'astro/loaders';
 import { z } from 'astro/zod';
+import { SPONSOR_CONTACT_EMAIL_PATTERN } from './lib/sponsorPageContract.js';
 
 /** entry.id = file name without extension (ignore frontmatter `slug`). */
 const idFromFileName = ({ entry }: { entry: string }) =>
@@ -309,7 +310,9 @@ const sponsors_page = defineCollection({
       priority_items: z.array(sponsorPageItem).min(1),
       contact_heading: z.string().min(1),
       contact_body: z.string().min(1),
-      contact_email: z.email(),
+      contact_email: z
+        .string()
+        .regex(SPONSOR_CONTACT_EMAIL_PATTERN, 'Enter a valid email address.'),
       contact_cta_label: z.string().min(1),
       disclosure: z.string().min(1),
     })

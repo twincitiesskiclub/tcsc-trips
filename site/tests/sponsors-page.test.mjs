@@ -5,21 +5,32 @@ import test from 'node:test';
 const sponsorsHtml = readFileSync(new URL('../dist/sponsors/index.html', import.meta.url), 'utf8');
 const homeHtml = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
 
-const toText = (html) =>
-  html
-    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
-    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
-    .replace(/<[^>]+>/g, ' ')
+const decodeHtml = (text) =>
+  text
     .replaceAll('&#39;', "'")
     .replaceAll('&#x27;', "'")
     .replaceAll('&apos;', "'")
     .replaceAll('&quot;', '"')
-    .replaceAll('&amp;', '&')
+    .replaceAll('&amp;', '&');
+
+const toText = (html) =>
+  decodeHtml(
+    html
+      .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, ' ')
+      .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, ' ')
+      .replace(/<[^>]+>/g, ' '),
+  )
     .replace(/\s+/g, ' ')
     .trim();
 
 const sponsorText = toText(sponsorsHtml);
 const homeText = toText(homeHtml);
+const sponsorCommercialSurface = [
+  sponsorText,
+  ...[...sponsorsHtml.matchAll(/\b(?:alt|title|aria-label|content)="([^"]*)"/gi)].map(
+    ([, value]) => decodeHtml(value),
+  ),
+].join('. ');
 const completedRows = [
   [
     'Host team waxing sessions',
@@ -67,6 +78,19 @@ function textPosition(marker) {
   const position = sponsorText.indexOf(marker);
   assert.notEqual(position, -1, `missing ordered page copy: ${marker}`);
   return position;
+}
+
+function openingTagBefore(html, marker, tagName) {
+  const markerIndex = html.indexOf(marker);
+  assert.notEqual(markerIndex, -1, `missing markup marker: ${marker}`);
+
+  const start = html.lastIndexOf(`<${tagName}`, markerIndex);
+  assert.notEqual(start, -1, `missing <${tagName}> before: ${marker}`);
+
+  const end = html.indexOf('>', start);
+  assert.notEqual(end, -1, `missing end of <${tagName}> before: ${marker}`);
+
+  return html.slice(start, end + 1);
 }
 
 test('renders the approved recognition and impact copy', () => {
@@ -132,6 +156,31 @@ test('keeps completed impact, recognition, future priorities, and contact in ord
   assert.ok(disclosure < contactHeading, 'disclosure must precede the contact section');
 });
 
+test('renders the impact photo before its copy in the mobile DOM flow', () => {
+  const photoAlt =
+    'alt="A large group of TCSC members posing with roller skis and poles after a summer training session"';
+  const impactHeading = 'Sponsor support helped TCSC...';
+  const photoPosition = sponsorsHtml.indexOf(photoAlt);
+  const headingPosition = sponsorsHtml.indexOf(impactHeading);
+
+  assert.notEqual(photoPosition, -1, 'missing impact photo');
+  assert.notEqual(headingPosition, -1, 'missing impact heading');
+  assert.ok(photoPosition < headingPosition, 'impact photo must precede impact copy in DOM order');
+  assert.match(openingTagBefore(sponsorsHtml, photoAlt, 'figure'), /\bmd:order-2\b/);
+  assert.match(openingTagBefore(sponsorsHtml, impactHeading, 'div'), /\bmd:order-1\b/);
+});
+
+test('keeps the sponsor disclosure at the mobile body-text minimum', () => {
+  const disclosureTag = openingTagBefore(
+    sponsorsHtml,
+    'Sponsor recognition acknowledges support',
+    'p',
+  );
+
+  assert.match(disclosureTag, /\btext-base\b/);
+  assert.doesNotMatch(disclosureTag, /\btext-xs\b/);
+});
+
 test('keeps current sponsor links accessible and qualified', () => {
   for (const [href, expectedAlt] of [
     ['https://tcomn.com/', 'Twin Cities Orthopedics website'],
@@ -157,22 +206,28 @@ test('keeps current sponsor links accessible and qualified', () => {
 });
 
 test('keeps commercial terms and sponsor-specific purchase attribution off the public page', () => {
-  assert.doesNotMatch(sponsorText, /highest level/i);
-  assert.doesNotMatch(sponsorText, /\$\s*\d[\d,]*(?:\.\d{1,2})?(?:\s*[km])?\b/i);
-  assert.doesNotMatch(sponsorText, /\b(?:package|packages|rate|rates|benefit|benefits)\b/i);
+  assert.doesNotMatch(sponsorCommercialSurface, /highest level/i);
   assert.doesNotMatch(
-    sponsorText,
+    sponsorCommercialSurface,
+    /\$\s*\d[\d,]*(?:\.\d{1,2})?(?:\s*[km])?\b/i,
+  );
+  assert.doesNotMatch(
+    sponsorCommercialSurface,
+    /\b(?:package|packages|rate|rates|benefit|benefits)\b/i,
+  );
+  assert.doesNotMatch(
+    sponsorCommercialSurface,
     /\b(?:tax[- ]deductible|tax deduction|deductible contribution|charitable deduction)\b/i,
   );
 
   const sponsorName = String.raw`(?:TCO|Twin Cities Orthopedics|Kwik Trip)`;
   const purchaseVerb = String.raw`(?:funded|paid(?:\s+for)?|bought|purchased|provided|donated|supplied)`;
   assert.doesNotMatch(
-    sponsorText,
+    sponsorCommercialSurface,
     new RegExp(`\\b${sponsorName}\\b[^.!?]{0,100}\\b${purchaseVerb}\\b`, 'i'),
   );
   assert.doesNotMatch(
-    sponsorText,
+    sponsorCommercialSurface,
     new RegExp(`\\b${purchaseVerb}\\b[^.!?]{0,100}\\b(?:by|from)\\s+${sponsorName}\\b`, 'i'),
   );
 });
