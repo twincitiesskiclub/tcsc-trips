@@ -35,7 +35,7 @@ const pathname = Astro.url.pathname;
       </svg>
     </a>
 
-    <nav aria-label="Primary" class="hidden md:flex items-center gap-7 text-sm text-paper/85">
+    <nav aria-label="Primary" class="hidden lg:flex items-center gap-7 text-sm text-paper/85">
       {links.map((l) => {
         const active = isActiveLink(l.href, pathname);
         return (
@@ -51,12 +51,12 @@ const pathname = Astro.url.pathname;
       })}
     </nav>
 
-    <div class="hidden md:flex items-center gap-5">
+    <div class="hidden lg:flex items-center gap-5">
       <CtaForState {...cta} />
     </div>
 
     <button
-      class="md:hidden p-2.5 -m-2.5 text-paper"
+      class="lg:hidden p-2.5 -m-2.5 text-paper"
       aria-label="Open menu"
       aria-expanded="false"
       aria-controls="mobile-nav-panel"

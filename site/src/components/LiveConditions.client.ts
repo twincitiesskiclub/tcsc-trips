@@ -1,3 +1,8 @@
+import {
+  conditionsDisplayMode,
+  type ConditionsDisplayMode,
+} from '@/lib/conditionsDisplayMode';
+
 type LocResp = {
   id: string;
   name: string;
@@ -29,24 +34,17 @@ async function fetchAndRender(root: HTMLElement) {
     const data: Resp = await r.json();
     renderInto(root, data);
   } catch {
-    renderFailure(root);
+    renderQuiet(root, conditionsDisplayMode(null));
   }
 }
 
 function renderInto(root: HTMLElement, data: Resp) {
-  // Flask's defensive error body is {updated_at: null, locations: [], error}.
-  if (data.error || !Array.isArray(data.locations) || data.locations.length === 0) {
-    return renderFailure(root);
+  const mode = conditionsDisplayMode(data);
+  if (mode !== 'live') {
+    renderQuiet(root, mode);
+    return;
   }
-  // Restore venue cells that were hidden during off-season, and remove any
-  // injected dryland label so the grid layout comes back cleanly.
-  root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
-    el.hidden = false;
-    // Inline display is the actual hide mechanism (the compact cells carry a
-    // `flex` class that out-specifies the UA [hidden] rule).
-    el.style.removeProperty('display');
-  });
-  root.querySelector('[data-dryland-label]')?.remove();
+  resetSeasonalPresentation(root);
   // The groomed line rides below the wax line and is prominent-only (the
   // compact variant keeps one line per venue); the stamp only exists there.
   const isCompact = !root.querySelector('[data-updated]');
@@ -93,12 +91,13 @@ function renderInto(root: HTMLElement, data: Resp) {
   updateStamp(root);
 }
 
-function renderFailure(root: HTMLElement) {
-  // Total failure: say it once in the stamp; cells go quiet ("No report")
-  // instead of repeating the error four times. Off-season (April-October),
-  // the strip talks like a member instead of erroring: no snow is not an
-  // outage.
-  const offSeason = new Date().getMonth() + 1 >= 4 && new Date().getMonth() + 1 <= 10;
+function renderQuiet(root: HTMLElement, mode: ConditionsDisplayMode) {
+  // Unavailable conditions say it once in the stamp; cells go quiet ("No
+  // report") instead of repeating the error four times. Off-season
+  // (April-October), healthy payloads and failures share this dryland path:
+  // no snow is not an outage.
+  const offSeason = mode === 'off-season';
+  resetSeasonalPresentation(root);
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
     // Clear temp so the server-rendered middot placeholder does not dangle.
     setText(el, '[data-temp]', '');
@@ -153,6 +152,18 @@ function renderFailure(root: HTMLElement) {
     stamp.textContent = stampText;
   }
   root.dataset.filled = 'true';
+}
+
+function resetSeasonalPresentation(root: HTMLElement) {
+  // Every render starts from winter-visible venue cells. Off-season can then
+  // deliberately hide them again without leaking that state into November.
+  root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
+    el.hidden = false;
+    // Inline display is the actual hide mechanism (the compact cells carry a
+    // `flex` class that out-specifies the UA [hidden] rule).
+    el.style.removeProperty('display');
+  });
+  root.querySelector('[data-dryland-label]')?.remove();
 }
 
 function updateStamp(root: HTMLElement) {

@@ -11,6 +11,7 @@
     "build": "astro build",
     "preview": "astro preview --port 4321",
     "check": "astro check",
+    "test:refinement": "npm run build && node --test tests/conditionsDisplayMode.test.mjs tests/responsiveNav.test.mjs tests/waxRoomEntry.test.mjs tests/contentRefinements.test.mjs",
     "test:sponsors": "npm run build && node --test tests/sponsorTiers.test.mjs tests/sponsorSchemaContracts.test.mjs tests/sponsorWallBuild.test.mjs tests/sponsors-page.test.mjs"
   },
   "dependencies": {
@@ -28,6 +29,7 @@
     "@tailwindcss/vite": "^4.3.2",
     "@types/react": "^19.2.17",
     "@types/react-dom": "^19.2.3",
+    "jsdom": "29.1.1",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "tailwindcss": "^4.3.2",
