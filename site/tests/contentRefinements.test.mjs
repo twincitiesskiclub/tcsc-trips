@@ -32,7 +32,7 @@ const html = {
 };
 
 const MISSION =
-  'TCSC is a 501(c)(3) nonprofit where young adult skiers train together twice a week, race if they want to, travel to Midwest ski weekends, volunteer, and organize workouts and socials beyond practice.';
+  'Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a supportive community for young adults (ages 21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.';
 const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
 const REGISTRATION_SUBHEAD = 'Returning members Aug 28; new members Sep 3.';
 const DRY_TRI_2026 =
@@ -174,8 +174,8 @@ test('dates the Tour de Finn participation claim in source and rendered copy', (
   assert.ok(toText(html.racing).includes('Two TCSC teams participated in 2026.'));
 });
 
-test('shows nonprofit status in the sponsor masthead', () => {
-  assert.match(
+test('keeps the 2.1 nonprofit fact out of the sponsor masthead', () => {
+  assert.doesNotMatch(
     source.sponsorsPage,
     /facts=\{\[\{ value: '501\(c\)\(3\) nonprofit', label: 'Status' \}\]\}/,
   );
@@ -183,7 +183,7 @@ test('shows nonprofit status in the sponsor masthead', () => {
   const mainStart = html.sponsors.indexOf('<main id="main"');
   assert.notEqual(mainStart, -1, 'missing sponsor main-content boundary');
   const masthead = html.sponsors.slice(0, mainStart);
-  assert.ok(toText(masthead).includes('501(c)(3) nonprofit Status'));
+  assert.equal(toText(masthead).includes('501(c)(3) nonprofit Status'), false);
 });
 
 test('keeps rejected generic and undated phrases out of public content', () => {
@@ -198,8 +198,6 @@ test('keeps rejected generic and undated phrases out of public content', () => {
   const publicBuiltText = htmlFiles(distDirectory).map(toText).join('\n');
 
   for (const rejected of [
-    /dedicated to fostering/i,
-    /promoting a healthy lifestyle/i,
     /\bthis year\b/i,
     /\beveryone welcome\b/i,
   ]) {
