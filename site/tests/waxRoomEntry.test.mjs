@@ -29,6 +29,12 @@ const toText = (html) =>
     .replace(/\s+/g, ' ')
     .trim();
 
+const bodyHtml = (html) => {
+  const body = html.match(/<body\b[^>]*>([\s\S]*?)<\/body>/i);
+  assert.ok(body, 'built page must include a body element');
+  return body[1];
+};
+
 test('publishes the contingency Wax Room field guide', () => {
   assert.equal(existsSync(sourceUrl), true, 'Wax Room entry source must exist');
   assert.equal(existsSync(detailUrl), true, `Astro must generate ${route}`);
@@ -37,14 +43,21 @@ test('publishes the contingency Wax Room field guide', () => {
   const homeHtml = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
   const indexHtml = readFileSync(new URL('../dist/wax-room/index.html', import.meta.url), 'utf8');
   const detailHtml = readFileSync(detailUrl, 'utf8');
+  const homeBody = bodyHtml(homeHtml);
+  const indexBody = bodyHtml(indexHtml);
+  const detailBody = bodyHtml(detailHtml);
 
-  for (const [surface, html] of [
-    ['home page', homeHtml],
-    ['Wax Room index', indexHtml],
-    ['Wax Room detail', detailHtml],
+  for (const [surface, body] of [
+    ['home page', homeBody],
+    ['Wax Room index', indexBody],
+    ['Wax Room detail', detailBody],
   ]) {
-    assert.ok(toText(html).includes(title), `${surface} must include the article title`);
+    assert.ok(toText(body).includes(title), `${surface} must visibly include the title`);
   }
+
+  const detailH1 = detailBody.match(/<h1\b[^>]*>([\s\S]*?)<\/h1>/i);
+  assert.ok(detailH1, 'Wax Room detail must include an h1');
+  assert.equal(toText(detailH1[1]), title, 'Wax Room detail h1 must be the article title');
 
   for (const [surface, html] of [
     ['home page', homeHtml],
@@ -68,6 +81,16 @@ test('publishes the contingency Wax Room field guide', () => {
   ]) {
     assert.match(source, new RegExp(`^## ${heading}$`, 'm'), `missing heading: ${heading}`);
   }
+
+  assert.match(source, /Shop labels vary\./);
+  assert.match(source, /Fine, medium, and coarse[^.]*structure grades/i);
+  assert.match(source, /Universal[^.]*(?:broader-use|broader use)[^.]*(?:pattern|menu label)/i);
+  assert.match(source, /None of these labels is a slow-to-fast ranking\./);
+
+  const checklistItems = source.match(/^\d+\. .+$/gm) ?? [];
+  assert.equal(checklistItems.length, 5, 'shop checklist must contain exactly five items');
+  assert.match(checklistItems.join('\n'), /classic or skate/i);
+  assert.match(checklistItems.join('\n'), /technique affects structure selection/i);
 
   assert.doesNotMatch(source, /\$\s*\d/, 'article must not include a dollar price');
   assert.doesNotMatch(
