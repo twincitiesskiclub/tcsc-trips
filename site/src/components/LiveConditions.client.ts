@@ -94,8 +94,8 @@ function renderInto(root: HTMLElement, data: Resp) {
 function renderQuiet(root: HTMLElement, mode: ConditionsDisplayMode) {
   // Unavailable conditions say it once in the stamp; cells go quiet ("No
   // report") instead of repeating the error four times. Off-season
-  // (April-October), healthy payloads and failures share this dryland path:
-  // no snow is not an outage.
+  // (April-October) is a failure-only fallback; healthy payloads render the
+  // same live temperature and wax instrument year round.
   const offSeason = mode === 'off-season';
   resetSeasonalPresentation(root);
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
