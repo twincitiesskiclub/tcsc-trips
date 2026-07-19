@@ -44,15 +44,7 @@ function renderInto(root: HTMLElement, data: Resp) {
     renderQuiet(root, mode);
     return;
   }
-  // Restore venue cells that were hidden during off-season, and remove any
-  // injected dryland label so the grid layout comes back cleanly.
-  root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
-    el.hidden = false;
-    // Inline display is the actual hide mechanism (the compact cells carry a
-    // `flex` class that out-specifies the UA [hidden] rule).
-    el.style.removeProperty('display');
-  });
-  root.querySelector('[data-dryland-label]')?.remove();
+  resetSeasonalPresentation(root);
   // The groomed line rides below the wax line and is prominent-only (the
   // compact variant keeps one line per venue); the stamp only exists there.
   const isCompact = !root.querySelector('[data-updated]');
@@ -105,6 +97,7 @@ function renderQuiet(root: HTMLElement, mode: ConditionsDisplayMode) {
   // (April-October), healthy payloads and failures share this dryland path:
   // no snow is not an outage.
   const offSeason = mode === 'off-season';
+  resetSeasonalPresentation(root);
   root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
     // Clear temp so the server-rendered middot placeholder does not dangle.
     setText(el, '[data-temp]', '');
@@ -159,6 +152,18 @@ function renderQuiet(root: HTMLElement, mode: ConditionsDisplayMode) {
     stamp.textContent = stampText;
   }
   root.dataset.filled = 'true';
+}
+
+function resetSeasonalPresentation(root: HTMLElement) {
+  // Every render starts from winter-visible venue cells. Off-season can then
+  // deliberately hide them again without leaking that state into November.
+  root.querySelectorAll<HTMLElement>('[data-location]').forEach((el) => {
+    el.hidden = false;
+    // Inline display is the actual hide mechanism (the compact cells carry a
+    // `flex` class that out-specifies the UA [hidden] rule).
+    el.style.removeProperty('display');
+  });
+  root.querySelector('[data-dryland-label]')?.remove();
 }
 
 function updateStamp(root: HTMLElement) {

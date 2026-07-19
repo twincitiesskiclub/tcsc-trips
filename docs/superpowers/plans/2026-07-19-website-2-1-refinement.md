@@ -160,7 +160,7 @@ lede: >-
 
 - [ ] In `home.yaml`, set:
   - `cta_coming_soon_label: Fall registration dates`
-  - `cta_coming_soon_url: https://tcsc.ski/#registration`
+  - `cta_coming_soon_url: https://twincitiesskiclub.org/#registration`
   - mission paragraph: `TCSC is a 501(c)(3) nonprofit where young adult skiers train together twice a week, race if they want to, travel to Midwest ski weekends, volunteer, and organize workouts and socials beyond practice.`
 - [ ] Add an optional `id` prop to `CTAStrip.astro`, forward it to the component's `<section>`, and pass `id="registration"` to the home-page CTA strip. Preserve every existing style class.
 - [ ] Keep the existing home CTA subhead with the confirmed distinction: `Returning members Aug 28; new members Sep 3.`
@@ -174,7 +174,7 @@ lede: >-
 
 - [ ] Run the focused contract test and confirm it passes.
 - [ ] Run a production build and assert:
-  - the coming-soon CTA label links to `https://tcsc.ski/#registration` and the target exists;
+  - the coming-soon CTA label links to `https://twincitiesskiclub.org/#registration` and the target exists;
   - both Aug 28 and Sep 3 are visible in the registration section;
   - the Dry Tri page contains no 2026 registration-open promise and no stale `/tri` registration link;
   - the sponsor masthead includes `501(c)(3) nonprofit`;

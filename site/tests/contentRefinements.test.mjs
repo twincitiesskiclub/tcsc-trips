@@ -33,6 +33,7 @@ const html = {
 
 const MISSION =
   'TCSC is a 501(c)(3) nonprofit where young adult skiers train together twice a week, race if they want to, travel to Midwest ski weekends, volunteer, and organize workouts and socials beyond practice.';
+const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
 const REGISTRATION_SUBHEAD = 'Returning members Aug 28; new members Sep 3.';
 const DRY_TRI_2026 =
   'Planning for 2026 is underway. The date and registration details will be posted here when confirmed.';
@@ -84,6 +85,10 @@ function sectionById(document, id) {
   return document.slice(start, end + '</section>'.length);
 }
 
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function htmlFiles(directory) {
   return readdirSync(directory, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile() && entry.name.endsWith('.html'))
@@ -94,7 +99,7 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   assert.equal(yamlScalar(source.home, 'cta_coming_soon_label'), 'Fall registration dates');
   assert.equal(
     yamlScalar(source.home, 'cta_coming_soon_url'),
-    'https://tcsc.ski/#registration',
+    `${MARKETING_ORIGIN}/#registration`,
   );
   assert.equal(yamlScalar(source.home, 'mission_paragraph'), MISSION);
 
@@ -110,11 +115,24 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   const registration = sectionById(html.home, 'registration');
   const registrationText = toText(registration);
   assert.ok(registrationText.includes(REGISTRATION_SUBHEAD));
-  assert.match(
-    registration,
-    /<a\b[^>]*href="https:\/\/tcsc\.ski\/#registration"[^>]*>Fall registration dates<\/a>/,
+  const cta = registration.match(
+    /<a\b([^>]*)>Fall registration dates<\/a>/i,
   );
-  assert.equal((html.home.match(/\bid="registration"/g) ?? []).length, 1);
+  assert.ok(cta, 'registration CTA must render as a title-bearing anchor');
+  const href = cta[1].match(/\bhref=(['"])(.*?)\1/i);
+  assert.ok(href, 'registration CTA must include an href');
+
+  const target = new URL(decodeHtml(href[2]), MARKETING_ORIGIN);
+  assert.equal(target.origin, MARKETING_ORIGIN);
+  assert.equal(target.pathname, '/');
+  assert.equal(target.hash, '#registration');
+  const targetId = target.hash.slice(1);
+  assert.equal(
+    (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp(targetId)}['"]`, 'gi')) ?? [])
+      .length,
+    1,
+    'registration CTA hash must resolve to exactly one target in the built home page',
+  );
   assert.ok(toText(html.home).includes(MISSION));
 });
 
