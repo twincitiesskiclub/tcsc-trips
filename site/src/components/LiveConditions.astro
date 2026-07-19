@@ -32,11 +32,11 @@ const locations = [
   <span class="sr-only" aria-live="polite" data-announcer></span>
   {variant === 'prominent' ? (
     <>
-      <div class="mx-auto max-w-7xl px-6 pt-3 pb-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+      <div class="safe-inline-6 mx-auto max-w-7xl px-6 pt-3 pb-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
         <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90 shrink-0">Trail report</span>
         <span class="text-[11px] text-coral ml-auto text-right min-w-0" data-updated>Loading conditions…</span>
       </div>
-      <div class="mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
+      <div class="safe-inline-6 mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
         {/* On a phone the full grid is overwhelming, so mobile leads with just
             the Theodore Wirth cell (the club's home venue); the other three
             venues and the fever cell are desktop-only. */}
@@ -87,7 +87,7 @@ const locations = [
       </div>
     </>
   ) : (
-    <div class="mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
+    <div class="safe-inline-6 mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
       {/* Mobile keeps just the Theodore Wirth line; the other venues and the
           fever line are desktop-only. */}
       {locations.map(({ id, name }) => (

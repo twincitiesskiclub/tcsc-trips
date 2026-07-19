@@ -21,6 +21,9 @@ const {
 } = Astro.props;
 
 const isHome = variant === 'home';
+// Every route begins and ends on navy (nav + footer), so browser chrome and
+// the overscroll canvas use that same continuous brand surface.
+const themeColor = '#202A44';
 
 // Build formats expose either a generated filename or a directory slash
 // through Astro.url during prerendering. Public routes remain extensionless,
@@ -44,7 +47,8 @@ const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
 <html lang="en">
   <head>
     <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content={themeColor} />
     <title>{title}</title>
     <meta name="description" content={description} />
     {robots && <meta name="robots" content={robots} />}
@@ -88,7 +92,7 @@ const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
       sameAs: orgSameAs,
     })} />
   </head>
-  <body class={`min-h-svh flex flex-col ${isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}`}>
+  <body class={`site-shell flex flex-col ${isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}`}>
     {/* Skip link: every page gives its <main> id="main" (the home page and
         InnerPageLayout both do). Visually hidden until keyboard-focused. */}
     <a

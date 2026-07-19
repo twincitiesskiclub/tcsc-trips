@@ -25,14 +25,14 @@ const seamRule = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
 ---
 <section class={surface}>
   {seam && !isCard && (
-    <div class={'mx-auto ' + innerMax + ' px-6 md:px-10 pt-12 md:pt-16'}>
+    <div class={'safe-inline-6-10 mx-auto ' + innerMax + ' px-6 md:px-10 pt-12 md:pt-16'}>
       <div class="flex items-center gap-4">
         <span class={'text-[11px] tracking-[0.18em] uppercase font-semibold ' + seamText}>{seam}</span>
         <span class={'h-px flex-1 ' + seamRule} aria-hidden="true"></span>
       </div>
     </div>
   )}
-  <div class={isCard ? 'px-6' : undefined}>
+  <div class={isCard ? 'safe-inline-6 px-6' : undefined}>
     <div class={'mx-auto ' + innerMax + ' ' + (isCard ? 'bg-paper text-ink ' : '') + padding}>
       {heading && (
         <h2 class="font-display font-semibold text-4xl md:text-5xl leading-[1.05] mb-4">{heading}</h2>

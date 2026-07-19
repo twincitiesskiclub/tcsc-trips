@@ -32,7 +32,7 @@ const legs = [
   ]}
 >
   {legs.length === 3 && (
-    <section class="mx-auto max-w-7xl px-6 md:px-10 pt-14 md:pt-20" aria-label="The three legs">
+    <section class="safe-inline-6-10 mx-auto max-w-7xl px-6 md:px-10 pt-14 md:pt-20" aria-label="The three legs">
       <div class="grid grid-cols-3 gap-px bg-ink/10 border border-ink/10">
         {legs.map((l) => (
           <figure class="bg-paper">
@@ -70,7 +70,7 @@ const legs = [
       <p class="mt-4 text-sm text-slate">The 2025 format. Each leg starts and ends at the transition zone in the Parley Lake lot.</p>
     </SectionBand>
   )}
-  <div class="mx-auto max-w-3xl px-6 pb-12">
+  <div class="safe-inline-6 mx-auto max-w-3xl px-6 pb-12">
     <div class="prose prose-lg max-w-prose text-ink">
       <Content />
     </div>

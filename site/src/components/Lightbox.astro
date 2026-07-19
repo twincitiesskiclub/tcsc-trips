@@ -10,7 +10,7 @@
 ---
 <div
   data-lightbox
-  class="fixed inset-0 z-50 hidden bg-ink/95 text-paper p-4 md:p-12 flex-col [--focus-ring-color:theme(colors.mint)]"
+  class="lightbox-shell fixed inset-0 z-50 hidden bg-ink/95 text-paper flex-col [--focus-ring-color:theme(colors.mint)]"
   role="dialog"
   aria-modal="true"
   aria-label="Photo viewer"
@@ -28,7 +28,29 @@
       caption-less photos still give screen readers navigation feedback. */}
   <div class="mt-4 max-w-3xl mx-auto text-center text-sm" data-lightbox-caption aria-live="polite"></div>
   <div class="flex justify-center gap-6 mt-6">
-    <button class="px-5 py-2 border border-paper/30 rounded" data-lightbox-prev aria-label="Previous photo">←</button>
-    <button class="px-5 py-2 border border-paper/30 rounded" data-lightbox-next aria-label="Next photo">→</button>
+    <button class="min-h-11 min-w-11 px-5 py-2 border border-paper/30 rounded" data-lightbox-prev aria-label="Previous photo">←</button>
+    <button class="min-h-11 min-w-11 px-5 py-2 border border-paper/30 rounded" data-lightbox-next aria-label="Next photo">→</button>
   </div>
 </div>
+
+<style>
+  .lightbox-shell {
+    --lightbox-gutter: 1rem;
+    --lightbox-safe-gap: 0.75rem;
+    box-sizing: border-box;
+    width: 100%;
+    height: 100vh;
+    height: 100dvh;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-top: max(var(--lightbox-gutter), calc(env(safe-area-inset-top, 0px) + var(--lightbox-safe-gap)));
+    padding-right: max(var(--lightbox-gutter), calc(env(safe-area-inset-right, 0px) + var(--lightbox-safe-gap)));
+    padding-bottom: max(var(--lightbox-gutter), calc(env(safe-area-inset-bottom, 0px) + var(--lightbox-safe-gap)));
+    padding-left: max(var(--lightbox-gutter), calc(env(safe-area-inset-left, 0px) + var(--lightbox-safe-gap)));
+  }
+  @media (min-width: 48rem) {
+    .lightbox-shell {
+      --lightbox-gutter: 3rem;
+    }
+  }
+</style>

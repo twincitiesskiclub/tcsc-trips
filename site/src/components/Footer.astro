@@ -24,7 +24,7 @@ const colB = [
 ];
 ---
 <footer class="bg-navy text-paper border-t border-mint/10">
-  <div class="mx-auto max-w-7xl px-6 py-14 grid gap-10 md:grid-cols-3">
+  <div class="footer-inner safe-inline-6 mx-auto max-w-7xl px-6 pt-14 pb-14 grid gap-10 md:grid-cols-3">
     <div>
       <div class="font-display font-bold uppercase text-[13px] tracking-[0.08em] text-mint">Twin Cities Ski Club</div>
       <p class="mt-3 text-sm text-paper/70 max-w-xs leading-relaxed">
@@ -32,18 +32,24 @@ const colB = [
       </p>
     </div>
     <nav aria-label="Footer" class="text-sm grid grid-cols-2 gap-x-6 content-start">
-      <div class="space-y-2">
-        {colA.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
+      <div class="md:space-y-2">
+        {colA.map((l) => <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={l.href}>{l.label}</a>)}
       </div>
-      <div class="space-y-2">
-        {colB.map((l) => <a class="block hover:text-mint" href={l.href}>{l.label}</a>)}
+      <div class="md:space-y-2">
+        {colB.map((l) => <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={l.href}>{l.label}</a>)}
       </div>
     </nav>
     <div class="text-sm space-y-2">
-      <a class="block hover:text-mint" href={'mailto:' + email}>{email}</a>
-      <a class="block hover:text-mint" href={ig}>Instagram</a>
+      <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={'mailto:' + email}>{email}</a>
+      <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={ig}>Instagram</a>
       <p class="text-paper/50 pt-3">All photos by club members.</p>
       <p class="text-paper/50">© {new Date().getFullYear()} Twin Cities Ski Club</p>
     </div>
   </div>
 </footer>
+
+<style>
+  .footer-inner {
+    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+  }
+</style>
