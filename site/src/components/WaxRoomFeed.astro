@@ -5,9 +5,9 @@
 // shares a surface with its paper destination page, so the rhythm is
 // truthful). Logbook grammar, not tiles: each entry is a dated field-log
 // line (date · author / title / one line of trail truth); the form is the
-// design, so every future club-written entry inherits the voice. Renders
-// its ruled empty-state line rather than vanishing: a placeholder row keeps
-// the rhythm and reads as season-aware, not abandoned.
+// design, so every future club-written entry inherits the voice. The home
+// teaser stays hidden until at least one published entry exists; the Wax
+// Room index owns the empty state.
 //
 // entry.id = filename slug (url), entry.data.slug = display title
 // (see content.config.ts header).
@@ -18,6 +18,7 @@ const entries = (await getCollection('wax_entries'))
   .sort((a, b) => +b.data.date - +a.data.date || a.id.localeCompare(b.id))
   .slice(0, 3);
 ---
+{entries.length > 0 && (
 <section class="bg-paper text-ink">
   <div class="safe-inline-6-10 mx-auto max-w-7xl px-6 md:px-10">
     {/* Seam: hairline running to the right edge (one device family
@@ -30,36 +31,33 @@ const entries = (await getCollection('wax_entries'))
         <h2 class="font-display font-semibold text-3xl md:text-4xl text-navy leading-[1.05]">From the Wax Room</h2>
         <a href="/wax-room" class="shrink-0 text-mint-deep text-sm hover:text-navy">All entries</a>
       </div>
-      {entries.length === 0 ? (
-        <p class="py-5 border-y border-ink/10 text-slate">No entries yet.</p>
-      ) : (
-        <ul class="border-y border-ink/10 divide-y divide-ink/10">
-          {entries.map((e) => (
-            <li>
-              <a
-                href={'/wax-room/' + e.id}
-                class="group grid items-baseline gap-x-6 gap-y-1 py-4 md:grid-cols-[8.5rem_1fr_auto]"
-              >
-                <span class="text-xs text-slate tabular-nums">
-                  {shortDate(e.data.date)}{e.data.author_name ? ` · ${e.data.author_name}` : ''}
-                </span>
-                <span class="font-display font-semibold text-lg text-navy leading-tight transition-colors duration-150 group-hover:text-mint-deep">
-                  {e.data.slug}
-                  {e.data.lede && (
-                    <span class="ml-3 font-sans text-sm font-normal text-slate">{e.data.lede}</span>
-                  )}
-                </span>
-                {e.data.conditions_snapshot?.temp_f != null && (
-                  <span class="text-xs text-slate tabular-nums">
-                    {e.data.conditions_snapshot.temp_f}°F
-                    {e.data.conditions_snapshot.location ? ` · ${e.data.conditions_snapshot.location}` : ''}
-                  </span>
+      <ul class="border-y border-ink/10 divide-y divide-ink/10">
+        {entries.map((e) => (
+          <li>
+            <a
+              href={'/wax-room/' + e.id}
+              class="group grid items-baseline gap-x-6 gap-y-1 py-4 md:grid-cols-[8.5rem_1fr_auto]"
+            >
+              <span class="text-xs text-slate tabular-nums">
+                {shortDate(e.data.date)}{e.data.author_name ? ` · ${e.data.author_name}` : ''}
+              </span>
+              <span class="font-display font-semibold text-lg text-navy leading-tight transition-colors duration-150 group-hover:text-mint-deep">
+                {e.data.slug}
+                {e.data.lede && (
+                  <span class="ml-3 font-sans text-sm font-normal text-slate">{e.data.lede}</span>
                 )}
-              </a>
-            </li>
-          ))}
-        </ul>
-      )}
+              </span>
+              {e.data.conditions_snapshot?.temp_f != null && (
+                <span class="text-xs text-slate tabular-nums">
+                  {e.data.conditions_snapshot.temp_f}°F
+                  {e.data.conditions_snapshot.location ? ` · ${e.data.conditions_snapshot.location}` : ''}
+                </span>
+              )}
+            </a>
+          </li>
+        ))}
+      </ul>
     </div>
   </div>
 </section>
+)}

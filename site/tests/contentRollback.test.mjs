@@ -25,8 +25,11 @@ test('keeps the withdrawn Wax Room article unpublished', () => {
   assert.equal(publicOutput.includes(route), false, 'public output must not expose the article route');
 
   const homeHtml = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
-  assert.ok(homeHtml.includes('From the Wax Room'), 'home page must retain the Wax Room section');
-  assert.ok(homeHtml.includes('href="/wax-room"'), 'home page must retain the Wax Room link');
+  assert.equal(
+    homeHtml.includes('From the Wax Room'),
+    false,
+    'home page must hide the Wax Room section while it has no published entries',
+  );
 
   const indexHtml = readFileSync(new URL('../dist/wax-room/index.html', import.meta.url), 'utf8');
   assert.ok(indexHtml.includes('No entries yet.'), 'Wax Room index must retain its empty state');
