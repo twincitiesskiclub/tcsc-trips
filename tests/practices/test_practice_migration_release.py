@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "scripts" / "release.sh"
 RELEASE_TIMEOUT_SECONDS = 30
 E36 = "e36bbec59bde"
-EVENTS_REVISION = "c8f4a2d6e901"
+EVENTS_REVISION = "d4e7f9a1b2c3"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -195,6 +195,7 @@ def test_release_lifecycle_upgrades_e36_orphan_to_head_without_consumers(
     assert "Running upgrade c4f1a8e2d9b7 -> d8b2c6f4a901" in output
     assert "Running upgrade d8b2c6f4a901 -> b433791f5783" in output
     assert "Running upgrade b433791f5783 -> c8f4a2d6e901" in output
+    assert "Running upgrade c8f4a2d6e901 -> d4e7f9a1b2c3" in output
     assert "=== Release tasks completed ===" in output
     assert "APScheduler started successfully" not in output
     assert "Slack Bolt enabled" not in output
