@@ -41,6 +41,52 @@ def _validate_question(template_key, index, question):
         raise ValueError(f"{offender} must have an 'options' list")
 
 
+def _price_option_name(template_key, index, option):
+    name = option.get("name") if isinstance(option, dict) else None
+    identifier = f"'{name}'" if name else str(index + 1)
+    return f"Template '{template_key}' price option {identifier}"
+
+
+def _validate_price_option(template_key, index, option):
+    offender = _price_option_name(template_key, index, option)
+    if not isinstance(option, dict):
+        raise ValueError(f"{offender} must be a mapping")
+
+    for field in ("name", "price_cents"):
+        if field not in option:
+            raise ValueError(f"{offender} is missing '{field}'")
+
+    if not isinstance(option["name"], str):
+        raise ValueError(f"{offender} field 'name' must be a str")
+    if type(option["price_cents"]) is not int:
+        raise ValueError(f"{offender} field 'price_cents' must be an int")
+
+    member_price_cents = option.get("member_price_cents")
+    if (
+        "member_price_cents" in option
+        and member_price_cents is not None
+        and type(member_price_cents) is not int
+    ):
+        raise ValueError(
+            f"{offender} field 'member_price_cents' must be an int or null"
+        )
+
+    if "participant_roles" in option and (
+        not isinstance(option["participant_roles"], list)
+        or not all(
+            isinstance(role, str) for role in option["participant_roles"]
+        )
+    ):
+        raise ValueError(
+            f"{offender} field 'participant_roles' must be a list of str"
+        )
+
+    if "description" in option and not isinstance(
+        option["description"], str
+    ):
+        raise ValueError(f"{offender} field 'description' must be a str")
+
+
 def _validate_templates(config):
     if not isinstance(config, dict):
         raise ValueError("Event templates config must be a mapping")
@@ -69,6 +115,8 @@ def _validate_templates(config):
                 f"Template '{template_key}' field 'custom_questions' "
                 "must be a list"
             )
+        for index, option in enumerate(template["price_options"]):
+            _validate_price_option(template_key, index, option)
         for index, question in enumerate(template["custom_questions"]):
             _validate_question(template_key, index, question)
 

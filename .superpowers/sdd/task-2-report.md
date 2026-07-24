@@ -122,3 +122,41 @@ The warnings are the suite's existing SQLAlchemy legacy-API warnings.
 No unresolved functional concerns.
 
 STATUS: DONE
+
+## Fix round 1
+
+- Added load-time validation for every price option. Each option must be a
+  mapping with a string `name` and integer `price_cents`; optional
+  `member_price_cents`, `participant_roles`, and `description` values are
+  validated when present. Validation errors identify the template and
+  offending option.
+- Added focused coverage for invalid question types, choice questions without
+  options, price options missing `price_cents`, and applying an unknown
+  template key.
+
+Focused command:
+
+```text
+./run-tests.sh tests/events/test_templates.py -v
+```
+
+Tail:
+
+```text
+tests/events/test_templates.py::test_apply_template_with_unknown_key_raises_value_error PASSED [100%]
+
+============================== 9 passed in 0.46s ===============================
+```
+
+Full-suite command:
+
+```text
+./run-tests.sh -q
+```
+
+Tail:
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1209 passed, 177 warnings in 47.73s
+```

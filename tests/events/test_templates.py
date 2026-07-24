@@ -107,3 +107,77 @@ templates:
 
     with pytest.raises(ValueError, match=r"broken.*question.*key"):
         event_templates.load_event_templates()
+
+
+def test_question_with_bad_type_raises_value_error(tmp_path, monkeypatch):
+    config_path = tmp_path / "event_templates.yaml"
+    config_path.write_text(
+        """
+templates:
+  broken:
+    name: Broken
+    price_options: []
+    custom_questions:
+      - key: format
+        label: Format
+        type: number
+        required: true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(event_templates, "_CONFIG_PATH", config_path)
+
+    with pytest.raises(ValueError, match=r"broken.*question.*invalid type"):
+        event_templates.load_event_templates()
+
+
+def test_choice_question_without_options_raises_value_error(
+    tmp_path, monkeypatch
+):
+    config_path = tmp_path / "event_templates.yaml"
+    config_path.write_text(
+        """
+templates:
+  broken:
+    name: Broken
+    price_options: []
+    custom_questions:
+      - key: format
+        label: Format
+        type: choice
+        required: true
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(event_templates, "_CONFIG_PATH", config_path)
+
+    with pytest.raises(ValueError, match=r"broken.*question.*options"):
+        event_templates.load_event_templates()
+
+
+def test_price_option_without_price_raises_value_error(
+    tmp_path, monkeypatch
+):
+    config_path = tmp_path / "event_templates.yaml"
+    config_path.write_text(
+        """
+templates:
+  broken:
+    name: Broken
+    price_options:
+      - name: Registration
+    custom_questions: []
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(event_templates, "_CONFIG_PATH", config_path)
+
+    with pytest.raises(
+        ValueError, match=r"broken.*price option.*Registration.*price_cents"
+    ):
+        event_templates.load_event_templates()
+
+
+def test_apply_template_with_unknown_key_raises_value_error():
+    with pytest.raises(ValueError, match=r"Unknown event template 'missing'"):
+        event_templates.apply_template(_event(), "missing")
