@@ -6,7 +6,12 @@ from app import create_app
 from app.models import db
 
 
-TEST_EVENT_SLUGS = ("dry-tri-2026", "payment-link-test")
+TEST_EVENT_SLUGS = (
+    "dry-tri-2026",
+    "payment-link-test",
+    "registration-service-test",
+    "registration-service-other",
+)
 
 
 @pytest.fixture
