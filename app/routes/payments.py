@@ -112,6 +112,34 @@ def stripe_idempotency_options():
     return {'idempotency_key': idempotency_key[:255]}
 
 
+def refund_or_cancel_payment(payment):
+    """Refund a captured payment or cancel an uncaptured payment.
+
+    The caller owns any related model updates and the database commit.
+    """
+    intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
+    if intent.status not in ['succeeded', 'requires_capture']:
+        raise ValueError(
+            'Payment cannot be refunded - '
+            f'current status: {intent.status}'
+        )
+
+    if intent.status == 'requires_capture':
+        canceled_intent = stripe.PaymentIntent.cancel(
+            payment.payment_intent_id
+        )
+        payment.status = canceled_intent.status
+    else:
+        refund = stripe.Refund.create(
+            payment_intent=payment.payment_intent_id
+        )
+        if refund.status not in ('succeeded', 'pending'):
+            raise ValueError(f'Refund failed - status: {refund.status}')
+        payment.status = 'refunded'
+
+    return payment
+
+
 @payments.route('/get-stripe-key')
 def get_stripe_key():
     return jsonify({'publicKey': os.getenv('STRIPE_PUBLISHABLE_KEY')})
@@ -413,29 +441,7 @@ def capture_payment(payment_id):
 def refund_payment(payment_id):
     try:
         payment = Payment.query.get_or_404(payment_id)
-
-        # First, retrieve the current payment intent status from Stripe
-        intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
-
-        # Check if the payment can be refunded
-        if intent.status not in ['succeeded', 'requires_capture']:
-            return json_error(f'Payment cannot be refunded - current status: {intent.status}')
-
-        # If payment is still on hold (requires_capture), we need to cancel it instead of refunding
-        if intent.status == 'requires_capture':
-            canceled_intent = stripe.PaymentIntent.cancel(payment.payment_intent_id)
-            payment.status = canceled_intent.status
-        else:
-            # Create refund for captured payments
-            refund = stripe.Refund.create(
-                payment_intent=payment.payment_intent_id
-            )
-
-            # Verify the refund was successful
-            if refund.status not in ('succeeded', 'pending'):
-                return json_error(f'Refund failed - status: {refund.status}')
-
-            payment.status = 'refunded'
+        refund_or_cancel_payment(payment)
 
         # Auto-sync: Update UserSeason status for season payments
         if payment.payment_type == PaymentType.SEASON and payment.season_id:
@@ -455,6 +461,8 @@ def refund_payment(payment_id):
                 'payment_intent_id': payment.payment_intent_id
             }
         })
+    except ValueError as e:
+        return json_error(str(e))
     except stripe.error.StripeError as e:
         return json_error(str(e))
     except Exception as e:
@@ -542,23 +550,7 @@ def bulk_refund_payments():
                     results.append({'id': payment_id, 'success': False, 'error': 'Payment not found'})
                     continue
 
-                # Retrieve current status from Stripe
-                intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
-
-                if intent.status not in ['succeeded', 'requires_capture']:
-                    results.append({'id': payment_id, 'success': False, 'error': f'Cannot refund - status: {intent.status}'})
-                    continue
-
-                # Cancel uncaptured payments, refund captured ones
-                if intent.status == 'requires_capture':
-                    canceled_intent = stripe.PaymentIntent.cancel(payment.payment_intent_id)
-                    payment.status = canceled_intent.status
-                else:
-                    refund = stripe.Refund.create(payment_intent=payment.payment_intent_id)
-                    if refund.status not in ('succeeded', 'pending'):
-                        results.append({'id': payment_id, 'success': False, 'error': f'Refund failed - status: {refund.status}'})
-                        continue
-                    payment.status = 'refunded'
+                refund_or_cancel_payment(payment)
 
                 # Auto-sync: Update UserSeason status for season payments
                 if payment.payment_type == PaymentType.SEASON and payment.season_id:
@@ -571,6 +563,8 @@ def bulk_refund_payments():
 
                 results.append({'id': payment_id, 'success': True})
 
+            except ValueError as e:
+                results.append({'id': payment_id, 'success': False, 'error': str(e)})
             except stripe.error.StripeError as e:
                 results.append({'id': payment_id, 'success': False, 'error': str(e)})
             except Exception as e:

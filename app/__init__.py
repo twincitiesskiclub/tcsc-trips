@@ -22,6 +22,7 @@ from .newsletter.models import (
     NewsletterPrompt,
 )
 from .routes.admin import admin
+from .routes.admin_events import admin_events_bp
 from .routes.admin_newsletter import admin_newsletter_bp
 from .routes.admin_practices import admin_practices_bp
 from .routes.admin_scheduled_tasks import admin_scheduled_tasks
@@ -66,6 +67,7 @@ def create_app(environment=None):
     app.register_blueprint(events)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
+    app.register_blueprint(admin_events_bp)
     app.register_blueprint(admin_newsletter_bp)
     app.register_blueprint(admin_practices_bp)
     app.register_blueprint(admin_scheduled_tasks)

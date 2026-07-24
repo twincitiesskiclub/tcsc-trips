@@ -87,6 +87,16 @@ def _validate_price_option(template_key, index, option):
         raise ValueError(f"{offender} field 'description' must be a str")
 
 
+def validate_question(question, index=0) -> None:
+    """Validate one admin-submitted custom question."""
+    _validate_question("Admin submission", index, question)
+
+
+def validate_price_option(option, index=0) -> None:
+    """Validate one admin-submitted event price option."""
+    _validate_price_option("Admin submission", index, option)
+
+
 def _validate_templates(config):
     if not isinstance(config, dict):
         raise ValueError("Event templates config must be a mapping")

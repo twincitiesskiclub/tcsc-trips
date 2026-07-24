@@ -7,6 +7,11 @@ from app.models import db
 
 
 TEST_EVENT_SLUGS = (
+    "admin-grid-test",
+    "admin-registration-test",
+    "admin-duplicate-test",
+    "admin-duplicate-test-copy",
+    "admin-delete-test",
     "dry-tri-2026",
     "payment-link-test",
     "registration-service-test",
