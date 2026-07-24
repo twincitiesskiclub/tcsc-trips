@@ -56,6 +56,7 @@ _REGISTRATION_TRAILING_COLUMNS = [
     ("discount_applied", "Discount applied"),
     ("created_at", "Created at"),
 ]
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
 
 
 def _parse_event_fields(form):
@@ -359,6 +360,14 @@ def _display_answer(value):
         return ""
     if isinstance(value, (dict, list)):
         return json.dumps(value, ensure_ascii=False)
+    return value
+
+
+def _sanitize_csv_value(value):
+    if isinstance(value, str) and value.startswith(
+        _CSV_FORMULA_PREFIXES
+    ):
+        return f"'{value}"
     return value
 
 
@@ -673,7 +682,13 @@ def export_event_registrations(event_id):
     output = StringIO()
     writer = csv.DictWriter(output, fieldnames=fieldnames)
     writer.writeheader()
-    writer.writerows(rows)
+    writer.writerows(
+        {
+            key: _sanitize_csv_value(value)
+            for key, value in row.items()
+        }
+        for row in rows
+    )
     return Response(
         output.getvalue(),
         mimetype="text/csv",

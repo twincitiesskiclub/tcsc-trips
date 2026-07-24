@@ -115,3 +115,35 @@ The warnings are existing SQLAlchemy `Query.get()` deprecations outside this new
 - No live browser was available for a visual walkthrough. Route rendering, responsive/touch styles, keyboard focus states, template compilation, JavaScript syntax, and generated Tailwind coverage were verified automatically.
 
 STATUS: COMPLETE
+
+## Fix round 1
+
+- Added a CSV-only sanitizer to the event registrations export. Every string
+  cell beginning with `=`, `+`, `-`, or `@` is prefixed with a single quote
+  before it is passed to `csv.DictWriter`.
+- Kept `_registration_rows()` unchanged, so the registrations JSON endpoint
+  continues to return raw values for safe `textContent` rendering.
+- Added focused coverage using a formula-like team name and a participant name
+  beginning with `+`. The test verifies escaped CSV cells and unchanged JSON
+  values.
+- Did not modify the season-members export in `app/routes/admin.py`.
+
+Focused test command:
+
+```text
+./run-tests.sh tests/events/test_admin.py -v
+tests/events/test_admin.py::test_edit_cannot_remove_price_option_with_registration PASSED [ 93%]
+tests/events/test_admin.py::test_cancel_paid_registration_uses_shared_refund_helper PASSED [100%]
+
+============================== 15 passed in 1.17s ==============================
+```
+
+Full-suite command:
+
+```text
+./run-tests.sh -q
+........................................................................ [ 91%]
+........................................................................ [ 96%]
+.......................................                                  [100%]
+1263 passed, 177 warnings in 52.49s
+```

@@ -1,6 +1,8 @@
 """Admin event management route tests."""
 
+import csv
 from datetime import date, datetime, timedelta
+from io import StringIO
 from unittest.mock import patch
 
 import pytest
@@ -309,6 +311,43 @@ def test_registration_csv_contains_flattened_headers_and_values(
     assert "Nordic Rockets" in csv_text
     assert "Rollerskier: Ada Skier" in csv_text
     assert "Long course" in csv_text
+
+
+def test_registration_csv_escapes_formulas_without_changing_json(
+    admin_client,
+    db_session,
+    registration_event,
+):
+    event, registration = registration_event
+    registration.team_name = '=HYPERLINK("http://evil")'
+    participant = registration.participants[0]
+    participant.role_label = "+Rollerskier"
+    participant.name = "+Ada Skier"
+    db_session.session.commit()
+
+    csv_response = admin_client.get(
+        f"/admin/events/{event.id}/registrations/export.csv"
+    )
+    assert csv_response.status_code == 200
+    csv_row = next(
+        csv.DictReader(StringIO(csv_response.get_data(as_text=True)))
+    )
+
+    assert csv_row["team_name"] == '\'=HYPERLINK("http://evil")'
+    assert csv_row["participant_1"].startswith(
+        "'+Rollerskier: +Ada Skier"
+    )
+
+    data_response = admin_client.get(
+        f"/admin/events/{event.id}/registrations/data"
+    )
+    assert data_response.status_code == 200
+    data_row = data_response.get_json()["registrations"][0]
+
+    assert data_row["team_name"] == '=HYPERLINK("http://evil")'
+    assert data_row["participant_1"].startswith(
+        "+Rollerskier: +Ada Skier"
+    )
 
 
 def test_cancel_unpaid_pending_registration(
