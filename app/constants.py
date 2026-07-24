@@ -53,8 +53,9 @@ class PaymentType:
     SEASON = 'season'
     TRIP = 'trip'
     SOCIAL_EVENT = 'social_event'
+    EVENT = 'event'
 
-    ALL = [SEASON, TRIP, SOCIAL_EVENT]
+    ALL = [SEASON, TRIP, SOCIAL_EVENT, EVENT]
 
 
 # Registration form valid values (must match season_register.html)

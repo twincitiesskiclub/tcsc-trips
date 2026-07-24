@@ -16,10 +16,15 @@ class Payment(db.Model):
     name = db.Column(db.String(255), nullable=False)
     amount = db.Column(db.Integer, nullable=False)  # Amount in cents
     status = db.Column(db.String(50), nullable=False)
-    payment_type = db.Column(db.String(50), nullable=False)  # 'season', 'trip', 'social_event'
+    payment_type = db.Column(db.String(50), nullable=False)  # 'season', 'trip', 'social_event', 'event'
     trip_id = db.Column(db.Integer, db.ForeignKey('trips.id'), nullable=True)  # Nullable for season payments
     season_id = db.Column(db.Integer, db.ForeignKey('seasons.id'), nullable=True)  # For season payments
     social_event_id = db.Column(db.Integer, db.ForeignKey('social_events.id'), nullable=True)  # For social event payments
+    event_registration_id = db.Column(
+        db.Integer,
+        db.ForeignKey('event_registrations.id'),
+        nullable=True,
+    )
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)

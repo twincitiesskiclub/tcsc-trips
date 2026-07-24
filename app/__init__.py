@@ -6,6 +6,12 @@ from flask_migrate import Migrate
 from .auth import init_oauth
 from .config import configure_database, load_stripe_config
 from .models import db, SocialEvent
+from .events.models import (
+    Event,
+    EventParticipant,
+    EventPriceOption,
+    EventRegistration,
+)
 from .security import csrf, init_security
 from .newsletter.models import (
     Newsletter,

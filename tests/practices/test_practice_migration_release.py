@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "scripts" / "release.sh"
 RELEASE_TIMEOUT_SECONDS = 30
 E36 = "e36bbec59bde"
-D8 = "d8b2c6f4a901"
+EVENTS_REVISION = "b433791f5783"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -170,7 +170,7 @@ def _c4_columns(connection) -> set[tuple[str, str]]:
     return {tuple(row) for row in rows}
 
 
-def test_release_lifecycle_upgrades_e36_orphan_to_d8_without_consumers(
+def test_release_lifecycle_upgrades_e36_orphan_to_head_without_consumers(
     engine, release_schema,
 ):
     with engine.begin() as connection:
@@ -190,13 +190,14 @@ def test_release_lifecycle_upgrades_e36_orphan_to_d8_without_consumers(
     output = result.stdout + result.stderr
     assert "Running upgrade e36bbec59bde -> c4f1a8e2d9b7" in output
     assert "Running upgrade c4f1a8e2d9b7 -> d8b2c6f4a901" in output
+    assert "Running upgrade d8b2c6f4a901 -> b433791f5783" in output
     assert "=== Release tasks completed ===" in output
     assert "APScheduler started successfully" not in output
     assert "Slack Bolt enabled" not in output
     assert "Socket Mode" not in output
     with engine.connect() as connection:
         _use_schema(connection, release_schema)
-        assert _revision(connection) == D8
+        assert _revision(connection) == EVENTS_REVISION
         assert _c4_columns(connection) == EXPECTED_C4_COLUMNS
         after = summary_catalog_snapshot(connection)
         defaults = {row[1]: row[6] for row in after["columns"]}
