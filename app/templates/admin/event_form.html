@@ -1,0 +1,193 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}{{ 'Edit Event' if event else 'New Event' }}{% endblock %}
+
+{% block extra_css %}
+<style>
+#admin-event-form .aef-section{border-top:1px solid #e4e4e7;padding-top:24px;margin-top:28px}
+#admin-event-form .aef-editor-list{display:flex;flex-direction:column;gap:10px}
+#admin-event-form .aef-editor-row{border:1px solid #e4e4e7;border-radius:10px;padding:14px;background:#fcfefd}
+#admin-event-form .aef-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
+#admin-event-form .aef-field{grid-column:span 4;display:flex;flex-direction:column;gap:5px}
+#admin-event-form .aef-field-wide{grid-column:span 8}
+#admin-event-form .aef-field-full{grid-column:1/-1}
+#admin-event-form .aef-field label{font-size:12px;font-weight:650;color:#475569}
+#admin-event-form .aef-field input,#admin-event-form .aef-field select,#admin-event-form .aef-field textarea{width:100%;min-height:40px;border:1px solid #d4d4d8;border-radius:7px;padding:8px 10px;color:#1c2c44;font:inherit;font-size:13px;background:#fcfefd;box-sizing:border-box}
+#admin-event-form .aef-field textarea{resize:vertical}
+#admin-event-form .aef-check{display:flex;align-items:center;gap:8px;min-height:40px;font-size:13px;color:#475569}
+#admin-event-form .aef-check input{width:16px;height:16px;min-height:0}
+#admin-event-form .aef-remove{margin-top:12px;min-height:36px;border:1px solid #fecaca;border-radius:7px;background:#fcfefd;color:#991b1b;padding:0 11px;font-size:12px;font-weight:650;cursor:pointer}
+#admin-event-form .aef-add{min-height:40px;border:1px solid #cbd5e1;border-radius:8px;background:#fcfefd;color:#1c2c44;padding:0 13px;font-size:13px;font-weight:650;cursor:pointer}
+#admin-event-form .aef-add:focus-visible,#admin-event-form .aef-remove:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#admin-event-form .aef-empty{border:1px dashed #cbd5e1;border-radius:10px;padding:18px;color:#64748b;font-size:13px;text-align:center}
+@media(max-width:780px){
+  #admin-event-form .aef-field,#admin-event-form .aef-field-wide{grid-column:1/-1}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<section id="admin-event-form" data-page="form">
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <a href="{{ url_for('admin_events.events_page') }}"
+         class="text-sm font-semibold text-zinc-500 hover:text-tcsc-navy">Events</a>
+      <h1 class="mb-0 mt-2 text-2xl font-semibold text-tcsc-navy">{{ 'Edit Event' if event else 'New Event' }}</h1>
+    </div>
+    {% if event %}
+      <a href="{{ url_for('admin_events.event_registrations', event_id=event.id) }}"
+         class="inline-flex min-h-11 items-center rounded-lg border border-zinc-300 bg-white px-4 text-sm font-semibold text-tcsc-navy no-underline hover:border-tcsc-navy">
+        View registrations
+      </a>
+    {% endif %}
+  </header>
+
+  {% if error %}
+    <div class="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
+         role="alert">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST" id="event-editor-form"
+        class="rounded-xl border border-zinc-200 bg-white p-5 lg:p-7">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+    {% if not event %}
+      <div class="mb-6">
+        <label for="template_key" class="mb-2 block text-sm font-semibold text-zinc-700">Start from a template</label>
+        <select id="template_key" name="template_key"
+                class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+          {% for key, template in templates.items() %}
+            {% set selected_template = form_data.get('template_key') if form_data else 'blank' %}
+            <option value="{{ key }}" {% if selected_template == key %}selected{% endif %}>{{ template.name }}</option>
+          {% endfor %}
+        </select>
+        <p class="mb-0 mt-2 text-sm text-zinc-500">Choosing a template replaces the option and question rows below. You can edit them before saving.</p>
+      </div>
+    {% elif event.template_key %}
+      <p class="mb-6 text-sm text-zinc-500">Created from template: <strong class="text-zinc-700">{{ event.template_key }}</strong></p>
+    {% endif %}
+
+    <div class="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div>
+        <label for="name" class="mb-2 block text-sm font-semibold text-zinc-700">Event name</label>
+        <input id="name" name="name" required
+               value="{{ form_data.get('name') if form_data else event.name if event else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="slug" class="mb-2 block text-sm font-semibold text-zinc-700">Slug</label>
+        <input id="slug" name="slug" required pattern="[a-z0-9]+(?:-[a-z0-9]+)*"
+               value="{{ form_data.get('slug') if form_data else event.slug if event else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="location" class="mb-2 block text-sm font-semibold text-zinc-700">Location</label>
+        <input id="location" name="location" required
+               value="{{ form_data.get('location') if form_data else event.location if event else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="event_date" class="mb-2 block text-sm font-semibold text-zinc-700">Event date and time</label>
+        <input id="event_date" name="event_date" type="datetime-local" required
+               value="{{ form_data.get('event_date') if form_data else event.event_date.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="signup_start" class="mb-2 block text-sm font-semibold text-zinc-700">Signup start</label>
+        <input id="signup_start" name="signup_start" type="datetime-local" required
+               value="{{ form_data.get('signup_start') if form_data else event.signup_start.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="signup_end" class="mb-2 block text-sm font-semibold text-zinc-700">Signup end</label>
+        <input id="signup_end" name="signup_end" type="datetime-local" required
+               value="{{ form_data.get('signup_end') if form_data else event.signup_end.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="capacity" class="mb-2 block text-sm font-semibold text-zinc-700">Capacity</label>
+        <input id="capacity" name="capacity" type="number" min="0"
+               value="{{ form_data.get('capacity') if form_data else event.capacity if event and event.capacity is not none else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+        <p class="mb-0 mt-1 text-xs text-zinc-500">Leave blank for unlimited.</p>
+      </div>
+      <div>
+        <label for="audience" class="mb-2 block text-sm font-semibold text-zinc-700">Audience</label>
+        {% set audience_value = form_data.get('audience') if form_data else event.audience if event else 'both' %}
+        <select id="audience" name="audience" class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+          <option value="internal" {% if audience_value == 'internal' %}selected{% endif %}>Internal</option>
+          <option value="external" {% if audience_value == 'external' %}selected{% endif %}>External</option>
+          <option value="both" {% if audience_value == 'both' %}selected{% endif %}>Both</option>
+        </select>
+      </div>
+      <div>
+        <label for="status" class="mb-2 block text-sm font-semibold text-zinc-700">Status</label>
+        {% set status_value = form_data.get('status') if form_data else event.status if event else 'draft' %}
+        <select id="status" name="status" class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+          <option value="draft" {% if status_value == 'draft' %}selected{% endif %}>Draft</option>
+          <option value="active" {% if status_value == 'active' %}selected{% endif %}>Active</option>
+          <option value="closed" {% if status_value == 'closed' %}selected{% endif %}>Closed</option>
+        </select>
+      </div>
+      <div>
+        <label for="details_url" class="mb-2 block text-sm font-semibold text-zinc-700">Details URL</label>
+        <input id="details_url" name="details_url" type="url"
+               value="{{ form_data.get('details_url') if form_data else event.details_url if event and event.details_url else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div>
+        <label for="discount_code" class="mb-2 block text-sm font-semibold text-zinc-700">Discount code</label>
+        <input id="discount_code" name="discount_code"
+               value="{{ form_data.get('discount_code') if form_data else event.discount_code if event and event.discount_code else '' }}"
+               class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
+      </div>
+      <div class="md:col-span-2">
+        <label for="description" class="mb-2 block text-sm font-semibold text-zinc-700">Description</label>
+        <textarea id="description" name="description" rows="6"
+                  class="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm">{{ form_data.get('description') if form_data else event.description if event and event.description else '' }}</textarea>
+      </div>
+    </div>
+
+    <section class="aef-section" aria-labelledby="price-options-heading">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="price-options-heading" class="m-0 text-lg font-semibold text-tcsc-navy">Price options</h2>
+          <p class="mb-0 mt-1 text-sm text-zinc-500">Prices are entered in dollars. Separate participant roles with commas.</p>
+        </div>
+        <button type="button" id="add-price-option" class="aef-add">Add price option</button>
+      </div>
+      <div id="price-option-rows" class="aef-editor-list"></div>
+      <textarea name="price_options_json" id="price_options_json" hidden>{{ price_options_json }}</textarea>
+    </section>
+
+    <section class="aef-section" aria-labelledby="questions-heading">
+      <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <h2 id="questions-heading" class="m-0 text-lg font-semibold text-tcsc-navy">Custom questions</h2>
+          <p class="mb-0 mt-1 text-sm text-zinc-500">Choice options use one line per answer.</p>
+        </div>
+        <button type="button" id="add-question" class="aef-add">Add question</button>
+      </div>
+      <div id="custom-question-rows" class="aef-editor-list"></div>
+      <textarea name="custom_questions_json" id="custom_questions_json" hidden>{{ custom_questions_json }}</textarea>
+    </section>
+
+    <div class="mt-8 flex flex-wrap justify-end gap-3 border-t border-zinc-200 pt-5">
+      <a href="{{ url_for('admin_events.events_page') }}"
+         class="inline-flex min-h-11 items-center rounded-lg border border-zinc-300 bg-white px-5 text-sm font-semibold text-zinc-600 no-underline hover:border-tcsc-navy hover:text-tcsc-navy">
+        Cancel
+      </a>
+      <button type="submit"
+              class="min-h-11 rounded-lg border-0 bg-tcsc-navy px-5 text-sm font-semibold text-white hover:opacity-90">
+        Save event
+      </button>
+    </div>
+  </form>
+</section>
+
+<script type="application/json" id="event-template-data">{{ template_editor_data|tojson }}</script>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_events.js') }}"></script>
+{% endblock %}

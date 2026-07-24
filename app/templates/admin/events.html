@@ -1,0 +1,86 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}Events{% endblock %}
+
+{% block extra_css %}
+<style>
+#admin-events-grid .ae-table-wrap{overflow-x:auto;border:1px solid #e4e4e7;border-radius:10px;background:#fcfefd}
+#admin-events-grid table{width:100%;min-width:960px;border-collapse:collapse;font-size:13px}
+#admin-events-grid th,#admin-events-grid td{padding:11px 12px;border-bottom:1px solid #eceef1;text-align:left;vertical-align:middle}
+#admin-events-grid th{background:#f4f5f7;color:#475569;font-size:12px;font-weight:700}
+#admin-events-grid tbody tr:hover{background:#f8fafc}
+#admin-events-grid tbody tr:last-child td{border-bottom:0}
+#admin-events-grid .ae-sort{border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;cursor:pointer;padding:4px 0}
+#admin-events-grid .ae-sort:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#admin-events-grid .ae-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+#admin-events-grid .ae-action{display:inline-flex;align-items:center;min-height:32px;padding:0 9px;border:1px solid #d7dce2;border-radius:7px;background:#fcfefd;color:#1c2c44;font-size:12px;font-weight:600;text-decoration:none;cursor:pointer}
+#admin-events-grid .ae-action:hover{border-color:#1c2c44}
+#admin-events-grid .ae-action-danger{color:#991b1b;border-color:#fecaca}
+#admin-events-grid .ae-action:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#admin-events-grid .ae-action:disabled{cursor:not-allowed;opacity:.5}
+#admin-events-grid .ae-status{display:inline-flex;padding:2px 8px;border-radius:999px;font-size:12px;font-weight:650}
+#admin-events-grid .ae-status-active{background:#dcfce7;color:#166534}
+#admin-events-grid .ae-status-closed{background:#e2e8f0;color:#475569}
+#admin-events-grid .ae-status-draft{background:#fef3c7;color:#92400e}
+#admin-events-grid .ae-empty{padding:36px 16px;text-align:center;color:#64748b}
+@media(max-width:640px){
+  #admin-events-grid .ae-action{min-height:44px}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<section id="admin-events-grid"
+         data-page="events"
+         data-data-url="{{ url_for('admin_events.events_data') }}">
+  <header class="mb-6 flex flex-wrap items-center justify-between gap-4">
+    <div>
+      <h1 class="m-0 text-2xl font-semibold text-tcsc-navy">Events</h1>
+      <p class="mb-0 mt-1 text-sm text-zinc-500">Manage event setup, publication, and registration rosters.</p>
+    </div>
+    <a href="{{ url_for('admin_events.new_event') }}"
+       class="inline-flex min-h-11 items-center rounded-lg bg-tcsc-navy px-4 text-sm font-semibold text-white no-underline hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-tcsc-navy focus:ring-offset-2">
+      New event
+    </a>
+  </header>
+
+  <div class="mb-4 flex flex-wrap items-center gap-2" role="group" aria-label="Filter events">
+    <input id="event-search" type="search"
+           class="min-h-11 min-w-56 flex-1 rounded-lg border border-zinc-300 px-3 text-sm"
+           placeholder="Search name or slug" aria-label="Search events">
+    <select id="event-status-filter"
+            class="min-h-11 rounded-lg border border-zinc-300 px-3 text-sm"
+            aria-label="Filter events by status">
+      <option value="">All statuses</option>
+      <option value="draft">Draft</option>
+      <option value="active">Active</option>
+      <option value="closed">Closed</option>
+    </select>
+    <span id="event-result-count" class="text-sm font-medium text-zinc-500" aria-live="polite"></span>
+  </div>
+
+  <div class="ae-table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th><button type="button" class="ae-sort" data-sort="name">Name</button></th>
+          <th><button type="button" class="ae-sort" data-sort="event_date">Date</button></th>
+          <th>Audience</th>
+          <th><button type="button" class="ae-sort" data-sort="status">Status</button></th>
+          <th>Confirmed</th>
+          <th><button type="button" class="ae-sort" data-sort="revenue_cents">Revenue</button></th>
+          <th>Template</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody id="event-grid-body">
+        <tr><td colspan="8" class="ae-empty">Loading events…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_events.js') }}"></script>
+{% endblock %}

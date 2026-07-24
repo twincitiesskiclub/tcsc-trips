@@ -8,7 +8,7 @@ import pytest
 from flask import Response
 
 from app import create_app
-from app.models import db, Season, SocialEvent, Trip
+from app.models import db, Season, Trip
 
 
 @pytest.fixture
@@ -134,35 +134,11 @@ def active_trip(app, db_session):
         db.session.commit()
 
 
-@pytest.fixture
-def social_event(app, db_session):
-    now = datetime.utcnow()
-    with app.app_context():
-        event = SocialEvent(
-            slug=f"security-test-social-{int(now.timestamp() * 1000000)}",
-            name="Security Test Social",
-            location="Test Venue",
-            max_participants=30,
-            event_date=now + timedelta(days=10),
-            signup_start=now - timedelta(days=1),
-            signup_end=now + timedelta(days=1),
-            price=2500,
-            status="active",
-        )
-        db.session.add(event)
-        db.session.commit()
-        event_id = event.id
-    yield event_id
-    with app.app_context():
-        SocialEvent.query.filter_by(id=event_id).delete()
-        db.session.commit()
-
-
 def test_state_changing_routes_do_not_accept_get(client):
     paths = [
         '/admin/trips/1/delete',
         '/admin/seasons/1/delete-json',
-        '/admin/social-events/1/delete',
+        '/admin/events/1/delete',
         '/admin/skipper/evaluate/1',
     ]
 
@@ -312,32 +288,6 @@ class TestCreateTripPaymentIntentIntegrity:
 
         assert response.status_code == 400
         mock_stripe.PaymentIntent.create.assert_not_called()
-
-
-@patch('app.routes.payments.stripe')
-def test_social_event_forwards_idempotency_key(mock_stripe, client, social_event):
-    mock_stripe.PaymentIntent.create.return_value = MagicMock(
-        client_secret='cs_social_test',
-        id='pi_social_test',
-        amount=2500,
-        status='requires_payment_method',
-    )
-
-    response = client.post(
-        '/create-social-event-payment-intent',
-        json={
-            'social_event_id': social_event,
-            'email': 'social-test@example.com',
-            'name': 'Social Tester',
-        },
-        headers={'Idempotency-Key': 'social-request-123'},
-    )
-
-    assert response.status_code == 200
-    assert (
-        mock_stripe.PaymentIntent.create.call_args.kwargs['idempotency_key']
-        == 'social-request-123'
-    )
 
 
 class TestCreateSeasonPaymentIntentWindowGate:

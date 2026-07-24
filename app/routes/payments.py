@@ -1,9 +1,10 @@
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 import re
 import stripe
 import os
 from datetime import datetime
-from ..models import db, Payment, Season, UserSeason, User, Trip, SocialEvent
+from ..models import db, Payment, Season, UserSeason, User, Trip
+from ..events.models import EventRegistration, RegistrationStatus
 from ..auth import admin_required
 from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, PaymentType
 from ..errors import json_error, json_success
@@ -13,6 +14,89 @@ from ..security import csrf
 from .. import late_link
 
 payments = Blueprint('payments', __name__)
+
+
+def _stripe_object_value(stripe_object, key, default=None):
+    """Read a field from either Stripe's object or development webhook JSON."""
+    if isinstance(stripe_object, dict):
+        return stripe_object.get(key, default)
+    return getattr(stripe_object, key, default)
+
+
+def _event_registration_from_metadata(metadata):
+    registration_id = metadata.get('registration_id')
+    try:
+        registration_id = int(registration_id)
+    except (TypeError, ValueError):
+        return None
+    return db.session.get(EventRegistration, registration_id)
+
+
+def _record_succeeded_event_payment(payment_intent):
+    """Record and confirm an event payment without looking up a User."""
+    metadata = _stripe_object_value(payment_intent, 'metadata', {}) or {}
+    payment_intent_id = _stripe_object_value(payment_intent, 'id')
+    amount = _stripe_object_value(payment_intent, 'amount')
+    email = normalize_email(metadata.get('email') or '')
+    name = metadata.get('name') or ''
+    registration = _event_registration_from_metadata(metadata)
+
+    if registration is None:
+        current_app.logger.warning(
+            "Event registration %s was not found for PaymentIntent %s",
+            metadata.get('registration_id'),
+            payment_intent_id,
+        )
+
+    payment = Payment.get_by_payment_intent(payment_intent_id)
+    if not payment:
+        payment = Payment(
+            payment_intent_id=payment_intent_id,
+            email=email,
+            name=name,
+            amount=amount,
+            status='succeeded',
+            payment_type=PaymentType.EVENT,
+            event_registration_id=(
+                registration.id if registration is not None else None
+            ),
+            user_id=None,
+        )
+        db.session.add(payment)
+    else:
+        payment.status = 'succeeded'
+        if registration is not None and not payment.event_registration_id:
+            payment.event_registration_id = registration.id
+
+    if registration is not None:
+        registration.status = RegistrationStatus.CONFIRMED
+
+    db.session.commit()
+    send_payment_notification(
+        name=payment.name,
+        amount_cents=payment.amount,
+        email=payment.email,
+        payment_intent_id=payment.payment_intent_id,
+    )
+
+
+def _cancel_event_registration(payment_intent):
+    """Cancel a pending event registration for a canceled intent."""
+    metadata = _stripe_object_value(payment_intent, 'metadata', {}) or {}
+    registration = _event_registration_from_metadata(metadata)
+    if (
+        registration is not None
+        and registration.status == RegistrationStatus.PENDING_PAYMENT
+    ):
+        registration.status = RegistrationStatus.CANCELLED
+
+    payment_intent_id = _stripe_object_value(payment_intent, 'id')
+    payment = Payment.get_by_payment_intent(payment_intent_id)
+    if payment:
+        payment.status = 'canceled'
+
+    db.session.commit()
+
 
 def build_statement_descriptor(payment_type, identifier):
     prefix = f"TCSC_{payment_type}_"
@@ -26,6 +110,43 @@ def stripe_idempotency_options():
     if not idempotency_key:
         return {}
     return {'idempotency_key': idempotency_key[:255]}
+
+
+def _log_unknown_payment_type(payment_type, payment_intent_id):
+    if payment_type not in PaymentType.ALL:
+        current_app.logger.warning(
+            "Recording PaymentIntent %s with unknown payment_type %r",
+            payment_intent_id,
+            payment_type,
+        )
+
+
+def refund_or_cancel_payment(payment):
+    """Refund a captured payment or cancel an uncaptured payment.
+
+    The caller owns any related model updates and the database commit.
+    """
+    intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
+    if intent.status not in ['succeeded', 'requires_capture']:
+        raise ValueError(
+            'Payment cannot be refunded - '
+            f'current status: {intent.status}'
+        )
+
+    if intent.status == 'requires_capture':
+        canceled_intent = stripe.PaymentIntent.cancel(
+            payment.payment_intent_id
+        )
+        payment.status = canceled_intent.status
+    else:
+        refund = stripe.Refund.create(
+            payment_intent=payment.payment_intent_id
+        )
+        if refund.status not in ('succeeded', 'pending'):
+            raise ValueError(f'Refund failed - status: {refund.status}')
+        payment.status = 'refunded'
+
+    return payment
 
 
 @payments.route('/get-stripe-key')
@@ -122,13 +243,23 @@ def webhook_received():
         if event_type == StripeEvent.PAYMENT_CAPTURABLE:
             # Payment authorized but not yet captured (new members with manual capture)
             payment_intent = data_object
-            payment_type = payment_intent.metadata.get('payment_type', PaymentType.SEASON)
-            member_type = (payment_intent.metadata.get('member_type') or '').upper()  # Normalize case
-            season_id = payment_intent.metadata.get('season_id')
-            trip_id = payment_intent.metadata.get('trip_id')
-            social_event_id = payment_intent.metadata.get('social_event_id')
-            email = normalize_email(payment_intent.metadata.get('email') or '')
-            name = payment_intent.metadata.get('name') or ''
+            metadata = (
+                _stripe_object_value(payment_intent, 'metadata', {}) or {}
+            )
+            payment_intent_id = _stripe_object_value(payment_intent, 'id')
+            amount = _stripe_object_value(payment_intent, 'amount')
+            payment_type = metadata.get(
+                'payment_type',
+                PaymentType.SEASON,
+            )
+            member_type = (
+                metadata.get('member_type') or ''
+            ).upper()
+            season_id = metadata.get('season_id')
+            trip_id = metadata.get('trip_id')
+            email = normalize_email(metadata.get('email') or '')
+            name = metadata.get('name') or ''
+            _log_unknown_payment_type(payment_type, payment_intent_id)
 
             # Always try to find existing user by email
             user = User.get_by_email(email)
@@ -155,18 +286,17 @@ def webhook_received():
                     db.session.commit()
 
             # Create Payment record (idempotent - check if exists first)
-            payment = Payment.get_by_payment_intent(payment_intent.id)
+            payment = Payment.get_by_payment_intent(payment_intent_id)
             if not payment:
                 payment = Payment(
-                    payment_intent_id=payment_intent.id,
+                    payment_intent_id=payment_intent_id,
                     email=email,
                     name=name,
-                    amount=payment_intent.amount,
+                    amount=amount,
                     status='requires_capture',
                     payment_type=payment_type,
                     season_id=int(season_id) if season_id else None,
                     trip_id=int(trip_id) if trip_id else None,
-                    social_event_id=int(social_event_id) if social_event_id else None,
                     user_id=user.id if user else None
                 )
                 db.session.add(payment)
@@ -175,13 +305,20 @@ def webhook_received():
         elif event_type == StripeEvent.PAYMENT_SUCCEEDED:
             # Payment captured (returning members auto-capture, or manual capture completed)
             payment_intent = data_object
-            payment_type = payment_intent.metadata.get('payment_type', PaymentType.SEASON)
-            member_type = (payment_intent.metadata.get('member_type') or '').upper()  # Normalize case
-            season_id = payment_intent.metadata.get('season_id')
-            trip_id = payment_intent.metadata.get('trip_id')
-            social_event_id = payment_intent.metadata.get('social_event_id')
-            email = normalize_email(payment_intent.metadata.get('email') or '')
-            name = payment_intent.metadata.get('name') or ''
+            metadata = _stripe_object_value(payment_intent, 'metadata', {}) or {}
+            payment_type = metadata.get('payment_type', PaymentType.SEASON)
+            if payment_type == PaymentType.EVENT:
+                _record_succeeded_event_payment(payment_intent)
+                return json_success()
+
+            payment_intent_id = _stripe_object_value(payment_intent, 'id')
+            amount = _stripe_object_value(payment_intent, 'amount')
+            member_type = (metadata.get('member_type') or '').upper()
+            season_id = metadata.get('season_id')
+            trip_id = metadata.get('trip_id')
+            email = normalize_email(metadata.get('email') or '')
+            name = metadata.get('name') or ''
+            _log_unknown_payment_type(payment_type, payment_intent_id)
 
             # Find or create user
             user = User.get_by_email(email)
@@ -213,18 +350,17 @@ def webhook_received():
                     user.sync_status()
 
             # Create or update Payment record
-            payment = Payment.get_by_payment_intent(payment_intent.id)
+            payment = Payment.get_by_payment_intent(payment_intent_id)
             if not payment:
                 payment = Payment(
-                    payment_intent_id=payment_intent.id,
+                    payment_intent_id=payment_intent_id,
                     email=email,
                     name=name,
-                    amount=payment_intent.amount,
+                    amount=amount,
                     status='succeeded',
                     payment_type=payment_type,
                     season_id=int(season_id) if season_id else None,
                     trip_id=int(trip_id) if trip_id else None,
-                    social_event_id=int(social_event_id) if social_event_id else None,
                     user_id=user.id if user else None
                 )
                 db.session.add(payment)
@@ -244,6 +380,11 @@ def webhook_received():
             )
 
         elif event_type == StripeEvent.PAYMENT_CANCELED:
+            metadata = _stripe_object_value(data_object, 'metadata', {}) or {}
+            if metadata.get('payment_type') == PaymentType.EVENT:
+                _cancel_event_registration(data_object)
+                return json_success()
+
             payment = Payment.get_by_payment_intent(data_object.id)
             if payment:
                 payment.status = 'canceled'
@@ -319,29 +460,7 @@ def capture_payment(payment_id):
 def refund_payment(payment_id):
     try:
         payment = Payment.query.get_or_404(payment_id)
-
-        # First, retrieve the current payment intent status from Stripe
-        intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
-
-        # Check if the payment can be refunded
-        if intent.status not in ['succeeded', 'requires_capture']:
-            return json_error(f'Payment cannot be refunded - current status: {intent.status}')
-
-        # If payment is still on hold (requires_capture), we need to cancel it instead of refunding
-        if intent.status == 'requires_capture':
-            canceled_intent = stripe.PaymentIntent.cancel(payment.payment_intent_id)
-            payment.status = canceled_intent.status
-        else:
-            # Create refund for captured payments
-            refund = stripe.Refund.create(
-                payment_intent=payment.payment_intent_id
-            )
-
-            # Verify the refund was successful
-            if refund.status not in ('succeeded', 'pending'):
-                return json_error(f'Refund failed - status: {refund.status}')
-
-            payment.status = 'refunded'
+        refund_or_cancel_payment(payment)
 
         # Auto-sync: Update UserSeason status for season payments
         if payment.payment_type == PaymentType.SEASON and payment.season_id:
@@ -361,6 +480,8 @@ def refund_payment(payment_id):
                 'payment_intent_id': payment.payment_intent_id
             }
         })
+    except ValueError as e:
+        return json_error(str(e))
     except stripe.error.StripeError as e:
         return json_error(str(e))
     except Exception as e:
@@ -448,23 +569,7 @@ def bulk_refund_payments():
                     results.append({'id': payment_id, 'success': False, 'error': 'Payment not found'})
                     continue
 
-                # Retrieve current status from Stripe
-                intent = stripe.PaymentIntent.retrieve(payment.payment_intent_id)
-
-                if intent.status not in ['succeeded', 'requires_capture']:
-                    results.append({'id': payment_id, 'success': False, 'error': f'Cannot refund - status: {intent.status}'})
-                    continue
-
-                # Cancel uncaptured payments, refund captured ones
-                if intent.status == 'requires_capture':
-                    canceled_intent = stripe.PaymentIntent.cancel(payment.payment_intent_id)
-                    payment.status = canceled_intent.status
-                else:
-                    refund = stripe.Refund.create(payment_intent=payment.payment_intent_id)
-                    if refund.status not in ('succeeded', 'pending'):
-                        results.append({'id': payment_id, 'success': False, 'error': f'Refund failed - status: {refund.status}'})
-                        continue
-                    payment.status = 'refunded'
+                refund_or_cancel_payment(payment)
 
                 # Auto-sync: Update UserSeason status for season payments
                 if payment.payment_type == PaymentType.SEASON and payment.season_id:
@@ -477,6 +582,8 @@ def bulk_refund_payments():
 
                 results.append({'id': payment_id, 'success': True})
 
+            except ValueError as e:
+                results.append({'id': payment_id, 'success': False, 'error': str(e)})
             except stripe.error.StripeError as e:
                 results.append({'id': payment_id, 'success': False, 'error': str(e)})
             except Exception as e:
@@ -550,56 +657,6 @@ def create_season_payment_intent():
             },
             **stripe_idempotency_options(),
         )
-        return jsonify({
-            'clientSecret': intent.client_secret,
-            'paymentIntent': {
-                'id': intent.id,
-                'amount': intent.amount,
-                'status': intent.status,
-                'email': email
-            }
-        })
-    except Exception as e:
-        return json_error(str(e), 500)
-
-
-@payments.route('/create-social-event-payment-intent', methods=['POST'])
-def create_social_event_payment_intent():
-    """Create a payment intent for social event registration.
-
-    Social events use automatic capture (immediate charge) - no lottery system.
-    """
-    try:
-        data = request.get_json()
-        social_event_id = data.get('social_event_id')
-        email = normalize_email(data.get('email', ''))
-        name = data.get('name', '')
-
-        if not all([social_event_id, email, name]):
-            return json_error('Missing required fields')
-
-        social_event = SocialEvent.query.get(social_event_id)
-        if not social_event:
-            return json_error('Social event not found')
-
-        # Create PaymentIntent with AUTOMATIC capture (immediate charge)
-        intent = stripe.PaymentIntent.create(
-            amount=social_event.price,
-            currency='usd',
-            capture_method='automatic',  # Immediate charge - no lottery
-            receipt_email=email,
-            statement_descriptor=build_statement_descriptor('SOCIAL', social_event.name),
-            description=f"TCSC Social Event - {social_event.name}",
-            metadata={
-                'name': name,
-                'email': email,
-                'payment_type': PaymentType.SOCIAL_EVENT,
-                'social_event_id': str(social_event.id),
-                'social_event_slug': social_event.slug
-            },
-            **stripe_idempotency_options(),
-        )
-
         return jsonify({
             'clientSecret': intent.client_secret,
             'paymentIntent': {

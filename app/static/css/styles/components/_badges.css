@@ -38,14 +38,14 @@
   color: var(--pill-trips-text);
 }
 
-.section-pill--social {
-  background: var(--pill-social-bg);
-  color: var(--pill-social-text);
+.section-pill--event {
+  background: var(--pill-event-bg);
+  color: var(--pill-event-text);
 }
 
-.badge--social {
-  background: var(--pill-social-bg);
-  color: var(--pill-social-text);
+.badge--event {
+  background: var(--pill-event-bg);
+  color: var(--pill-event-text);
   font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.3px;
