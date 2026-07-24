@@ -1,0 +1,56 @@
+templates:
+  dry_tri:
+    name: Dry Tri (race)
+    price_options:
+      - name: Individual
+        description: Complete all three legs yourself
+        price_cents: 5500
+        participant_roles: ["Participant"]
+      - name: Team of 3
+        description: 'One registration covers your whole team. If the same participant will complete multiple legs, enter their information again.'
+        price_cents: 10500
+        participant_roles: ["Rollerskier", "Mountain Biker", "Trail Runner"]
+      - name: Run-only 6K
+        description: Just the 6K trail run
+        price_cents: 3000
+        participant_roles: ["Participant"]
+    custom_questions:
+      - key: competition_gender
+        label: "Competition gender"
+        type: choice
+        options: ["Men", "Women", "Mixed / non-binary"]
+        required: true
+      - key: club
+        label: "Club(s) or team(s) you represent (e.g., TCSC, LNR)"
+        type: text
+        required: false
+      - key: city_state
+        label: "City, State (e.g., Minneapolis, MN)"
+        type: text
+        required: true
+      - key: course
+        label: "Which race will you participate in?"
+        type: choice
+        options:
+          - "Long course (18K roll, 17K ride, 11K run)"
+          - "Short course (9K roll, 9K ride, 6K run)"
+        required: true
+      - key: wave
+        label: "What is your preferred wave? (We may not be able to accommodate requested wave)"
+        type: choice
+        options:
+          - "Wave 1 (fighting for the podium)"
+          - "Wave 2 (strong finish)"
+          - "Wave 3 (focused on completion)"
+        required: false
+  social:
+    name: Social event
+    price_options:
+      - name: Registration
+        price_cents: 0
+        participant_roles: ["Participant"]
+    custom_questions: []
+  blank:
+    name: Blank
+    price_options: []
+    custom_questions: []
