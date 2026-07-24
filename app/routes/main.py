@@ -58,4 +58,4 @@ def get_home_page():
 
 @main.route('/tri')
 def dryland_triathlon_page():
-    return render_template('dryland-triathlon.html')
+    return redirect('/events/dry-tri-2026', code=302)

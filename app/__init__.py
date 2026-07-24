@@ -28,6 +28,7 @@ from .routes.admin_scheduled_tasks import admin_scheduled_tasks
 from .routes.admin_skipper import admin_skipper_bp
 from .routes.auth import auth
 from .routes.conditions import bp as conditions_bp
+from .routes.events import events
 from .routes.main import main
 from .routes.payments import payments
 from .routes.registration import registration
@@ -62,6 +63,7 @@ def create_app(environment=None):
     app.register_blueprint(main)
     app.register_blueprint(trips)
     app.register_blueprint(socials)
+    app.register_blueprint(events)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
     app.register_blueprint(admin_newsletter_bp)
