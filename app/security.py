@@ -62,7 +62,7 @@ _ADMIN_CSP = (
 _PAYMENT_PAGE_ENDPOINTS = {
     "events.get_event_page",
     "registration.season_register",
-    "socials.get_social_event_page",
+    "socials.redirect_social",
     "trips.get_trip_page",
 }
 

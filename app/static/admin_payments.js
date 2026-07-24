@@ -50,7 +50,7 @@
   var TYPE_LABELS = {
     trip: 'Trip',
     season: 'Season',
-    social_event: 'Social Event'
+    event: 'Event'
   };
 
   // ---------------------------------------------------------------------------
@@ -140,7 +140,7 @@
           options: [
             { value: 'trip', label: 'Trip' },
             { value: 'season', label: 'Season' },
-            { value: 'social_event', label: 'Social Event' }
+            { value: 'event', label: 'Event' }
           ]
         },
         {

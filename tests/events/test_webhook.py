@@ -16,6 +16,16 @@ from app.models import Payment, User
 
 
 @pytest.fixture
+def unknown_payment_cleanup(db_session):
+    intent_id = "pi_unknown_payment_type"
+    Payment.query.filter_by(payment_intent_id=intent_id).delete()
+    db_session.session.commit()
+    yield intent_id
+    Payment.query.filter_by(payment_intent_id=intent_id).delete()
+    db_session.session.commit()
+
+
+@pytest.fixture
 def pending_registration(db_session):
     now = datetime.utcnow()
     event = Event(
@@ -183,3 +193,36 @@ def test_canceled_event_intent_cancels_pending_registration(
         registration_id,
     )
     assert registration.status == RegistrationStatus.CANCELLED
+
+
+@patch("app.routes.payments.send_payment_notification")
+def test_unknown_payment_type_logs_and_records_payment(
+    _notify,
+    client,
+    caplog,
+    unknown_payment_cleanup,
+):
+    intent_id = unknown_payment_cleanup
+    payload = {
+        "type": "payment_intent.succeeded",
+        "data": {
+            "object": {
+                "id": intent_id,
+                "amount": 3200,
+                "metadata": {
+                    "payment_type": "legacy_unknown",
+                    "email": "unknown@example.com",
+                    "name": "Unknown Payment",
+                },
+            }
+        },
+    }
+
+    response = _post_development_webhook(client, payload)
+
+    assert response.status_code == 200
+    payment = Payment.get_by_payment_intent(intent_id)
+    assert payment is not None
+    assert payment.payment_type == "legacy_unknown"
+    assert payment.status == "succeeded"
+    assert "unknown payment_type" in caplog.text

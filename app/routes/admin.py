@@ -1,7 +1,7 @@
 from flask import Blueprint, render_template, jsonify, request, redirect, url_for, Response, session
 from sqlalchemy import func
 from ..auth import admin_required
-from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, SocialEvent, Tag, UserTag
+from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, Tag, UserTag
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
@@ -142,26 +142,6 @@ def parse_trip_form(form):
     }
 
 
-def parse_social_event_form(form):
-    """Parse and validate social event form data.
-
-    Returns:
-        dict: Parsed social event data ready for model creation/update
-    """
-    return {
-        'slug': form['slug'],
-        'name': form['name'],
-        'location': form['location'],
-        'max_participants': int(form['max_participants']),
-        'event_date': datetime.strptime(form['event_date'], DATETIME_FORMAT),
-        'signup_start': datetime.strptime(form['signup_start'], DATETIME_FORMAT),
-        'signup_end': datetime.strptime(form['signup_end'], DATETIME_FORMAT),
-        'price': int(float(form['price']) * CENTS_PER_DOLLAR),
-        'description': form['description'],
-        'status': form['status'],
-    }
-
-
 @admin.route('/admin')
 @admin_required
 def get_admin_page():
@@ -182,14 +162,17 @@ def get_payments_data():
 
     payments_data = []
     for payment in payments:
-        # Get the associated trip, season, or social event name
+        # Get the associated trip, season, or event name
         for_name = '-'
         if payment.payment_type == 'trip' and payment.trip:
             for_name = payment.trip.name
         elif payment.payment_type == 'season' and payment.season:
             for_name = payment.season.name
-        elif payment.payment_type == 'social_event' and payment.social_event:
-            for_name = payment.social_event.name
+        elif (
+            payment.payment_type == 'event'
+            and payment.event_registration
+        ):
+            for_name = payment.event_registration.event.name
 
         # Map status to display status
         display_status = {
@@ -458,88 +441,6 @@ def activate_season(season_id):
         flash_error(f'Error activating season: {str(e)}')
 
     return redirect(url_for('admin.get_admin_seasons'))
-
-
-# Social Events CRUD
-@admin.route('/admin/social-events')
-@admin_required
-def get_admin_social_events():
-    social_events = SocialEvent.query.order_by(SocialEvent.event_date).all()
-    return render_template('admin/social_events.html', social_events=social_events)
-
-
-@admin.route('/admin/social-events/new', methods=['GET', 'POST'])
-@admin_required
-def new_social_event():
-    if request.method == 'POST':
-        try:
-            social_event = SocialEvent(**parse_social_event_form(request.form))
-            db.session.add(social_event)
-            db.session.commit()
-            flash_success('Social event created successfully!')
-            return redirect(url_for('admin.get_admin_social_events'))
-        except Exception as e:
-            flash_error(f'Error creating social event: {str(e)}')
-            return redirect(url_for('admin.new_social_event'))
-
-    return render_template('admin/social_event_form.html', social_event=None)
-
-
-@admin.route('/admin/social-events/<int:event_id>/edit', methods=['GET', 'POST'])
-@admin_required
-def edit_social_event(event_id):
-    social_event = SocialEvent.query.get_or_404(event_id)
-
-    if request.method == 'POST':
-        try:
-            parsed_data = parse_social_event_form(request.form)
-            # Skip slug on edit - it's set only during creation
-            parsed_data.pop('slug', None)
-            for key, value in parsed_data.items():
-                setattr(social_event, key, value)
-            db.session.commit()
-            flash_success('Social event updated successfully!')
-            return redirect(url_for('admin.get_admin_social_events'))
-        except Exception as e:
-            flash_error(f'Error updating social event: {str(e)}')
-            return redirect(url_for('admin.edit_social_event', event_id=event_id))
-
-    return render_template('admin/social_event_form.html', social_event=social_event)
-
-
-@admin.route('/admin/social-events/data')
-@admin_required
-def social_events_data():
-    """JSON data endpoint for social events admin grid."""
-    events = SocialEvent.query.order_by(SocialEvent.event_date.desc()).all()
-    return jsonify({
-        'events': [{
-            'id': e.id,
-            'name': e.name,
-            'location': e.location,
-            'event_date': e.formatted_date,
-            'event_time': e.formatted_time,
-            'signup_start': e.signup_start.strftime('%Y-%m-%d') if e.signup_start else None,
-            'signup_end': e.signup_end.strftime('%Y-%m-%d') if e.signup_end else None,
-            'max_participants': e.max_participants,
-            'price': e.price,
-            'status': e.status
-        } for e in events]
-    })
-
-
-@admin.route('/admin/social-events/<int:event_id>/delete', methods=['POST'])
-@admin_required
-def delete_social_event_json(event_id):
-    """JSON API endpoint for deleting a social event."""
-    event = SocialEvent.query.get_or_404(event_id)
-    try:
-        db.session.delete(event)
-        db.session.commit()
-        return jsonify({'success': True})
-    except Exception as e:
-        db.session.rollback()
-        return jsonify({'success': False, 'error': str(e)}), 400
 
 
 @admin.route('/admin/seasons/<int:season_id>/export')

@@ -360,8 +360,9 @@ def test_admin_can_register_for_draft_event(
     assert preview.status_code == 200
 
 
-def test_tri_redirects_to_generic_event_page(client):
-    response = client.get("/tri")
+@pytest.mark.parametrize("path", ["/tri", "/dryland-triathlon"])
+def test_dry_tri_legacy_urls_redirect_to_generic_event_page(client, path):
+    response = client.get(path)
 
     assert response.status_code == 302
     assert response.headers["Location"] == "/events/dry-tri-2026"

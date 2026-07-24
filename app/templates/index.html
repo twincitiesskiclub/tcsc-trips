@@ -96,21 +96,32 @@
         </div>
         {% endif %}
 
-        {% if social_events %}
+        {% if events %}
         <div class="homepage-section">
-          <div class="section-pill section-pill--social">Social Events</div>
+          <div class="section-pill section-pill--event">Events</div>
           <div class="section-grid" style="margin-top: 16px;">
-            {% for event in social_events %}
-            <a href="/social/{{ event.slug }}" class="card" style="text-decoration: none;">
+            {% for event in events %}
+            <a href="/events/{{ event.slug }}" class="card" style="text-decoration: none;">
               <span class="card__title">{{ event.name }}</span>
               <div class="card__meta">
                 <span class="card__meta-item">📍 {{ event.location }}</span>
-                <span class="card__meta-item">📅 {{ event.formatted_date }}</span>
-                <span class="card__meta-item">🕐 {{ event.formatted_time }}</span>
+                <span class="card__meta-item">📅 {{ event.event_date.strftime('%B %-d, %Y') }}</span>
+                <span class="card__meta-item">🕐 {{ event.event_date.strftime('%-I:%M %p') }}</span>
               </div>
               <p class="card__description">{{ event.description }}</p>
               <div class="card__footer">
-                <span class="card__price">${{ "%.2f"|format(event.price/100) }}</span>
+                {% set prices = event.price_options | selectattr('active') | map(attribute='price_cents') | list %}
+                <span class="card__price">
+                  {% if prices %}
+                    {% if prices|min == prices|max %}
+                      {{ prices|min | format_price }}
+                    {% else %}
+                      {{ prices|min | format_price }}–{{ prices|max | format_price }}
+                    {% endif %}
+                  {% else %}
+                    Details
+                  {% endif %}
+                </span>
                 <span class="btn btn--small">Sign Up</span>
               </div>
             </a>

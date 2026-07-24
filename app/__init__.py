@@ -5,7 +5,7 @@ from flask_migrate import Migrate
 
 from .auth import init_oauth
 from .config import configure_database, load_stripe_config
-from .models import db, SocialEvent
+from .models import db
 from .events.models import (
     Event,
     EventParticipant,

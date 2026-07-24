@@ -231,8 +231,8 @@
                                 <span class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-sm font-medium status-info">Season</span>
                             {% elif payment.payment_type == 'trip' %}
                                 <span class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-sm font-medium status-active">Trip</span>
-                            {% elif payment.payment_type == 'social_event' %}
-                                <span class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-sm font-medium status-pending">Social</span>
+                            {% elif payment.payment_type == 'event' %}
+                                <span class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-sm font-medium status-pending">Event</span>
                             {% else %}
                                 <span class="inline-flex items-center gap-1.5 rounded-md px-2 py-0.5 text-sm font-medium status-unknown">{{ payment.payment_type }}</span>
                             {% endif %}
@@ -242,8 +242,8 @@
                                 {{ payment.season.name }}
                             {% elif payment.payment_type == 'trip' and payment.trip %}
                                 {{ payment.trip.name }}
-                            {% elif payment.payment_type == 'social_event' and payment.social_event %}
-                                {{ payment.social_event.name }}
+                            {% elif payment.payment_type == 'event' and payment.event_registration %}
+                                {{ payment.event_registration.event.name }}
                             {% else %}
                                 -
                             {% endif %}
