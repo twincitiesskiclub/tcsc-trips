@@ -67,6 +67,9 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
     connection.exec_driver_sql(
         "CREATE TABLE practice_activities (id INTEGER PRIMARY KEY)"
     )
+    connection.exec_driver_sql(
+        "CREATE TABLE payments (id INTEGER PRIMARY KEY)"
+    )
     connection.exec_driver_sql("""
         CREATE TABLE practice_types (
             id INTEGER PRIMARY KEY,

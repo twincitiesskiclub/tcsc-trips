@@ -155,3 +155,62 @@ The warnings are the suite's existing SQLAlchemy legacy-API warnings.
 - No unresolved functional concerns.
 
 STATUS: DONE
+
+## Fix round 1
+
+### What changed
+
+- Added a minimal `payments` table with an integer primary key to the synthetic
+  e36 release-test baseline, matching the historical presence of that table.
+- Removed the events migration's table/column existence checks and made the
+  `payments.event_registration_id` column and foreign-key creation
+  unconditional during upgrade.
+- Made the matching foreign-key and column removal unconditional during
+  downgrade.
+
+### Verification
+
+Command:
+
+```text
+./run-tests.sh tests/practices/test_practice_migration_release.py -v
+```
+
+Tail output:
+
+```text
+tests/practices/test_practice_migration_release.py::test_release_lifecycle_upgrades_e36_orphan_to_head_without_consumers PASSED [ 50%]
+tests/practices/test_practice_migration_release.py::test_release_lifecycle_conflict_rolls_back_c4_and_restores_orphan PASSED [100%]
+
+============================== 2 passed in 2.78s ===============================
+```
+
+Command:
+
+```text
+./run-tests.sh tests/events/ -v
+```
+
+Tail output:
+
+```text
+tests/events/test_models.py::test_event_with_options_and_registration PASSED [ 25%]
+tests/events/test_models.py::test_payment_links_to_event_registration PASSED [ 50%]
+tests/events/test_models.py::test_event_defaults_and_string_constants PASSED [ 75%]
+tests/events/test_models.py::test_event_tables_have_no_user_fk PASSED    [100%]
+
+============================== 4 passed in 0.35s ===============================
+```
+
+Command:
+
+```text
+./run-tests.sh -q
+```
+
+Tail output:
+
+```text
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+1200 passed, 177 warnings in 48.18s
+```
