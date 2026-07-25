@@ -67,13 +67,21 @@ def run_coach_summary(
     practice_model = SimpleNamespace(
         query=FakeQuery(practices),
         date=Practice.date,
+        is_draft=Practice.is_draft,
     )
 
     def stage_summary(*, message_ts, practices, **_kwargs):
         for practice_item in practices:
             practice_item.slack_coach_summary_ts = message_ts
 
-    with patch.object(coach_review, "Practice", practice_model), patch.object(
+    with patch.object(coach_review, "Practice", practice_model), patch(
+        # post_coach_weekly_summary now routes through published_practices(),
+        # which does its own independent `from app.practices.models import
+        # Practice` inside the function body rather than using the name
+        # bound in coach_review. Patching that too keeps both name
+        # resolutions pointed at the fake model instead of the real one.
+        "app.practices.models.Practice", practice_model
+    ), patch.object(
         coach_review, "current_app", SimpleNamespace(logger=logger)
     ), patch.object(
         coach_review, "get_slack_client", return_value=client

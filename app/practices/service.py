@@ -244,6 +244,12 @@ def published_practices():
     members see anything, so every member-visible read must go through here.
     Returns a Query, so callers keep chaining .filter()/.order_by() as before.
     """
+    # Re-imported here (Practice is already imported at module level above)
+    # so this resolves against app.practices.models.Practice at call time.
+    # Tests that patch that name via mock.patch("app.practices.models.Practice", ...)
+    # only affect that module attribute, not the module-level `Practice` name
+    # already bound in this file's namespace at import time; a local import
+    # re-reads the current attribute and picks up the patch.
     from app.practices.models import Practice
 
     return Practice.query.filter(Practice.is_draft.is_(False))

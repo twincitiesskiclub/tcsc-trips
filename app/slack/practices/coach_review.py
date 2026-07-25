@@ -9,6 +9,7 @@ from app.models import db
 from app.slack.client import get_slack_client, get_channel_id_by_name
 from app.slack.blocks import build_collab_practice_blocks
 from app.practices.models import Practice
+from app.practices.service import published_practices
 
 from app.slack.practices._config import (
     LOGGING_CHANNEL_ID,
@@ -448,7 +449,7 @@ def post_coach_weekly_summary(
 
     # Query practices for the week
     week_end = week_start + timedelta(days=7)
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= week_start,
         Practice.date < week_end
     ).order_by(Practice.date).all()

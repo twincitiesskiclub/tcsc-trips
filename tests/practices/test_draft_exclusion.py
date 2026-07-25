@@ -58,8 +58,14 @@ def test_published_practices_is_chainable(db_session):
     db_session.commit()
 
     try:
-        found = published_practices().filter(Practice.date >= soon).all()
-        assert [p.id for p in found] == [live.id]
+        # Membership assertions rather than exact list equality: this runs
+        # against the real local dev database, which may already contain
+        # unrelated practices in this date range. Exact equality would fail
+        # spuriously for any developer who has run ./scripts/dev.sh and
+        # created practices of their own.
+        ids = [p.id for p in published_practices().filter(Practice.date >= soon).all()]
+        assert live.id in ids
+        assert draft.id not in ids, "a draft practice leaked through a chained filter"
     finally:
         db_session.delete(draft)
         db_session.delete(live)
@@ -67,7 +73,17 @@ def test_published_practices_is_chainable(db_session):
 
 
 def test_no_member_facing_query_uses_bare_practice_query():
-    """Guard the rule itself: these modules must go through the helper."""
+    """Guard the rule itself: these modules must go through the helper.
+
+    The grep intentionally only flags `Practice.query.filter(`/`.filter_by(`
+    style listing queries, not `Practice.query.get(`/`.get_or_404(` by-id
+    lookups. Fetching one specific practice by id (e.g. to RSVP against it,
+    or to render an admin detail page) is not a member-visible listing and
+    must not be forced through published_practices(). This is why
+    app/slack/commands.py can be watched even though it also contains a
+    legitimate `Practice.query.get(practice_id)` lookup in
+    `_handle_rsvp_command` — that line doesn't match the narrower pattern.
+    """
     import pathlib
 
     watched = [
@@ -77,6 +93,9 @@ def test_no_member_facing_query_uses_bare_practice_query():
         "app/agent/routines/lead_verification.py",
         "app/agent/routines/weekly_summary.py",
         "app/agent/routines/pre_practice.py",
+        "app/slack/commands.py",
+        "app/slack/practices/app_home.py",
+        "app/slack/practices/coach_review.py",
     ]
     offenders = []
     for rel in watched:
@@ -86,10 +105,11 @@ def test_no_member_facing_query_uses_bare_practice_query():
             if stripped.startswith("#"):
                 continue
             code = line.split("#", 1)[0]
-            if "Practice.query" in code and "published_practices" not in code:
+            if "Practice.query.filter" in code and "published_practices" not in code:
                 offenders.append(f"{rel}:{num}")
     assert not offenders, (
-        "these lines read Practice.query directly, which would include draft "
-        "practices on a member-visible surface; replace with "
-        f"published_practices() from app.practices.service: {offenders}"
+        "these lines read Practice.query.filter(...)/.filter_by(...) directly, "
+        "which would include draft practices on a member-visible surface; "
+        "replace with published_practices() from app.practices.service: "
+        f"{offenders}"
     )
