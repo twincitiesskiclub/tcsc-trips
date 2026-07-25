@@ -96,3 +96,34 @@ def generate_draft_block(start_date: date, weeks: int = 4) -> list[Practice]:
             "Drafted %d practices for %s (+%d weeks)", len(created), start_date, weeks
         )
     return created
+
+
+def missing_fields(practice: Practice) -> list[str]:
+    """Which of the details that decide whether someone can lead are unset.
+
+    Location, type and time are exactly the three things the spec identifies as
+    determining availability, so they are what gate the poll.
+    """
+    missing: list[str] = []
+    if not practice.location_id:
+        missing.append("location")
+    if not practice.practice_types and not practice.activities:
+        missing.append("type")
+    if not practice.date:
+        missing.append("time")
+    return missing
+
+
+def is_ready(practice: Practice) -> bool:
+    """True when a draft has enough detail for someone to judge availability."""
+    return not missing_fields(practice)
+
+
+def readiness_summary(practices: list[Practice]) -> dict:
+    """Counts plus the incomplete drafts and what each is missing."""
+    incomplete = [(p, missing_fields(p)) for p in practices if not is_ready(p)]
+    return {
+        "total": len(practices),
+        "ready": len(practices) - len(incomplete),
+        "incomplete": sorted(incomplete, key=lambda pair: pair[0].date),
+    }
