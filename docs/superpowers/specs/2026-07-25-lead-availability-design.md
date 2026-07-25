@@ -66,10 +66,9 @@ COACHES + DIRECTORS fill in location, type, time
      └─ Director triggers the poll  ← human gate, deliberately not a timer
 
 POLL OPENS                        → #coord-practices-leads-assists
-  └─ One post per block, one lettered emoji per session (🇦 … 🇱)
-  └─ Leads react to every session they can lead; react again to undo
-  └─ ✅ means "that's everything from me"
-  └─ Bot maintains a threaded reply with coverage
+  └─ One post per block, one lettered emoji per session (:letter_a: … :letter_l:)
+  └─ Leads react to each session they can lead
+  └─ ✅ means "that's everything from me", including picking nothing
 
 DAILY (08:00 Central)             job: lead_availability_nudge
   └─ DM only people who have neither reacted nor hit ✅
@@ -104,8 +103,8 @@ again. Additional consequences:
   `app/slack/bolt_app.py:1175` and `:1180` for practice RSVPs.
 
 Accepted costs: the reaction pill row renders at the bottom of the message rather than beside
-each line, so mapping 🇩 back to its session costs a glance at the legend; per-row coverage hints
-must live in a threaded reply; and stray reactions are noise the bot ignores.
+each line, so mapping a letter back to its session costs a glance at the legend; per-row coverage
+hints cannot sit beside a row; and stray reactions are noise the bot ignores.
 
 ### Evidence behind the post's content
 
@@ -117,8 +116,8 @@ must live in a threaded reply; and stray reactions are noise the bot ignores.
 - **Half-covered sessions get their own nudge.** That study also found middling slots are the
   ones neglected, while empty and full both do fine.
 - **No response-rate counter.** Descriptive-norm messaging that advertises low participation
-  produces documented boomerang effects. The threaded reply states a need
-  ("3 sessions still have nobody"), never a participation statistic ("9 of 24 responded").
+  produces documented boomerang effects. Nothing in the poll reports turnout; when the coverage
+  reply is eventually built it states a need ("3 sessions still have nobody"), never a statistic.
 - **✅ exists because pure opt-in is ambiguous.** Check-all-that-apply research (Smyth et al.
   2006, replicated by Pew 2019) shows people mark the obvious few and stop scanning;
   forced-choice yields ~8pp more endorsement. Twelve forced marks is the spreadsheet that
