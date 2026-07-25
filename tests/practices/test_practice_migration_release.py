@@ -21,6 +21,9 @@ RELEASE = ROOT / "scripts" / "release.sh"
 RELEASE_TIMEOUT_SECONDS = 30
 E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
+# Head as of the lead-availability poll schema migration (down_revision points
+# at EVENTS_REVISION above) — bump this whenever a new migration lands on top.
+LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -69,6 +72,13 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
     )
     connection.exec_driver_sql(
         "CREATE TABLE payments (id INTEGER PRIMARY KEY)"
+    )
+    connection.exec_driver_sql(
+        # Bare stub: real `users` predates e36bbec59bde and isn't otherwise
+        # touched by the migrations under test here, but the lead-availability
+        # tables (added after 1b29976741b6) FK to it, so it must exist in this
+        # synthetic baseline for the upgrade to head to succeed.
+        "CREATE TABLE users (id INTEGER PRIMARY KEY)"
     )
     connection.exec_driver_sql("""
         CREATE TABLE practice_types (
@@ -202,7 +212,7 @@ def test_release_lifecycle_upgrades_e36_orphan_to_head_without_consumers(
     assert "Socket Mode" not in output
     with engine.connect() as connection:
         _use_schema(connection, release_schema)
-        assert _revision(connection) == EVENTS_REVISION
+        assert _revision(connection) == LEAD_AVAILABILITY_REVISION
         assert _c4_columns(connection) == EXPECTED_C4_COLUMNS
         after = summary_catalog_snapshot(connection)
         defaults = {row[1]: row[6] for row in after["columns"]}

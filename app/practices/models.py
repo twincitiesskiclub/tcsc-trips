@@ -337,3 +337,12 @@ class CancellationRequest(db.Model):
 
     def __repr__(self):
         return f'<CancellationRequest Practice#{self.practice_id} {self.status}>'
+
+
+# Imported for Alembic metadata registration.
+from app.practices.availability_models import (  # noqa: E402,F401
+    LeadAvailabilityParticipant,
+    LeadAvailabilityPoll,
+    LeadAvailabilityPollPractice,
+    LeadAvailabilityResponse,
+)
