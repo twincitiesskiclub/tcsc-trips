@@ -4,7 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from app.models import db
+from app.models import db, User
+from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice, PracticeLead, PracticeLocation
 
 
@@ -67,11 +68,33 @@ def no_slack_refresh(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("value", [0, 4, -1, "two"])
+@pytest.mark.parametrize("value", [0, 4, -1, "two", True, False])
 def test_invalid_leads_needed_is_rejected(admin_client, value):
     response = admin_client.post("/admin/practices/create", json={
         "date": "2026-08-04T18:15:00",
         "location_id": 1,
+        "leads_needed": value,
+    })
+    assert response.status_code == 400
+    assert "leads_needed" in response.get_json()["error"].lower()
+
+
+# `create_practice` and `edit_practice` each carry their own, independent
+# `isinstance(leads_needed, bool)` guard (the edit route does not delegate to
+# create's validation). Booleans are `int` instances in Python, so without
+# this guard `{"leads_needed": true}` would be silently accepted and stored
+# as `1`. The parametrize above only exercises the create-route copy of the
+# guard; this test pins the edit-route copy the same way.
+@pytest.mark.parametrize("value", [True, False])
+def test_invalid_leads_needed_is_rejected_on_edit(admin_client, value):
+    create_response = admin_client.post("/admin/practices/create", json={
+        "date": "2026-08-04T18:15:00",
+        "location_id": 1,
+    })
+    assert create_response.status_code == 200
+    practice_id = create_response.get_json()["practice_id"]
+
+    response = admin_client.post(f"/admin/practices/{practice_id}/edit", json={
         "leads_needed": value,
     })
     assert response.status_code == 400
@@ -109,3 +132,70 @@ def test_assist_ids_are_ignored(admin_client):
     practice_id = response.get_json()["practice_id"]
     assists = PracticeLead.query.filter_by(practice_id=practice_id, role="assist").count()
     assert assists == 0, "the assist role is retired; no new assist rows may be written"
+
+
+def test_editing_practice_preserves_historical_assist_role(admin_client, db_session):
+    """`edit_practice` rebuilds staffing by deleting existing `PracticeLead`
+    rows and re-adding from the request, but the delete is scoped to
+    `role.in_(('coach', 'lead'))` specifically so historical `role='assist'`
+    rows survive. The admin UI no longer sends `assist_ids` on save, so an
+    unscoped delete would silently erase years of assist history the next
+    time any practice is edited. This seeds a practice with an existing
+    assist row plus a lead and a coach row, then edits it the way the current
+    UI actually does -- only `coach_ids`/`lead_ids`, no `assist_ids` -- and
+    asserts the assist row is still there afterward.
+    """
+    coach_user = User(
+        first_name="TEST", last_name="Coach",
+        email="test.leads-needed-coach@example.invalid", status="ACTIVE",
+    )
+    lead_user = User(
+        first_name="TEST", last_name="Lead",
+        email="test.leads-needed-lead@example.invalid", status="ACTIVE",
+    )
+    assist_user = User(
+        first_name="TEST", last_name="Assist",
+        email="test.leads-needed-assist@example.invalid", status="ACTIVE",
+    )
+    db.session.add_all([coach_user, lead_user, assist_user])
+    db.session.flush()
+
+    practice = Practice(
+        date=_TEST_DATE,
+        day_of_week=_TEST_DATE.strftime("%A"),
+        location_id=1,
+        status=PracticeStatus.SCHEDULED.value,
+    )
+    db.session.add(practice)
+    db.session.flush()
+
+    db.session.add_all([
+        PracticeLead(practice_id=practice.id, user_id=coach_user.id, role="coach"),
+        PracticeLead(practice_id=practice.id, user_id=lead_user.id, role="lead"),
+        PracticeLead(practice_id=practice.id, user_id=assist_user.id, role="assist"),
+    ])
+    db.session.commit()
+
+    try:
+        response = admin_client.post(f"/admin/practices/{practice.id}/edit", json={
+            "coach_ids": [coach_user.id],
+            "lead_ids": [lead_user.id],
+        })
+        assert response.status_code == 200
+
+        remaining_roles = [
+            row.role
+            for row in PracticeLead.query.filter_by(practice_id=practice.id).all()
+        ]
+        assert "assist" in remaining_roles, (
+            "editing a practice with only coach_ids/lead_ids must not delete "
+            "historical role='assist' rows"
+        )
+    finally:
+        db.session.rollback()
+        PracticeLead.query.filter_by(practice_id=practice.id).delete()
+        db.session.delete(practice)
+        db.session.delete(coach_user)
+        db.session.delete(lead_user)
+        db.session.delete(assist_user)
+        db.session.commit()
