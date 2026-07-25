@@ -371,7 +371,7 @@ dispatcher but not live posting.
 |---|---|
 | Custom letter emoji renamed or deleted | Already happened once in Phase 0. Validate the set against `emoji.list` before opening a poll; store position alongside name; numbered weekly layout is the fallback |
 | No deadline on the poll | The closes-Sunday footer was cut. Availability declines with response lateness, so reminders now carry that weight alone |
-| `reactions:read` scope may not be granted | Verify before implementation; reconciliation depends on it |
+| ~~`reactions:read` scope may not be granted~~ | **Resolved 2026-07-25** — verified granted via `auth.test` (`x-oauth-scopes`), along with `reactions:write`, `chat:write`, `emoji:read`, `channels:history` |
 | Practice list changes after a poll opens | Emoji mapping is persisted; affected responses marked stale |
 | A practice is deleted mid-poll | `lead_availability_poll_practices` and responses cascade; its emoji is retired, not reassigned |
 
