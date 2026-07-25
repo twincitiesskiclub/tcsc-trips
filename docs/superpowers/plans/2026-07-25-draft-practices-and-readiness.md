@@ -73,30 +73,34 @@ def test_draft_flag_round_trips(db_session):
     assert practice.leads_needed == 3
 ```
 
-If `tests/practices/` has no `db_session` fixture, add `tests/practices/conftest.py`:
+`tests/practices/` has no shared conftest — each file defines its own fixtures.
+Follow the existing pattern exactly (see `tests/practices/test_plan_reaction_migration.py`):
 
 ```python
 import pytest
 
 from app import create_app
-from app.models import db as _db
+from app.models import db
 
 
-@pytest.fixture()
+@pytest.fixture
 def app():
     application = create_app()
-    application.config["TESTING"] = True
-    with application.app_context():
-        _db.create_all()
-        yield application
-        _db.session.rollback()
-        _db.drop_all()
+    application.config.update(TESTING=True, SECRET_KEY="test-secret-key")
+    return application
 
 
-@pytest.fixture()
+@pytest.fixture
 def db_session(app):
-    return _db.session
+    with app.app_context():
+        yield db
 ```
+
+**Never call `db.create_all()` or `db.drop_all()` in a test.** `tests/_db_guard.py`
+pins the suite to `postgresql://tcsc:tcsc@localhost:5432/tcsc_trips`, which is the
+real local development database — `drop_all()` would destroy local data. No
+existing test does this. Tables already exist via migrations; clean up rows you
+create instead.
 
 - [ ] **Step 2: Run test to verify it fails**
 

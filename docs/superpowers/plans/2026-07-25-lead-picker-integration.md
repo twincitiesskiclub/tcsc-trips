@@ -467,59 +467,113 @@ git commit -m "feat(admin): lead-candidates endpoint for the practice form"
 **Files:**
 - Modify: `app/static/admin_practices.js`
 - Modify: `app/templates/admin/practices/detail.html` (and the create/edit form partial)
-- Test: `tests/js/test_lead_picker_source.py`
+- Test: `tests/js/lead_picker.test.js`
+- Modify: `package.json` (add the new file to the `test:practice-reactions` script)
 
 **Interfaces:**
 - Consumes: `GET /admin/practices/<id>/lead-candidates` (Task 2).
 - Produces: a lead picker rendering each candidate as `Name · available · led N this block · M in 90d`, with a `⚠` marker on stale rows and a `needs N` capacity hint.
 
-`tests/js/` already tests JS by asserting on source content; follow that existing pattern rather than adding a JS test runner.
+`tests/js/` runs under `node --test` with JSDOM (see `tests/js/toast.test.js`), wired
+through the `test:practice-reactions` script in `package.json`. Follow that pattern —
+these are real JS tests, not Python source assertions. Run them with
+`npm run test:practice-reactions`.
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/js/test_lead_picker_source.py`:
+Create `tests/js/lead_picker.test.js`:
 
-```python
-"""The lead picker must render availability, load and staleness."""
+```javascript
+'use strict';
 
-import pathlib
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const path = require('node:path');
+const {JSDOM} = require('jsdom');
 
-SOURCE = pathlib.Path("app/static/admin_practices.js").read_text()
+const ROOT = path.resolve(__dirname, '../..');
+const SOURCE = fs.readFileSync(
+  path.join(ROOT, 'app/static/admin_practices.js'), 'utf8');
 
+function load() {
+  const dom = new JSDOM('<!doctype html><div id="lead-picker"></div>');
+  global.window = dom.window;
+  global.document = dom.window.document;
+  const module = {exports: {}};
+  new Function('module', 'exports', 'window', 'document',
+    SOURCE + '\nmodule.exports = {leadCandidateLabel, renderLeadPicker};'
+  )(module, module.exports, dom.window, dom.window.document);
+  return {dom, ...module.exports};
+}
 
-def test_picker_fetches_the_candidates_endpoint():
-    assert "lead-candidates" in SOURCE
+test('label shows availability and both load counts', () => {
+  const {leadCandidateLabel} = load();
+  const label = leadCandidateLabel({
+    name: 'Ada L', available: true, responded: true, stale: false,
+    led_in_block: 0, led_last_90d: 2,
+  });
+  assert.match(label, /available/);
+  assert.match(label, /led 0 this block/);
+  assert.match(label, /2 in 90d/);
+});
 
+test('no response reads differently from unavailable', () => {
+  const {leadCandidateLabel} = load();
+  const silent = leadCandidateLabel({
+    name: 'Zoe', available: false, responded: false, stale: false,
+    led_in_block: 0, led_last_90d: 0,
+  });
+  const declined = leadCandidateLabel({
+    name: 'Kai', available: false, responded: true, stale: false,
+    led_in_block: 0, led_last_90d: 0,
+  });
+  assert.match(silent, /no response/);
+  assert.match(declined, /unavailable/);
+});
 
-def test_picker_renders_load_counts():
-    assert "led_in_block" in SOURCE
-    assert "led_last_90d" in SOURCE
+test('stale responses are marked', () => {
+  const {leadCandidateLabel} = load();
+  const label = leadCandidateLabel({
+    name: 'Ada L', available: true, responded: true, stale: true,
+    led_in_block: 0, led_last_90d: 0,
+  });
+  assert.match(label, /⚠/);
+});
 
+test('capacity is rendered and unavailable candidates stay selectable', () => {
+  const {renderLeadPicker, dom} = load();
+  const container = dom.window.document.getElementById('lead-picker');
+  renderLeadPicker(container, {
+    leads_needed: 2,
+    assigned: [1],
+    candidates: [
+      {user_id: 1, name: 'Ada L', available: true, responded: true,
+       stale: false, led_in_block: 0, led_last_90d: 1},
+      {user_id: 2, name: 'Zoe L', available: false, responded: false,
+       stale: false, led_in_block: 3, led_last_90d: 5},
+    ],
+  });
 
-def test_picker_marks_stale_responses():
-    assert "stale" in SOURCE
-    assert "⚠" in SOURCE or "warning" in SOURCE.lower()
+  assert.match(container.textContent, /needs 2/);
+  const boxes = container.querySelectorAll('input[type=checkbox]');
+  assert.equal(boxes.length, 2);
+  assert.equal(boxes[0].checked, true, 'already-assigned lead is checked');
+  assert.equal(boxes[1].disabled, false,
+    'unavailable leads must stay selectable — the picker informs the choice, it does not block it');
+});
+```
 
+Add the file to the test script in `package.json`:
 
-def test_picker_shows_capacity():
-    assert "leads_needed" in SOURCE
-
-
-def test_picker_does_not_disable_unavailable_candidates():
-    """Assignment is a judgment call — unavailable people stay selectable."""
-    import re
-    for match in re.finditer(r"disabled", SOURCE):
-        window = SOURCE[max(0, match.start() - 200):match.start() + 200]
-        assert "available" not in window, (
-            "unavailable candidates must never be disabled; the picker informs "
-            "the choice, it does not block it"
-        )
+```json
+"test:practice-reactions": "node --test tests/js/practice_plan_reactions.test.js tests/js/practice_plan_reaction_editor.test.js tests/js/toast.test.js tests/js/lead_picker.test.js"
 ```
 
 - [ ] **Step 2: Run test to verify it fails**
 
-Run: `pytest tests/js/test_lead_picker_source.py -v`
-Expected: FAIL — `lead-candidates` is not in the source.
+Run: `npm run test:practice-reactions`
+Expected: FAIL — `leadCandidateLabel is not defined`
 
 - [ ] **Step 3: Implement**
 
@@ -587,8 +641,8 @@ Wire `loadLeadCandidates` + `renderLeadPicker` into the practice create/edit for
 
 - [ ] **Step 4: Run the tests**
 
-Run: `pytest tests/js/test_lead_picker_source.py -v`
-Expected: PASS, 5 passed
+Run: `npm run test:practice-reactions`
+Expected: PASS — all existing tests plus 4 new ones
 
 - [ ] **Step 5: Verify in the browser**
 
@@ -597,12 +651,12 @@ Run `./scripts/dev.sh`, open a practice in `/admin/practices`, and confirm: avai
 - [ ] **Step 6: Commit**
 
 ```bash
-git add app/static/admin_practices.js app/templates/admin/practices/ tests/js/test_lead_picker_source.py
+git add app/static/admin_practices.js app/templates/admin/practices/ tests/js/lead_picker.test.js package.json
 git commit -m "feat(admin): show availability, load and staleness in the lead picker
 
 Server-side ordering puts available and least-loaded first. Unavailable
-leads stay selectable — a test asserts they are never disabled, because
-assignment is a judgment call the tool informs rather than makes."
+leads stay selectable — a JSDOM test asserts they are never disabled,
+because assignment is a judgment call the tool informs rather than makes."
 ```
 
 ---
