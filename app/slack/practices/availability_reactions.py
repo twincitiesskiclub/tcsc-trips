@@ -45,7 +45,12 @@ def _participant(poll_id, user_id):
         poll_id=poll_id, user_id=user_id).first()
     if participant is None:
         # Created lazily so a lead who joins mid-poll is handled automatically.
-        participant = LeadAvailabilityParticipant(poll_id=poll_id, user_id=user_id)
+        # status is set explicitly rather than relying on the column default,
+        # which only applies at INSERT time -- a freshly constructed instance
+        # would otherwise compare as `None`, not ParticipantStatus.PENDING,
+        # until something else happens to flush it first.
+        participant = LeadAvailabilityParticipant(
+            poll_id=poll_id, user_id=user_id, status=ParticipantStatus.PENDING)
         db.session.add(participant)
     return participant
 
@@ -68,9 +73,8 @@ def handle_availability_reaction(*, channel, message_ts, reaction, slack_user_id
             "Availability reaction from unlinked Slack user %s", slack_user_id)
         return {"success": True, "ignored": "unlinked_user"}
 
-    participant = _participant(poll.id, user.id)
-
     if reaction == DONE_EMOJI:
+        participant = _participant(poll.id, user.id)
         participant.status = (
             ParticipantStatus.PENDING if removed else ParticipantStatus.DONE
         )
@@ -81,6 +85,12 @@ def handle_availability_reaction(*, channel, message_ts, reaction, slack_user_id
         poll_id=poll.id, emoji=reaction).first()
     if mapping is None:
         return {"success": True, "ignored": "unmapped_emoji"}
+
+    # Only construct a participant row once we know the reaction means
+    # something -- an unmapped emoji (a stray :tada: from a linked member)
+    # should not create state, matching the unlinked_user path above which
+    # also returns before creating anything.
+    participant = _participant(poll.id, user.id)
 
     existing = LeadAvailabilityResponse.query.filter_by(
         poll_id=poll.id, practice_id=mapping.practice_id, user_id=user.id).first()
@@ -156,15 +166,38 @@ def reconcile_poll(poll) -> dict:
             db.session.delete(has[user_id])
             removed += 1
 
-        for user_id in should_have:
-            participant = _participant(poll.id, user_id)
-            if participant.status == ParticipantStatus.PENDING:
-                participant.status = ParticipantStatus.RESPONDED
+    # Reconciliation is authoritative for participant status, not just
+    # response rows: a stale DONE (the lead removed ✅ meaning to add more
+    # sessions, but the removal event was lost) is exactly the failure class
+    # this function exists to correct. Recompute every participant's status
+    # from what Slack shows right now plus what response rows survived
+    # above, rather than only ever promoting.
+    db.session.flush()
 
-    for uid in by_emoji.get(DONE_EMOJI, set()):
-        user = slack_uid_to_user.get(uid)
-        if user:
-            _participant(poll.id, user.id).status = ParticipantStatus.DONE
+    done_user_ids = {
+        slack_uid_to_user[uid].id
+        for uid in by_emoji.get(DONE_EMOJI, set())
+        if uid in slack_uid_to_user
+    }
+    responded_user_ids = {
+        row.user_id
+        for row in LeadAvailabilityResponse.query.filter_by(poll_id=poll.id).all()
+    }
+    known_participant_ids = {
+        p.user_id
+        for p in LeadAvailabilityParticipant.query.filter_by(poll_id=poll.id).all()
+    }
+
+    for user_id in known_participant_ids | done_user_ids | responded_user_ids:
+        participant = _participant(poll.id, user_id)
+        if participant.status == ParticipantStatus.OPTED_OUT:
+            continue  # a deliberate user choice, not derived state
+        if user_id in done_user_ids:
+            participant.status = ParticipantStatus.DONE
+        elif user_id in responded_user_ids:
+            participant.status = ParticipantStatus.RESPONDED
+        else:
+            participant.status = ParticipantStatus.PENDING
 
     db.session.commit()
     current_app.logger.info(

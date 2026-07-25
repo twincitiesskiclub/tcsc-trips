@@ -12,6 +12,10 @@ kwarg, but SlackUser has no such column -- the real FK lives on User
 (User.slack_user_id -> SlackUser.id), matching the linked_user fixture in
 tests/slack/test_reaction_rsvp.py. Fixed here so the "linked user" tests
 actually exercise a linked user rather than silently testing an unlinked one.
+
+The test practice is given a real PracticeLocation (rather than leaving
+location_id null) so answered_for_location_id snapshot assertions actually
+distinguish "snapshotted the real value" from "happens to be None either way".
 """
 
 from datetime import date, datetime
@@ -27,7 +31,7 @@ from app.practices.availability_models import (
     ParticipantStatus,
     PollStatus,
 )
-from app.practices.models import Practice
+from app.practices.models import Practice, PracticeLocation
 from app.slack.practices.availability_reactions import (
     handle_availability_reaction,
     reconcile_poll,
@@ -40,7 +44,12 @@ _PRACTICE_DATE = datetime(2099, 8, 4, 18, 15)
 
 
 def _setup(db_session, message_ts):
-    practice = Practice(date=_PRACTICE_DATE, day_of_week="Tuesday", is_draft=True)
+    location = PracticeLocation(name="TEST Location")
+    db_session.add(location)
+    db_session.flush()
+
+    practice = Practice(date=_PRACTICE_DATE, day_of_week="Tuesday", is_draft=True,
+                         location_id=location.id)
     db_session.add(practice)
     db_session.flush()
 
@@ -62,10 +71,11 @@ def _setup(db_session, message_ts):
                 slack_user_id=slack_user.id)
     db_session.add(user)
     db_session.commit()
-    return poll, practice, user, slack_user
+    return poll, practice, user, slack_user, location
 
 
-def _cleanup(poll_id=None, practice_id=None, user_id=None, slack_user_id=None):
+def _cleanup(poll_id=None, practice_id=None, user_id=None, slack_user_id=None,
+             location_id=None):
     """Delete only the rows this test created.
 
     Rolls back first so a poisoned session (e.g. a prior statement that
@@ -74,7 +84,8 @@ def _cleanup(poll_id=None, practice_id=None, user_id=None, slack_user_id=None):
     Deleting the poll first cascades to its poll-practice mapping,
     participants, and responses; the user must go before its slack_user
     (User.slack_user_id is the FK); the practice can go any time after the
-    poll (which held the only FK to it).
+    poll (which held the only FK to it); the location goes last since the
+    practice holds the only FK to it.
     """
     db.session.rollback()
     if poll_id is not None:
@@ -95,11 +106,16 @@ def _cleanup(poll_id=None, practice_id=None, user_id=None, slack_user_id=None):
         practice = db.session.get(Practice, practice_id)
         if practice is not None:
             db.session.delete(practice)
+    db.session.flush()
+    if location_id is not None:
+        location = db.session.get(PracticeLocation, location_id)
+        if location is not None:
+            db.session.delete(location)
     db.session.commit()
 
 
 def test_letter_reaction_records_availability(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.1")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.1")
     try:
         result = handle_availability_reaction(
             channel=TEST_CHANNEL_ID, message_ts="111.1", reaction="letter_a",
@@ -109,12 +125,20 @@ def test_letter_reaction_records_availability(db_session):
         row = LeadAvailabilityResponse.query.filter_by(poll_id=poll.id).one()
         assert row.practice_id == practice.id and row.user_id == user.id
         assert row.answered_for_date == practice.date, "snapshot for staleness detection"
+        assert practice.location_id is not None, "test practice must have a real location"
+        assert row.answered_for_location_id == practice.location_id, \
+            "location must be snapshotted, not left null"
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.RESPONDED, \
+            "a fresh letter reaction must flip a pending participant to responded"
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_removing_the_reaction_deletes_the_row(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.2")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.2")
     try:
         handle_availability_reaction(channel=TEST_CHANNEL_ID, message_ts="111.2",
                                      reaction="letter_a", slack_user_id=slack_user.slack_uid,
@@ -126,11 +150,11 @@ def test_removing_the_reaction_deletes_the_row(db_session):
 
         assert LeadAvailabilityResponse.query.filter_by(poll_id=poll.id).count() == 0
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_done_emoji_marks_participant_done_without_a_response_row(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.3")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.3")
     try:
         handle_availability_reaction(channel=TEST_CHANNEL_ID, message_ts="111.3",
                                      reaction="white_check_mark", slack_user_id=slack_user.slack_uid,
@@ -141,45 +165,56 @@ def test_done_emoji_marks_participant_done_without_a_response_row(db_session):
         assert participant.status == ParticipantStatus.DONE
         assert LeadAvailabilityResponse.query.filter_by(poll_id=poll.id).count() == 0, \
             "done is not availability for any session"
+
+        handle_availability_reaction(channel=TEST_CHANNEL_ID, message_ts="111.3",
+                                     reaction="white_check_mark", slack_user_id=slack_user.slack_uid,
+                                     removed=True)
+
+        db.session.refresh(participant)
+        assert participant.status == ParticipantStatus.PENDING, \
+            "removing the done reaction must return the participant to pending"
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_unmapped_emoji_is_ignored(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.4")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.4")
     try:
         result = handle_availability_reaction(channel=TEST_CHANNEL_ID, message_ts="111.4",
                                               reaction="tada", slack_user_id=slack_user.slack_uid,
                                               removed=False)
         assert result["ignored"] == "unmapped_emoji"
         assert LeadAvailabilityResponse.query.filter_by(poll_id=poll.id).count() == 0
+        assert LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).first() is None, \
+            "an unmapped emoji must not create participant state"
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_non_poll_message_returns_none_so_attendance_still_runs(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.5")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.5")
     try:
         assert handle_availability_reaction(
             channel=TEST_CHANNEL_ID, message_ts="999.9", reaction="letter_a",
             slack_user_id=slack_user.slack_uid, removed=False) is None
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_unlinked_slack_user_is_ignored_not_crashed(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.6")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.6")
     try:
         result = handle_availability_reaction(channel=TEST_CHANNEL_ID, message_ts="111.6",
                                               reaction="letter_a", slack_user_id="TEST-U-UNKNOWN",
                                               removed=False)
         assert result["ignored"] == "unlinked_user"
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_reconcile_adds_missed_and_removes_stale(db_session):
-    poll, practice, user, slack_user = _setup(db_session, "111.7")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.7")
     try:
         # A response that Slack no longer shows.
         db_session.add(LeadAvailabilityResponse(
@@ -201,7 +236,145 @@ def test_reconcile_adds_missed_and_removes_stale(db_session):
             poll_id=poll.id, user_id=user.id).one()
         assert participant.status == ParticipantStatus.DONE
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+def test_reconcile_adds_missed_response_with_snapshot(db_session):
+    """The add half of reconciliation: Slack shows a letter reaction we never
+    recorded (the add event was lost). This is the brief's headline
+    requirement for reconcile_poll -- unlike the remove-only test above,
+    should_have is non-empty here so the add branch actually executes.
+    """
+    poll, practice, user, slack_user, location = _setup(db_session, "111.13")
+    try:
+        client = MagicMock()
+        client.reactions_get.return_value = {
+            "message": {"reactions": [
+                {"name": "letter_a", "users": [slack_user.slack_uid]},
+            ]}
+        }
+
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client):
+            result = reconcile_poll(poll)
+
+        assert result["added"] == 1, "a reaction Slack shows but we never recorded must be added"
+        row = LeadAvailabilityResponse.query.filter_by(poll_id=poll.id).one()
+        assert row.practice_id == practice.id and row.user_id == user.id
+        assert row.answered_for_date == practice.date
+        assert practice.location_id is not None
+        assert row.answered_for_location_id == practice.location_id, \
+            "the add path must snapshot the real location, not null"
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+def test_reconcile_recovers_missed_participant_to_responded(db_session):
+    """Fix for: a lead's reaction ADD event is lost during a deploy, so no
+    participant row was ever created for them. Reconciliation re-reads
+    Slack, sees the letter reaction, and must not leave the recovered
+    responder looking un-answered (stuck at pending/no-row) -- that is
+    exactly the case reconciliation exists to correct.
+    """
+    poll, practice, user, slack_user, location = _setup(db_session, "111.9")
+    try:
+        assert LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).first() is None, \
+            "precondition: no participant row exists yet"
+
+        client = MagicMock()
+        client.reactions_get.return_value = {
+            "message": {"reactions": [
+                {"name": "letter_a", "users": [slack_user.slack_uid]},
+            ]}
+        }
+
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client):
+            reconcile_poll(poll)
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.RESPONDED
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+def test_reconcile_demotes_stale_done_to_responded_when_response_survives(db_session):
+    """Fix for: a lead removes ✅ intending to add more sessions, but the
+    removal event is lost. Reconciliation must not leave them at DONE just
+    because nobody promoted them -- it must actively demote based on what
+    Slack shows now.
+    """
+    poll, practice, user, slack_user, location = _setup(db_session, "111.10")
+    try:
+        db_session.add(LeadAvailabilityParticipant(
+            poll_id=poll.id, user_id=user.id, status=ParticipantStatus.DONE))
+        db_session.add(LeadAvailabilityResponse(
+            poll_id=poll.id, practice_id=practice.id, user_id=user.id, source="reaction"))
+        db_session.commit()
+
+        client = MagicMock()
+        client.reactions_get.return_value = {
+            "message": {"reactions": [
+                {"name": "letter_a", "users": [slack_user.slack_uid]},
+            ]}
+        }  # no white_check_mark -- the checkmark was removed on Slack
+
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client):
+            reconcile_poll(poll)
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.RESPONDED, \
+            "a stale DONE with surviving responses must fall back to responded"
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+def test_reconcile_demotes_stale_done_to_pending_when_no_responses_remain(db_session):
+    poll, practice, user, slack_user, location = _setup(db_session, "111.11")
+    try:
+        db_session.add(LeadAvailabilityParticipant(
+            poll_id=poll.id, user_id=user.id, status=ParticipantStatus.DONE))
+        db_session.commit()
+
+        client = MagicMock()
+        client.reactions_get.return_value = {"message": {"reactions": []}}
+
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client):
+            reconcile_poll(poll)
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.PENDING, \
+            "a stale DONE with no surviving responses must fall back to pending"
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+def test_reconcile_leaves_opted_out_participant_alone(db_session):
+    poll, practice, user, slack_user, location = _setup(db_session, "111.12")
+    try:
+        db_session.add(LeadAvailabilityParticipant(
+            poll_id=poll.id, user_id=user.id, status=ParticipantStatus.OPTED_OUT))
+        db_session.commit()
+
+        client = MagicMock()
+        client.reactions_get.return_value = {"message": {"reactions": []}}
+
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client):
+            reconcile_poll(poll)
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.OPTED_OUT, \
+            "opted_out is a deliberate user choice, not derived state -- reconcile must not touch it"
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
 
 
 def test_reconcile_survives_a_non_slack_api_error(db_session):
@@ -210,7 +383,7 @@ def test_reconcile_survives_a_non_slack_api_error(db_session):
     SlackApiError, so a bare `except SlackApiError` would let this crash the
     caller instead of returning a clean failure result.
     """
-    poll, practice, user, slack_user = _setup(db_session, "111.8")
+    poll, practice, user, slack_user, location = _setup(db_session, "111.8")
     try:
         with patch("app.slack.practices.availability_reactions.get_slack_client",
                    side_effect=TimeoutError("boom")):
@@ -219,4 +392,4 @@ def test_reconcile_survives_a_non_slack_api_error(db_session):
         assert result["added"] == 0 and result["removed"] == 0
         assert "error" in result
     finally:
-        _cleanup(poll.id, practice.id, user.id, slack_user.id)
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
