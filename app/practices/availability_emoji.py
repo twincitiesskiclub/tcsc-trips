@@ -100,6 +100,11 @@ def validate_emoji_available(names: list[str]) -> tuple[bool, list[str]]:
             exc.response.get("error", exc),
         )
         return False, custom
+    except Exception as exc:
+        current_app.logger.error(
+            "emoji.list failed (%s); refusing to open a poll unverified", exc
+        )
+        return False, custom
 
     missing = [name for name in custom if name not in available]
     return (not missing), missing

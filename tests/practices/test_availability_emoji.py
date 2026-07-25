@@ -88,3 +88,38 @@ def test_unreachable_emoji_list_refuses_rather_than_passes(app):
 
     assert ok is False
     assert missing == ["letter_a", "letter_b"]
+
+
+def test_missing_token_refuses_rather_than_raises(app):
+    """get_slack_client() raises ValueError when SLACK_BOT_TOKEN isn't configured.
+
+    That call happens inside the try block, but ValueError is not a
+    SlackApiError -- without a catch-all backstop it propagates and crashes
+    the poll-open path instead of refusing.
+    """
+    with patch(
+        "app.practices.availability_emoji.get_slack_client",
+        side_effect=ValueError("SLACK_BOT_TOKEN not configured"),
+    ):
+        with app.app_context():
+            ok, missing = validate_emoji_available(["letter_a", "letter_b"])
+
+    assert ok is False
+    assert missing == ["letter_a", "letter_b"]
+
+
+def test_transport_failure_refuses_rather_than_raises(app):
+    """slack_sdk re-raises raw transport errors (e.g. TimeoutError) unwrapped.
+
+    Only SlackApiError originally had a catch here, so a network timeout
+    would propagate instead of yielding the promised refusal.
+    """
+    client = MagicMock()
+    client.emoji_list.side_effect = TimeoutError("connection timed out")
+
+    with patch("app.practices.availability_emoji.get_slack_client", return_value=client):
+        with app.app_context():
+            ok, missing = validate_emoji_available(["letter_a", "letter_b"])
+
+    assert ok is False
+    assert missing == ["letter_a", "letter_b"]
