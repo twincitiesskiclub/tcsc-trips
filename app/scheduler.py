@@ -905,7 +905,19 @@ def run_lead_availability_nudge_job(app: Flask):
             try:
                 # Reconcile first: a missed removal would otherwise let us
                 # nudge someone who has actually withdrawn or answered.
-                reconcile_poll(poll)
+                # reconcile_poll() is fail-soft (Slack error -> logs and
+                # returns an "error" key rather than raising), so its result
+                # must be checked explicitly -- nudging on unreconciled state
+                # is exactly the DM-someone-who-already-answered scenario
+                # reconcile-first exists to prevent. Nothing is lost by
+                # skipping: the poll survives to tomorrow's run.
+                reconcile_result = reconcile_poll(poll)
+                if reconcile_result.get("error"):
+                    app.logger.warning(
+                        f"Poll {poll.id} reconcile failed, skipping nudges "
+                        f"this run: {reconcile_result['error']}"
+                    )
+                    continue
                 sync_participants(poll)
                 result = send_nudges(poll)
                 app.logger.info(

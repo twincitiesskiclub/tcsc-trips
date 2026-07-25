@@ -6,7 +6,8 @@ from flask import current_app
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import joinedload
 
-from app.models import Tag, User, db
+from app.constants import UserStatus
+from app.models import AppConfig, SlackUser, Tag, User, db
 from app.practices.availability_emoji import (
     DONE_EMOJI,
     letter_emoji,
@@ -40,6 +41,13 @@ def eligible_leads() -> list[User]:
     Computed rather than stored so a lead who joins mid-block is included
     automatically — a stale roster is a failure that recurred every single
     season with the old spreadsheet.
+
+    Excludes DROPPED members: a former member who kept a tag should not still
+    be DMed. ALUMNI is deliberately NOT filtered here -- coaches are routinely
+    ALUMNI-status while actively coaching (see the coach override in Slack
+    tier logic), so excluding ALUMNI would drop real, active coaches from the
+    pool. Whether ALUMNI leads (not just coaches) should also be nudged is an
+    open question for the practices director, not settled by this fix.
     """
     tag_ids = [t.id for t in Tag.query.filter(Tag.name.in_(ELIGIBLE_TAGS)).all()]
     if not tag_ids:
@@ -47,9 +55,36 @@ def eligible_leads() -> list[User]:
     return (
         User.query.options(joinedload(User.tags))
         .filter(User.tags.any(Tag.id.in_(tag_ids)))
+        .filter(User.status != UserStatus.DROPPED)
         .order_by(User.first_name)
         .all()
     )
+
+
+def shadow_roster_leads() -> list[User]:
+    """Resolve the shadow-mode participant pool.
+
+    Fails closed on purpose: an unset or empty `lead_availability.shadow_roster`
+    returns an empty list rather than falling back to eligible_leads(). Shadow
+    mode exists specifically so a misconfiguration cannot DM the live 10-17
+    person tag pool -- silently falling back to that pool on a missing config
+    key would recreate the exact disaster this fix closes.
+    """
+    slack_uids = AppConfig.get("lead_availability.shadow_roster") or []
+    if not slack_uids:
+        current_app.logger.warning(
+            "lead_availability.shadow_roster is unset or empty -- shadow poll "
+            "participant pool is empty (failing closed, not falling back to "
+            "the live tag pool)"
+        )
+        return []
+
+    users = []
+    for slack_uid in slack_uids:
+        slack_user = SlackUser.query.filter_by(slack_uid=slack_uid).first()
+        if slack_user and slack_user.user:
+            users.append(slack_user.user)
+    return users
 
 
 def _week_label(when: datetime) -> str:
@@ -58,7 +93,6 @@ def _week_label(when: datetime) -> str:
 
 
 def _target_channel(is_shadow: bool) -> str:
-    from app.models import AppConfig
     from app.slack.practices._config import COORD_CHANNEL_ID
 
     if is_shadow:
@@ -208,13 +242,19 @@ def sync_participants(poll) -> int:
     A lead who joins mid-block (new tag assignment) is picked up the next
     time this runs, since eligible_leads() is computed live rather than
     snapshotted when the poll opened.
+
+    Shadow polls (poll.is_shadow) use the shadow roster instead of the live
+    tag pool, so nudge DMs during the shadow month reach only the small test
+    roster -- never the real 10-17 person lead/coach pool. See
+    shadow_roster_leads() for the fail-closed behavior on a missing roster.
     """
     existing = {
         row.user_id for row in
         LeadAvailabilityParticipant.query.filter_by(poll_id=poll.id).all()
     }
     added = 0
-    for user in eligible_leads():
+    pool = shadow_roster_leads() if poll.is_shadow else eligible_leads()
+    for user in pool:
         if user.id not in existing:
             db.session.add(LeadAvailabilityParticipant(poll_id=poll.id, user_id=user.id))
             added += 1

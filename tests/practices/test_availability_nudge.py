@@ -10,16 +10,32 @@ SlackUser has no user_id column -- the FK lives on User.slack_user_id), so
 every participant here is backed by a real User row, matching the fix
 already made for this same brief mismatch in
 tests/slack/test_availability_reactions.py.
+
+Every ``_cleanup(poll_id, user_ids)`` call below is passed plain ints
+captured immediately after ``flush()``/``commit()``, never the ORM objects'
+``.id`` attributes evaluated at the finally site. Python evaluates a call's
+arguments before invoking it, so ``_cleanup(poll.id, [user.id])`` would
+resolve ``poll.id``/``user.id`` *before* ``_cleanup``'s own
+``db.session.rollback()`` ever runs. On a session already poisoned by a
+failing assertion (e.g. a prior statement raised, leaving the transaction
+aborted), that attribute access hits SQLAlchemy's expired-attribute refresh
+and raises ``PendingRollbackError`` -- so the rollback that's supposed to
+make cleanup safe never executes, and rows leak. Capturing the ids as plain
+ints up front sidesteps ORM attribute access entirely at the finally site.
 """
 
 from datetime import date, datetime, timedelta
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
-from app.models import SlackUser, User, db
+from slack_sdk.errors import SlackApiError
+
+from app.models import AppConfig, SlackUser, User, db
 from app.practices.availability import (
+    eligible_leads,
     participants_to_nudge,
     send_nudges,
+    shadow_roster_leads,
     sync_participants,
 )
 from app.practices.availability_models import (
@@ -34,11 +50,11 @@ _STARTS_ON = date(2099, 7, 21)
 _ENDS_ON = date(2099, 8, 13)
 
 
-def _poll(db_session):
+def _poll(db_session, is_shadow=False):
     poll = LeadAvailabilityPoll(
         starts_on=_STARTS_ON, ends_on=_ENDS_ON,
         channel_id="TEST-CHANNEL-NUDGE", message_ts="1.1",
-        status=PollStatus.OPEN, opened_at=OPENED,
+        status=PollStatus.OPEN, opened_at=OPENED, is_shadow=is_shadow,
     )
     db_session.add(poll)
     db_session.flush()
@@ -81,6 +97,10 @@ def _cleanup(poll_id=None, user_ids=None):
     Deleting the poll first cascades to its participants (poll_id FK); each
     user's slack_user (if any) must go after the user, since User.slack_user_id
     is the FK pointing at it.
+
+    Callers must pass plain ints captured before entering the try block --
+    see the module docstring for why passing ``poll.id`` / ``user.id``
+    directly at the call site defeats the rollback below.
     """
     db.session.rollback()
     if poll_id is not None:
@@ -105,31 +125,35 @@ def _cleanup(poll_id=None, user_ids=None):
 def test_nobody_is_nudged_before_day_three(db_session):
     poll = _poll(db_session)
     user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
     _participant(db_session, poll, user, status=ParticipantStatus.PENDING)
     db_session.commit()
 
     try:
         assert participants_to_nudge(poll, now=OPENED + timedelta(days=2)) == []
     finally:
-        _cleanup(poll.id, [user.id])
+        _cleanup(poll_id, [user_id])
 
 
 def test_pending_participant_is_nudged_on_day_three(db_session):
     poll = _poll(db_session)
     user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
     p = _participant(db_session, poll, user, status=ParticipantStatus.PENDING)
+    participant_id = p.id
     db_session.commit()
 
     try:
         due = participants_to_nudge(poll, now=OPENED + timedelta(days=3))
-        assert [x.id for x in due] == [p.id]
+        assert [x.id for x in due] == [participant_id]
     finally:
-        _cleanup(poll.id, [user.id])
+        _cleanup(poll_id, [user_id])
 
 
 def test_responded_and_done_and_opted_out_are_never_nudged(db_session):
     poll = _poll(db_session)
     users = [_user(db_session, f"U{i}") for i in range(3)]
+    poll_id, user_ids = poll.id, [u.id for u in users]
     for user, status in zip(users, (ParticipantStatus.RESPONDED, ParticipantStatus.DONE,
                                      ParticipantStatus.OPTED_OUT)):
         _participant(db_session, poll, user, status=status)
@@ -138,12 +162,13 @@ def test_responded_and_done_and_opted_out_are_never_nudged(db_session):
     try:
         assert participants_to_nudge(poll, now=OPENED + timedelta(days=10)) == []
     finally:
-        _cleanup(poll.id, [u.id for u in users])
+        _cleanup(poll_id, user_ids)
 
 
 def test_nudges_are_spaced_at_least_two_days(db_session):
     poll = _poll(db_session)
     user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
     _participant(db_session, poll, user, status=ParticipantStatus.PENDING,
                  nudge_count=1, last_nudged_at=OPENED + timedelta(days=3))
     db_session.commit()
@@ -152,12 +177,13 @@ def test_nudges_are_spaced_at_least_two_days(db_session):
         assert participants_to_nudge(poll, now=OPENED + timedelta(days=4)) == []
         assert len(participants_to_nudge(poll, now=OPENED + timedelta(days=5))) == 1
     finally:
-        _cleanup(poll.id, [user.id])
+        _cleanup(poll_id, [user_id])
 
 
 def test_three_nudges_is_the_ceiling(db_session):
     poll = _poll(db_session)
     user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
     _participant(db_session, poll, user, status=ParticipantStatus.PENDING,
                  nudge_count=3, last_nudged_at=OPENED + timedelta(days=7))
     db_session.commit()
@@ -166,13 +192,15 @@ def test_three_nudges_is_the_ceiling(db_session):
         assert participants_to_nudge(poll, now=OPENED + timedelta(days=30)) == [], \
             "3 sends is the ceiling; more trains people to mute the bot"
     finally:
-        _cleanup(poll.id, [user.id])
+        _cleanup(poll_id, [user_id])
 
 
 def test_sync_participants_adds_new_leads_only(db_session):
     poll = _poll(db_session)
     existing_user = _user(db_session, "Existing")
     new_user = _user(db_session, "New")
+    poll_id = poll.id
+    user_ids = [existing_user.id, new_user.id]
     _participant(db_session, poll, existing_user, status=ParticipantStatus.RESPONDED)
     db_session.commit()
 
@@ -182,14 +210,15 @@ def test_sync_participants_adds_new_leads_only(db_session):
             added = sync_participants(poll)
 
         assert added == 1
-        assert LeadAvailabilityParticipant.query.filter_by(poll_id=poll.id).count() == 2
+        assert LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).count() == 2
     finally:
-        _cleanup(poll.id, [existing_user.id, new_user.id])
+        _cleanup(poll_id, user_ids)
 
 
 def test_send_nudges_records_the_send(db_session, app):
     poll = _poll(db_session)
     user = _user(db_session, "Ada", with_slack=True)
+    poll_id, user_id = poll.id, user.id
     _participant(db_session, poll, user, status=ParticipantStatus.PENDING)
     db_session.commit()
 
@@ -203,8 +232,195 @@ def test_send_nudges_records_the_send(db_session, app):
 
         assert result["sent"] == 1
         participant = LeadAvailabilityParticipant.query.filter_by(
-            poll_id=poll.id, user_id=user.id).one()
+            poll_id=poll_id, user_id=user_id).one()
         assert participant.nudge_count == 1
         assert participant.last_nudged_at is not None
     finally:
-        _cleanup(poll.id, [user.id])
+        _cleanup(poll_id, [user_id])
+
+
+# ---------------------------------------------------------------------------
+# Fix 3: a failed DM must not consume that person's nudge budget, and
+# send_nudges must default `now` to now_central_naive() rather than
+# datetime.utcnow(). Both behaviours previously passed with 7/7 tests green
+# even when broken -- these two tests close that gap.
+# ---------------------------------------------------------------------------
+
+def test_failed_dm_does_not_consume_nudge_budget(db_session, app):
+    poll = _poll(db_session)
+    ok_user = _user(db_session, "Ok", with_slack=True)
+    fail_user = _user(db_session, "Fail", with_slack=True)
+    poll_id = poll.id
+    ok_id, fail_id = ok_user.id, fail_user.id
+    ok_slack_uid = ok_user.slack_user.slack_uid
+    fail_slack_uid = fail_user.slack_user.slack_uid
+    _participant(db_session, poll, ok_user, status=ParticipantStatus.PENDING)
+    _participant(db_session, poll, fail_user, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    client = MagicMock()
+    client.chat_getPermalink.return_value = {"permalink": "https://slack/p/1"}
+
+    def _post_message(channel, **kwargs):
+        if channel == fail_slack_uid:
+            raise SlackApiError("boom", {"error": "channel_not_found"})
+        assert channel == ok_slack_uid
+        return {"ts": "123.456"}
+
+    client.chat_postMessage.side_effect = _post_message
+
+    try:
+        with patch("app.slack.practices.availability_nudge.get_slack_client",
+                   return_value=client):
+            result = send_nudges(poll, now=OPENED + timedelta(days=3))
+
+        assert result == {"sent": 1, "skipped": 1}
+
+        ok_participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll_id, user_id=ok_id).one()
+        fail_participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll_id, user_id=fail_id).one()
+
+        assert ok_participant.nudge_count == 1
+        assert ok_participant.last_nudged_at is not None
+
+        assert fail_participant.nudge_count == 0, \
+            "a failed DM must not consume the nudge budget -- they haven't " \
+            "actually been reminded, so the next run must retry"
+        assert fail_participant.last_nudged_at is None
+    finally:
+        _cleanup(poll_id, [ok_id, fail_id])
+
+
+def test_send_nudges_defaults_now_to_now_central_naive(db_session, app):
+    poll = _poll(db_session)
+    user = _user(db_session, "Ada", with_slack=True)
+    poll_id, user_id = poll.id, user.id
+    _participant(db_session, poll, user, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    fixed_now = OPENED + timedelta(days=3)
+    client = MagicMock()
+    client.chat_getPermalink.return_value = {"permalink": "https://slack/p/1"}
+    client.chat_postMessage.return_value = {"ts": "123.456"}
+
+    try:
+        with patch("app.practices.availability.now_central_naive", return_value=fixed_now), \
+             patch("app.slack.practices.availability_nudge.get_slack_client",
+                   return_value=client):
+            result = send_nudges(poll)  # no `now=` -- must default correctly
+
+        assert result["sent"] == 1
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll_id, user_id=user_id).one()
+        assert participant.last_nudged_at == fixed_now, (
+            "send_nudges must default `now` to now_central_naive(); reverting "
+            "to datetime.utcnow() reintroduces a 5-6 hour skew at the day-3 "
+            "boundary, and this is the only test that reaches send_nudges "
+            "without passing now= explicitly"
+        )
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+# ---------------------------------------------------------------------------
+# Fix 1: shadow mode must restrict who gets nudged. `sync_participants` must
+# resolve the shadow roster (not the live tag pool) when poll.is_shadow, and
+# must fail closed -- an unset/empty roster nudges nobody, never falls back
+# to eligible_leads().
+# ---------------------------------------------------------------------------
+
+def test_shadow_poll_uses_the_shadow_roster_not_the_live_pool(db_session):
+    poll = _poll(db_session, is_shadow=True)
+    roster_user = _user(db_session, "Roster", with_slack=True)
+    live_user = _user(db_session, "Live")  # would come back from eligible_leads()
+    poll_id = poll.id
+    user_ids = [roster_user.id, live_user.id]
+    roster_slack_uid = roster_user.slack_user.slack_uid
+    db_session.commit()
+
+    try:
+        with patch("app.models.AppConfig.get", return_value=[roster_slack_uid]), \
+             patch("app.practices.availability.eligible_leads",
+                   return_value=[roster_user, live_user]):
+            added = sync_participants(poll)
+
+        assert added == 1
+        participant_user_ids = {
+            row.user_id for row in
+            LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).all()
+        }
+        assert participant_user_ids == {roster_user.id}, (
+            "a shadow poll must only ever add the shadow roster as "
+            "participants -- eligible_leads() (the live pool) must not be "
+            "consulted at all"
+        )
+    finally:
+        _cleanup(poll_id, user_ids)
+
+
+def test_shadow_poll_with_empty_roster_fails_closed(db_session):
+    """An unset or empty shadow_roster config must nudge nobody -- it must
+    NOT silently fall back to the live tag pool. A misconfiguration that DMs
+    everyone is the exact disaster shadow mode exists to prevent.
+    """
+    poll = _poll(db_session, is_shadow=True)
+    live_user = _user(db_session, "Live")
+    poll_id = poll.id
+    user_ids = [live_user.id]
+    db_session.commit()
+
+    try:
+        with patch("app.models.AppConfig.get", return_value=[]), \
+             patch("app.practices.availability.eligible_leads",
+                   return_value=[live_user]) as eligible_mock:
+            added = sync_participants(poll)
+
+        assert added == 0
+        assert LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).count() == 0
+        eligible_mock.assert_not_called()
+    finally:
+        _cleanup(poll_id, user_ids)
+
+
+def test_non_shadow_poll_uses_the_live_pool(db_session):
+    poll = _poll(db_session, is_shadow=False)
+    live_user = _user(db_session, "Live")
+    poll_id = poll.id
+    user_ids = [live_user.id]
+    db_session.commit()
+
+    try:
+        with patch("app.practices.availability.eligible_leads",
+                   return_value=[live_user]) as eligible_mock, \
+             patch("app.practices.availability.shadow_roster_leads") as shadow_mock:
+            added = sync_participants(poll)
+
+        assert added == 1
+        eligible_mock.assert_called_once()
+        shadow_mock.assert_not_called()
+        assert {
+            row.user_id for row in
+            LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).all()
+        } == {live_user.id}
+    finally:
+        _cleanup(poll_id, user_ids)
+
+
+def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
+    """Unit-level check on shadow_roster_leads() itself, independent of
+    sync_participants: unknown slack uids in the roster are skipped rather
+    than raising, and a known one resolves to its User via SlackUser.
+    """
+    user = _user(db_session, "Roster", with_slack=True)
+    user_id = user.id
+    slack_uid = user.slack_user.slack_uid
+    db_session.commit()
+
+    try:
+        with patch("app.models.AppConfig.get",
+                   return_value=[slack_uid, "TEST-UNKNOWN-UID"]):
+            result = shadow_roster_leads()
+        assert [u.id for u in result] == [user_id]
+    finally:
+        _cleanup(None, [user_id])
