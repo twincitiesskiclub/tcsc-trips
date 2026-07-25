@@ -1066,13 +1066,11 @@ def open_poll(poll) -> dict:
         try:
             client.reactions_add(channel=poll.channel_id,
                                  timestamp=poll.message_ts, name=name)
-        except SlackApiError as exc:
-            current_app.logger.warning(
-                "Could not seed :%s: — %s", name, exc.response.get("error", exc)
-            )
-    except Exception as exc:  # noqa: BLE001 - never raise; see Global Constraints
-        current_app.logger.error('Slack call failed: %s', exc)
-        return {'success': False, 'error': str(exc)}
+        except Exception as exc:
+            # Seeding is best-effort: the poll is already posted, so a failed
+            # reaction must not fail the open. Broad by design — a missing token
+            # raises ValueError and a transport failure raises TimeoutError.
+            current_app.logger.warning("Could not seed :%s: — %s", name, exc)
 
     return {"success": True, "poll_id": poll.id, "ts": poll.message_ts}
 ```
