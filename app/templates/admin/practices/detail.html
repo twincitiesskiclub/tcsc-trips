@@ -96,6 +96,21 @@
 #workout-editor .role-emoji{font-size:12px;line-height:1}
 #workout-editor .hidden{display:none!important}
 
+/* ── lead availability picker (edit mode) ── */
+#workout-editor .lead-picker{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+#workout-editor .lead-capacity{font-size:12px;font-weight:600;color:#1c2c44;margin-bottom:2px}
+#workout-editor .lead-option{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;border-radius:10px;
+  font-size:13px;color:#475569;
+  border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;
+}
+#workout-editor .lead-option.available{border-color:#86efac;background:#f0fdf4;color:#166534}
+#workout-editor .lead-option.unavailable{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
+#workout-editor .lead-option.no-response{border-style:dotted;color:#94a3b8}
+#workout-editor .lead-option.stale{border-style:dashed;border-color:#f59e0b}
+#workout-editor .lead-option:focus-within{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+
 /* ── selected summary chips ── */
 #workout-editor .selected-summary{display:flex;flex-wrap:wrap;gap:6px;min-height:20px;margin-top:4px;margin-bottom:6px}
 #workout-editor .selected-chip{display:inline-flex;align-items:center;gap:4px;background:#1c2c44;color:#fff;border-radius:20px;padding:3px 8px 3px 12px;font-size:12px;font-weight:500}
@@ -286,8 +301,15 @@
         </div>
         <div class="field">
           <label>Leads</label>
+          {% if practice %}
+          <div id="lead-picker" class="lead-picker" aria-live="polite">
+            <p class="pe-empty">Loading…</p>
+          </div>
+          {% else %}
+          <p class="field-hint">Save the practice to see lead availability.</p>
           <div id="leads-summary" class="selected-summary"></div>
           <div id="leads-pills" class="person-pill-group"></div>
+          {% endif %}
         </div>
       </section>
 
@@ -367,6 +389,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='practice_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='admin_practices.js') }}"></script>
 <script src="{{ url_for('static', filename='practice_plan_reactions.js') }}"></script>
 <script src="{{ url_for('static', filename='practice_plan_reaction_editor.js') }}"></script>
 <script>

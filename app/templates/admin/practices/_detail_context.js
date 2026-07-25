@@ -60,6 +60,14 @@ async function loadLeadConfirmations() {
     } catch (err) { c.innerHTML = `<p class="rail-error">${err.message}</p>`; }
 }
 
+async function loadLeadPicker() {
+    const container = document.getElementById('lead-picker');
+    if (!container) return;
+    const payload = await loadLeadCandidates(practiceId);
+    if (!payload) return; // loadLeadCandidates already showed a toast
+    renderLeadPicker(container, payload);
+}
+
 async function toggleLeadConfirmation(leadId) {
     try {
         const result = await fetch(`/admin/practices/${practiceId}/leads/${leadId}/toggle-confirm`, {

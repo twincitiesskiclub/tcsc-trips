@@ -14,6 +14,9 @@ const STATUS_LABEL = {
 };
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // This file is also loaded on the practice create/edit form (for the
+  // lead-candidates picker below), which has none of the list-page DOM.
+  if (!document.getElementById('pl-list')) return;
   await Promise.all([loadPractices(), loadLocations()]);
   populateLocationFilter();
   attachEventListeners();
@@ -424,4 +427,70 @@ async function openAvailabilityPoll() {
   } finally {
     btn.disabled = false;
   }
+}
+
+/* ---------- lead candidates picker (practice create/edit form) ---------- */
+async function loadLeadCandidates(practiceId) {
+  const response = await fetch(`/admin/practices/${practiceId}/lead-candidates`);
+  if (!response.ok) {
+    showToast('Could not load lead availability', 'error');
+    return null;
+  }
+  return response.json();
+}
+
+function leadCandidateLabel(candidate) {
+  const parts = [];
+  if (candidate.available) {
+    parts.push('available');
+  } else if (candidate.responded) {
+    parts.push('unavailable');
+  } else {
+    parts.push('no response');
+  }
+  parts.push(`led ${candidate.led_in_block} this block`);
+  parts.push(`${candidate.led_last_90d} in 90d`);
+  const warning = candidate.stale ? ' ⚠ answered before this practice changed' : '';
+  return `${candidate.name} · ${parts.join(' · ')}${warning}`;
+}
+
+function renderLeadPicker(container, payload) {
+  const assigned = new Set(payload.assigned || []);
+  container.innerHTML = '';
+
+  const capacity = document.createElement('div');
+  capacity.className = 'lead-capacity';
+  capacity.textContent =
+    `Leads (needs ${payload.leads_needed}, assigned ${assigned.size})`;
+  container.appendChild(capacity);
+
+  // Ordering comes from the server: available and least-loaded first.
+  // Every candidate stays selectable — assignment is a human judgment call.
+  payload.candidates.forEach((candidate) => {
+    const row = document.createElement('label');
+    row.className = 'lead-option';
+    // Available / unavailable / no-response are visually distinct states —
+    // they mean different things to the person assigning leads.
+    if (candidate.available) {
+      row.classList.add('available');
+    } else if (candidate.responded) {
+      row.classList.add('unavailable');
+    } else {
+      row.classList.add('no-response');
+    }
+    if (candidate.stale) row.classList.add('stale');
+
+    const box = document.createElement('input');
+    box.type = 'checkbox';
+    box.name = 'lead_ids';
+    box.value = candidate.user_id;
+    box.checked = assigned.has(candidate.user_id);
+
+    const text = document.createElement('span');
+    text.textContent = leadCandidateLabel(candidate);
+
+    row.appendChild(box);
+    row.appendChild(text);
+    container.appendChild(row);
+  });
 }

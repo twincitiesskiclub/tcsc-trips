@@ -17,6 +17,18 @@ function selectedTagIds(containerId) {
     return peCollectIds(containerId);
 }
 
+/* Leads are collected from the availability picker when it's present
+   (editing an existing practice); new practices fall back to the plain
+   person-pill picker since lead-candidates needs a saved practice id. */
+function collectLeadIds() {
+    const picker = document.getElementById('lead-picker');
+    if (picker) {
+        return Array.from(picker.querySelectorAll('input[type=checkbox]:checked'))
+            .map(el => parseInt(el.value, 10));
+    }
+    return peCollectIds('leads-pills');
+}
+
 function refreshPlanReactionSelection() {
     if (!planReactionController) return;
     planReactionController.setSelection(
@@ -53,6 +65,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         .toLocaleString([], {weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'});
     loadRSVPs();
     loadLeadConfirmations();
+    loadLeadPicker();
     {% endif %}
 });
 
@@ -117,7 +130,7 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         activity_ids: peCollectIds('activities-pills'),
         type_ids: peCollectIds('types-pills'),
         coach_ids: peCollectIds('coaches-pills'),
-        lead_ids: peCollectIds('leads-pills'),
+        lead_ids: collectLeadIds(),
         leads_needed: parseInt(fd.get('leads_needed'), 10),
         workout_description: fd.get('workout_description') || null,
         logistics_notes: fd.get('logistics_notes') || null,
