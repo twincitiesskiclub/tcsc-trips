@@ -517,6 +517,9 @@ def validate_emoji_available(names: list[str]) -> tuple[bool, list[str]]:
             exc.response.get("error", exc),
         )
         return False, custom
+    except Exception as exc:  # noqa: BLE001 - never raise; see Global Constraints
+        current_app.logger.error('Slack call failed: %s', exc)
+        return {'success': False, 'error': str(exc)}
 
     missing = [name for name in custom if name not in available]
     return (not missing), missing
@@ -1048,6 +1051,9 @@ def open_poll(poll) -> dict:
         error = exc.response.get("error", str(exc))
         current_app.logger.error("Availability poll failed to post: %s", error)
         return {"success": False, "error": error}
+    except Exception as exc:  # noqa: BLE001 - never raise; see Global Constraints
+        current_app.logger.error('Slack call failed: %s', exc)
+        return {'success': False, 'error': str(exc)}
 
     poll.message_ts = response["ts"]
     poll.status = PollStatus.OPEN
@@ -1064,6 +1070,9 @@ def open_poll(poll) -> dict:
             current_app.logger.warning(
                 "Could not seed :%s: — %s", name, exc.response.get("error", exc)
             )
+    except Exception as exc:  # noqa: BLE001 - never raise; see Global Constraints
+        current_app.logger.error('Slack call failed: %s', exc)
+        return {'success': False, 'error': str(exc)}
 
     return {"success": True, "poll_id": poll.id, "ts": poll.message_ts}
 ```
@@ -1352,6 +1361,9 @@ def reconcile_poll(poll) -> dict:
         error = exc.response.get("error", str(exc))
         current_app.logger.error("Reconcile failed for poll %s: %s", poll.id, error)
         return {"added": 0, "removed": 0, "error": error}
+    except Exception as exc:  # noqa: BLE001 - never raise; see Global Constraints
+        current_app.logger.error('Slack call failed: %s', exc)
+        return {'success': False, 'error': str(exc)}
 
     reactions = (response.get("message") or {}).get("reactions") or []
     by_emoji = {r["name"]: set(r.get("users") or []) for r in reactions}
@@ -1612,6 +1624,9 @@ def poll_permalink(poll) -> str | None:
         current_app.logger.warning(
             "No permalink for poll %s: %s", poll.id, exc.response.get("error", exc))
         return None
+    except Exception as exc:  # noqa: BLE001 - never raise; see Global Constraints
+        current_app.logger.error('Slack call failed: %s', exc)
+        return {'success': False, 'error': str(exc)}
 
 
 def send_nudge_dm(poll, slack_uid: str, permalink: str | None) -> bool:
