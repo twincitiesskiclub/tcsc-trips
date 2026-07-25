@@ -143,7 +143,8 @@ must live in a threaded reply; and stray reactions are noise the bot ignores.
 
 ```
 lead_availability_polls
-  id, starts_on, ends_on, status, is_shadow,
+  id, starts_on, ends_on, is_shadow,
+  status (draft | open | closed),
   channel_id, message_ts, coverage_thread_ts,
   created_at, opened_at, closed_at
 
@@ -158,7 +159,9 @@ lead_availability_participants          -- drives nudging and completion trackin
   UNIQUE(poll_id, user_id)
 
 lead_availability_responses             -- a row means "available"; undo deletes it
-  poll_id, practice_id, user_id, responded_at, source
+  poll_id, practice_id, user_id, responded_at,
+  source (reaction | admin),
+  answered_for_date, answered_for_location_id   -- staleness snapshot
   UNIQUE(poll_id, practice_id, user_id)
 ```
 
@@ -239,9 +242,18 @@ labelled — the system informs the choice, it never blocks it.
 Load counts are computed from `PracticeLead` rows with `role='lead'`: `led_in_block` within the
 poll window, and `led_last_90d` on a trailing window. No coupling to `Season`.
 
-A response recorded before a material change to a practice's date, time, or location is marked
-stale and flagged with a warning in the picker. This addresses the exact failure behind "I
-updated the spreadsheet to unavailable" and "6/26 doesn't pull the right data".
+A response is **stale** when the practice's date/time or location no longer matches the
+`answered_for_date` / `answered_for_location_id` snapshot taken when the response was recorded.
+Stale responses still appear in the picker but carry a warning, since somebody who volunteered
+for a Wirth trail run did not necessarily volunteer for the Hyland rollerski it became.
+
+Staleness is deliberately **not** derived from `Practice.updated_at`. That column has `onupdate`
+and fires on any edit — a workout description tweak would mark every response stale and train
+directors to ignore the warning. Only date/time and location change whether someone can lead;
+the snapshot captures exactly those.
+
+This addresses the failure behind "I updated the spreadsheet to unavailable… is anyone willing to
+lead?" and "6/26 doesn't pull the right data".
 
 ## Background jobs
 
@@ -310,7 +322,7 @@ dispatcher but not live posting.
 | Regional-indicator shortcodes may not render as intended across clients | Verify first; documented fallback emoji set required |
 | `reactions:read` scope may not be granted | Verify before implementation; reconciliation depends on it |
 | Practice list changes after a poll opens | Emoji mapping is persisted; affected responses marked stale |
-| Autostart of the preview/companion tooling is unrelated to this feature | Noted only to avoid conflation |
+| A practice is deleted mid-poll | `lead_availability_poll_practices` and responses cascade; its emoji is retired, not reassigned |
 
 ## References
 
