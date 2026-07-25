@@ -15,6 +15,7 @@ from app.practices.models import Practice, PracticeLocation, PracticeType
 # real data (see _cleanup below for how that's now avoided).
 _SLOT_A = datetime(2099, 1, 6, 18, 15)
 _SLOT_B = datetime(2099, 1, 8, 18, 15)
+_SLOT_C = datetime(2099, 1, 10, 18, 15)
 
 
 @pytest.fixture
@@ -120,3 +121,24 @@ def test_summary_counts_and_lists_incomplete(db_session):
         assert summary["incomplete"][0][1] == ["location", "type"]
     finally:
         _cleanup([ready.id, bare.id], [loc.id], [typ.id])
+
+
+def test_incomplete_is_sorted_by_date_not_creation_order(db_session):
+    # Created deliberately out of chronological order (middle, latest,
+    # earliest) so a passing test can only mean readiness_summary() actually
+    # sorts by date rather than happening to preserve insertion/query order.
+    middle = Practice(date=_SLOT_B, day_of_week="Thursday", is_draft=True)
+    latest = Practice(date=_SLOT_C, day_of_week="Saturday", is_draft=True)
+    earliest = Practice(date=_SLOT_A, day_of_week="Tuesday", is_draft=True)
+    db_session.add_all([middle, latest, earliest])
+    db_session.commit()
+
+    try:
+        summary = readiness_summary([middle, latest, earliest])
+        assert [p.id for p, _ in summary["incomplete"]] == [
+            earliest.id,
+            middle.id,
+            latest.id,
+        ]
+    finally:
+        _cleanup([middle.id, latest.id, earliest.id], [], [])
