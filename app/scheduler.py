@@ -457,10 +457,11 @@ def _get_upcoming_strength_practices(now, app) -> list:
     from datetime import timedelta
     from app.practices.models import Practice
     from app.practices.interfaces import PracticeStatus
+    from app.practices.service import published_practices
 
     week_end = now + timedelta(days=7)
 
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= now,
         Practice.date <= week_end,
         Practice.status.in_([
@@ -496,6 +497,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
     with app.app_context():
         from app.practices.models import Practice
         from app.practices.interfaces import PracticeStatus
+        from app.practices.service import published_practices
         from app.slack.practices import post_practice_announcement, post_combined_lift_announcement
 
         app.logger.info("=" * 60)
@@ -519,7 +521,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
                 today_end = now.replace(hour=23, minute=59, second=59, microsecond=0)
                 app.logger.info(f"Morning run: Looking for practices between {today_start} and {today_end}")
 
-                practices = Practice.query.filter(
+                practices = published_practices().filter(
                     Practice.date >= today_start,
                     Practice.date <= today_end,
                     Practice.status.in_([
@@ -540,7 +542,7 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
                 tomorrow_noon = tomorrow_start.replace(hour=12)
                 app.logger.info(f"Evening run: Looking for practices between {tomorrow_start} and {tomorrow_noon}")
 
-                practices = Practice.query.filter(
+                practices = published_practices().filter(
                     Practice.date >= tomorrow_start,
                     Practice.date < tomorrow_noon,
                     Practice.status.in_([

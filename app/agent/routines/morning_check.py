@@ -11,7 +11,7 @@ from datetime import timedelta
 from app.models import db
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
-from app.practices.service import convert_practice_to_info
+from app.practices.service import convert_practice_to_info, published_practices
 from app.agent.decision_engine import (
     evaluate_practice,
     should_propose_cancellation,
@@ -61,7 +61,7 @@ def run_morning_check(channel_override: str = None) -> dict:
     today_end = today_start + timedelta(days=1)
 
     # Find all scheduled or confirmed practices today
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= today_start,
         Practice.date < today_end,
         Practice.status.in_([

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from app.models import db
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
+from app.practices.service import published_practices
 from app.agent.decision_engine import (
     evaluate_practice,
     should_propose_cancellation,
@@ -131,7 +132,7 @@ def _run_lead_verification_check(
         logger.info("DRY RUN MODE - No database changes will be made")
 
     # Find practices in the time range
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= start,
         Practice.date < end,
         Practice.status.in_([

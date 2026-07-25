@@ -48,6 +48,7 @@ def model_for(query):
         date=Practice.date,
         status=Practice.status,
         id=Practice.id,
+        is_draft=Practice.is_draft,
     )
 
 
@@ -108,7 +109,10 @@ def run_with_query(
         for practice_item in practices:
             practice_item.slack_weekly_summary_ts = message_ts
 
-    with patch.object(routine, "Practice", model_for(query)), patch.object(
+    fake_practice_model = model_for(query)
+    with patch.object(routine, "Practice", fake_practice_model), patch(
+        "app.practices.models.Practice", fake_practice_model
+    ), patch.object(
         routine, "load_skipper_config", return_value={"agent": {"dry_run": dry_run}}
     ), patch.object(routine, "now_central_naive", return_value=now, create=True), patch.object(
         routine, "convert_practice_to_info", side_effect=lambda item: item

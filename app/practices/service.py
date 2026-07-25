@@ -235,3 +235,15 @@ def convert_cancellation_to_proposal(request: CancellationRequest) -> Cancellati
         decision_notes=request.decision_notes,
         expires_at=request.expires_at
     )
+
+
+def published_practices():
+    """Practice query excluding drafts.
+
+    Drafts exist so availability can be collected against real details before
+    members see anything, so every member-visible read must go through here.
+    Returns a Query, so callers keep chaining .filter()/.order_by() as before.
+    """
+    from app.practices.models import Practice
+
+    return Practice.query.filter(Practice.is_draft.is_(False))

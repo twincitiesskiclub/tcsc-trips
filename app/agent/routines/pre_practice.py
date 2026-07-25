@@ -11,6 +11,7 @@ from datetime import timedelta
 from app.models import db
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
+from app.practices.service import published_practices
 from app.agent.decision_engine import evaluate_practice, load_skipper_config
 from app.agent.brain import generate_evaluation_summary
 from app.slack.practices import (
@@ -46,7 +47,7 @@ def run_48h_check(channel_override: str = None) -> dict:
     window_start = now + timedelta(hours=46)
     window_end = now + timedelta(hours=50)
 
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= window_start,
         Practice.date < window_end,
         Practice.status.in_([
@@ -149,7 +150,7 @@ def run_24h_check(channel_override: str = None) -> dict:
     window_start = now + timedelta(hours=22)
     window_end = now + timedelta(hours=26)
 
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= window_start,
         Practice.date < window_end,
         Practice.status.in_([
