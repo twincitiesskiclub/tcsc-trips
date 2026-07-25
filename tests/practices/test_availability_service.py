@@ -23,7 +23,8 @@ from app.practices.availability import (
     eligible_leads,
     open_poll,
 )
-from app.practices.availability_models import PollStatus
+from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice, PracticeLocation, PracticeType
 
 _START = date(2099, 8, 1)
@@ -48,7 +49,13 @@ def _cleanup_practices(practices, poll=None):
     and their locations/types. Order matters: LeadAvailabilityPollPractice
     has a NOT NULL FK to practices, so the poll must go first; Practice has
     FKs to location/type, so practices must go before those.
+
+    Rolls back first so a poisoned session (e.g. a prior statement that
+    raised and left the transaction aborted) doesn't turn this cleanup
+    itself into a PendingRollbackError that leaves debris behind for the
+    next test to trip over.
     """
+    db.session.rollback()
     if poll is not None:
         stored = db.session.get(type(poll), poll.id)
         if stored is not None:
@@ -69,9 +76,20 @@ def _cleanup_practices(practices, poll=None):
     db.session.commit()
 
 
+# Matches the seed data in migration 36f58dc97c0c: the admin roles page
+# renders display_name, so a get-or-create fallback must not invent a
+# different one (that leaked a "PRACTICES_LEAD/PRACTICES_LEAD" badge before).
+_TAG_DISPLAY_NAMES = {
+    "PRACTICES_LEAD": "Practices Lead",
+    "HEAD_COACH": "Head Coach",
+    "ASSISTANT_COACH": "Assistant Coach",
+    "PRACTICES_DIRECTOR": "Practices Director",
+}
+
+
 def _tagged_user(name, tag_name="PRACTICES_LEAD"):
-    tag = Tag.query.filter_by(name=tag_name).first() or Tag(name=tag_name,
-                                                            display_name=tag_name)
+    tag = Tag.query.filter_by(name=tag_name).first() or Tag(
+        name=tag_name, display_name=_TAG_DISPLAY_NAMES.get(tag_name, tag_name))
     db.session.add(tag)
     unique = uuid.uuid4().hex[:8]
     user = User(first_name=f"TEST {name}", last_name="Availability",
@@ -83,6 +101,7 @@ def _tagged_user(name, tag_name="PRACTICES_LEAD"):
 
 
 def _cleanup_users(users):
+    db.session.rollback()
     for user in users:
         obj = db.session.get(User, user.id)
         if obj is not None:
@@ -134,12 +153,16 @@ def test_build_poll_refuses_incomplete_drafts(db_session):
     db_session.add(bare)
     db_session.commit()
 
+    poll = None
     try:
         with pytest.raises(PollNotReadyError) as exc:
             build_poll(_START, _END)
         assert "location" in str(exc.value)
+        assert LeadAvailabilityPoll.query.filter_by(
+            starts_on=_START, ends_on=_END
+        ).first() is None, "a refused build must leave no poll row behind"
     finally:
-        _cleanup_practices([ready, bare])
+        _cleanup_practices([ready, bare], poll)
 
 
 def test_open_poll_refuses_when_emoji_are_missing(db_session, app):
@@ -186,6 +209,82 @@ def test_open_poll_posts_and_seeds_reactions(db_session, app):
             "seed each session emoji plus done, so members tap rather than search"
     finally:
         _cleanup_practices([first, second], poll)
+
+
+def test_open_poll_seeding_survives_a_reaction_failure(db_session, app):
+    """Seeding reactions is deliberately best-effort: the message is already
+    posted and the poll already committed as OPEN by the time seeding runs,
+    so one failed reactions_add must be logged, not raised, and seeding must
+    keep going for the remaining emoji rather than stopping partway through.
+    """
+    first = _ready_practice(4)
+    second = _ready_practice(6)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+
+    try:
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ok": True, "ts": "1785.1"}
+        client.reactions_add.side_effect = [None, TimeoutError("boom"), None]
+
+        with patch("app.practices.availability.validate_emoji_available", return_value=(True, [])), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            result = open_poll(poll)
+
+        assert result["success"] is True
+        assert poll.status == PollStatus.OPEN
+        assert client.reactions_add.call_count == 3, \
+            "a failed reaction must not stop seeding of the remaining emoji"
+    finally:
+        _cleanup_practices([first, second], poll)
+
+
+def test_build_poll_excludes_cancelled_practices(db_session):
+    """A cancelled practice must not get a letter emoji or block the poll --
+    otherwise leads are asked to cover a session that isn't happening, and a
+    cancelled-but-incomplete practice would refuse the whole poll for a
+    detail (location, type) the director has no reason to fill in.
+    """
+    live = _ready_practice(4)
+    cancelled = _ready_practice(6)
+    cancelled.status = PracticeStatus.CANCELLED.value
+    db_session.commit()
+
+    poll = None
+    try:
+        poll = build_poll(_START, _END)
+
+        assert [m.practice_id for m in poll.practices] == [live.id]
+        assert [m.emoji for m in poll.practices] == ["letter_a"]
+    finally:
+        _cleanup_practices([live, cancelled], poll)
+
+
+def test_build_poll_targets_channel_by_shadow_flag(db_session):
+    """is_shadow=True must route to the shadow channel, never the live
+    #coord-practices-leads-assists channel -- during the shadow month that
+    is the one thing standing between a test poll and 64 real members.
+    """
+    from app.slack.practices._config import COORD_CHANNEL_ID
+
+    live_practice = _ready_practice(4)
+    db_session.commit()
+    live_poll = None
+    try:
+        live_poll = build_poll(_START, _END, is_shadow=False)
+        assert live_poll.channel_id == COORD_CHANNEL_ID
+    finally:
+        _cleanup_practices([live_practice], live_poll)
+
+    shadow_practice = _ready_practice(4)
+    db_session.commit()
+    shadow_poll = None
+    try:
+        shadow_poll = build_poll(_START, _END, is_shadow=True)
+        assert shadow_poll.channel_id == "C0B3Y71PG92"
+        assert shadow_poll.channel_id != COORD_CHANNEL_ID
+    finally:
+        _cleanup_practices([shadow_practice], shadow_poll)
 
 
 def test_open_poll_survives_a_non_slack_api_error(db_session, app):

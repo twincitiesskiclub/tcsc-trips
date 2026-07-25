@@ -18,9 +18,11 @@ from app.practices.availability_models import (
     PollStatus,
 )
 from app.practices.drafting import is_ready, missing_fields
+from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
 from app.slack.blocks.availability import build_poll_blocks, poll_fallback_text
 from app.slack.client import get_slack_client
+from app.utils import now_central_naive
 
 # Every tag that makes a member eligible to be asked for availability.
 ELIGIBLE_TAGS = ["PRACTICES_LEAD", "PRACTICES_DIRECTOR", "HEAD_COACH", "ASSISTANT_COACH"]
@@ -75,7 +77,8 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
     practices = (
         Practice.query
         .filter(Practice.date >= datetime.combine(starts_on, datetime.min.time()),
-                Practice.date <= datetime.combine(ends_on, datetime.max.time()))
+                Practice.date <= datetime.combine(ends_on, datetime.max.time()),
+                Practice.status != PracticeStatus.CANCELLED.value)
         .order_by(Practice.date)
         .all()
     )
@@ -169,7 +172,7 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
 
     poll.message_ts = response["ts"]
     poll.status = PollStatus.OPEN
-    poll.opened_at = datetime.utcnow()
+    poll.opened_at = now_central_naive()
     db.session.commit()
 
     # Seed every reaction so members tap an existing pill rather than hunting
