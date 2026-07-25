@@ -327,6 +327,14 @@ def create_practice():
     if not data.get('location_id'):
         return jsonify({'error': 'Location is required'}), 400
 
+    leads_needed = data.get('leads_needed', 2)
+    if not isinstance(leads_needed, int) or isinstance(leads_needed, bool) \
+            or not 1 <= leads_needed <= 3:
+        return jsonify({
+            'error': 'leads_needed must be a whole number from 1 to 3',
+            'field': 'leads_needed',
+        }), 400
+
     for field, label in (
         ('workout_description', 'Workout'),
         ('logistics_notes', 'Notes / Logistics'),
@@ -367,6 +375,7 @@ def create_practice():
             logistics_notes=data.get('logistics_notes') or None,
             plan_reactions=plan_reactions,
             is_dark_practice=data.get('is_dark_practice', False),
+            leads_needed=leads_needed,
         )
         practice.activities = list(selected.activities)
         practice.practice_types = list(selected.practice_types)
@@ -393,15 +402,8 @@ def create_practice():
                 )
                 db.session.add(lead)
 
-        # Add assists
-        if data.get('assist_ids'):
-            for user_id in data['assist_ids']:
-                assist = PracticeLead(
-                    practice_id=practice.id,
-                    user_id=user_id,
-                    role='assist'
-                )
-                db.session.add(assist)
+        # Assists are retired. Historical role='assist' rows stay readable, but
+        # no new ones are written and the role is no longer offered in the UI.
 
         db.session.commit()
 
@@ -472,6 +474,15 @@ def edit_practice(practice_id):
                     'field': field,
                 }), 400
 
+        if 'leads_needed' in data:
+            leads_needed = data['leads_needed']
+            if not isinstance(leads_needed, int) or isinstance(leads_needed, bool) \
+                    or not 1 <= leads_needed <= 3:
+                return jsonify({
+                    'error': 'leads_needed must be a whole number from 1 to 3',
+                    'field': 'leads_needed',
+                }), 400
+
         try:
             selected, plan_reactions = _prepare_plan_reaction_submission(
                 data,
@@ -520,6 +531,9 @@ def edit_practice(practice_id):
         if 'status' in data:
             practice.status = data['status']
 
+        if 'leads_needed' in data:
+            practice.leads_needed = leads_needed
+
         # Update activities if provided
         if 'activity_ids' in data:
             practice.activities = list(selected.activities)
@@ -528,10 +542,15 @@ def edit_practice(practice_id):
         if 'type_ids' in data:
             practice.practice_types = list(selected.practice_types)
 
-        # Update coaches, leads, and assistants if provided (now using user_id)
-        if 'coach_ids' in data or 'lead_ids' in data or 'assist_ids' in data:
-            # Remove existing leads/coaches/assistants
-            PracticeLead.query.filter_by(practice_id=practice.id).delete()
+        # Update coaches and leads if provided (now using user_id).
+        # Assists are retired: no longer offered in the UI or written, but
+        # historical role='assist' rows are deliberately left untouched here
+        # so past schedules stay intact when a practice is later edited.
+        if 'coach_ids' in data or 'lead_ids' in data:
+            PracticeLead.query.filter(
+                PracticeLead.practice_id == practice.id,
+                PracticeLead.role.in_(('coach', 'lead')),
+            ).delete(synchronize_session=False)
 
             # Add coaches
             if data.get('coach_ids'):
@@ -552,16 +571,6 @@ def edit_practice(practice_id):
                         role='lead'
                     )
                     db.session.add(lead)
-
-            # Add assists
-            if data.get('assist_ids'):
-                for user_id in data['assist_ids']:
-                    assist = PracticeLead(
-                        practice_id=practice.id,
-                        user_id=user_id,
-                        role='assist'
-                    )
-                    db.session.add(assist)
 
         db.session.commit()
         practice_updated = True

@@ -5,7 +5,6 @@ const selActivities = {{ (practice.activities | map(attribute='id') | list) | to
 const selTypes = {{ (practice.practice_types | map(attribute='id') | list) | tojson if practice else '[]' }};
 const selCoaches = {{ (practice.leads | selectattr('role','equalto','coach') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
 const selLeads = {{ (practice.leads | selectattr('role','equalto','lead') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
-const selAssists = {{ (practice.leads | selectattr('role','equalto','assist') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
 const savedPlanReactions = {{ (practice.plan_reactions or []) | tojson if practice else '[]' }};
 let activitiesData = [];
 let typesData = [];
@@ -84,28 +83,15 @@ async function loadFormData() {
     const people = references.people;
     peRenderPersonPills('coaches-pills', 'coaches-summary', people.coaches, selCoaches);
     peRenderPersonPills('leads-pills', 'leads-summary', people.leads, selLeads);
-    peRenderPersonPills('assists-pills', 'assists-summary', people.assists, selAssists);
 
-    if (selAssists.length > 0) toggleAssists();
     document.getElementById('people-search').addEventListener('input', () =>
-        peFilterPeople('people-search', ['coaches-pills', 'leads-pills', 'assists-pills']));
+        peFilterPeople('people-search', ['coaches-pills', 'leads-pills']));
 
     if (references.failed.length) {
         formReferenceLoadError = 'Could not load form options. Refresh and try again.';
         console.error('Reference data failed:', references.failed.join(', '));
         showToast(formReferenceLoadError, 'error');
     }
-}
-
-function toggleAssists() {
-    const box = document.getElementById('assists-collapsible');
-    const btn = document.getElementById('assists-toggle');
-    const chevron = btn.querySelector('.chevron');
-    const text = document.getElementById('assists-toggle-text');
-    const nowOpen = box.classList.toggle('hidden') === false;
-    btn.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
-    chevron.classList.toggle('expanded', nowOpen);
-    text.textContent = nowOpen ? 'Hide' : 'Show';
 }
 
 document.getElementById('practice-form').addEventListener('submit', async (e) => {
@@ -132,7 +118,7 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         type_ids: peCollectIds('types-pills'),
         coach_ids: peCollectIds('coaches-pills'),
         lead_ids: peCollectIds('leads-pills'),
-        assist_ids: peCollectIds('assists-pills'),
+        leads_needed: parseInt(fd.get('leads_needed'), 10),
         workout_description: fd.get('workout_description') || null,
         logistics_notes: fd.get('logistics_notes') || null,
         is_dark_practice: fd.get('is_dark_practice') === 'on',
