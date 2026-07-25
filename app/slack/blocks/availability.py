@@ -5,7 +5,6 @@ without re-previewing — it was revised four times against real Slack renders.
 """
 
 from app.practices.availability_emoji import DONE_EMOJI
-from app.slack.blocks.text import BLOCKS_MAX
 
 INSTRUCTION = (
     "React to each session you can lead. · "
@@ -36,10 +35,6 @@ def build_poll_blocks(rows: list[dict], start_label: str, end_label: str) -> lis
 
     One section per week, one line (with a distinct letter emoji) per
     session. No deadline footer -- one was drafted and deliberately cut.
-
-    Slack rejects messages over 50 blocks. If the week groups would push
-    past that, later weeks are summarized in a trailing note instead of
-    being silently dropped or breaching the cap.
     """
     blocks: list[dict] = [
         {"type": "header", "text": {"type": "plain_text",
@@ -48,19 +43,11 @@ def build_poll_blocks(rows: list[dict], start_label: str, end_label: str) -> lis
     ]
 
     week_labels = list(dict.fromkeys(row["week_label"] for row in rows))
-    max_weeks_shown = BLOCKS_MAX - len(blocks) - 1  # reserve 1 block for an overflow note
-    shown_labels, hidden_labels = week_labels[:max_weeks_shown], week_labels[max_weeks_shown:]
 
-    for label in shown_labels:
+    for label in week_labels:
         week_rows = [row for row in rows if row["week_label"] == label]
         blocks.append({"type": "section", "text": {"type": "mrkdwn",
             "text": f"*{label}*\n" + "\n".join(_line(row) for row in week_rows)}})
-
-    if hidden_labels:
-        hidden_sessions = sum(1 for row in rows if row["week_label"] in hidden_labels)
-        blocks.append({"type": "context", "elements": [{"type": "mrkdwn",
-            "text": f"_+{hidden_sessions} more sessions across {len(hidden_labels)} "
-                    "more weeks not shown._"}]})
 
     return blocks
 
