@@ -75,16 +75,18 @@ def test_published_practices_is_chainable(db_session):
 def test_no_member_facing_query_uses_bare_practice_query():
     """Guard the rule itself: these modules must go through the helper.
 
-    The grep intentionally only flags `Practice.query.filter(`/`.filter_by(`
-    style listing queries, not `Practice.query.get(`/`.get_or_404(` by-id
-    lookups. Fetching one specific practice by id (e.g. to RSVP against it,
-    or to render an admin detail page) is not a member-visible listing and
-    must not be forced through published_practices(). This is why
+    Flags any use of `Practice.query.` that is NOT immediately followed by
+    `get(` or `get_or_404(`. Fetching one specific practice by id (e.g. to
+    RSVP against it, or to render an admin detail page) is not a member-visible
+    listing and must not be forced through published_practices(). This is why
     app/slack/commands.py can be watched even though it also contains a
-    legitimate `Practice.query.get(practice_id)` lookup in
-    `_handle_rsvp_command` — that line doesn't match the narrower pattern.
+    legitimate `Practice.query.get(practice_id)` lookup in `_handle_rsvp_command`
+    — that line doesn't match (ends in get(), which is allowed). Any listing
+    query shape (filter, filter_by, order_by, options, all) must go through
+    published_practices() to exclude draft practices.
     """
     import pathlib
+    import re
 
     watched = [
         "app/scheduler.py",
@@ -105,11 +107,15 @@ def test_no_member_facing_query_uses_bare_practice_query():
             if stripped.startswith("#"):
                 continue
             code = line.split("#", 1)[0]
-            if "Practice.query.filter" in code and "published_practices" not in code:
-                offenders.append(f"{rel}:{num}")
+            # Flag Practice.query.X where X is NOT get( or get_or_404(
+            # This catches all listing patterns: filter, filter_by, order_by, options, all, etc.
+            if "Practice.query." in code and "published_practices" not in code:
+                # Check if it's a safe single-by-id lookup
+                if not re.search(r"Practice\.query\.(get|get_or_404)\(", code):
+                    offenders.append(f"{rel}:{num}")
     assert not offenders, (
-        "these lines read Practice.query.filter(...)/.filter_by(...) directly, "
-        "which would include draft practices on a member-visible surface; "
-        "replace with published_practices() from app.practices.service: "
+        "these lines read Practice.query.* directly in a way that would include "
+        "draft practices on a member-visible surface; replace with "
+        "published_practices() from app.practices.service: "
         f"{offenders}"
     )
