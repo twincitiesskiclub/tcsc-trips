@@ -18,6 +18,7 @@ from ..practices.models import (
     practice_types_junction
 )
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
+from ..practices.lead_candidates import lead_candidates
 from ..practices.plan_reaction_queries import (
     PlanReactionSourceSelectionError,
     load_all_plan_reaction_sources,
@@ -1408,6 +1409,22 @@ def toggle_lead_confirmation(practice_id, lead_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'error': str(e)}), 500
+
+
+@admin_practices_bp.route('/<int:practice_id>/lead-candidates')
+@admin_required
+def practice_lead_candidates(practice_id):
+    """Eligible leads for this practice, ranked by availability then load."""
+    practice = Practice.query.get_or_404(practice_id)
+    assigned = [
+        lead.user_id for lead in
+        PracticeLead.query.filter_by(practice_id=practice.id, role='lead').all()
+    ]
+    return jsonify({
+        'leads_needed': practice.leads_needed,
+        'assigned': assigned,
+        'candidates': lead_candidates(practice),
+    })
 
 
 @admin_practices_bp.route('/<int:practice_id>/leads/data')
