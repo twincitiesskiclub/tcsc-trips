@@ -24,7 +24,13 @@ DEFAULT_PRACTICE_DAYS = [
 
 
 def expected_slots(start_date: date, weeks: int = 4) -> list[datetime]:
-    """Datetimes the practice_days config implies over the window."""
+    """Datetimes the practice_days config implies over the window.
+
+    Weeks are normalised to the Monday of the week containing start_date so
+    the window has stable, predictable boundaries — but no slot earlier than
+    start_date itself is ever returned. The first week may therefore be
+    partial; that's correct for "the next N weeks starting today."
+    """
     config = AppConfig.get("practice_days", DEFAULT_PRACTICE_DAYS) or []
     slots: list[datetime] = []
 
@@ -47,6 +53,8 @@ def expected_slots(start_date: date, weeks: int = 4) -> list[datetime]:
                 )
                 continue
             day = week_start + timedelta(days=weekday)
+            if day < start_date:
+                continue
             slots.append(datetime(day.year, day.month, day.day, hour, minute))
 
     return sorted(slots)
