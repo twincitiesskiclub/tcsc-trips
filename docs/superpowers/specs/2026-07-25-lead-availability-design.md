@@ -265,7 +265,29 @@ lead?" and "6/26 doesn't pull the right data".
 
 All Central, registered in `app/scheduler.py` under the existing single-worker file lock.
 
-## Shadow mode
+## Rollout
+
+### Phase 0 — UI preview (before any pipeline is built)
+
+Real renders of every bot-authored message are posted to `#collab-asset-mgmt-practices`
+(`C0B3Y71PG92`) and reviewed on both desktop and mobile before implementation proceeds. Surfaces
+to preview:
+
+1. The availability poll, with all twelve session rows and the emoji pre-seeded as reactions
+2. The coverage thread reply, in all three states — nothing covered, partially covered, fully
+   covered
+3. The nudge DM
+4. The monthly readiness digest to coaches and directors
+
+This is a throwaway script posting static Block Kit, not the real feature. Its purpose is to
+settle layout questions while they are still cheap to change, and it is the **only** way to
+resolve the regional-indicator risk: whether 🇦–🇱 render as intended as reactions, in order,
+without adjacent pairs combining into flags, across the clients members actually use.
+
+Exit condition: the directors are satisfied with the layout, and the emoji set is confirmed or a
+fallback chosen.
+
+### Phase 1 — Shadow mode
 
 The first month runs shadowed, configured through `AppConfig` so exiting needs no deploy:
 
@@ -319,7 +341,7 @@ dispatcher but not live posting.
 
 | Risk | Mitigation |
 |---|---|
-| Regional-indicator shortcodes may not render as intended across clients | Verify first; documented fallback emoji set required |
+| Regional-indicator shortcodes may not render as intended across clients | Resolved in Phase 0 by posting a real message; fallback set chosen there if needed |
 | `reactions:read` scope may not be granted | Verify before implementation; reconciliation depends on it |
 | Practice list changes after a poll opens | Emoji mapping is persisted; affected responses marked stale |
 | A practice is deleted mid-poll | `lead_availability_poll_practices` and responses cascade; its emoji is retired, not reassigned |
