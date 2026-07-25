@@ -193,18 +193,48 @@ One post per block in `#coord-practices-leads-assists`, listing each session as
 `<emoji> <day date> · <time> · <location> · <type>`, grouped under week headings, with the emoji
 in a hard-left column so it reads as an index against the reaction row.
 
-Emoji are assigned deterministically by chronological position. **Regional indicators
-(🇦–🇱) are the intended set, but the exact Slack shortcodes and cross-client rendering must be
-verified before implementation proceeds** — adjacent regional indicators can combine into flags
-in some contexts. A documented fallback set is required if verification fails.
+Emoji are assigned deterministically by chronological position, using the custom workspace emoji
+`:letter_a:` … `:letter_z:`.
 
-`✅` is reserved for "that's everything from me" and is never a session.
+**Resolved in Phase 0.** Native ordered emoji sets are inadequate: `:regional_indicator_*:` and
+`:alphabet-white-*:` / `:alphabet-yellow-*:` do not exist (0/26 each), and keycap numbers stop
+being ordered after `:nine:`. This is why the hand-written polls ended in `:cactus:` and
+`:evergreen_tree:` — they ran out. A–Z were subsequently uploaded as custom workspace emoji and
+re-probed at 26/26 accepted as reactions.
 
-### Coverage reply
+**Consequence: the emoji set is operational infrastructure, not decoration.** These emoji have
+already been renamed once during Phase 0 (`regional_indicator_*` → `letter_*`), and that rename
+silently broke a poll posted minutes earlier. A rename or deletion in production would break every
+open poll *and* orphan stored mappings, so reactions would stop resolving and the picker would
+quietly show nobody as available. Three requirements follow:
 
-A threaded reply the bot maintains, listing sessions with nobody, sessions below
-`leads_needed`, and sessions covered. Updated on a debounce (~30s). This is the only Slack
-message the bot rewrites.
+- the letter list lives in **config, not hardcoded**
+- the bot **validates the full set against `emoji.list` before opening a poll**, and refuses to
+  post with a clear error rather than publishing a poll nobody can answer
+- `lead_availability_poll_practices` stores **both the emoji name and its position**, so ordering
+  survives a rename even when the name does not
+
+The numbered weekly layout (one post per week, `1️⃣`–`5️⃣`) remains the documented fallback and is
+implemented in the preview script as `--layout week-numbers`.
+
+`✅` means "that's everything from me" — including the case of picking nothing, which is how
+someone who cannot lead at all suppresses reminders. It is never a session.
+
+### Final copy (approved in Phase 0)
+
+- Title: `Practice Leads July 21 - Aug 13`
+- Instruction: `React to each session you can lead. · ✅ when you're done, even if you picked nothing.`
+- No deadline footer. Undo is not spelled out — un-reacting is native Slack behavior.
+- Nudge DM: `Reminder: Provide lead availability for Jul 21 – Aug 13 in #coord-practices-leads-assists`,
+  with `To suppress these, if you can't lead at all just hit the ✅ on the post there.` and a
+  single `Go to post` URL button deep-linking to the poll.
+
+### Coverage reply — DEFERRED
+
+A threaded reply listing sessions with nobody, sessions below `leads_needed`, and sessions
+covered. **Cut from the initial build during Phase 0 review.** It is the only thing that would
+surface half-covered sessions, which the Doodle research identifies as the neglected case — empty
+and full sessions both self-correct. Worth revisiting once the poll itself is proven.
 
 ### Nudge DM
 
@@ -279,13 +309,12 @@ to preview:
 3. The nudge DM
 4. The monthly readiness digest to coaches and directors
 
-This is a throwaway script posting static Block Kit, not the real feature. Its purpose is to
-settle layout questions while they are still cheap to change, and it is the **only** way to
-resolve the regional-indicator risk: whether 🇦–🇱 render as intended as reactions, in order,
-without adjacent pairs combining into flags, across the clients members actually use.
+Implemented as `scripts/preview_lead_availability_ui.py` — static Block Kit, not the real
+feature, with `--clean` to remove everything it posted and `--layout` to compare the lettered and
+numbered variants.
 
-Exit condition: the directors are satisfied with the layout, and the emoji set is confirmed or a
-fallback chosen.
+**Status: complete.** The emoji scheme was found unbuildable as originally designed and corrected,
+copy was revised, and the coverage reply was cut. None of those would have surfaced from mockups.
 
 ### Phase 1 — Shadow mode
 
@@ -341,7 +370,8 @@ dispatcher but not live posting.
 
 | Risk | Mitigation |
 |---|---|
-| Regional-indicator shortcodes may not render as intended across clients | Resolved in Phase 0 by posting a real message; fallback set chosen there if needed |
+| Custom letter emoji renamed or deleted | Already happened once in Phase 0. Validate the set against `emoji.list` before opening a poll; store position alongside name; numbered weekly layout is the fallback |
+| No deadline on the poll | The closes-Sunday footer was cut. Availability declines with response lateness, so reminders now carry that weight alone |
 | `reactions:read` scope may not be granted | Verify before implementation; reconciliation depends on it |
 | Practice list changes after a poll opens | Emoji mapping is persisted; affected responses marked stale |
 | A practice is deleted mid-poll | `lead_availability_poll_practices` and responses cascade; its emoji is retired, not reassigned |
