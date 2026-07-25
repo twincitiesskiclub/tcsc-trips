@@ -20,6 +20,16 @@ Plan 3 of 3 from `docs/superpowers/specs/2026-07-25-lead-availability-design.md`
 - Load counts come from `PracticeLead` rows with `role='lead'`. The `assist` role is retired (Plan 1 Task 8) and must not be counted.
 - Run the suite with `pytest`.
 
+> **Slack error handling — applies to every Slack call in this plan.** Catching only
+> `SlackApiError` is insufficient. `get_slack_client()` raises `ValueError` when
+> `SLACK_BOT_TOKEN` is unset, and network failures raise `TimeoutError` — both would
+> crash a scheduled job that has already written good data. Follow the codebase's
+> established pattern (see `_delete_slack_message` in
+> `app/slack/practices/announcements.py:1361`): an `except SlackApiError` branch for
+> the structured error, then an `except Exception as exc: return {"success": False,
+> "error": str(exc)}` backstop. Every Slack-calling function in this plan needs both,
+> and a test covering a non-`SlackApiError` failure.
+
 ---
 
 ### Task 1: Candidate ranking

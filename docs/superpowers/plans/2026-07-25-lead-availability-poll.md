@@ -29,6 +29,16 @@ Plan 2 of 3 from `docs/superpowers/specs/2026-07-25-lead-availability-design.md`
 - Requires the `reactions:read` Slack scope. **Verify it is granted before Task 5** — reconciliation depends on it.
 - Run the suite with `pytest`.
 
+> **Slack error handling — applies to every Slack call in this plan.** Catching only
+> `SlackApiError` is insufficient. `get_slack_client()` raises `ValueError` when
+> `SLACK_BOT_TOKEN` is unset, and network failures raise `TimeoutError` — both would
+> crash a scheduled job that has already written good data. Follow the codebase's
+> established pattern (see `_delete_slack_message` in
+> `app/slack/practices/announcements.py:1361`): an `except SlackApiError` branch for
+> the structured error, then an `except Exception as exc: return {"success": False,
+> "error": str(exc)}` backstop. Every Slack-calling function in this plan needs both,
+> and a test covering a non-`SlackApiError` failure.
+
 ---
 
 ### Task 1: Poll schema
