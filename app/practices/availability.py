@@ -25,6 +25,7 @@ from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
 from app.slack.blocks.availability import build_poll_blocks, poll_fallback_text
 from app.slack.client import get_slack_client
+from app.slack.practices.availability_reactions import reconcile_poll
 from app.utils import now_central_naive
 
 # Every tag that makes a member eligible to be asked for availability.
@@ -322,3 +323,20 @@ def send_nudges(poll, *, now: datetime | None = None) -> dict:
     db.session.commit()
     current_app.logger.info("Poll %s nudges: %d sent, %d skipped", poll.id, sent, skipped)
     return {"sent": sent, "skipped": skipped}
+
+
+def close_poll(poll) -> dict:
+    """Reconcile one final time, then close.
+
+    The last reconcile matters: the picker must read Slack's actual final
+    state, not whatever the last delivered event happened to say.
+    """
+    if poll.status == PollStatus.CLOSED:
+        return {"success": True, "already_closed": True}
+
+    reconcile_poll(poll)
+    poll.status = PollStatus.CLOSED
+    poll.closed_at = datetime.utcnow()
+    db.session.commit()
+    current_app.logger.info("Closed availability poll %s", poll.id)
+    return {"success": True, "poll_id": poll.id}

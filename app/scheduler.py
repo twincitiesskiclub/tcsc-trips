@@ -35,7 +35,7 @@ from apscheduler.triggers.cron import CronTrigger
 from flask import Flask
 
 from app.models import db
-from app.utils import now_central_naive
+from app.utils import now_central_naive, today_central
 from app.practices.drafting import drafted_practices_in_window, generate_draft_block, is_ready
 from app.slack.practices.drafts import post_readiness_digest
 
@@ -930,6 +930,30 @@ def run_lead_availability_nudge_job(app: Flask):
                 )
 
 
+def run_close_expired_polls_job(app: Flask):
+    """Daily: close polls whose block has ended.
+
+    Until this runs, an OPEN poll stays open forever once its last practice
+    has passed, and the nudge job would keep reconciling and nudging against
+    it indefinitely. Closing reconciles one final time so the picker reads
+    Slack's actual final state (see close_poll docstring).
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from app.practices.availability import close_poll
+        from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+
+        today = today_central()
+        expired = LeadAvailabilityPoll.query.filter(
+            LeadAvailabilityPoll.status == PollStatus.OPEN,
+            LeadAvailabilityPoll.ends_on < today,
+        ).all()
+        for poll in expired:
+            close_poll(poll)
+
+
 def init_scheduler(app: Flask) -> bool:
     """Initialize the scheduler within the Flask application.
 
@@ -1258,6 +1282,21 @@ def init_scheduler(app: Flask) -> bool:
         ),
         id='lead_availability_nudge',
         name='Lead Availability Nudge',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
+    # Daily: close availability polls whose block has ended
+    scheduler.add_job(
+        func=run_close_expired_polls_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=8,
+            minute=30,
+            timezone='America/Chicago'
+        ),
+        id='lead_availability_close',
+        name='Close Expired Availability Polls',
         replace_existing=True,
         misfire_grace_time=3600
     )
