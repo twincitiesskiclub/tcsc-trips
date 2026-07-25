@@ -73,6 +73,9 @@ from app.slack.practices.refresh import (
 from app.slack.practices.delete_recovery import (
     recover_failed_practice_delete,
 )
+from app.slack.practices.drafts import (
+    post_readiness_digest,
+)
 
 __all__ = [
     # _config
@@ -133,4 +136,6 @@ __all__ = [
     "refresh_practice_posts",
     # delete recovery
     "recover_failed_practice_delete",
+    # drafts
+    "post_readiness_digest",
 ]
