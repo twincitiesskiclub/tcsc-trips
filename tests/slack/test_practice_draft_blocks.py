@@ -53,8 +53,11 @@ def test_each_incomplete_row_opens_the_existing_edit_modal():
 
 
 def test_digest_stays_within_slack_block_limit():
-    incomplete = [(_practice(4 + i % 20, 18, 15), ["location"]) for i in range(40)]
-    summary = {"total": 60, "ready": 20, "incomplete": incomplete}
+    # Feed 200 practices to ensure uncapped builder would exceed 50 blocks.
+    # With MAX_LISTED=12 cap: 1 header + 1 summary + 12 rows + 1 "more" context + 1 bulb context = 16 blocks.
+    incomplete = [(_practice(4 + i % 20, 18, 15), ["location"]) for i in range(200)]
+    summary = {"total": 220, "ready": 20, "incomplete": incomplete}
     blocks = build_readiness_digest_blocks(summary, "Jul 21", "Aug 13")
 
     assert len(blocks) <= 50, "Slack rejects messages over 50 blocks"
+    assert len(blocks) == 16, f"Cap should hold at 16 blocks, got {len(blocks)}"
