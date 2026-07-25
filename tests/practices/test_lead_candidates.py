@@ -15,7 +15,7 @@ DB must not make this suite start failing.
 """
 
 import uuid
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from app.models import Tag, User, db
 from app.practices.availability_models import (
@@ -249,6 +249,162 @@ def test_workout_edit_does_not_make_a_response_stale(db_session):
             "only date/time and location decide availability; text edits must not warn"
     finally:
         _cleanup(users=[user_id], practices=[practice_id], polls=[poll_id])
+
+
+def test_led_last_90d_anchors_to_practice_date_not_newest_lead_row(db_session):
+    """led_last_90d must be anchored to practice.date, never to the newest
+    matching PracticeLead row -- see the _load_counts docstring.
+
+    One lead gets four role='lead' assignments at known offsets from the
+    practice being scheduled: 106 days before (outside the trailing window),
+    75 days before (inside), exactly on the anchor (inside, the upper
+    boundary), and 5 days after (in the future relative to the practice --
+    outside under the correct rule).
+
+    The +5d offset is deliberately close to the anchor (not far, e.g. +17d):
+    if anchoring shifted to "the newest matching row" (anchor' = anchor+5),
+    the window would slide forward by only 5 days -- not enough to also
+    push the -75d row out (it has a 15-day margin to the -90d boundary) --
+    so the mutation nets a *different* count (3) instead of swapping one
+    in-window row for another and coincidentally landing on the same count.
+    That's what makes this assertion sensitive to the anchor rule rather
+    than incidentally passing either way.
+    """
+    practice = _practice(20)
+    anchor = practice.date
+    user = _lead_user("Anchor")
+
+    offsets = (-106, -75, 0, 5)
+    lead_practice_ids = []
+    for delta in offsets:
+        p = Practice(date=anchor + timedelta(days=delta), day_of_week="Tuesday", leads_needed=2)
+        db_session.add(p)
+        db_session.flush()
+        db_session.add(PracticeLead(practice_id=p.id, user_id=user.id, role="lead"))
+        lead_practice_ids.append(p.id)
+    db_session.commit()
+
+    practice_id, user_id = practice.id, user.id
+
+    try:
+        rows = lead_candidates(practice)
+        by_id = {r["user_id"]: r for r in rows}
+        assert by_id[user_id]["led_last_90d"] == 2, (
+            "only the -75d and on-anchor rows fall in [practice.date - 90d, practice.date]; "
+            "anchoring on the newest row instead of practice.date would count -75d out and "
+            "+5d in, yielding 3 instead of 2"
+        )
+    finally:
+        _cleanup(users=[user_id], practices=[practice_id] + lead_practice_ids)
+
+
+def test_available_ties_break_on_led_last_90d(db_session):
+    """Equal led_in_block must fall through to led_last_90d, not name.
+
+    eligible_leads() itself queries `ORDER BY User.first_name`, so if the two
+    candidates' names happened to already be alphabetical in the direction
+    this test expects, a sort key that silently dropped led_last_90d would
+    still produce the "right" order by coincidence (Python's sort is
+    stable, so ties fall back to that original query order) and this test
+    would pass either way. Naming the *lower*-load candidate alphabetically
+    *later* ("ZFresh...") than the higher-load one ("ALoaded...") makes the
+    two orderings disagree, so only a sort that genuinely consults
+    led_last_90d produces the expected result.
+    """
+    practice = _practice(4)
+    poll = _open_poll(practice)
+    fresh = _lead_user("ZFreshNinety")
+    loaded = _lead_user("ALoadedNinety")
+    _available(poll, practice, fresh)
+    _available(poll, practice, loaded)
+
+    # Dated before the poll's Aug 1-31 block, so it never touches
+    # led_in_block, but within the trailing 90-day window anchored on this
+    # practice's Aug 4 date -- isolates led_last_90d as the only difference
+    # between these two candidates.
+    prior = Practice(date=datetime(2099, 7, 1, 18, 15), day_of_week="Tuesday", leads_needed=2)
+    db_session.add(prior)
+    db_session.flush()
+    db_session.add(PracticeLead(practice_id=prior.id, user_id=loaded.id, role="lead"))
+    db_session.commit()
+
+    practice_id, poll_id, prior_id = practice.id, poll.id, prior.id
+    fresh_id, loaded_id = fresh.id, loaded.id
+
+    try:
+        rows = lead_candidates(practice)
+        by_id = {r["user_id"]: r for r in rows}
+        assert by_id[fresh_id]["led_in_block"] == by_id[loaded_id]["led_in_block"] == 0, \
+            "led_in_block must be tied for this to isolate the next sort key"
+        assert by_id[fresh_id]["led_last_90d"] == 0
+        assert by_id[loaded_id]["led_last_90d"] == 1
+        # "ALoadedNinety" sorts before "ZFreshNinety" alphabetically, and
+        # eligible_leads() returns them in that order -- so this specific
+        # assertion only holds if led_last_90d, not name or query order,
+        # decided the ranking.
+        idx = [r["user_id"] for r in rows if r["user_id"] in (fresh_id, loaded_id)]
+        assert idx == [fresh_id, loaded_id], \
+            "equal led_in_block must fall through to led_last_90d as the tie-break"
+    finally:
+        _cleanup(users=[fresh_id, loaded_id], practices=[practice_id, prior_id], polls=[poll_id])
+
+
+def test_available_ties_break_on_name(db_session):
+    """With every numeric key tied, name must decide the final order.
+
+    _lead_user() always gives distinct first_names, and eligible_leads()
+    itself queries `ORDER BY User.first_name` -- so two candidates with
+    different first_names would already arrive in name order before
+    lead_candidates() ever sorts them, and a sort key that dropped `name`
+    entirely would still pass by coincidence (stable sort preserves that
+    incoming order). Giving both users the *same* first_name and differing
+    only by last_name breaks that coincidence: eligible_leads()'s ORDER BY
+    can't distinguish them at all, so only an explicit comparison on the
+    full "first last" name can put them in the right order. The row with
+    the alphabetically later last_name ("Zzz") is inserted first, biasing
+    any accidental fallback to insertion/query order the wrong way.
+    """
+    practice = _practice(4)
+    poll = _open_poll(practice)
+    tag = Tag.query.filter_by(name="PRACTICES_LEAD").first()
+    if tag is None:
+        tag = Tag(name="PRACTICES_LEAD", display_name="Practices Lead")
+        db_session.add(tag)
+        db_session.flush()
+
+    later = User(first_name="TEST Sameo", last_name="Zzz",
+                 email=f"test-leadcand-later-{uuid.uuid4().hex[:8]}@example.invalid")
+    later.tags = [tag]
+    db_session.add(later)
+    db_session.flush()
+
+    earlier = User(first_name="TEST Sameo", last_name="Aaa",
+                   email=f"test-leadcand-earlier-{uuid.uuid4().hex[:8]}@example.invalid")
+    earlier.tags = [tag]
+    db_session.add(earlier)
+    db_session.flush()
+
+    _available(poll, practice, later)
+    _available(poll, practice, earlier)
+    db_session.commit()
+
+    practice_id, poll_id = practice.id, poll.id
+    earlier_id, later_id = earlier.id, later.id
+
+    try:
+        rows = lead_candidates(practice)
+        by_id = {r["user_id"]: r for r in rows}
+        assert by_id[earlier_id]["led_in_block"] == by_id[later_id]["led_in_block"] == 0, \
+            "led_in_block must be tied for this to isolate the name tie-break"
+        assert by_id[earlier_id]["led_last_90d"] == by_id[later_id]["led_last_90d"] == 0, \
+            "led_last_90d must also be tied for this to isolate the name tie-break"
+        assert by_id[earlier_id]["name"] == "TEST Sameo Aaa"
+        assert by_id[later_id]["name"] == "TEST Sameo Zzz"
+        idx = [r["user_id"] for r in rows if r["user_id"] in (earlier_id, later_id)]
+        assert idx == [earlier_id, later_id], \
+            "with every numeric key tied, name must decide the order"
+    finally:
+        _cleanup(users=[earlier_id, later_id], practices=[practice_id], polls=[poll_id])
 
 
 def test_responded_flag_distinguishes_silence_from_unavailable(db_session):
