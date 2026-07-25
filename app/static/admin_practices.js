@@ -194,6 +194,7 @@ function attachEventListeners() {
   document.getElementById('pl-scrim').addEventListener('click', closeDrawer);
   document.getElementById('pl-cancel-btn').addEventListener('click', () => { if (currentDrawerId) openCancelModal(currentDrawerId); });
   document.getElementById('pl-delete-btn').addEventListener('click', () => { if (currentDrawerId) deletePractice(currentDrawerId); });
+  document.getElementById('pl-poll-btn').addEventListener('click', openAvailabilityPoll);
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -381,4 +382,46 @@ async function deletePractice(id) {
       await loadPractices(); render();
     } else { showToast(result.error || 'Failed to delete practice', 'error'); }
   } catch (e) { showToast('Failed to delete practice', 'error'); }
+}
+
+/* ---------- lead availability poll trigger ---------- */
+async function openAvailabilityPoll() {
+  const startsOn = document.getElementById('pl-poll-start').value;
+  const endsOn = document.getElementById('pl-poll-end').value;
+  if (!startsOn || !endsOn) { showToast('Pick a start and end date for the poll', 'error'); return; }
+
+  const btn = document.getElementById('pl-poll-btn');
+  btn.disabled = true;
+  try {
+    // Step 1: build the DRAFT poll. build_poll() refuses (400) if any
+    // practice in range is missing location/type/time -- that error names
+    // exactly which practice needs what, so it's shown verbatim, not
+    // replaced with a generic message.
+    const createResult = await fetch('/admin/availability/polls/create', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ starts_on: startsOn, ends_on: endsOn }),
+    }).then(r => r.json());
+    if (!createResult.success) {
+      showToast(createResult.error || 'Failed to create poll', 'error');
+      return;
+    }
+
+    // Step 2: open it -- posts to Slack and seeds reactions. Refuses (400)
+    // if any custom letter emoji is missing from the workspace; that error
+    // names the missing emoji verbatim too.
+    const openResult = await fetch(`/admin/availability/polls/${createResult.poll_id}/open`, {
+      method: 'POST',
+    }).then(r => r.json());
+    if (!openResult.success) {
+      showToast(openResult.error || 'Failed to open poll', 'error');
+      return;
+    }
+
+    showToast('Availability poll posted to Slack', 'success');
+  } catch (e) {
+    showToast('Failed to open availability poll', 'error');
+  } finally {
+    btn.disabled = false;
+  }
 }
