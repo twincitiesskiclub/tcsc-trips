@@ -32,6 +32,17 @@ def handle_attendance_reaction(
     if not all((channel, message_ts, reaction, slack_user_id)):
         return {"success": True, "ignored": "invalid_event"}
 
+    # Availability polls live in the same channels as announcements, so check
+    # them first. Returns None when this message is not a poll.
+    from app.slack.practices.availability_reactions import handle_availability_reaction
+
+    availability = handle_availability_reaction(
+        channel=channel, message_ts=message_ts, reaction=reaction,
+        slack_user_id=slack_user_id, removed=removed,
+    )
+    if availability is not None:
+        return availability
+
     from app.slack.practices.announcements import get_announcement_siblings
 
     siblings = get_announcement_siblings(SimpleNamespace(
