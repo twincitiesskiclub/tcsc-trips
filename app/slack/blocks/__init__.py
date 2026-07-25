@@ -5,6 +5,11 @@ existing imports like ``from app.slack.blocks import build_practice_announcement
 continue to work without change.
 """
 
+from app.slack.blocks.availability import (
+    build_nudge_blocks,
+    build_poll_blocks,
+    poll_fallback_text,
+)
 from app.slack.blocks.announcements import (
     build_practice_announcement_blocks,
     build_combined_fallback_text,
@@ -62,6 +67,10 @@ from app.slack.blocks.text import (
 )
 
 __all__ = [
+    # availability
+    "build_nudge_blocks",
+    "build_poll_blocks",
+    "poll_fallback_text",
     # announcements
     "build_practice_announcement_blocks",
     "build_combined_fallback_text",
