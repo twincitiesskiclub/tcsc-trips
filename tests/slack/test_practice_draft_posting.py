@@ -52,6 +52,20 @@ def test_slack_failure_is_reported_not_raised(app):
     assert result["error"] == "channel_not_found"
 
 
+def test_non_slack_failure_is_reported_not_raised(app):
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.side_effect = TimeoutError("connection timed out")
+
+    with patch("app.slack.practices.drafts.get_slack_client", return_value=client):
+        with app.app_context():
+            result = post_readiness_digest([_practice(4)], "Jul 21", "Aug 13")
+
+    assert result["success"] is False
+    assert "connection timed out" in result["error"]
+
+
 def test_empty_practice_list_posts_nothing(app):
     from app.slack.practices.drafts import post_readiness_digest
 

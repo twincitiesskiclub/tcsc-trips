@@ -36,3 +36,6 @@ def post_readiness_digest(practices: list, start_label: str, end_label: str) -> 
         error = exc.response.get("error", str(exc))
         current_app.logger.error("Readiness digest failed to post: %s", error)
         return {"success": False, "error": error}
+    except Exception as exc:
+        current_app.logger.error("Readiness digest failed to post: %s", exc)
+        return {"success": False, "error": str(exc)}
