@@ -936,7 +936,9 @@ def run_close_expired_polls_job(app: Flask):
     Until this runs, an OPEN poll stays open forever once its last practice
     has passed, and the nudge job would keep reconciling and nudging against
     it indefinitely. Closing reconciles one final time so the picker reads
-    Slack's actual final state (see close_poll docstring).
+    Slack's actual final state (see close_poll docstring). One poll's
+    failure must not block the others, so each is handled in its own
+    try/except -- same pattern as run_lead_availability_nudge_job above.
 
     Args:
         app: Flask application instance for context.
@@ -951,7 +953,12 @@ def run_close_expired_polls_job(app: Flask):
             LeadAvailabilityPoll.ends_on < today,
         ).all()
         for poll in expired:
-            close_poll(poll)
+            try:
+                close_poll(poll)
+            except Exception as e:
+                app.logger.error(
+                    f"Failed to close availability poll {poll.id}: {e}", exc_info=True
+                )
 
 
 def init_scheduler(app: Flask) -> bool:

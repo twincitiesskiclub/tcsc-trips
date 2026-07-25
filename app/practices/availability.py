@@ -330,13 +330,33 @@ def close_poll(poll) -> dict:
 
     The last reconcile matters: the picker must read Slack's actual final
     state, not whatever the last delivered event happened to say.
+
+    reconcile_poll() is fail-soft (Slack error -> logs and returns an
+    "error" key rather than raising), so its result is captured here. The
+    poll still closes either way -- a poll stuck OPEN keeps the daily nudge
+    job DMing people about a block that already ended, which is worse than
+    availability data that may be slightly stale, and the picker still works
+    either way. But a failed final reconcile must be loud: it's logged at
+    error level and surfaced back to the caller via `reconcile_failed`,
+    since OPEN is the only status ever reconciled again -- once CLOSED,
+    there is no other recovery path for this poll.
     """
     if poll.status == PollStatus.CLOSED:
         return {"success": True, "already_closed": True}
 
-    reconcile_poll(poll)
+    reconcile_result = reconcile_poll(poll)
     poll.status = PollStatus.CLOSED
-    poll.closed_at = datetime.utcnow()
+    poll.closed_at = now_central_naive()
     db.session.commit()
+
+    result = {"success": True, "poll_id": poll.id}
+    if reconcile_result.get("error"):
+        current_app.logger.error(
+            "Final reconcile failed while closing availability poll %s: %s",
+            poll.id, reconcile_result["error"],
+        )
+        result["reconcile_failed"] = True
+        result["error"] = reconcile_result["error"]
+
     current_app.logger.info("Closed availability poll %s", poll.id)
-    return {"success": True, "poll_id": poll.id}
+    return result

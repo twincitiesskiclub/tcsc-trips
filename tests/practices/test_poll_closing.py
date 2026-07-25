@@ -41,15 +41,55 @@ def test_closing_reconciles_first(db_session):
     poll = _poll(db_session, date(2099, 8, 31))
     poll_id = poll.id
 
+    # Record the poll's status at the moment reconcile_poll is actually
+    # called, not just whether it was called -- a reviewer moved the
+    # reconcile call to after the status flip once and every assertion in
+    # this test still passed, since none of them checked ordering.
+    observed_status = []
+
+    def _record_status_and_reconcile(p):
+        observed_status.append(p.status)
+        return {"added": 0, "removed": 1}
+
     try:
-        with patch("app.practices.availability.reconcile_poll") as reconcile:
-            reconcile.return_value = {"added": 0, "removed": 1}
+        with patch(
+            "app.practices.availability.reconcile_poll",
+            side_effect=_record_status_and_reconcile,
+        ) as reconcile:
             result = close_poll(poll)
 
         reconcile.assert_called_once_with(poll)
+        assert observed_status == [PollStatus.OPEN]
         assert result["success"] is True
         assert poll.status == PollStatus.CLOSED
         assert poll.closed_at is not None
+    finally:
+        _cleanup_poll(poll_id)
+
+
+def test_closing_surfaces_reconcile_failure(db_session):
+    """A failed final reconcile must not be silently swallowed.
+
+    The poll still closes -- an OPEN poll stuck forever keeps the daily
+    nudge job DMing people about a block that already ended, which is
+    worse than availability data that may be slightly stale -- but the
+    failure must be loud and visible to an operator, since CLOSED polls
+    are never reconciled again.
+    """
+    poll = _poll(db_session, date(2099, 8, 31))
+    poll_id = poll.id
+
+    try:
+        with patch(
+            "app.practices.availability.reconcile_poll",
+            return_value={"added": 0, "removed": 0, "error": "channel_not_found"},
+        ):
+            result = close_poll(poll)
+
+        assert poll.status == PollStatus.CLOSED
+        assert result["success"] is True
+        assert result.get("reconcile_failed") is True
+        assert "channel_not_found" in result.get("error", "")
     finally:
         _cleanup_poll(poll_id)
 
@@ -94,3 +134,60 @@ def test_expired_polls_close_automatically(db_session, app):
     finally:
         _cleanup_poll(past_id)
         _cleanup_poll(future_id)
+
+
+def test_poll_ending_today_does_not_close(db_session, app):
+    """The rule is `ends_on < today`, not `<=` -- a block that ends today is
+    still in progress and must stay OPEN through the day it ends.
+    """
+    from app.scheduler import run_close_expired_polls_job
+
+    today_poll = _poll(db_session, date(2099, 8, 15))
+    today_id = today_poll.id
+
+    try:
+        with patch("app.practices.availability.reconcile_poll", return_value={}), \
+             patch("app.scheduler.today_central", return_value=date(2099, 8, 15)):
+            run_close_expired_polls_job(app)
+
+        db_session.expire_all()
+        assert db_session.get(LeadAvailabilityPoll, today_id).status == PollStatus.OPEN
+    finally:
+        _cleanup_poll(today_id)
+
+
+def test_one_poll_failing_does_not_block_others(db_session, app):
+    """One poll's close() raising must not abort the whole batch, leaving
+    later expired polls open for that run -- each poll is handled in its
+    own try/except, matching run_lead_availability_nudge_job.
+    """
+    from app.scheduler import run_close_expired_polls_job
+
+    broken = _poll(db_session, date(2099, 8, 1))
+    healthy = _poll(db_session, date(2099, 8, 2))
+    broken_id = broken.id
+    healthy_id = healthy.id
+
+    from app.practices.availability import close_poll as real_close_poll
+
+    def _flaky_close_poll(poll):
+        if poll.id == broken_id:
+            raise RuntimeError("boom")
+        return real_close_poll(poll)
+
+    try:
+        # run_close_expired_polls_job does `from app.practices.availability
+        # import close_poll` inside its own function body (re-executed every
+        # call), so the patch target is the source module's attribute, not
+        # anything already bound in app.scheduler's namespace.
+        with patch("app.practices.availability.close_poll", side_effect=_flaky_close_poll), \
+             patch("app.practices.availability.reconcile_poll", return_value={}), \
+             patch("app.scheduler.today_central", return_value=date(2099, 8, 15)):
+            run_close_expired_polls_job(app)
+
+        db_session.expire_all()
+        assert db_session.get(LeadAvailabilityPoll, broken_id).status == PollStatus.OPEN
+        assert db_session.get(LeadAvailabilityPoll, healthy_id).status == PollStatus.CLOSED
+    finally:
+        _cleanup_poll(broken_id)
+        _cleanup_poll(healthy_id)
