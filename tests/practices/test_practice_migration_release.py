@@ -20,7 +20,7 @@ ROOT = Path(__file__).resolve().parents[2]
 RELEASE = ROOT / "scripts" / "release.sh"
 RELEASE_TIMEOUT_SECONDS = 30
 E36 = "e36bbec59bde"
-EVENTS_REVISION = "d4e7f9a1b2c3"
+EVENTS_REVISION = "1b29976741b6"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
