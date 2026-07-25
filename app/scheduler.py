@@ -22,6 +22,8 @@ Scheduled Jobs:
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
+- 8:00 AM on the 1st: Draft the next 4 weeks of practices, post readiness digest
+- 9:00 AM daily: Nudge coaches/directors while drafted practices lack details
 """
 import os
 import fcntl
@@ -34,6 +36,8 @@ from flask import Flask
 
 from app.models import db
 from app.utils import now_central_naive
+from app.practices.drafting import drafted_practices_in_window, generate_draft_block, is_ready
+from app.slack.practices.drafts import post_readiness_digest
 
 
 # Lock file for single-worker guard
@@ -380,6 +384,69 @@ def run_expire_proposals_job(app: Flask):
 
         except Exception as e:
             app.logger.error(f"Expire proposals failed: {e}", exc_info=True)
+
+
+DRAFT_BLOCK_WEEKS = 4
+
+
+def run_practice_block_bootstrap_job(app: Flask):
+    """Monthly: draft the next four weeks and report what still needs details.
+
+    generate_draft_block() is idempotent, so a re-run (redeploy, manual
+    trigger, misfire grace) returns an empty list — posting a digest anyway
+    would spam the channel with a duplicate every time the job re-fires.
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from app.utils import today_central
+
+        app.logger.info("Starting practice block bootstrap job")
+
+        start = today_central()
+        created = generate_draft_block(start, weeks=DRAFT_BLOCK_WEEKS)
+        if not created:
+            app.logger.info("Draft bootstrap: nothing to create, block already drafted")
+            return
+
+        end = max(p.date for p in created)
+        result = post_readiness_digest(
+            created,
+            start.strftime("%b %-d"),
+            end.strftime("%b %-d"),
+        )
+        if result.get("success"):
+            app.logger.info(f"Draft bootstrap: drafted {len(created)} practices, digest posted")
+        else:
+            app.logger.warning(
+                f"Drafted {len(created)} practices but the digest failed: {result.get('error')}"
+            )
+
+
+def run_practice_readiness_nudge_job(app: Flask):
+    """Daily: re-post the digest only while drafts are still incomplete.
+
+    A daily "all good" post trains people to ignore the channel, so this
+    stays silent whenever every drafted practice already has its details.
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from app.utils import today_central
+
+        start = today_central()
+        drafts = drafted_practices_in_window(start, DRAFT_BLOCK_WEEKS)
+
+        if not drafts or all(is_ready(p) for p in drafts):
+            app.logger.info("Readiness nudge: nothing outstanding, staying quiet")
+            return
+
+        end = max(p.date for p in drafts)
+        result = post_readiness_digest(drafts, start.strftime("%b %-d"), end.strftime("%b %-d"))
+        if not result.get("success"):
+            app.logger.warning(f"Readiness nudge digest failed: {result.get('error')}")
 
 
 def _is_strength_practice(practice) -> bool:
@@ -1091,6 +1158,41 @@ def init_scheduler(app: Flask) -> bool:
         name='Newsletter Monthly Orchestrator',
         replace_existing=True,
         misfire_grace_time=3600  # 1 hour grace
+    )
+
+    # ========================================================================
+    # Practice Availability Drafting
+    # ========================================================================
+
+    # Monthly: draft the next 4 weeks of practices on the 1st at 8:00 AM
+    scheduler.add_job(
+        func=run_practice_block_bootstrap_job,
+        args=[app],
+        trigger=CronTrigger(
+            day=1,
+            hour=8,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='practice_block_bootstrap',
+        name='Practice Block Bootstrap',
+        replace_existing=True,
+        misfire_grace_time=7200  # 2 hour grace; generation is idempotent
+    )
+
+    # Daily: nudge coaches/directors while drafted practices lack details
+    scheduler.add_job(
+        func=run_practice_readiness_nudge_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=9,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='practice_block_readiness_nudge',
+        name='Practice Readiness Nudge',
+        replace_existing=True,
+        misfire_grace_time=3600
     )
 
     scheduler.start()

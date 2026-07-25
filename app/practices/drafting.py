@@ -119,6 +119,29 @@ def is_ready(practice: Practice) -> bool:
     return not missing_fields(practice)
 
 
+def drafted_practices_in_window(start_date: date, weeks: int = 4) -> list[Practice]:
+    """Draft practices scheduled within the window, ordered by date.
+
+    This is the mirror image of published_practices() in app/practices/service.py:
+    that helper exists to keep drafts OUT of member-visible listings, while this
+    one exists to deliberately query FOR drafts — it backs the readiness nudge,
+    whose whole purpose is tracking incomplete drafts before they're published.
+    Kept here (rather than inlined in the scheduler) so the one place scheduler
+    jobs read draft rows from is a reviewed, named function rather than an
+    ad hoc `Practice.query.filter(...)`.
+    """
+    horizon = start_date + timedelta(weeks=weeks)
+    return (
+        Practice.query.filter(
+            Practice.is_draft.is_(True),
+            Practice.date >= start_date,
+            Practice.date <= horizon,
+        )
+        .order_by(Practice.date)
+        .all()
+    )
+
+
 def readiness_summary(practices: list[Practice]) -> dict:
     """Counts plus the incomplete drafts and what each is missing."""
     incomplete = [(p, missing_fields(p)) for p in practices if not is_ready(p)]
