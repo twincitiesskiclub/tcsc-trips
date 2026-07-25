@@ -882,6 +882,42 @@ def run_newsletter_monthly_orchestrator_job(app: Flask):
         app.logger.info("=" * 60)
 
 
+def run_lead_availability_nudge_job(app: Flask):
+    """Daily: reconcile reactions, then DM only the people who haven't answered.
+
+    Reconciling first matters: a missed reaction event otherwise means DMing
+    someone who has already responded or opted out -- the exact annoyance
+    this feature exists to remove. One poll's failure must not block the
+    others, so each open poll is handled in its own try/except.
+
+    Args:
+        app: Flask application instance for context.
+    """
+    with app.app_context():
+        from app.practices.availability import send_nudges, sync_participants
+        from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+        from app.slack.practices.availability_reactions import reconcile_poll
+
+        open_polls = LeadAvailabilityPoll.query.filter_by(status=PollStatus.OPEN).all()
+        app.logger.info(f"Lead availability nudge: {len(open_polls)} open poll(s)")
+
+        for poll in open_polls:
+            try:
+                # Reconcile first: a missed removal would otherwise let us
+                # nudge someone who has actually withdrawn or answered.
+                reconcile_poll(poll)
+                sync_participants(poll)
+                result = send_nudges(poll)
+                app.logger.info(
+                    f"Poll {poll.id} nudges: sent={result.get('sent', 0)}, "
+                    f"skipped={result.get('skipped', 0)}"
+                )
+            except Exception as e:
+                app.logger.error(
+                    f"Lead availability nudge failed for poll {poll.id}: {e}", exc_info=True
+                )
+
+
 def init_scheduler(app: Flask) -> bool:
     """Initialize the scheduler within the Flask application.
 
@@ -1191,6 +1227,25 @@ def init_scheduler(app: Flask) -> bool:
         ),
         id='practice_block_readiness_nudge',
         name='Practice Readiness Nudge',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
+    # ========================================================================
+    # Lead Availability Nudge
+    # ========================================================================
+
+    # Daily: nudge leads who have not responded to an open availability poll
+    scheduler.add_job(
+        func=run_lead_availability_nudge_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=8,
+            minute=0,
+            timezone='America/Chicago'
+        ),
+        id='lead_availability_nudge',
+        name='Lead Availability Nudge',
         replace_existing=True,
         misfire_grace_time=3600
     )

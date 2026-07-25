@@ -13,8 +13,10 @@ from app.practices.availability_emoji import (
     validate_emoji_available,
 )
 from app.practices.availability_models import (
+    LeadAvailabilityParticipant,
     LeadAvailabilityPoll,
     LeadAvailabilityPollPractice,
+    ParticipantStatus,
     PollStatus,
 )
 from app.practices.drafting import is_ready, missing_fields
@@ -193,3 +195,90 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
             )
 
     return {"success": True, "poll_id": poll.id, "ts": poll.message_ts}
+
+
+FIRST_NUDGE_AFTER_DAYS = 3
+MIN_DAYS_BETWEEN_NUDGES = 2
+MAX_NUDGES = 3
+
+
+def sync_participants(poll) -> int:
+    """Ensure every currently-eligible lead has a participant row.
+
+    A lead who joins mid-block (new tag assignment) is picked up the next
+    time this runs, since eligible_leads() is computed live rather than
+    snapshotted when the poll opened.
+    """
+    existing = {
+        row.user_id for row in
+        LeadAvailabilityParticipant.query.filter_by(poll_id=poll.id).all()
+    }
+    added = 0
+    for user in eligible_leads():
+        if user.id not in existing:
+            db.session.add(LeadAvailabilityParticipant(poll_id=poll.id, user_id=user.id))
+            added += 1
+    if added:
+        db.session.commit()
+    return added
+
+
+def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityParticipant]:
+    """Who is due a reminder right now.
+
+    Only PENDING participants -- anyone who reacted, hit done, or opted out
+    is left alone. First nudge at day 3, then at least 2 days apart, 3 sends
+    is the ceiling. An off-by-one here DMs everyone every morning, which is
+    the fastest way to get the bot muted by the people it depends on.
+    """
+    if not poll.opened_at:
+        return []
+    if now - poll.opened_at < timedelta(days=FIRST_NUDGE_AFTER_DAYS):
+        return []
+
+    due = []
+    for participant in LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, status=ParticipantStatus.PENDING).all():
+        if participant.nudge_count >= MAX_NUDGES:
+            continue
+        if participant.last_nudged_at and \
+                now - participant.last_nudged_at < timedelta(days=MIN_DAYS_BETWEEN_NUDGES):
+            continue
+        due.append(participant)
+    return due
+
+
+def send_nudges(poll, *, now: datetime | None = None) -> dict:
+    """DM everyone currently due a reminder.
+
+    `now` defaults to now_central_naive() -- poll.opened_at is written with
+    that same clock, and mixing in datetime.utcnow() would shift the day-3
+    boundary by 5-6 hours.
+    """
+    from app.slack.practices.availability_nudge import poll_permalink, send_nudge_dm
+
+    now = now or now_central_naive()
+    due = participants_to_nudge(poll, now=now)
+    if not due:
+        return {"sent": 0, "skipped": 0}
+
+    permalink = poll_permalink(poll)
+    sent = skipped = 0
+    for participant in due:
+        slack_user = getattr(participant.user, "slack_user", None)
+        if not slack_user or not slack_user.slack_uid:
+            skipped += 1
+            continue
+        if send_nudge_dm(poll, slack_user.slack_uid, permalink):
+            participant.nudge_count += 1
+            participant.last_nudged_at = now
+            sent += 1
+        else:
+            # A failed DM must not consume this person's nudge budget --
+            # they haven't actually been reminded, so nudge_count/
+            # last_nudged_at are left untouched and the next run retries.
+            skipped += 1
+
+    db.session.commit()
+    current_app.logger.info("Poll %s nudges: %d sent, %d skipped", poll.id, sent, skipped)
+    return {"sent": sent, "skipped": skipped}
