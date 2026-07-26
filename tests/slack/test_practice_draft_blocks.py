@@ -54,10 +54,29 @@ def test_each_incomplete_row_opens_the_existing_edit_modal():
 
 def test_digest_stays_within_slack_block_limit():
     # Feed 200 practices to ensure uncapped builder would exceed 50 blocks.
-    # With MAX_LISTED=12 cap: 1 header + 1 summary + 12 rows + 1 "more" context + 1 bulb context = 16 blocks.
+    # With the MAX_LISTED=40 cap: 1 header + 1 summary + 40 rows +
+    # 1 "more" context + 1 bulb context = 44 blocks, inside Slack's 50.
     incomplete = [(_practice(4 + i % 20, 18, 15), ["location"]) for i in range(200)]
     summary = {"total": 220, "ready": 20, "incomplete": incomplete}
     blocks = build_readiness_digest_blocks(summary, "Jul 21", "Aug 13")
 
     assert len(blocks) <= 50, "Slack rejects messages over 50 blocks"
-    assert len(blocks) == 16, f"Cap should hold at 16 blocks, got {len(blocks)}"
+    assert len(blocks) == 44, f"Cap should hold at 44 blocks, got {len(blocks)}"
+
+
+def test_digest_lists_a_full_two_month_block_without_truncating():
+    """The drafting window is now two months (see end_of_next_month): a
+    freshly-bootstrapped Tue/Thu/Sat block is ~29 all-incomplete drafts, and
+    MAX_LISTED=12 (sized for the old 4-week block) would hide most of what
+    needs filling in behind "+N more not shown" on every first digest."""
+    incomplete = [(_practice(1 + i % 28, 18, 15), ["location"]) for i in range(29)]
+    summary = {"total": 29, "ready": 0, "incomplete": incomplete}
+    blocks = build_readiness_digest_blocks(summary, "Aug 1", "Sep 30")
+
+    rows = [b for b in blocks if b.get("accessory")]
+    assert len(rows) == 29, "every incomplete draft in a two-month block must be listed"
+    assert not any(
+        "more not shown" in element.get("text", "")
+        for b in blocks if b.get("type") == "context"
+        for element in b.get("elements", [])
+    ), "a normal-size block must never be truncated"

@@ -1,8 +1,14 @@
 """Block Kit for the monthly draft readiness digest."""
 
 # Each incomplete draft gets its own section so it can carry an edit button.
-# Budget: header + summary + MAX_LISTED rows + 2 context blocks, well under 50.
-MAX_LISTED = 12
+# Sized for the drafting window, which is up to two months (see
+# end_of_next_month in app/practices/drafting.py): a freshly-bootstrapped
+# Tue/Thu/Sat block is ~29 all-incomplete drafts, and a smaller cap would
+# hide most of what needs filling in behind "+N more not shown" on every
+# first digest of the month. 40 keeps headroom for a 4-day schedule while
+# the total — header + summary + rows + 2 context blocks = 44 — stays under
+# Slack's hard 50-block limit.
+MAX_LISTED = 40
 
 
 def _row_text(practice, missing: list[str]) -> str:
