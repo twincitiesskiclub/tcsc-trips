@@ -215,8 +215,11 @@ def test_build_poll_refuses_incomplete_drafts(db_session):
         with pytest.raises(PollNotReadyError) as exc:
             build_poll(_START, _END)
         assert "location" in str(exc.value)
+        # Scoped to DRAFT: this suite runs against the real dev database, so
+        # asserting "no poll at all covers this range" breaks on any leaked or
+        # genuinely pre-existing row rather than on the behaviour under test.
         assert LeadAvailabilityPoll.query.filter_by(
-            starts_on=_START, ends_on=_END
+            starts_on=_START, ends_on=_END, status=PollStatus.DRAFT
         ).first() is None, "a refused build must leave no poll row behind"
     finally:
         _cleanup_practices([ready, bare], poll)
@@ -498,9 +501,10 @@ def test_build_poll_replaces_an_abandoned_draft_over_the_same_range(db_session):
         assert replacement.id != abandoned_id, "a fresh poll, not the old row"
         assert db.session.get(LeadAvailabilityPoll, abandoned_id) is None, \
             "the abandoned draft must be gone, not left to block the range again"
+        # DRAFT-scoped for the same reason as above.
         assert LeadAvailabilityPoll.query.filter_by(
-            starts_on=_START, ends_on=_END
-        ).count() == 1, "exactly one poll may cover the range"
+            starts_on=_START, ends_on=_END, status=PollStatus.DRAFT
+        ).count() == 1, "exactly one draft poll may cover the range"
         assert [m.emoji for m in replacement.practices] == ["letter_a"], \
             "the replacement gets its own complete emoji mapping"
     finally:

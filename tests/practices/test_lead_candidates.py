@@ -107,8 +107,15 @@ def _cleanup(*, users=(), practices=(), polls=(), locations=()):
             db.session.delete(obj)
     db.session.flush()
 
-    if practice_ids:
-        Practice.query.filter(Practice.id.in_(practice_ids)).delete(synchronize_session=False)
+    # ORM deletes, never a bulk .delete(): a bulk delete skips the
+    # practice_types_junction rows and dies on the FK the moment _practice()
+    # is given a practice_type, which would then leak ~4 practices, 2 users
+    # and a poll per test into the shared dev database from inside a finally.
+    for practice_id in practice_ids:
+        stored = db.session.get(Practice, practice_id)
+        if stored is not None:
+            db.session.delete(stored)
+    db.session.flush()
     if locations:
         PracticeLocation.query.filter(
             PracticeLocation.id.in_(list(locations))
