@@ -1,12 +1,12 @@
 # Lead availability branch — handoff
 
-> **Status:** Feature-complete and green. Not yet merged. All three open
-> decisions are resolved (see below); the fresh whole-branch review is in
-> progress.
-> **Prepared:** 2026-07-26. **Updated:** 2026-07-26, after applying Rob's three
-> decisions.
-> **Branch:** `lead-availability`, 72 commits on top of `main` (base `0b229ec`).
-> **Tests:** 1496 Python (baseline before the branch: 1270), 74 JS.
+> **Status:** Feature-complete and green. Ready for PR. All three open
+> decisions resolved and applied; second whole-branch review done, all five
+> blockers fixed.
+> **Prepared:** 2026-07-26. **Updated:** 2026-07-26, after the second
+> whole-branch review.
+> **Branch:** `lead-availability`, 89 commits on top of `main` (base `0b229ec`).
+> **Tests:** 1536 Python (baseline before the branch: 1270), 81 JS.
 > **Migrations:** single head `539ad532aeb3`, dev DB at head, chain linear and reversible.
 > Nothing merged. Nothing has posted to the club's real Slack channels except the
 > readiness digest, which is live by design (see Shadow mode).
@@ -14,10 +14,11 @@
 ## Suggested next-session prompt
 
 > Read `docs/superpowers/notes/2026-07-26-lead-availability-handoff.md` completely.
-> The three open decisions are resolved and applied. Finish triaging the
-> whole-branch review findings against the Known minors list below, then take the
-> branch to a PR. Use `.venv`, not `env/`. The test database is the real local
-> dev database — follow `tests/practices/conftest.py` conventions exactly.
+> Decisions are applied and the second whole-branch review is closed out. What is
+> left is the shadow month: merge, deploy, set `lead_availability.shadow_roster`,
+> and watch the list under "What to watch during the shadow month". Use `.venv`,
+> not `env/`. The test database is the real local dev database — follow
+> `tests/practices/conftest.py` conventions exactly.
 > `.superpowers/sdd/progress.md` is the full task-by-task ledger if you need the
 > reasoning behind any decision.
 
@@ -132,10 +133,9 @@ to scope the preservation to practices whose date is in the past.
 
 ## Recommended before merge
 
-**A fresh whole-branch review.** The last one ran at `b76b341`; 15 commits have
-landed since, including a new migration and a change to how the draft window is
-computed. Its Criticals are all closed and independently verified (numbers below),
-but that much movement deserves another pass.
+**Done.** The second whole-branch review ran at `785bf03` across five scopes;
+see "The second whole-branch review" below. All five blockers are fixed and the
+suite is green at 1536 Python / 81 JS.
 
 ## What P4 fixed, and what it found
 
@@ -203,9 +203,68 @@ problems, two worse than anything on the original list.
   letter and no availability) now reaches the admin, via a sessionStorage handoff
   because the create page redirects in ~800ms.
 
-## Known minors — triage before merge, none blocking
+## The second whole-branch review (2026-07-26)
 
-Carried from the per-task and whole-branch reviews. Ship-as-is unless noted.
+Five reviewers, one per scope: availability core, drafting/publishing,
+scheduler + Slack, routes + frontend, tests + migrations. Every finding acted
+on below was independently verified against the code first, and two were proved
+empirically rather than argued.
+
+**Five blockers, all fixed.** In severity order:
+
+- **The close-job tests closed every OPEN poll in the database.**
+  `run_close_expired_polls_job` filters `status == OPEN AND ends_on < today`
+  with no other scope, and three tests patched `today_central` to 2099 — so
+  they swept the whole table. Against this dev DB that silently CLOSES a live
+  shadow poll: nudges stop, the picker treats partial availability as final,
+  recovery is a manual UPDATE. Proved by planting a poll dated 2026-08-31 and
+  watching the new `protect_foreign_polls` fixture restore it three times, once
+  per job test. (`1538bf3`)
+- **Three suites deleted real near-term practices.**
+  `test_lead_candidates_endpoint` and `test_admin_practice_leads_needed` both
+  reserved `2026-08-04 18:15` — a real Tuesday nine days out, at the exact time
+  every availability suite treats as the club's slot — and the first had no
+  collision guard at all. `test_drafting`'s four generation tests swept real
+  `2026-08-03..16` with a helper that documents deleting rows "regardless of
+  who created it". All now on reserved 2099 windows. (`8e704af`)
+- **A lead picker that failed to load turned Save into "delete all leads".**
+  The container is server-rendered with a "Loading…" placeholder, so
+  `collectLeadIds()` took the picker branch whether or not it had rendered, and
+  the form always submits `lead_ids`. Both a failed load and a Save during the
+  load window (`loadLeadPicker()` is called without `await`) produced `[]`,
+  which `edit_practice` reads as "delete every lead" — then
+  `refresh_practice_posts` rewrote the member-facing announcement without them.
+  (`cd56b88`)
+- **Shadow-mode containment and the ALUMNI exclusion were both inert for DMs.**
+  Found independently by two reviewers in different file scopes.
+  `participants_to_nudge` selected on `poll_id` + PENDING alone, but
+  `_participant()` creates a row for anyone who reacts, and `reconcile_poll`
+  (run immediately before `send_nudges`) resets a withdrawn reaction to
+  PENDING. So a non-roster coach in the shadow channel who tapped a pill and
+  untapped it got DMed — during the month whose entire purpose is that no real
+  lead is. (`6478dd9`)
+- **An empty `time` in `practice_days` erased a whole weekday**, and `"25:00"`
+  killed the bootstrap job outright — the same silent-absence class this branch
+  exists to eliminate, one cleared form field away. (`2420e7e`)
+
+**Also fixed:** an abandoned DRAFT poll bricking its date range (cancelling the
+shadow-mode confirm dialog — the thing the dialog is *for* — left a poll
+nothing could open or discard); three missing `db.session.rollback()`s that let
+one poll's DB error poison every later poll in the run; stored XSS in the
+detail rails (member names from the public registration form, admin CSP allows
+`unsafe-inline`); the poll seeding past Slack's 23-reactions-per-user cap and
+reporting success anyway; no warning when a practice is *rescheduled* into an
+open poll; assigned leads outside the pool being invisible and dropped on save;
+availability recorded for cancelled sessions; and 17 `db.create_all()` calls
+that could wedge a developer's migration chain (all removable — the suite is
+green without them — now guarded by `tests/test_no_create_all.py`).
+
+One finding was against this session's own earlier work: deleting the orphaned
+Slack message assumed a raising `commit()` means nothing was written, which is
+false when the connection drops *after* Postgres commits. Now re-reads the row
+first. (`34b7e89`)
+
+## Known minors — none blocking
 
 - A **native** done emoji other than `white_check_mark` still blocks the poll:
   `NATIVE_EMOJI` is hardcoded, so `emoji.list` never confirms it and `open_poll`
@@ -214,34 +273,37 @@ Carried from the per-task and whole-branch reviews. Ship-as-is unless noted.
   with a small native allowlist if you care.
 - The daily nudge's start label is still `today` while the bootstrap's is
   `min(drafted)`, so the same block can read "Sep 3 – Oct 29" then "Sep 2 – Oct 29".
-- Historical migration `d8b2c6f4a901`'s orphan fingerprint recognises only the
-  3-value CHECK constraint, so a pre-`b4d1f8e6c2a7` orphan aborts the release
-  with "constraint mismatch". Fails closed. Nothing at the model points at the
-  fingerprint — the next person adding a surface gets ~9 opaque failures.
-- `poll.id` and numeric counts are interpolated into `innerHTML` without `esc()`
-  in the poll cards (server ints, but it breaks the file's uniform discipline).
 - Four copies of `innerHTML = <p class="rail-error">${err.message}</p>` in
-  `_detail_context.js`.
+  `_detail_context.js` (all escaped now, but still four copies).
 - `lead_availability_responses`'s composite unique index leads with `poll_id`, so
   practice_id-only / user_id-only lookups are unindexed. Fine at 10–17 leads.
-- Availability reactions are still recorded for CANCELLED practices: the line is
-  dropped from the poll message but the seeded pill and mapping row survive.
-  Inflates counts; harmless since assignment is per-practice.
 - No detector for a draft whose date has already passed — it simply never
-  announces and ages quietly into the past.
-- Test hygiene: `client.reactions_add.assert_not_called(), "msg"` is a discarded
-  tuple in two places, so the message is dead text; the `no_poll` log test has no
-  positive control and is the only test of `_log_refresh_results`; the
-  delete-cascade route test doesn't assert `chat_update` fired.
+  announces and ages quietly into the past. (The *new* detector,
+  `undrafted_next_month`, catches a month nobody drafted, which is a different
+  hole.)
+- `_publish_counts` is an N+1 over poll → mappings → practice → types on every
+  practices-list load. ~350 round trips at ten polls; add `joinedload` if the
+  page feels slow.
+- Every save still deletes and recreates `PracticeLead` rows, so a director
+  editing workout text silently resets lead *confirmations* to Pending.
+  Pre-existing, but newly consequential now that this form is the normal
+  assignment path. Diffing ids instead would fix it.
 - `README`-level: `test_practice_post.py` in the repo root is a manual script, not
   a pytest file.
+
+**Corrected from the previous handoff:** the claimed "discarded tuple
+assertions" minor was wrong. An AST scan over every changed test file found
+zero `assert (expr, "msg")` tuples — they are bare expression statements, so
+the assertion *does* fire and only the message string is dead. Not a
+correctness problem.
 
 ## Deploy-order constraints
 
 - Do **not** enable `lead_availability_nudge` in an environment where poll closing
   does not exist — with nothing closing polls, every historical poll is reconciled
   and nudged forever. Resolved on this branch (`lead_availability_close`, daily
-  08:30 Central), but note the ordering issue in Open decision 2.
+  08:30 Central); the ordering issue from Open decision 2 is closed too, since
+  the nudge now gates on the poll's own `ends_on`.
 - **Confirm the `practice_days` AppConfig row exists in prod, and that it includes
   Saturday.** The dev database has no row at all, so everything falls back to
   `default_practice_days()`. If prod is the same, verify the fallback matches the

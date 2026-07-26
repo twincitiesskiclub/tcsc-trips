@@ -578,7 +578,10 @@ function pollCardHtml(poll) {
     act += `<span class="pl-poll-note warn">${n(held, 'draft')} need${held === 1 ? 's' : ''} details before publishing</span>`;
   }
   if (poll.publishable > 0) {
-    act += `<button type="button" class="pl-poll-publish" data-poll-id="${poll.id}">`
+    // esc() even though poll.id is a server-side int column: this file's
+    // discipline is that every interpolated value is escaped, and a single
+    // exception is what makes the next one look acceptable.
+    act += `<button type="button" class="pl-poll-publish" data-poll-id="${esc(poll.id)}">`
       + `Publish ${n(poll.publishable, 'practice')}</button>`;
   } else if (poll.unpublished === 0) {
     act = '<span class="pl-poll-note">All published</span>';
