@@ -277,7 +277,6 @@ def app():
 @pytest.fixture
 def db_session(app):
     with app.app_context():
-        db.create_all()
         _cleanup_test_records()
         yield db
         db.session.rollback()

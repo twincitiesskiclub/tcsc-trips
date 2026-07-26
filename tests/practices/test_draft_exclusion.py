@@ -1,4 +1,14 @@
-"""Draft practices must never reach a member-visible surface."""
+"""Draft practices must never reach a member-visible surface.
+
+Year 2099 dates and a "TEST " marker per tests/practices/conftest.py. These
+rows used to sit at `utcnow() + 2 days` with cleanup that never rolled back
+first, which is specifically dangerous on this branch: check the branch out,
+run the suite before `flask db upgrade`, and published_practices() filters on
+a not-yet-existing Practice.is_draft column -> UndefinedColumn -> aborted
+transaction. Both practices were already committed by then, so the cleanup
+raised PendingRollbackError and both leaked -- including a phantom
+member-visible practice two days out.
+"""
 
 from datetime import datetime, timedelta
 
@@ -24,38 +34,56 @@ def db_session(app):
         yield db.session
 
 
+# Reserved for this module: no other suite uses November 2099 or 21:35.
+_SLOT = datetime(2099, 11, 10, 21, 35)
+
+
 def _make(is_draft, when):
     p = Practice(
         date=when,
         day_of_week=when.strftime("%A"),
         status=PracticeStatus.SCHEDULED.value,
         is_draft=is_draft,
+        logistics_notes="TEST draft exclusion",
     )
     db.session.add(p)
     return p
 
 
+def _cleanup(practice_ids):
+    """Rollback FIRST — see the module docstring for the specific way this
+    suite's session gets poisoned before cleanup runs.
+    """
+    db.session.rollback()
+    for practice_id in practice_ids:
+        stored = db.session.get(Practice, practice_id)
+        if stored is not None:
+            db.session.delete(stored)
+    db.session.commit()
+
+
 def test_published_practices_excludes_drafts(db_session):
-    soon = datetime.utcnow() + timedelta(days=2)
-    draft = _make(True, soon)
-    live = _make(False, soon + timedelta(hours=1))
+    draft = _make(True, _SLOT)
+    live = _make(False, _SLOT + timedelta(hours=1))
     db_session.commit()
+    ids = [draft.id, live.id]
+    draft_id, live_id = ids
 
     try:
         found = {p.id for p in published_practices().all()}
-        assert live.id in found
-        assert draft.id not in found, "a draft practice leaked into published_practices()"
+        assert live_id in found
+        assert draft_id not in found, "a draft practice leaked into published_practices()"
     finally:
-        db_session.delete(draft)
-        db_session.delete(live)
-        db_session.commit()
+        _cleanup(ids)
 
 
 def test_published_practices_is_chainable(db_session):
-    soon = datetime.utcnow() + timedelta(days=2)
+    soon = _SLOT
     draft = _make(True, soon)
     live = _make(False, soon)
     db_session.commit()
+    ids = [draft.id, live.id]
+    draft_id, live_id = ids
 
     try:
         # Membership assertions rather than exact list equality: this runs
@@ -63,13 +91,11 @@ def test_published_practices_is_chainable(db_session):
         # unrelated practices in this date range. Exact equality would fail
         # spuriously for any developer who has run ./scripts/dev.sh and
         # created practices of their own.
-        ids = [p.id for p in published_practices().filter(Practice.date >= soon).all()]
-        assert live.id in ids
-        assert draft.id not in ids, "a draft practice leaked through a chained filter"
+        found = [p.id for p in published_practices().filter(Practice.date >= soon).all()]
+        assert live_id in found
+        assert draft_id not in found, "a draft practice leaked through a chained filter"
     finally:
-        db_session.delete(draft)
-        db_session.delete(live)
-        db_session.commit()
+        _cleanup(ids)
 
 
 def test_no_member_facing_query_uses_bare_practice_query():

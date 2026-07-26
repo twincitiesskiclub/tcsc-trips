@@ -40,7 +40,6 @@ def client(app):
 def db_session(app):
     """Create a database session for testing."""
     with app.app_context():
-        db.create_all()
         yield db
         db.session.rollback()
 

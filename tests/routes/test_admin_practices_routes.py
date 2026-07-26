@@ -32,8 +32,20 @@ def client(app):
 
 @pytest.fixture
 def db_session(app):
+    """No db.create_all().
+
+    The schema this suite needs already exists — it runs against the real
+    local dev database (see tests/practices/conftest.py), which Alembic owns.
+    create_all() here was actively dangerous on this branch: run the suite
+    before `flask db upgrade` and it materialises the four new
+    lead_availability_* tables with NO alembic_version bump, after which
+    `flask db upgrade` dies at 3d34ea39db0f with "relation
+    lead_availability_polls already exists" and the chain is wedged until
+    somebody drops four tables by hand. Migration d8b2c6f4a901 carries 350
+    lines of orphan recovery precisely because this already happened once,
+    with practice_summary_posts; 3d34ea39db0f has no such recovery.
+    """
     with app.app_context():
-        db.create_all()
         yield db
         db.session.rollback()
 

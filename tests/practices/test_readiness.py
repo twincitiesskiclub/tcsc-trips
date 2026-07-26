@@ -1,5 +1,6 @@
 """Readiness gating — the poll must not open against incomplete drafts."""
 
+import uuid
 from datetime import datetime
 
 import pytest
@@ -36,7 +37,7 @@ def _location():
     # exists locally) — PracticeLocation.name has no unique constraint, so a
     # collision wouldn't error, but it would leave an indistinguishable
     # duplicate of real data behind.
-    loc = PracticeLocation(name="Test Readiness Location")
+    loc = PracticeLocation(name=f"TEST Readiness Location {uuid.uuid4().hex[:8]}")
     db.session.add(loc)
     db.session.flush()
     return loc
@@ -46,7 +47,13 @@ def _type():
     # Same reasoning as _location(): "Intervals" already exists in the local
     # dev database, and practice_types.name IS unique there — reusing it
     # raises IntegrityError instead of just duplicating.
-    t = PracticeType(name="Test Readiness Type")
+    #
+    # The uuid suffix matters beyond that: with a FIXED name, one leaked row
+    # made this file permanently unrunnable. _cleanup used to skip its
+    # rollback, so a poisoned session left the type behind, and every
+    # subsequent run then died at this flush with IntegrityError until
+    # somebody deleted the row by hand.
+    t = PracticeType(name=f"TEST Readiness Type {uuid.uuid4().hex[:8]}")
     db.session.add(t)
     db.session.flush()
     return t
@@ -62,7 +69,18 @@ def _cleanup(practice_ids, location_ids, type_ids):
     blocks deleting the PracticeType with a FK violation. Practices must be
     removed before their location/type so nothing is ever left referencing a
     row this function already deleted.
+
+    Rolls back FIRST. Without it, a failing assertion above left the
+    transaction aborted and this function's own first query raised
+    PendingRollbackError — so the cleanup that exists to prevent debris was
+    itself the thing that leaked it.
+
+    Callers pass plain ints captured before the `try`, never `obj.id`
+    evaluated at the finally site: Python evaluates the arguments before
+    calling, so on a poisoned session that attribute access hits SQLAlchemy's
+    expired-attribute refresh and raises before the rollback below can run.
     """
+    db.session.rollback()
     for pid in practice_ids:
         practice = db.session.get(Practice, pid)
         if practice is not None:
@@ -79,12 +97,13 @@ def test_bare_draft_is_not_ready(db_session):
     p = Practice(date=_SLOT_A, day_of_week="Tuesday", is_draft=True)
     db_session.add(p)
     db_session.commit()
+    practice_ids = [p.id]
 
     try:
         assert is_ready(p) is False
         assert missing_fields(p) == ["location", "type"]
     finally:
-        _cleanup([p.id], [], [])
+        _cleanup(practice_ids, [], [])
 
 
 def test_draft_with_location_and_type_is_ready(db_session):
@@ -95,12 +114,13 @@ def test_draft_with_location_and_type_is_ready(db_session):
     p.practice_types = [typ]
     db_session.add(p)
     db_session.commit()
+    practice_ids, location_ids, type_ids = [p.id], [loc.id], [typ.id]
 
     try:
         assert is_ready(p) is True
         assert missing_fields(p) == []
     finally:
-        _cleanup([p.id], [loc.id], [typ.id])
+        _cleanup(practice_ids, location_ids, type_ids)
 
 
 def test_summary_counts_and_lists_incomplete(db_session):
@@ -112,6 +132,7 @@ def test_summary_counts_and_lists_incomplete(db_session):
     bare = Practice(date=_SLOT_B, day_of_week="Thursday", is_draft=True)
     db_session.add_all([ready, bare])
     db_session.commit()
+    practice_ids, location_ids, type_ids = [ready.id, bare.id], [loc.id], [typ.id]
 
     try:
         summary = readiness_summary([ready, bare])
@@ -120,7 +141,7 @@ def test_summary_counts_and_lists_incomplete(db_session):
         assert [p.id for p, _ in summary["incomplete"]] == [bare.id]
         assert summary["incomplete"][0][1] == ["location", "type"]
     finally:
-        _cleanup([ready.id, bare.id], [loc.id], [typ.id])
+        _cleanup(practice_ids, location_ids, type_ids)
 
 
 def test_incomplete_is_sorted_by_date_not_creation_order(db_session):
@@ -132,6 +153,7 @@ def test_incomplete_is_sorted_by_date_not_creation_order(db_session):
     earliest = Practice(date=_SLOT_A, day_of_week="Tuesday", is_draft=True)
     db_session.add_all([middle, latest, earliest])
     db_session.commit()
+    practice_ids = [middle.id, latest.id, earliest.id]
 
     try:
         summary = readiness_summary([middle, latest, earliest])
@@ -141,4 +163,4 @@ def test_incomplete_is_sorted_by_date_not_creation_order(db_session):
             latest.id,
         ]
     finally:
-        _cleanup([middle.id, latest.id, earliest.id], [], [])
+        _cleanup(practice_ids, [], [])
