@@ -150,3 +150,36 @@ def test_participant_statuses_exist():
     assert ParticipantStatus.RESPONDED == "responded"
     assert ParticipantStatus.DONE == "done"
     assert ParticipantStatus.OPTED_OUT == "opted_out"
+
+
+def test_availability_timestamps_default_to_central_not_utc(db_session):
+    """responded_at is what a human reads when debugging staleness during the
+    shadow month, and opened_at is written with now_central_naive() -- a
+    utcnow default would put the two clocks 5-6 hours apart in the same query
+    result. Every default on the availability models must use the Central
+    clock."""
+    from datetime import timedelta
+
+    from app.utils import now_central_naive
+
+    poll, practice, user = _poll(), _practice(_SLOT_A), _user()
+    poll_id, practice_id, user_id = poll.id, practice.id, user.id
+    response = LeadAvailabilityResponse(
+        poll_id=poll_id, practice_id=practice_id, user_id=user_id, source="reaction",
+    )
+    db_session.add(response)
+    db_session.commit()
+    try:
+        now = now_central_naive()
+        for label, value in (
+            ("responded_at", response.responded_at),
+            ("created_at", poll.created_at),
+        ):
+            assert value is not None, f"{label} must default"
+            assert abs(now - value) < timedelta(minutes=10), (
+                f"{label} defaulted to {value}, which is not the Central "
+                f"clock (now_central_naive() = {now}); a utcnow default "
+                "skews it 5-6 hours against opened_at"
+            )
+    finally:
+        _cleanup(poll_ids=[poll_id], practice_ids=[practice_id], user_ids=[user_id])

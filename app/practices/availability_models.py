@@ -5,9 +5,8 @@ mapping is persisted because inbound reaction events identify only an emoji
 name, and because the custom letter emoji have already been renamed once.
 """
 
-from datetime import datetime
-
 from app.models import db
+from app.utils import now_central_naive
 
 
 class PollStatus:
@@ -36,7 +35,10 @@ class LeadAvailabilityPoll(db.Model):
     channel_id = db.Column(db.String(50), nullable=False)
     message_ts = db.Column(db.String(50))
 
-    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Central like opened_at/closed_at (which are written with
+    # now_central_naive()) -- a utcnow default here would sit 5-6 hours off
+    # the other timestamps in the same row.
+    created_at = db.Column(db.DateTime, nullable=False, default=now_central_naive)
     opened_at = db.Column(db.DateTime)
     closed_at = db.Column(db.DateTime)
 
@@ -107,7 +109,11 @@ class LeadAvailabilityResponse(db.Model):
     poll_id = db.Column(db.Integer, db.ForeignKey("lead_availability_polls.id"), nullable=False)
     practice_id = db.Column(db.Integer, db.ForeignKey("practices.id"), nullable=False)
     user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
-    responded_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    # Central, matching poll.opened_at: the day-3 nudge rule compares against
+    # opened_at, and this is the timestamp a human reads when debugging
+    # staleness -- a utcnow default would skew it 5-6 hours in the same
+    # query result.
+    responded_at = db.Column(db.DateTime, nullable=False, default=now_central_naive)
     source = db.Column(db.String(20), nullable=False, default="reaction")
 
     # Snapshot of what the practice looked like when answered. Staleness is a
