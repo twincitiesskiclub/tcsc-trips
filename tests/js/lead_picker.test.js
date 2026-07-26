@@ -35,13 +35,19 @@ function loadContext({loadLeadCandidates, renderLeadPicker,
     '<!doctype html><div id="lead-picker"><p class="pe-empty">Loading…</p></div>');
   const module = {exports: {}};
   const readyCalls = [];
+  // esc() lives in admin_practices.js, which the detail page loads first;
+  // _detail_context.js escapes every innerHTML hole through it.
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   new Function('module', 'exports', 'window', 'document',
     'practiceId', 'loadLeadCandidates', 'renderLeadPicker',
-    'markLeadPickerReady',
-    CONTEXT_SOURCE + '\nmodule.exports = {loadLeadPicker};'
+    'markLeadPickerReady', 'esc',
+    CONTEXT_SOURCE + '\nmodule.exports = {loadLeadPicker, loadRSVPs, '
+    + 'loadLeadConfirmations};'
   )(module, module.exports, dom.window, dom.window.document,
     42, loadLeadCandidates, renderLeadPicker,
-    markLeadPickerReady || ((v) => readyCalls.push(v)));
+    markLeadPickerReady || ((v) => readyCalls.push(v)), esc);
   return {dom, readyCalls, ...module.exports};
 }
 
@@ -205,4 +211,64 @@ test('reloading the picker withdraws trust until it re-renders', async () => {
   await loadLeadPicker();
   assert.deepEqual(readyCalls, [false],
     'a failed reload must clear the flag, not leave a stale true standing');
+});
+
+/* --------------------------------------------------------------------------
+   Stored XSS in the detail rails. Member names reach these rails straight from
+   the public season-registration form, and the admin CSP allows 'unsafe-inline'
+   for script-src, so an <img onerror> in a last name executed in the admin's
+   session the moment they opened the practice page.
+   -------------------------------------------------------------------------- */
+
+function loadRails(fetchImpl) {
+  const dom = new JSDOM(
+    '<!doctype html><div id="rsvp-summary"></div><div id="rsvp-list"></div>'
+    + '<div id="lead-confirmations-container"></div>');
+  const esc = (v) => String(v == null ? '' : v)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  const module = {exports: {}};
+  new Function('module', 'exports', 'window', 'document', 'practiceId',
+    'loadLeadCandidates', 'renderLeadPicker', 'markLeadPickerReady', 'esc',
+    'fetch',
+    CONTEXT_SOURCE + '\nmodule.exports = {loadRSVPs, loadLeadConfirmations};'
+  )(module, module.exports, dom.window, dom.window.document, 42,
+    async () => null, () => {}, () => {}, esc, fetchImpl);
+  return {dom, ...module.exports};
+}
+
+const XSS = '<img src=x onerror="window.pwned=1">';
+
+test('a hostile member name cannot inject markup into the RSVP rail', async () => {
+  const {dom, loadRSVPs} = loadRails(async () => ({
+    json: async () => ({
+      summary: {going: 1, maybe: 0, not_going: 0},
+      rsvps: [{id: 1, user_id: 2, user_name: `Ada ${XSS}`, status: 'going'}],
+    }),
+  }));
+
+  await loadRSVPs();
+  const list = dom.window.document.getElementById('rsvp-list');
+  assert.equal(list.querySelectorAll('img').length, 0,
+    'the name must not become a real element');
+  assert.match(list.textContent, /Ada/, 'but the name itself still renders');
+  assert.match(list.innerHTML, /&lt;img/, 'escaped, not stripped');
+});
+
+test('a hostile lead name cannot inject markup into the confirmations rail', async () => {
+  const {dom, loadLeadConfirmations} = loadRails(async () => ({
+    json: async () => ({
+      leads: [{id: 5, name: `Zoe ${XSS}`, role: 'lead', confirmed: false}],
+    }),
+  }));
+
+  await loadLeadConfirmations();
+  const c = dom.window.document.getElementById('lead-confirmations-container');
+  assert.equal(c.querySelectorAll('img').length, 0);
+  assert.match(c.textContent, /Zoe/);
+  // The name is also interpolated into an aria-label attribute, so a quote
+  // must not be able to break out of it and add a handler.
+  const label = c.querySelector('input[type=checkbox]').getAttribute('aria-label');
+  assert.match(label, /Confirm Zoe/);
+  assert.equal(c.querySelector('input[type=checkbox]').getAttribute('onerror'), null);
 });
