@@ -432,6 +432,25 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
     a block that already finished is noise the recipient can do nothing about.
     The gate is the poll's own ends_on, not "has the close job run yet", so
     reordering the two schedules can't reintroduce it.
+
+    Only people the poll's own pool says may be asked are nudged. This has to
+    be re-checked here and not left to sync_participants, because that is not
+    the only way a participant row appears: _participant() in
+    app/slack/practices/availability_reactions.py creates one for ANY
+    Slack-linked user who reacts, with no pool check, and reconcile_poll --
+    which the nudge job runs immediately before send_nudges -- resets such a
+    row to PENDING once its reaction is withdrawn. Selecting on poll_id +
+    PENDING alone therefore defeated the two containment rules that matter
+    most: shadow mode (the shadow channel holds real coaches who are not on
+    the roster, and the point of the shadow month is that no real lead is
+    DMed) and the ALUMNI exclusion (a lapsed lead-tagged alumnus is out of the
+    pool because DMing them every block is how the bot gets muted). It also
+    means a lead dropped from the club mid-block stops being nudged, which
+    sync_participants cannot do since it only ever adds.
+
+    Filtering here rather than refusing to create the row is deliberate: the
+    reaction still counts as availability, so a genuine lead who is
+    temporarily untagged keeps their answer -- only the DM is withheld.
     """
     if not poll.opened_at:
         return []
@@ -440,9 +459,18 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
     if (now.date() - poll.opened_at.date()).days < FIRST_NUDGE_AFTER_DAYS:
         return []
 
+    # Resolved once, and fails closed: an empty pool means nobody is nudged,
+    # never "no filter, so everyone" (see shadow_roster_leads).
+    may_be_asked = {
+        user.id for user in
+        (shadow_roster_leads() if poll.is_shadow else eligible_leads())
+    }
+
     due = []
     for participant in LeadAvailabilityParticipant.query.filter_by(
             poll_id=poll.id, status=ParticipantStatus.PENDING).all():
+        if participant.user_id not in may_be_asked:
+            continue
         if participant.nudge_count >= MAX_NUDGES:
             continue
         if participant.last_nudged_at and \

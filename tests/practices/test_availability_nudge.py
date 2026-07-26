@@ -30,7 +30,7 @@ from uuid import uuid4
 
 from slack_sdk.errors import SlackApiError
 
-from app.models import AppConfig, SlackUser, User, db
+from app.models import AppConfig, SlackUser, Tag, User, db
 from app.practices.availability import (
     eligible_leads,
     participants_to_nudge,
@@ -61,10 +61,18 @@ def _poll(db_session, is_shadow=False, opened_at=OPENED):
     return poll
 
 
-def _user(db_session, name, with_slack=False):
+def _user(db_session, name, with_slack=False, in_pool=True):
     """A real User row -- LeadAvailabilityParticipant.user_id is FK-constrained
     to users.id, so a bare int (as in the brief's literal fixtures) would
     violate the constraint against this real Postgres dev database.
+
+    Tagged PRACTICES_LEAD by default, because participants_to_nudge now
+    re-checks the poll's pool and an untagged user is (correctly) never
+    nudged. Tagging for real rather than patching eligible_leads() keeps these
+    cadence tests exercising the actual pool rules; the tag row is
+    get-or-create and never deleted, matching the fixed reference-data
+    convention in test_availability_service.py. Pass in_pool=False for the
+    tests that specifically need somebody outside the pool.
     """
     suffix = uuid4().hex
     slack_user_id = None
@@ -76,6 +84,11 @@ def _user(db_session, name, with_slack=False):
     user = User(first_name=f"TEST {name}", last_name="Nudge",
                 email=f"test-nudge-{name.lower()}-{suffix}@example.test",
                 slack_user_id=slack_user_id)
+    if in_pool:
+        tag = Tag.query.filter_by(name="PRACTICES_LEAD").first() or Tag(
+            name="PRACTICES_LEAD", display_name="Practices Lead")
+        db_session.add(tag)
+        user.tags = [tag]
     db_session.add(user)
     db_session.flush()
     return user
@@ -605,3 +618,98 @@ def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
         assert [u.id for u in result] == [user_id]
     finally:
         _cleanup(None, [user_id])
+
+
+# ---------------------------------------------------------------------------
+# The pool gate has to bite at NUDGE time, not only at sync time.
+#
+# sync_participants is not the only way a participant row appears:
+# _participant() in app/slack/practices/availability_reactions.py creates one
+# for ANY Slack-linked user who reacts to the poll, with no pool check -- and
+# reconcile_poll (which the nudge job runs immediately before send_nudges)
+# resets such a row to PENDING once its reaction is withdrawn. So selecting
+# nudge targets by poll_id + PENDING alone let a non-pool member be DMed,
+# which defeats the two containment rules that matter most:
+#
+#   - shadow mode: the shadow channel holds real coaches who are not on the
+#     roster, and the whole point of the shadow month is that no real lead is
+#     DMed. Shadow-ness is persisted on the poll, so the gate uses that.
+#   - the ALUMNI exclusion: a lapsed lead-tagged alumnus is deliberately out
+#     of the pool because "DMing them every block is how the bot gets muted
+#     by the people it depends on" (eligible_leads' own docstring).
+#
+# Filtering at nudge time rather than refusing to create the row keeps the
+# availability record for someone who volunteered -- the reaction still counts
+# -- while making sure the DM only goes to people who were actually asked.
+# ---------------------------------------------------------------------------
+
+def test_shadow_poll_does_not_nudge_a_participant_off_the_roster(db_session):
+    poll = _poll(db_session, is_shadow=True)
+    roster_user = _user(db_session, "Roster", with_slack=True)
+    intruder = _user(db_session, "Intruder", with_slack=True, in_pool=False)
+    poll_id = poll.id
+    user_ids = [roster_user.id, intruder.id]
+    roster_slack_uid = roster_user.slack_user.slack_uid
+    # Both PENDING: the intruder's row is what a reaction-then-unreact leaves
+    # behind, exactly as reconcile_poll would write it.
+    _participant(db_session, poll, roster_user, status=ParticipantStatus.PENDING)
+    _participant(db_session, poll, intruder, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    try:
+        with patch("app.models.AppConfig.get", return_value=[roster_slack_uid]):
+            due = participants_to_nudge(poll, now=OPENED + timedelta(days=3))
+
+        assert [p.user_id for p in due] == [roster_user.id], (
+            "a shadow poll must only DM the shadow roster -- a participant row "
+            "created by a reaction from someone off the roster must not be nudged"
+        )
+    finally:
+        _cleanup(poll_id, user_ids)
+
+
+def test_live_poll_does_not_nudge_a_participant_outside_the_eligible_pool(db_session):
+    poll = _poll(db_session, is_shadow=False)
+    lead = _user(db_session, "Lead", with_slack=True)
+    outsider = _user(db_session, "Outsider", with_slack=True, in_pool=False)
+    poll_id = poll.id
+    user_ids = [lead.id, outsider.id]
+    _participant(db_session, poll, lead, status=ParticipantStatus.PENDING)
+    _participant(db_session, poll, outsider, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    try:
+        # No patching: the outsider genuinely carries no eligible tag, so the
+        # real eligible_leads() excludes them. That is the state left behind
+        # by an ALUMNI lead with no coach tag, a DROPPED member, or someone
+        # whose tag was pulled mid-block.
+        due = participants_to_nudge(poll, now=OPENED + timedelta(days=3))
+
+        assert [p.user_id for p in due] == [lead.id], (
+            "only people the pool rules say may be asked can be DMed"
+        )
+    finally:
+        _cleanup(poll_id, user_ids)
+
+
+def test_shadow_poll_with_an_unresolvable_roster_nudges_nobody(db_session):
+    """Fail closed at nudge time too: an empty resolved roster must mean zero
+    DMs, never "no filter, so everyone".
+    """
+    poll = _poll(db_session, is_shadow=True)
+    someone = _user(db_session, "Someone", with_slack=True)
+    poll_id = poll.id
+    user_ids = [someone.id]
+    _participant(db_session, poll, someone, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    try:
+        with patch("app.models.AppConfig.get", return_value=[]):
+            due = participants_to_nudge(poll, now=OPENED + timedelta(days=3))
+
+        assert due == [], (
+            "an unset/empty shadow roster must nudge nobody -- an empty pool "
+            "must not be treated as 'no filter'"
+        )
+    finally:
+        _cleanup(poll_id, user_ids)
