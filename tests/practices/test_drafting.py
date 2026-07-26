@@ -141,6 +141,37 @@ def test_expected_slots_excludes_dates_after_end_date(practice_days):
     ], "slots after end_date must be excluded"
 
 
+def test_default_practice_days_include_saturday(no_practice_days_row):
+    """With no practice_days row (the state of dev AND prod today), drafting
+    must cover the same Tue/Thu/Sat schedule the coach post renders — a
+    Tue/Thu-only drafting default meant Saturday practices were never drafted
+    while the coach post showed a permanent empty Saturday placeholder,
+    inviting a duplicate on top of a draft."""
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))  # Mon..Sun
+    assert slots == [
+        datetime(2026, 8, 4, 18, 0),
+        datetime(2026, 8, 6, 18, 0),
+        datetime(2026, 8, 8, 9, 0),
+    ], "the built-in default must draft Saturday 09:00, matching the coach post"
+
+
+def test_default_practice_days_is_one_shared_constant():
+    """Every site that defaults `practice_days` must share the ONE constant.
+
+    The bug this pins: drafting had its own Tue/Thu copy while the coach
+    post, refresh, and the admin settings endpoint each carried a Tue/Thu/Sat
+    copy — identical-looking literals that had already drifted.
+    """
+    from app.practices import drafting
+    from app.routes import admin_practices
+    from app.slack.practices import coach_review, refresh
+
+    for module in (admin_practices, coach_review, refresh):
+        assert module.DEFAULT_PRACTICE_DAYS is drafting.DEFAULT_PRACTICE_DAYS, (
+            f"{module.__name__} must import the shared default, not carry a copy"
+        )
+
+
 def test_end_of_next_month_spans_year_boundaries():
     assert end_of_next_month(date(2026, 8, 1)) == date(2026, 9, 30)
     assert end_of_next_month(date(2026, 8, 31)) == date(2026, 9, 30)

@@ -17,9 +17,20 @@ WEEKDAYS = {
     "friday": 4, "saturday": 5, "sunday": 6,
 }
 
+# The built-in schedule when no `practice_days` AppConfig row exists — which
+# is the live state of dev (and, as far as we know, prod) today, so this
+# default IS the schedule, not a formality. It lives here because this module
+# owns the practice_days schedule semantics (see the module docstring), and it
+# is imported by every other site that defaults the key (coach weekly summary,
+# post refresh, the admin settings endpoint): the drafting copy once said
+# Tue/Thu while the coach post said Tue/Thu/Sat, so Saturday practices were
+# never drafted while the coach post rendered a permanent empty Saturday
+# "Add Practice" placeholder — the duplicate-on-top-of-a-draft trap that
+# coach_visible_practices() exists to prevent. One constant, one schedule.
 DEFAULT_PRACTICE_DAYS = [
     {"day": "tuesday", "time": "18:00", "active": True},
     {"day": "thursday", "time": "18:00", "active": True},
+    {"day": "saturday", "time": "09:00", "active": True},
 ]
 
 
