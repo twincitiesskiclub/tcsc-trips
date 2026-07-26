@@ -415,6 +415,10 @@ def run_practice_block_bootstrap_job(app: Flask):
             created,
             start.strftime("%b %-d"),
             end.strftime("%b %-d"),
+            # The block is drafted on the 1st, so anchor the digest identity
+            # to the first of the month — the daily nudge computes the same
+            # anchor and threads onto this post even if this run fired late.
+            block_start=start.replace(day=1),
         )
         if result.get("success"):
             app.logger.info(f"Draft bootstrap: drafted {len(created)} practices, digest posted")
@@ -425,10 +429,15 @@ def run_practice_block_bootstrap_job(app: Flask):
 
 
 def run_practice_readiness_nudge_job(app: Flask):
-    """Daily: re-post the digest only while drafts are still incomplete.
+    """Daily: chase incomplete drafts in the original digest's thread.
 
     A daily "all good" post trains people to ignore the channel, so this
     stays silent whenever every drafted practice already has its details.
+    When drafts ARE incomplete, the digest goes out as a reply in the
+    thread of the block's original digest post (recorded by the bootstrap
+    job) rather than a fresh channel message — daily top-level re-posts
+    train people to ignore the channel just as fast. post_readiness_digest
+    falls back to a recorded top-level post when no digest is on record.
 
     Args:
         app: Flask application instance for context.
@@ -444,7 +453,14 @@ def run_practice_readiness_nudge_job(app: Flask):
             return
 
         end = max(p.date for p in drafts)
-        result = post_readiness_digest(drafts, start.strftime("%b %-d"), end.strftime("%b %-d"))
+        result = post_readiness_digest(
+            drafts,
+            start.strftime("%b %-d"),
+            end.strftime("%b %-d"),
+            # Blocks are drafted on the 1st of the month; this is the same
+            # anchor the bootstrap job records the digest under.
+            block_start=start.replace(day=1),
+        )
         if not result.get("success"):
             app.logger.warning(f"Readiness nudge digest failed: {result.get('error')}")
 

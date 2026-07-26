@@ -1,8 +1,17 @@
 """Readiness digest posting."""
 
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
+
+from app.models import db
+from app.practices.models import PracticeSummaryPost
+from app.slack.practices.summary_posts import READINESS_DIGEST
+
+# Far-future block anchors so these rows can never collide with real data in
+# the shared local dev database (see tests/practices/conftest.py conventions).
+THREADED_BLOCK_START = date(2099, 8, 1)
+FALLBACK_BLOCK_START = date(2099, 9, 1)
 
 
 def _practice(day):
@@ -13,6 +22,18 @@ def _practice(day):
         id=day, date=datetime(2026, 8, day, 18, 15),
         location_id=None, practice_types=[], activities=[],
     )
+
+
+def _digest_records(block_start):
+    return PracticeSummaryPost.query.filter_by(
+        week_start=block_start, surface=READINESS_DIGEST
+    ).all()
+
+
+def _delete_digest_records(block_start):
+    for record in _digest_records(block_start):
+        db.session.delete(record)
+    db.session.commit()
 
 
 def test_posts_to_the_coaches_channel(app):
@@ -64,6 +85,121 @@ def test_non_slack_failure_is_reported_not_raised(app):
 
     assert result["success"] is False
     assert "connection timed out" in result["error"]
+
+
+def test_nudge_threads_onto_the_recorded_digest(app):
+    """A recorded digest identity turns the daily nudge into a thread reply."""
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ok": True, "ts": "1785000099.2"}
+
+    with app.app_context():
+        assert not _digest_records(THREADED_BLOCK_START), (
+            "reserved 2099 block anchor already occupied in the dev database"
+        )
+        record = PracticeSummaryPost(
+            week_start=THREADED_BLOCK_START,
+            surface=READINESS_DIGEST,
+            channel_id="C-TEST-DIGEST",
+            message_ts="1785000000.42",
+        )
+        db.session.add(record)
+        db.session.commit()
+        try:
+            with patch(
+                "app.slack.practices.drafts.get_slack_client", return_value=client
+            ):
+                result = post_readiness_digest(
+                    [_practice(4)], "Jul 21", "Aug 13",
+                    block_start=THREADED_BLOCK_START,
+                )
+
+            assert result["success"] is True
+            kwargs = client.chat_postMessage.call_args.kwargs
+            assert kwargs["channel"] == "C-TEST-DIGEST"
+            assert kwargs["thread_ts"] == "1785000000.42"
+            assert len(_digest_records(THREADED_BLOCK_START)) == 1, (
+                "threading must reuse the recorded identity, not create another"
+            )
+        finally:
+            db.session.rollback()
+            _delete_digest_records(THREADED_BLOCK_START)
+
+
+def test_nudge_without_a_recorded_digest_posts_top_level_and_records(app):
+    """No digest on record → post top-level, remember it, thread the next day."""
+    from app.slack.practices._config import COLLAB_CHANNEL_ID
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ok": True, "ts": "1785000001.7"}
+
+    with app.app_context():
+        assert not _digest_records(FALLBACK_BLOCK_START), (
+            "reserved 2099 block anchor already occupied in the dev database"
+        )
+        try:
+            with patch(
+                "app.slack.practices.drafts.get_slack_client", return_value=client
+            ):
+                result = post_readiness_digest(
+                    [_practice(4)], "Jul 21", "Aug 13",
+                    block_start=FALLBACK_BLOCK_START,
+                )
+
+            assert result["success"] is True
+            kwargs = client.chat_postMessage.call_args.kwargs
+            assert kwargs["channel"] == COLLAB_CHANNEL_ID
+            assert "thread_ts" not in kwargs, "fallback must be a top-level post"
+
+            records = _digest_records(FALLBACK_BLOCK_START)
+            assert len(records) == 1
+            assert records[0].channel_id == COLLAB_CHANNEL_ID
+            assert records[0].message_ts == "1785000001.7"
+
+            # The very next day's nudge threads onto the recorded fallback.
+            client.chat_postMessage.return_value = {"ok": True, "ts": "1785000002.9"}
+            with patch(
+                "app.slack.practices.drafts.get_slack_client", return_value=client
+            ):
+                post_readiness_digest(
+                    [_practice(4)], "Jul 22", "Aug 13",
+                    block_start=FALLBACK_BLOCK_START,
+                )
+            kwargs = client.chat_postMessage.call_args.kwargs
+            assert kwargs["thread_ts"] == "1785000001.7"
+        finally:
+            db.session.rollback()
+            _delete_digest_records(FALLBACK_BLOCK_START)
+
+
+def test_recording_failure_still_reports_a_successful_post(app):
+    """The message went out; a bookkeeping failure must not turn that into an
+    error (or raise) — tomorrow's nudge just falls back to top-level again."""
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ok": True, "ts": "1785000003.1"}
+
+    with app.app_context():
+        try:
+            with patch(
+                "app.slack.practices.drafts.get_slack_client", return_value=client
+            ), patch(
+                "app.slack.practices.drafts.stage_readiness_digest_post",
+                side_effect=RuntimeError("TEST boom"),
+            ):
+                result = post_readiness_digest(
+                    [_practice(4)], "Jul 21", "Aug 13",
+                    block_start=FALLBACK_BLOCK_START,
+                )
+
+            assert result["success"] is True
+            assert not _digest_records(FALLBACK_BLOCK_START)
+        finally:
+            db.session.rollback()
+            _delete_digest_records(FALLBACK_BLOCK_START)
 
 
 def test_empty_practice_list_posts_nothing(app):

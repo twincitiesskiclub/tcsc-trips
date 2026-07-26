@@ -33,8 +33,13 @@ _EXPECTED_CONSTRAINTS = (
         "ck_practice_summary_post_surface",
         "c",
         ("surface",),
+        # Tracks the CURRENT model's constraint (b4d1f8e6c2a7 added
+        # 'readiness_digest'): orphan recovery targets tables produced by
+        # db.create_all with today's code, so this fingerprint must follow
+        # the model, not the two-value shape this migration itself creates.
         "CHECK (surface::text = ANY (ARRAY['coach_summary'::character "
-        "varying, 'weekly_summary'::character varying]::text[]))",
+        "varying, 'weekly_summary'::character varying, "
+        "'readiness_digest'::character varying]::text[]))",
     ),
     (
         "practice_summary_posts_pkey",

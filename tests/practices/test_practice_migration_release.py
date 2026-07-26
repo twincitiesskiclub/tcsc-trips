@@ -23,7 +23,7 @@ E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
 # Head as of the lead-availability poll schema migration (down_revision points
 # at EVENTS_REVISION above) — bump this whenever a new migration lands on top.
-LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
+READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"  # the branch's migration head
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -212,7 +212,7 @@ def test_release_lifecycle_upgrades_e36_orphan_to_head_without_consumers(
     assert "Socket Mode" not in output
     with engine.connect() as connection:
         _use_schema(connection, release_schema)
-        assert _revision(connection) == LEAD_AVAILABILITY_REVISION
+        assert _revision(connection) == READINESS_DIGEST_REVISION
         assert _c4_columns(connection) == EXPECTED_C4_COLUMNS
         after = summary_catalog_snapshot(connection)
         defaults = {row[1]: row[6] for row in after["columns"]}

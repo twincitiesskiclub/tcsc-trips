@@ -116,7 +116,12 @@ practice_types_junction = db.Table(
 # =============================================================================
 
 class PracticeSummaryPost(db.Model):
-    """Canonical Slack identity for one weekly practice-summary surface."""
+    """Canonical Slack identity for one weekly practice-summary surface.
+
+    The 'readiness_digest' surface bends the "weekly" framing: its post covers
+    a 4-week draft block, so week_start holds the block's start date (the 1st
+    of the month, per the bootstrap job's cadence) rather than a Monday.
+    """
 
     __tablename__ = "practice_summary_posts"
 
@@ -140,7 +145,7 @@ class PracticeSummaryPost(db.Model):
             name="uq_practice_summary_post_week_surface",
         ),
         db.CheckConstraint(
-            "surface IN ('coach_summary', 'weekly_summary')",
+            "surface IN ('coach_summary', 'weekly_summary', 'readiness_digest')",
             name="ck_practice_summary_post_surface",
         ),
     )
