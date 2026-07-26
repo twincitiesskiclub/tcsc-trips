@@ -50,11 +50,11 @@ _STARTS_ON = date(2099, 7, 21)
 _ENDS_ON = date(2099, 8, 13)
 
 
-def _poll(db_session, is_shadow=False):
+def _poll(db_session, is_shadow=False, opened_at=OPENED):
     poll = LeadAvailabilityPoll(
         starts_on=_STARTS_ON, ends_on=_ENDS_ON,
         channel_id="TEST-CHANNEL-NUDGE", message_ts="1.1",
-        status=PollStatus.OPEN, opened_at=OPENED, is_shadow=is_shadow,
+        status=PollStatus.OPEN, opened_at=opened_at, is_shadow=is_shadow,
     )
     db_session.add(poll)
     db_session.flush()
@@ -191,6 +191,116 @@ def test_three_nudges_is_the_ceiling(db_session):
     try:
         assert participants_to_nudge(poll, now=OPENED + timedelta(days=30)) == [], \
             "3 sends is the ceiling; more trains people to mute the bot"
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+# ---------------------------------------------------------------------------
+# Task 4: nudge boundaries are calendar days, not hour deltas. The nudge job
+# runs at a fixed 08:00 Central, so a 72-hour rule skips the day-3 run for any
+# poll opened after 08:00 on day 0 (70 hours old at Thursday 08:00 for a
+# Monday 10:00 open) and the first nudge slips to day 4. Same class of bug in
+# the last_nudged_at spacing check: a day-3 send recorded at 08:00:30 leaves
+# the day-5 08:00:00 run 30 seconds short of 48 hours, slipping it to day 6.
+# These tests drive `now` at the job's real fixed run time to pin both
+# boundaries exactly.
+# ---------------------------------------------------------------------------
+
+# Poll opened mid-morning Monday 2099-07-21; the daily job runs at 08:00.
+_OPENED_DAY0_1000 = datetime(2099, 7, 21, 10, 0)
+_RUN_DAY2 = datetime(2099, 7, 23, 8, 0)
+_RUN_DAY3 = datetime(2099, 7, 24, 8, 0)
+_RUN_DAY4 = datetime(2099, 7, 25, 8, 0)
+_RUN_DAY5 = datetime(2099, 7, 26, 8, 0)
+
+
+def test_poll_opened_midmorning_gets_first_nudge_on_the_day3_run(db_session):
+    poll = _poll(db_session, opened_at=_OPENED_DAY0_1000)
+    user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
+    participant_id = _participant(
+        db_session, poll, user, status=ParticipantStatus.PENDING).id
+    db_session.commit()
+
+    try:
+        due = participants_to_nudge(poll, now=_RUN_DAY3)
+        assert [x.id for x in due] == [participant_id], (
+            "a poll opened 10:00 on day 0 is only 70 hours old at the day-3 "
+            "08:00 run; a 72-hour rule skips it and the first nudge slips to "
+            "day 4 -- the boundary must be calendar days"
+        )
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+def test_poll_opened_midmorning_is_not_nudged_on_the_day2_run(db_session):
+    poll = _poll(db_session, opened_at=_OPENED_DAY0_1000)
+    user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
+    _participant(db_session, poll, user, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    try:
+        assert participants_to_nudge(poll, now=_RUN_DAY2) == [], (
+            "day 2 is too early -- an off-by-one in the permissive direction "
+            "DMs everyone every morning"
+        )
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+def test_poll_opened_just_before_midnight_still_nudges_on_the_day3_run(db_session):
+    poll = _poll(db_session, opened_at=datetime(2099, 7, 21, 23, 59))
+    user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
+    participant_id = _participant(
+        db_session, poll, user, status=ParticipantStatus.PENDING).id
+    db_session.commit()
+
+    try:
+        due = participants_to_nudge(poll, now=_RUN_DAY3)
+        assert [x.id for x in due] == [participant_id], (
+            "23:59 on day 0 still counts as day 0 -- the day-3 run must nudge"
+        )
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+def test_spacing_is_calendar_days_across_fixed_morning_runs(db_session):
+    """Nudged on the day-3 run -> skipped on day 4, eligible on day 5.
+
+    last_nudged_at carries 08:00:30 because the job never fires at exactly
+    :00.000 -- under an hours-based rule the day-5 08:00:00 run would be 30
+    seconds short of 48 hours and slip to day 6.
+    """
+    poll = _poll(db_session, opened_at=_OPENED_DAY0_1000)
+    user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
+    _participant(db_session, poll, user, status=ParticipantStatus.PENDING,
+                 nudge_count=1, last_nudged_at=datetime(2099, 7, 24, 8, 0, 30))
+    db_session.commit()
+
+    try:
+        assert participants_to_nudge(poll, now=_RUN_DAY4) == [], \
+            "nudged yesterday -- MIN_DAYS_BETWEEN_NUDGES = 2 must hold"
+        assert len(participants_to_nudge(poll, now=_RUN_DAY5)) == 1, (
+            "two calendar days after the last nudge -- due again even though "
+            "the wall-clock gap is 30 seconds short of 48 hours"
+        )
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+def test_max_nudges_still_caps_at_fixed_morning_runs(db_session):
+    poll = _poll(db_session, opened_at=_OPENED_DAY0_1000)
+    user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
+    _participant(db_session, poll, user, status=ParticipantStatus.PENDING,
+                 nudge_count=3, last_nudged_at=datetime(2099, 7, 28, 8, 0, 30))
+    db_session.commit()
+
+    try:
+        assert participants_to_nudge(poll, now=datetime(2099, 8, 20, 8, 0)) == []
     finally:
         _cleanup(poll_id, [user_id])
 

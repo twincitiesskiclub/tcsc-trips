@@ -378,13 +378,21 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
     """Who is due a reminder right now.
 
     Only PENDING participants -- anyone who reacted, hit done, or opted out
-    is left alone. First nudge at day 3, then at least 2 days apart, 3 sends
-    is the ceiling. An off-by-one here DMs everyone every morning, which is
-    the fastest way to get the bot muted by the people it depends on.
+    is left alone. First nudge on calendar day 3, then at least 2 calendar
+    days apart, 3 sends is the ceiling.
+
+    Both boundaries compare calendar dates, not hour deltas: the nudge job
+    runs at a fixed 08:00 Central, so an hours rule silently shifts the
+    schedule -- a poll opened Monday 10:00 is only 70 hours old at Thursday
+    08:00, pushing the first nudge to day 4, and a day-3 send recorded a few
+    seconds after 08:00 leaves the day-5 run just short of 48 hours, pushing
+    the follow-up to day 6. An off-by-one in the other direction DMs
+    everyone every morning, which is the fastest way to get the bot muted by
+    the people it depends on.
     """
     if not poll.opened_at:
         return []
-    if now - poll.opened_at < timedelta(days=FIRST_NUDGE_AFTER_DAYS):
+    if (now.date() - poll.opened_at.date()).days < FIRST_NUDGE_AFTER_DAYS:
         return []
 
     due = []
@@ -393,7 +401,7 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
         if participant.nudge_count >= MAX_NUDGES:
             continue
         if participant.last_nudged_at and \
-                now - participant.last_nudged_at < timedelta(days=MIN_DAYS_BETWEEN_NUDGES):
+                (now.date() - participant.last_nudged_at.date()).days < MIN_DAYS_BETWEEN_NUDGES:
             continue
         due.append(participant)
     return due
