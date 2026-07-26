@@ -3,6 +3,7 @@
 
 let practicesData = [];
 let locationsData = [];
+let pollsData = [];
 let pastExpanded = false;
 let pastLimit = 20;
 let lastFocusedEl = null;
@@ -17,10 +18,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   // This file is also loaded on the practice create/edit form (for the
   // lead-candidates picker below), which has none of the list-page DOM.
   if (!document.getElementById('pl-list')) return;
-  await Promise.all([loadPractices(), loadLocations()]);
+  await Promise.all([loadPractices(), loadLocations(), loadAvailabilityPolls()]);
   populateLocationFilter();
   attachEventListeners();
   render();
+  renderPolls();
+  flashPendingAvailabilityWarning();
 });
 
 async function loadPractices() {
@@ -236,8 +239,9 @@ async function publishOnePractice(id) {
         skipped ? 'warning' : 'info');
     }
 
-    await loadPractices();
+    await Promise.all([loadPractices(), loadAvailabilityPolls()]);
     render();
+    renderPolls(); // its block's unpublished/publishable counts just changed
     const fresh = findPractice(id);
     if (fresh && currentDrawerId === id) populateDrawer(fresh);
   } catch (e) {
@@ -265,6 +269,11 @@ function attachEventListeners() {
   document.getElementById('pl-cancel-btn').addEventListener('click', () => { if (currentDrawerId) openCancelModal(currentDrawerId); });
   document.getElementById('pl-delete-btn').addEventListener('click', () => { if (currentDrawerId) deletePractice(currentDrawerId); });
   document.getElementById('pl-poll-btn').addEventListener('click', openAvailabilityPoll);
+
+  document.getElementById('pl-polls').addEventListener('click', (e) => {
+    const btn = e.target.closest('.pl-poll-publish');
+    if (btn) publishPollBlock(parseInt(btn.dataset.pollId));
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -526,7 +535,146 @@ async function openAvailabilityPoll() {
     showToast('Failed to open availability poll', 'error');
   } finally {
     btn.disabled = false;
+    // A poll may have been created (even the "draft only, not posted" path),
+    // so the poll cards below the toolbar need to pick it up.
+    await loadAvailabilityPolls();
+    renderPolls();
   }
+}
+
+/* ---------- block-level publish (per availability poll) ----------
+
+   THE publish control: one poll's worth of practices, sent live together from
+   the poll that collected their availability. Deliberately per block — never
+   per week, never automatic (see the note above draftPublishHtml). */
+
+const POLL_STATUS_LABEL = {draft: 'Draft', open: 'Open', closed: 'Closed'};
+
+async function loadAvailabilityPolls() {
+  try {
+    const r = await fetch('/admin/availability/');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    pollsData = (await r.json()).polls || [];
+  } catch (e) {
+    console.error(e);
+    pollsData = null; // render as a visible load failure, not "no polls"
+  }
+}
+
+function pollRangeLabel(poll) {
+  const f = s => new Date(s + 'T12:00:00Z')
+    .toLocaleDateString([], {month: 'short', day: 'numeric'});
+  return `${f(poll.starts_on)} – ${f(poll.ends_on)}`;
+}
+
+function pollCardHtml(poll) {
+  const st = poll.status || 'draft';
+  const n = (c, w) => `${c} ${w}${c === 1 ? '' : 's'}`;
+  // "N unpublished, 0 publishable" must read as "go fill in details", never
+  // as "nothing to do" — that distinction is why the endpoint returns both.
+  const held = poll.unpublished - poll.publishable;
+  let act = '';
+  if (held > 0) {
+    act += `<span class="pl-poll-note warn">${n(held, 'draft')} need${held === 1 ? 's' : ''} details before publishing</span>`;
+  }
+  if (poll.publishable > 0) {
+    act += `<button type="button" class="pl-poll-publish" data-poll-id="${poll.id}">`
+      + `Publish ${n(poll.publishable, 'practice')}</button>`;
+  } else if (poll.unpublished === 0) {
+    act = '<span class="pl-poll-note">All published</span>';
+  }
+  return `<div class="pl-poll">`
+    + `<span class="pl-poll-range">${esc(pollRangeLabel(poll))}</span>`
+    + `<span class="pl-poll-status is-${esc(st)}">${esc(POLL_STATUS_LABEL[st] || st)}</span>`
+    + `<span class="pl-poll-sessions">${n(poll.sessions, 'session')}</span>`
+    + `<span class="pl-poll-act">${act}</span></div>`;
+}
+
+function renderPolls() {
+  const root = document.getElementById('pl-polls');
+  if (!root) return;
+  if (pollsData === null) {
+    root.innerHTML = '<div class="pl-poll"><span class="pl-poll-note">Could not load availability polls — reload to retry.</span></div>';
+    return;
+  }
+  root.innerHTML = pollsData.map(pollCardHtml).join('');
+}
+
+function practiceName(id) {
+  const p = findPractice(id);
+  if (!p) return `practice #${id}`;
+  const d = new Date(p.date)
+    .toLocaleDateString([], {weekday: 'short', month: 'numeric', day: 'numeric'});
+  return `${d} ${p.location_name || 'No Location'}`;
+}
+
+function publishResultMessage(result) {
+  const published = result.published || [];
+  const skipped = result.skipped || [];
+  const parts = [];
+  if (published.length) {
+    parts.push(`Published ${published.length} practice${published.length === 1 ? '' : 's'}`
+      + ' — members can see them now');
+  }
+  for (const s of skipped) {
+    parts.push(`held back ${practiceName(s.practice_id)} — still needs `
+      + (s.missing || []).join(', '));
+  }
+  if (!parts.length) {
+    return (result.already_published || []).length
+      ? 'Everything in this block was already published'
+      : 'Nothing to publish in this block';
+  }
+  return parts.join('; ');
+}
+
+async function publishPollBlock(pollId) {
+  const poll = (pollsData || []).find(p => p.id === pollId);
+  if (!poll) return;
+  const count = poll.publishable;
+  const proceed = confirm(
+    `Publish ${count} practice${count === 1 ? '' : 's'} from the `
+    + `${pollRangeLabel(poll)} block? Members will be able to see them, and `
+    + 'announcements will go out on the normal schedule.');
+  if (!proceed) return;
+
+  const btn = document.querySelector(`.pl-poll-publish[data-poll-id="${pollId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
+  try {
+    const r = await fetch(`/admin/availability/polls/${pollId}/publish`, {method: 'POST'});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+    const tone = (body.skipped || []).length
+      ? 'warning' : ((body.published || []).length ? 'success' : 'info');
+    showToast(publishResultMessage(body), tone);
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || 'Failed to publish this block', 'error');
+  } finally {
+    // Re-render both views from fresh data either way — the rows' draft
+    // badges and the poll counts must agree, and a re-render also restores
+    // the button after a failure.
+    await Promise.all([loadPractices(), loadAvailabilityPolls()]);
+    render();
+    renderPolls();
+  }
+}
+
+/* ---------- availability_warning handoff (from the create form) ----------
+
+   create_practice() warns when a new practice lands inside an OPEN poll's
+   range: the poll's emoji mapping is already fixed, so the practice gets no
+   letter and collects no availability. The create page stashes that warning
+   (see _detail_script.js) because it redirects here immediately — the toast
+   has to survive the navigation to be seen by the admin who caused it. */
+
+function flashPendingAvailabilityWarning() {
+  let warning = null;
+  try {
+    warning = window.sessionStorage.getItem('tcsc-availability-warning');
+    if (warning) window.sessionStorage.removeItem('tcsc-availability-warning');
+  } catch (e) { return; /* storage blocked; the server already logged it */ }
+  if (warning) showToast(warning, 'warning');
 }
 
 /* ---------- lead candidates picker (practice create/edit form) ---------- */
