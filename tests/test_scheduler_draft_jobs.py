@@ -85,6 +85,46 @@ def test_readiness_nudge_posts_when_a_draft_is_incomplete(app):
     post.assert_called_once()
 
 
+def test_bootstrap_drafts_through_the_end_of_next_month(app):
+    """The window must be an explicit horizon, not a Monday-normalised week
+    count: the job fires on the 1st, and a weeks window anchored to the
+    Monday before the 1st left the tail of most months entirely undrafted
+    (no rows, no digest, no poll — invisible until the week it happened).
+    Drafting through the end of NEXT month makes consecutive monthly runs
+    overlap by a whole month; generate_draft_block's idempotency absorbs
+    the overlap."""
+    from app.scheduler import run_practice_block_bootstrap_job
+
+    with patch("app.utils.today_central", return_value=date(2099, 8, 1)), \
+         patch("app.scheduler.generate_draft_block", return_value=[]) as gen:
+        run_practice_block_bootstrap_job(app)
+
+    assert gen.call_args.args == (date(2099, 8, 1), date(2099, 9, 30))
+
+
+def test_readiness_nudge_window_reaches_the_bootstrap_horizon(app):
+    """The nudge must chase every draft the bootstrap created. A shorter
+    window (the old fixed 4 weeks) would silently stop chasing the tail of
+    the drafted block."""
+    from app.scheduler import run_practice_readiness_nudge_job
+
+    with patch("app.utils.today_central", return_value=date(2099, 8, 15)), \
+         patch("app.scheduler.drafted_practices_in_window", return_value=[]) as window:
+        run_practice_readiness_nudge_job(app)
+
+    assert window.call_args.args == (date(2099, 8, 15), date(2099, 9, 30))
+
+
+def test_both_jobs_compute_the_same_block_anchor(app):
+    """The nudge threads onto the digest the bootstrap recorded; the two jobs
+    must derive the anchor from one shared helper, not two copies of
+    `start.replace(day=1)` coupled only by comments."""
+    from app.scheduler import _block_anchor
+
+    assert _block_anchor(date(2099, 7, 15)) == date(2099, 7, 1)
+    assert _block_anchor(date(2099, 7, 1)) == date(2099, 7, 1)
+
+
 def test_bootstrap_anchors_the_digest_to_the_first_of_the_month(app):
     """The digest identity is keyed to the block's start (the 1st, per the job
     cadence) even if a late run drafts mid-month — so the daily nudge, which

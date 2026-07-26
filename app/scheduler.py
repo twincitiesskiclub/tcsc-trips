@@ -22,7 +22,7 @@ Scheduled Jobs:
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
-- 8:00 AM on the 1st: Draft the next 4 weeks of practices, post readiness digest
+- 8:00 AM on the 1st: Draft practices through the end of next month, post readiness digest
 - 9:00 AM daily: Nudge coaches/directors while drafted practices lack details
 """
 import os
@@ -36,7 +36,12 @@ from flask import Flask
 
 from app.models import db
 from app.utils import now_central_naive, today_central
-from app.practices.drafting import drafted_practices_in_window, generate_draft_block, is_ready
+from app.practices.drafting import (
+    drafted_practices_in_window,
+    end_of_next_month,
+    generate_draft_block,
+    is_ready,
+)
 from app.slack.practices.drafts import post_readiness_digest
 
 
@@ -386,15 +391,28 @@ def run_expire_proposals_job(app: Flask):
             app.logger.error(f"Expire proposals failed: {e}", exc_info=True)
 
 
-DRAFT_BLOCK_WEEKS = 4
+def _block_anchor(today):
+    """The draft block's identity date: the 1st of the month it was drafted in.
+
+    Blocks are drafted on the 1st (the bootstrap job's cadence). The bootstrap
+    job records the readiness digest under this anchor, and the daily nudge
+    computes it again to find the post to thread onto — so both jobs MUST use
+    this one helper. If the two computations diverge, every nudge silently
+    posts top-level instead of threading.
+    """
+    return today.replace(day=1)
 
 
 def run_practice_block_bootstrap_job(app: Flask):
-    """Monthly: draft the next four weeks and report what still needs details.
+    """Monthly: draft through the end of next month, report what needs details.
 
-    generate_draft_block() is idempotent, so a re-run (redeploy, manual
-    trigger, misfire grace) returns an empty list — posting a digest anyway
-    would spam the channel with a duplicate every time the job re-fires.
+    The horizon is end_of_next_month(), not a week count: the job fires on
+    the 1st, and consecutive runs deliberately overlap by a whole month so no
+    month's tail is ever left undrafted. generate_draft_block() is
+    idempotent, so a re-run (redeploy, manual trigger, misfire grace, the
+    monthly overlap) creates nothing twice — and when nothing new was
+    created, no digest is posted, since posting anyway would spam the channel
+    with a duplicate every time the job re-fires.
 
     Args:
         app: Flask application instance for context.
@@ -405,7 +423,7 @@ def run_practice_block_bootstrap_job(app: Flask):
         app.logger.info("Starting practice block bootstrap job")
 
         start = today_central()
-        created = generate_draft_block(start, weeks=DRAFT_BLOCK_WEEKS)
+        created = generate_draft_block(start, end_of_next_month(start))
         if not created:
             app.logger.info("Draft bootstrap: nothing to create, block already drafted")
             return
@@ -414,11 +432,10 @@ def run_practice_block_bootstrap_job(app: Flask):
         result = post_readiness_digest(
             created,
             start.strftime("%b %-d"),
+            # Honest about what was actually drafted this run: the label ends
+            # at the last row created, not the nominal horizon.
             end.strftime("%b %-d"),
-            # The block is drafted on the 1st, so anchor the digest identity
-            # to the first of the month — the daily nudge computes the same
-            # anchor and threads onto this post even if this run fired late.
-            block_start=start.replace(day=1),
+            block_start=_block_anchor(start),
         )
         if result.get("success"):
             app.logger.info(f"Draft bootstrap: drafted {len(created)} practices, digest posted")
@@ -446,7 +463,10 @@ def run_practice_readiness_nudge_job(app: Flask):
         from app.utils import today_central
 
         start = today_central()
-        drafts = drafted_practices_in_window(start, DRAFT_BLOCK_WEEKS)
+        # Same horizon as the bootstrap job: the nudge must chase every draft
+        # the bootstrap created, and a shorter window would silently stop
+        # chasing the tail of the drafted block.
+        drafts = drafted_practices_in_window(start, end_of_next_month(start))
 
         if not drafts or all(is_ready(p) for p in drafts):
             app.logger.info("Readiness nudge: nothing outstanding, staying quiet")
@@ -457,9 +477,7 @@ def run_practice_readiness_nudge_job(app: Flask):
             drafts,
             start.strftime("%b %-d"),
             end.strftime("%b %-d"),
-            # Blocks are drafted on the 1st of the month; this is the same
-            # anchor the bootstrap job records the digest under.
-            block_start=start.replace(day=1),
+            block_start=_block_anchor(start),
         )
         if not result.get("success"):
             app.logger.warning(f"Readiness nudge digest failed: {result.get('error')}")
@@ -1259,7 +1277,7 @@ def init_scheduler(app: Flask) -> bool:
     # Practice Availability Drafting
     # ========================================================================
 
-    # Monthly: draft the next 4 weeks of practices on the 1st at 8:00 AM
+    # Monthly: draft practices through the end of next month on the 1st at 8:00 AM
     scheduler.add_job(
         func=run_practice_block_bootstrap_job,
         args=[app],

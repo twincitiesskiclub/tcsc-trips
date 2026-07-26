@@ -1,6 +1,13 @@
-"""Draft block generation — idempotency is the point."""
+"""Draft block generation — idempotency and month-tail continuity are the point.
 
-from datetime import date, datetime
+The window is an explicit [start_date, end_date] range (see
+end_of_next_month): the old weeks-count window was normalised back to the
+Monday of start_date's week, which silently shortened the forward window and
+left the tail of most months undrafted. The twelve-consecutive-runs test at
+the bottom is the guard against that bug recurring.
+"""
+
+from datetime import date, datetime, timedelta
 
 import pytest
 
@@ -8,6 +15,7 @@ from app import create_app
 from app.models import AppConfig, db
 from app.practices.drafting import (
     drafted_practices_in_window,
+    end_of_next_month,
     expected_slots,
     generate_draft_block,
 )
@@ -32,17 +40,14 @@ def db_session(app):
         yield db.session
 
 
-@pytest.fixture()
-def practice_days(db_session):
+def _save_restore_practice_days(value):
     """Save and restore the real `practice_days` AppConfig row.
 
-    This is the real local dev database. The previous version of this
-    fixture unconditionally deleted the `practice_days` row on teardown --
-    if a human (or another script) had ever seeded a real value, running
-    this module would silently wipe it. Capture whatever was there before
-    the test (if anything) and put it back exactly afterward, deleting only
-    if there was no row to begin with -- never assume delete is the correct
-    restore.
+    This is the real local dev database. An unconditional delete on teardown
+    would silently wipe a value a human (or another script) had seeded.
+    Capture whatever was there before the test (if anything) and put it back
+    exactly afterward, deleting only if there was no row to begin with --
+    never assume delete is the correct restore.
     """
     db.session.rollback()
     existing = AppConfig.query.filter_by(key="practice_days").first()
@@ -52,31 +57,54 @@ def practice_days(db_session):
         if had_row else None
     )
 
-    AppConfig.set(
-        key="practice_days",
-        value=[
-            {"day": "tuesday", "time": "18:15", "active": True},
-            {"day": "thursday", "time": "18:15", "active": True},
-            {"day": "thursday", "time": "19:20", "active": True},
-            {"day": "sunday", "time": "09:00", "active": False},
-        ],
-        description="test",
-        category="practices",
-    )
+    if value is None:
+        AppConfig.query.filter_by(key="practice_days").delete()
+    else:
+        AppConfig.set(
+            key="practice_days", value=value,
+            description="test", category="practices",
+        )
     db.session.commit()
     yield
     db.session.rollback()
     if had_row:
-        value, description, category = original
-        AppConfig.set(key="practice_days", value=value,
+        stored_value, description, category = original
+        AppConfig.set(key="practice_days", value=stored_value,
                       description=description, category=category)
     else:
         AppConfig.query.filter_by(key="practice_days").delete()
     db.session.commit()
 
 
+@pytest.fixture()
+def practice_days(db_session):
+    yield from _save_restore_practice_days([
+        {"day": "tuesday", "time": "18:15", "active": True},
+        {"day": "thursday", "time": "18:15", "active": True},
+        {"day": "thursday", "time": "19:20", "active": True},
+        {"day": "sunday", "time": "09:00", "active": False},
+    ])
+
+
+@pytest.fixture()
+def practice_days_continuity(db_session):
+    """Tue/Thu/Sat at 06:45 — a time no other suite uses, so the continuity
+    test's cleanup-by-exact-datetime can never touch another test's rows."""
+    yield from _save_restore_practice_days([
+        {"day": "tuesday", "time": "06:45", "active": True},
+        {"day": "thursday", "time": "06:45", "active": True},
+        {"day": "saturday", "time": "06:45", "active": True},
+    ])
+
+
+@pytest.fixture()
+def no_practice_days_row(db_session):
+    """Force the no-config-row state (what dev and prod look like today)."""
+    yield from _save_restore_practice_days(None)
+
+
 def test_expected_slots_covers_active_days_only(practice_days):
-    slots = expected_slots(date(2026, 8, 3), weeks=1)  # Mon Aug 3
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))  # Mon..Sun
     assert slots == [
         datetime(2026, 8, 4, 18, 15),
         datetime(2026, 8, 6, 18, 15),
@@ -85,25 +113,43 @@ def test_expected_slots_covers_active_days_only(practice_days):
 
 
 def test_expected_slots_excludes_dates_before_start_date(practice_days):
-    # Wed Aug 5, 2026. The week containing it starts Mon Aug 3, so the
-    # Tuesday slot (Aug 4) falls before start_date and must be dropped —
-    # the contract is "no slot earlier than start_date."
-    slots = expected_slots(date(2026, 8, 5), weeks=1)
+    # Wed Aug 5, 2026: the Tuesday slot (Aug 4) is earlier in the same week
+    # and must not appear — the contract is "no slot earlier than start_date."
+    slots = expected_slots(date(2026, 8, 5), date(2026, 8, 9))
     assert slots == [
         datetime(2026, 8, 6, 18, 15),
         datetime(2026, 8, 6, 19, 20),
-    ], "slots before start_date must be excluded, even though week normalisation looks back to Monday"
+    ], "slots before start_date must be excluded"
 
 
-def test_expected_slots_full_first_week_when_start_is_monday(practice_days):
-    # Guard against over-trimming: when start_date already IS the Monday of
-    # its week, no in-window slot should be excluded.
-    slots = expected_slots(date(2026, 8, 3), weeks=1)  # Mon Aug 3
+def test_expected_slots_end_date_is_inclusive(practice_days):
+    # Thu Aug 6 IS the end date; its slots must still be produced. The old
+    # weeks-window bug was exactly this shape: a window that quietly stopped
+    # short of the dates a human would say it covered.
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 6))
     assert slots == [
         datetime(2026, 8, 4, 18, 15),
         datetime(2026, 8, 6, 18, 15),
         datetime(2026, 8, 6, 19, 20),
-    ], "a Monday start_date must still produce the full first week"
+    ], "a slot falling on end_date itself must be included"
+
+
+def test_expected_slots_excludes_dates_after_end_date(practice_days):
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 5))
+    assert slots == [
+        datetime(2026, 8, 4, 18, 15),
+    ], "slots after end_date must be excluded"
+
+
+def test_end_of_next_month_spans_year_boundaries():
+    assert end_of_next_month(date(2026, 8, 1)) == date(2026, 9, 30)
+    assert end_of_next_month(date(2026, 8, 31)) == date(2026, 9, 30)
+    assert end_of_next_month(date(2026, 10, 1)) == date(2026, 11, 30)
+    assert end_of_next_month(date(2026, 11, 1)) == date(2026, 12, 31)
+    assert end_of_next_month(date(2026, 12, 1)) == date(2027, 1, 31)
+    # Next month is February — leap and non-leap.
+    assert end_of_next_month(date(2027, 1, 15)) == date(2027, 2, 28)
+    assert end_of_next_month(date(2028, 1, 15)) == date(2028, 2, 29)
 
 
 def _delete_practices_in_slots(slots):
@@ -121,9 +167,9 @@ def _delete_practices_in_slots(slots):
 
 
 def test_generate_creates_drafts(practice_days):
-    slots = expected_slots(date(2026, 8, 3), weeks=2)
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 16))
     try:
-        created = generate_draft_block(date(2026, 8, 3), weeks=2)
+        created = generate_draft_block(date(2026, 8, 3), date(2026, 8, 16))
         assert len(created) == 6
         assert all(p.is_draft is True for p in created)
         assert all(p.leads_needed == 2 for p in created)
@@ -132,10 +178,10 @@ def test_generate_creates_drafts(practice_days):
 
 
 def test_generate_is_idempotent(practice_days):
-    slots = expected_slots(date(2026, 8, 3), weeks=2)
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 16))
     try:
-        first = generate_draft_block(date(2026, 8, 3), weeks=2)
-        second = generate_draft_block(date(2026, 8, 3), weeks=2)
+        first = generate_draft_block(date(2026, 8, 3), date(2026, 8, 16))
+        second = generate_draft_block(date(2026, 8, 3), date(2026, 8, 16))
 
         assert len(first) == 6
         assert second == [], "re-running must create nothing"
@@ -152,7 +198,7 @@ def test_generate_is_idempotent(practice_days):
 
 
 def test_generate_skips_slots_that_already_have_a_real_practice(practice_days):
-    slots = expected_slots(date(2026, 8, 3), weeks=1)
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))
     existing = Practice(
         date=datetime(2026, 8, 4, 18, 15),
         day_of_week="Tuesday",
@@ -162,11 +208,66 @@ def test_generate_skips_slots_that_already_have_a_real_practice(practice_days):
     db.session.commit()
 
     try:
-        created = generate_draft_block(date(2026, 8, 3), weeks=1)
+        created = generate_draft_block(date(2026, 8, 3), date(2026, 8, 9))
         assert len(created) == 2, "must not duplicate an already-published practice"
         assert Practice.query.filter_by(date=datetime(2026, 8, 4, 18, 15)).count() == 1
     finally:
         _delete_practices_in_slots(slots)
+
+
+# -----------------------------------------------------------------------
+# Twelve consecutive monthly bootstrap runs — the continuity property.
+#
+# The bug this guards against: the old window was `weeks=4` normalised back
+# to the Monday of start_date's week, so a run on the 1st covered only
+# 28 - weekday(1st) days forward, and the tail of most months was NEVER
+# drafted by any run (the next run started at the next 1st and never looked
+# back). Measured before the fix: 15 of 91 Tue/Thu/Sat slots over 8 months
+# simply never existed as rows.
+#
+# The fix drafts through the end of NEXT month on every run, so consecutive
+# runs overlap by a whole month and idempotency absorbs the overlap. The
+# property asserted here — no configured slot in the spanned period is
+# skipped, ever — is the entire reason the feature can promise availability
+# is collected for every practice.
+# -----------------------------------------------------------------------
+
+
+def test_twelve_consecutive_monthly_runs_skip_no_configured_slot(practice_days_continuity):
+    starts = [date(2099, month, 1) for month in range(1, 13)]
+    final_end = end_of_next_month(starts[-1])  # 2100-01-31
+
+    # Independently enumerate every configured slot in the spanned period —
+    # deliberately NOT via expected_slots(), so a bug there can't hide.
+    expected = []
+    day = starts[0]
+    while day <= final_end:
+        if day.weekday() in (1, 3, 5):  # Tue/Thu/Sat per the fixture
+            expected.append(datetime(day.year, day.month, day.day, 6, 45))
+        day += timedelta(days=1)
+    assert len(expected) > 150, "sanity: a year of Tue/Thu/Sat is ~170 slots"
+
+    try:
+        for start in starts:
+            generate_draft_block(start, end_of_next_month(start))
+
+        drafted = {
+            row.date
+            for row in Practice.query.with_entities(Practice.date)
+            .filter(Practice.date.in_(expected))
+            .all()
+        }
+        missing = sorted(set(expected) - drafted)
+        assert missing == [], (
+            f"{len(missing)} configured slot(s) were never drafted by any of "
+            f"twelve consecutive monthly runs — first few: {missing[:6]}"
+        )
+        # And the month-long overlap must not create duplicates.
+        assert Practice.query.filter(Practice.date.in_(expected)).count() == len(expected), (
+            "overlapping monthly runs must never double-draft a slot"
+        )
+    finally:
+        _delete_practices_in_slots(expected)
 
 
 # -----------------------------------------------------------------------
@@ -197,7 +298,7 @@ def test_drafted_practices_in_window_returns_drafts_inside_window(db_session):
     db.session.commit()
 
     try:
-        result = drafted_practices_in_window(start, weeks=2)
+        result = drafted_practices_in_window(start, date(2099, 3, 16))
         assert [p.id for p in result] == [inside.id], "a draft inside the window must be returned"
     finally:
         _delete_practices_in_slots([inside_slot])
@@ -220,7 +321,7 @@ def test_drafted_practices_in_window_excludes_published_practices(db_session):
     db.session.commit()
 
     try:
-        result = drafted_practices_in_window(start, weeks=2)
+        result = drafted_practices_in_window(start, date(2099, 3, 16))
         assert [p.id for p in result] == [draft.id], (
             "a published (non-draft) practice inside the window must be excluded"
         )
@@ -242,35 +343,33 @@ def test_drafted_practices_in_window_excludes_drafts_before_start_date(db_sessio
     db.session.commit()
 
     try:
-        result = drafted_practices_in_window(start, weeks=2)
+        result = drafted_practices_in_window(start, date(2099, 3, 16))
         assert [p.id for p in result] == [inside.id], "a draft before start_date must be excluded"
     finally:
         _delete_practices_in_slots([before_slot, inside_slot])
 
 
-def test_drafted_practices_in_window_excludes_drafts_after_window_end(db_session):
+def test_drafted_practices_in_window_includes_end_date_and_excludes_beyond(db_session):
     start = date(2099, 3, 2)
-    weeks = 2
-    inside_slot = datetime(2099, 3, 10, 18, 0)
-    # A full day past the 2-week horizon (start + 14 days = 2099-03-16), so
-    # the exclusion doesn't depend on time-of-day boundary semantics.
+    end = date(2099, 3, 16)
+    on_end_slot = datetime(2099, 3, 16, 18, 0)  # ON the end date — inclusive
     after_slot = datetime(2099, 3, 17, 12, 0)
-    inside = Practice(
-        date=inside_slot, day_of_week="Tuesday", is_draft=True, logistics_notes=_TEST_NOTE
+    on_end = Practice(
+        date=on_end_slot, day_of_week="Monday", is_draft=True, logistics_notes=_TEST_NOTE
     )
     after = Practice(
-        date=after_slot, day_of_week="Wednesday", is_draft=True, logistics_notes=_TEST_NOTE
+        date=after_slot, day_of_week="Tuesday", is_draft=True, logistics_notes=_TEST_NOTE
     )
-    db.session.add_all([inside, after])
+    db.session.add_all([on_end, after])
     db.session.commit()
 
     try:
-        result = drafted_practices_in_window(start, weeks=weeks)
-        assert [p.id for p in result] == [inside.id], (
-            "a draft past the window's horizon must be excluded"
+        result = drafted_practices_in_window(start, end)
+        assert [p.id for p in result] == [on_end.id], (
+            "a draft on end_date must be included; one past it must be excluded"
         )
     finally:
-        _delete_practices_in_slots([inside_slot, after_slot])
+        _delete_practices_in_slots([on_end_slot, after_slot])
 
 
 def test_drafted_practices_in_window_orders_by_date(db_session):
@@ -293,7 +392,7 @@ def test_drafted_practices_in_window_orders_by_date(db_session):
     db.session.commit()
 
     try:
-        result = drafted_practices_in_window(start, weeks=2)
+        result = drafted_practices_in_window(start, date(2099, 3, 16))
         assert [p.id for p in result] == [earliest.id, middle.id, latest.id], (
             "results must be ordered by date, not creation order"
         )
