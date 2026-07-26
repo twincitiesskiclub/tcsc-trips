@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import make_url
+from sqlalchemy.exc import DBAPIError
 
 from tests._db_guard import is_local_db
 from tests.practices.migration_test_support import (
@@ -21,9 +22,10 @@ RELEASE = ROOT / "scripts" / "release.sh"
 RELEASE_TIMEOUT_SECONDS = 30
 E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
-# Head as of the lead-availability poll schema migration (down_revision points
-# at EVENTS_REVISION above) — bump this whenever a new migration lands on top.
-READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"  # the branch's migration head
+LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
+# Head as of the readiness-digest surface migration (down_revision is
+# LEAD_AVAILABILITY_REVISION above) — bump whenever a new migration lands.
+READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -128,7 +130,7 @@ def _schema_database_url(schema: str) -> str:
     return scoped.render_as_string(hide_password=False)
 
 
-def _run_release(schema: str) -> subprocess.CompletedProcess[str]:
+def _schema_environment(schema: str) -> dict[str, str]:
     environment = os.environ.copy()
     environment.update({
         "PATH": (
@@ -151,8 +153,32 @@ def _run_release(schema: str) -> subprocess.CompletedProcess[str]:
         "SLACK_YOUR_X_ID": "",
         "RENDER": "",
     })
+    return environment
+
+
+def _run_release(schema: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(RELEASE)],
+        cwd=ROOT,
+        env=_schema_environment(schema),
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=RELEASE_TIMEOUT_SECONDS,
+    )
+
+
+def _run_flask_db(schema: str, *args: str) -> subprocess.CompletedProcess[str]:
+    """Run `flask db <args>` against the isolated schema, like release.sh."""
+    environment = _schema_environment(schema)
+    environment.update({
+        "TCSC_MIGRATION_ONLY": "1",
+        "SLACK_BOT_TOKEN": "",
+        "SLACK_APP_TOKEN": "",
+        "SLACK_SIGNING_SECRET": "",
+    })
+    return subprocess.run(
+        [sys.executable, "-m", "flask", "db", *args],
         cwd=ROOT,
         env=environment,
         text=True,
@@ -256,3 +282,82 @@ def test_release_lifecycle_conflict_rolls_back_c4_and_restores_orphan(
         }
         assert defaults["created_at"] is None
         assert defaults["updated_at"] is None
+
+
+def _try_insert_readiness_digest(connection) -> str | None:
+    """Attempt the probe insert in a savepoint; return the error, if any.
+
+    Always rolls the savepoint back so the probe never leaves a row behind
+    (the schema is throwaway anyway, but this keeps later assertions exact).
+    """
+    savepoint = connection.begin_nested()
+    try:
+        connection.exec_driver_sql("""
+            INSERT INTO practice_summary_posts
+                (week_start, surface, message_ts, created_at, updated_at)
+            VALUES ('2099-01-01', 'readiness_digest', 'TEST-probe', now(), now())
+        """)
+    except DBAPIError as error:
+        savepoint.rollback()
+        return str(error.orig)
+    savepoint.rollback()
+    return None
+
+
+def _readiness_digest_count(connection) -> int:
+    return connection.exec_driver_sql(
+        "SELECT count(*) FROM practice_summary_posts "
+        "WHERE surface = 'readiness_digest'"
+    ).scalar_one()
+
+
+def test_readiness_digest_migration_applies_and_reverses(
+    engine, release_schema,
+):
+    """b4d1f8e6c2a7 round trip in an isolated schema: at head the surface is
+    accepted; downgrade deletes existing digest rows and rejects the surface
+    again; upgrading once more re-accepts it."""
+    with engine.begin() as connection:
+        _use_schema(connection, release_schema)
+        _create_e36_baseline(connection, conflicting=False)
+
+    upgrade = _run_flask_db(release_schema, "upgrade")
+    assert upgrade.returncode == 0, upgrade.stdout + upgrade.stderr
+
+    with engine.begin() as connection:
+        _use_schema(connection, release_schema)
+        assert _revision(connection) == READINESS_DIGEST_REVISION
+        assert _try_insert_readiness_digest(connection) is None, (
+            "head must accept surface='readiness_digest'"
+        )
+        # Leave a committed digest row so downgrade's DELETE path is exercised.
+        connection.exec_driver_sql("""
+            INSERT INTO practice_summary_posts
+                (week_start, surface, message_ts, created_at, updated_at)
+            VALUES ('2099-02-01', 'readiness_digest', 'TEST-kept', now(), now())
+        """)
+
+    downgrade = _run_flask_db(
+        release_schema, "downgrade", LEAD_AVAILABILITY_REVISION
+    )
+    assert downgrade.returncode == 0, downgrade.stdout + downgrade.stderr
+
+    with engine.begin() as connection:
+        _use_schema(connection, release_schema)
+        assert _revision(connection) == LEAD_AVAILABILITY_REVISION
+        assert _readiness_digest_count(connection) == 0, (
+            "downgrade must delete rows that would violate the restored check"
+        )
+        error = _try_insert_readiness_digest(connection)
+        assert error is not None, (
+            "after downgrade, surface='readiness_digest' must be rejected"
+        )
+        assert "ck_practice_summary_post_surface" in error
+
+    reupgrade = _run_flask_db(release_schema, "upgrade")
+    assert reupgrade.returncode == 0, reupgrade.stdout + reupgrade.stderr
+
+    with engine.begin() as connection:
+        _use_schema(connection, release_schema)
+        assert _revision(connection) == READINESS_DIGEST_REVISION
+        assert _try_insert_readiness_digest(connection) is None

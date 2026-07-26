@@ -46,20 +46,21 @@ def post_readiness_digest(
         f"{summary['ready']} ready, {len(summary['incomplete'])} need details"
     )
 
-    channel = COLLAB_CHANNEL_ID
-    thread_ts = None
-    if block_start is not None:
-        record = find_readiness_digest_post(block_start)
-        if record is not None:
-            channel = record.channel_id or COLLAB_CHANNEL_ID
-            thread_ts = record.message_ts
-
-    kwargs = {"channel": channel, "blocks": blocks, "text": fallback}
-    if thread_ts is not None:
-        kwargs["thread_ts"] = thread_ts
-
     try:
+        channel = COLLAB_CHANNEL_ID
+        thread_ts = None
+        if block_start is not None:
+            record = find_readiness_digest_post(block_start)
+            if record is not None:
+                channel = record.channel_id or COLLAB_CHANNEL_ID
+                thread_ts = record.message_ts
+
+        kwargs = {"channel": channel, "blocks": blocks, "text": fallback}
+        if thread_ts is not None:
+            kwargs["thread_ts"] = thread_ts
+
         response = get_slack_client().chat_postMessage(**kwargs)
+        ts = response["ts"]
     except SlackApiError as exc:
         error = exc.response.get("error", str(exc))
         current_app.logger.error("Readiness digest failed to post: %s", error)
@@ -67,8 +68,6 @@ def post_readiness_digest(
     except Exception as exc:
         current_app.logger.error("Readiness digest failed to post: %s", exc)
         return {"success": False, "error": str(exc)}
-
-    ts = response["ts"]
     if block_start is not None and thread_ts is None:
         # Remember the top-level digest so tomorrow's nudge threads onto it.
         try:

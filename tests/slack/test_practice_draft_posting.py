@@ -87,6 +87,44 @@ def test_non_slack_failure_is_reported_not_raised(app):
     assert "connection timed out" in result["error"]
 
 
+def test_response_without_ts_is_reported_not_raised(app):
+    """A malformed Slack response must come back as a failure dict, not a
+    KeyError escaping the never-raises contract."""
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"ok": True}  # no "ts"
+
+    with patch("app.slack.practices.drafts.get_slack_client", return_value=client):
+        with app.app_context():
+            result = post_readiness_digest([_practice(4)], "Jul 21", "Aug 13")
+
+    assert result["success"] is False
+
+
+def test_digest_lookup_failure_is_reported_not_raised(app):
+    """A DB error while resolving the recorded digest must come back as a
+    failure dict, not raise out of the never-raises contract."""
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    with patch(
+        "app.slack.practices.drafts.get_slack_client", return_value=client
+    ), patch(
+        "app.slack.practices.drafts.find_readiness_digest_post",
+        side_effect=RuntimeError("TEST db unavailable"),
+    ):
+        with app.app_context():
+            result = post_readiness_digest(
+                [_practice(4)], "Jul 21", "Aug 13",
+                block_start=THREADED_BLOCK_START,
+            )
+
+    assert result["success"] is False
+    assert "TEST db unavailable" in result["error"]
+    client.chat_postMessage.assert_not_called()
+
+
 def test_nudge_threads_onto_the_recorded_digest(app):
     """A recorded digest identity turns the daily nudge into a thread reply."""
     from app.slack.practices.drafts import post_readiness_digest
