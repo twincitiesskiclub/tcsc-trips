@@ -93,6 +93,119 @@ def admin_create_records(db_session):
     db.session.commit()
 
 
+@pytest.fixture
+def open_poll_covering_create_date(db_session):
+    """An OPEN availability poll whose range covers ADMIN_CREATE_REFRESH_DATE.
+
+    2126 dates are unique to this module (availability suites reserve 2099),
+    so this poll can't overlap any other test's ranges.
+    """
+    from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+
+    poll = LeadAvailabilityPoll(
+        starts_on=ADMIN_CREATE_REFRESH_DATE.date().replace(day=1),
+        ends_on=ADMIN_CREATE_REFRESH_DATE.date().replace(day=28),
+        status=PollStatus.OPEN,
+        channel_id="C-TEST-CREATE-WARN",
+    )
+    db.session.add(poll)
+    db.session.commit()
+    poll_id = poll.id
+
+    yield poll
+
+    db.session.rollback()
+    stored = db.session.get(LeadAvailabilityPoll, poll_id)
+    if stored is not None:
+        db.session.delete(stored)
+    db.session.commit()
+
+
+def test_admin_create_warns_when_an_open_poll_covers_the_date(
+    admin_client,
+    admin_create_records,
+    open_poll_covering_create_date,
+    monkeypatch,
+    caplog,
+):
+    """A practice created inside an OPEN poll's range gets no letter and no
+    availability (the emoji mapping is fixed at build time, and appending
+    would shift letters under reactions leads already gave). That must be
+    LOUD — an error log naming poll and practice, and a warning in the
+    response for the admin UI — never silent."""
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: {},
+    )
+
+    with caplog.at_level(logging.ERROR):
+        response = admin_client.post(
+            "/admin/practices/create",
+            json={
+                "date": ADMIN_CREATE_REFRESH_DATE.isoformat(),
+                "location_id": admin_create_records.location_id,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["success"] is True
+    admin_create_records.practice_id = body["practice_id"]
+
+    warning = body.get("availability_warning")
+    assert warning, "the create response must surface the poll-coverage warning"
+    assert f"#{open_poll_covering_create_date.id}" in warning
+    assert str(body["practice_id"]) in warning
+    assert f"#{open_poll_covering_create_date.id}" in caplog.text
+    assert "OPEN availability poll" in caplog.text
+
+
+def test_admin_create_does_not_warn_without_a_covering_open_poll(
+    admin_client,
+    admin_create_records,
+    db_session,
+    monkeypatch,
+):
+    """A CLOSED poll over the same range is history, not a live poll the
+    practice is missing from — no warning."""
+    from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: {},
+    )
+    closed = LeadAvailabilityPoll(
+        starts_on=ADMIN_CREATE_REFRESH_DATE.date().replace(day=1),
+        ends_on=ADMIN_CREATE_REFRESH_DATE.date().replace(day=28),
+        status=PollStatus.CLOSED,
+        channel_id="C-TEST-CREATE-WARN",
+    )
+    db.session.add(closed)
+    db.session.commit()
+    closed_id = closed.id
+
+    try:
+        response = admin_client.post(
+            "/admin/practices/create",
+            json={
+                "date": ADMIN_CREATE_REFRESH_DATE.isoformat(),
+                "location_id": admin_create_records.location_id,
+            },
+        )
+
+        assert response.status_code == 200
+        body = response.get_json()
+        assert body["success"] is True
+        admin_create_records.practice_id = body["practice_id"]
+        assert "availability_warning" not in body
+    finally:
+        db.session.rollback()
+        stored = db.session.get(LeadAvailabilityPoll, closed_id)
+        if stored is not None:
+            db.session.delete(stored)
+        db.session.commit()
+
+
 def test_new_practice_route_renders_create_mode(admin_client, db_session):
     resp = admin_client.get('/admin/practices/new')
     assert resp.status_code == 200

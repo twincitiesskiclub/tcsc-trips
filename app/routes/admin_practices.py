@@ -17,6 +17,7 @@ from ..practices.models import (
     PracticeLead, SocialLocation, practice_activities_junction,
     practice_types_junction
 )
+from ..practices.availability_models import LeadAvailabilityPoll, PollStatus
 from ..practices.drafting import DEFAULT_PRACTICE_DAYS
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
 from ..practices.lead_candidates import lead_candidates
@@ -452,6 +453,37 @@ def create_practice():
 
         db.session.commit()
 
+        # A practice created inside an OPEN availability poll's range is
+        # invisible to that poll: the emoji-to-practice mapping is fixed when
+        # the poll is built, and appending a row would shift letters under
+        # reactions leads have already given (the position guarantee on
+        # lead_availability_poll_practices is load-bearing). So no letter, no
+        # availability — which must be LOUD, not silent: log at error level
+        # and surface a warning in the response for the admin UI. Best-effort
+        # after the commit: a failure here must not fail the create.
+        availability_warning = None
+        try:
+            practice_day = practice.date.date()
+            covering_poll = LeadAvailabilityPoll.query.filter(
+                LeadAvailabilityPoll.status == PollStatus.OPEN,
+                LeadAvailabilityPoll.starts_on <= practice_day,
+                LeadAvailabilityPoll.ends_on >= practice_day,
+            ).first()
+            if covering_poll is not None:
+                availability_warning = (
+                    f"Practice {practice.id} ({practice.date:%a %-m/%-d}) falls "
+                    f"inside OPEN availability poll #{covering_poll.id} "
+                    f"({covering_poll.starts_on} – {covering_poll.ends_on}) but is "
+                    "NOT on that poll — its emoji mapping was fixed when the poll "
+                    "was built, so no availability will be collected for this "
+                    "practice. Assign leads for it manually."
+                )
+                current_app.logger.error(availability_warning)
+        except Exception:
+            current_app.logger.exception(
+                'Practice #%s: open-poll coverage check failed', practice.id
+            )
+
         # The row is already committed, so summary refresh is best-effort and
         # must not turn a successful create into a false failure response.
         try:
@@ -478,11 +510,14 @@ def create_practice():
                 practice.id,
             )
 
-        return jsonify({
+        payload = {
             'success': True,
             'practice_id': practice.id,
             'message': 'Practice created successfully'
-        })
+        }
+        if availability_warning:
+            payload['availability_warning'] = availability_warning
+        return jsonify(payload)
 
     except Exception as e:
         db.session.rollback()
