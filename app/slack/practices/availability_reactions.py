@@ -26,6 +26,7 @@ from app.practices.availability_models import (
     ParticipantStatus,
     PollStatus,
 )
+from app.practices.interfaces import PracticeStatus
 from app.slack.client import get_slack_client
 
 
@@ -102,6 +103,23 @@ def handle_availability_reaction(*, channel, message_ts, reaction, slack_user_id
             db.session.delete(existing)
     elif existing is None:
         practice = mapping.practice
+        # A cancelled session's line is dropped from the poll message by
+        # poll_rows(), but its seeded reaction pill stays on the message --
+        # there is nothing to remove it, and removing it would be its own
+        # risk. So a lead can still tap a letter whose line is gone and, until
+        # now, that wrote a real availability response for a practice that
+        # isn't happening. Harmless to assignment (which is per-practice) but
+        # it inflates every count the director reads. Withdrawing a reaction
+        # is still honoured above, so an existing response can always be
+        # cleaned up.
+        if practice is not None and practice.status == PracticeStatus.CANCELLED.value:
+            current_app.logger.info(
+                "Ignoring availability reaction :%s: from %s on poll %s: "
+                "practice %s is cancelled",
+                reaction, slack_user_id, poll.id, mapping.practice_id,
+            )
+            db.session.commit()  # the participant row above is still real
+            return {"success": True, "ignored": "cancelled_practice"}
         db.session.add(LeadAvailabilityResponse(
             poll_id=poll.id,
             practice_id=mapping.practice_id,
@@ -146,7 +164,17 @@ def reconcile_poll(poll) -> dict:
     added = removed = 0
 
     for mapping in poll.practices:
-        should_have = {
+        practice = mapping.practice
+        cancelled = (
+            practice is not None
+            and practice.status == PracticeStatus.CANCELLED.value
+        )
+        # Same rule as handle_availability_reaction: no NEW availability for a
+        # cancelled session, whose pill outlives its line on the message.
+        # `should_have` is emptied rather than skipping the mapping outright,
+        # so the removal loop below still runs and rows recorded before the
+        # cancellation are cleaned up instead of being frozen in place.
+        should_have = set() if cancelled else {
             slack_uid_to_user[uid].id
             for uid in by_emoji.get(mapping.emoji, set())
             if uid in slack_uid_to_user
@@ -156,7 +184,6 @@ def reconcile_poll(poll) -> dict:
         has = {row.user_id: row for row in existing_rows}
 
         for user_id in should_have - set(has):
-            practice = mapping.practice
             db.session.add(LeadAvailabilityResponse(
                 poll_id=poll.id, practice_id=mapping.practice_id, user_id=user_id,
                 source="reaction",

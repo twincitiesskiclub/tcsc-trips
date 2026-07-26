@@ -31,6 +31,7 @@ from app.practices.availability_models import (
     ParticipantStatus,
     PollStatus,
 )
+from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice, PracticeLocation
 from app.slack.practices.availability_reactions import (
     handle_availability_reaction,
@@ -489,6 +490,102 @@ def test_reconcile_counts_done_under_the_polls_snapshotted_emoji(db_session):
             poll_id=poll.id, user_id=user.id).one()
         assert participant.status == ParticipantStatus.DONE, (
             "a mid-poll config rename must not demote DONE participants"
+        )
+    finally:
+        _cleanup(*ids)
+
+
+def test_a_reaction_on_a_cancelled_practice_is_not_recorded(db_session):
+    """A cancelled session's line is dropped from the poll message, but its
+    seeded pill stays on it — nothing removes reactions from a live message.
+    So a lead can still tap a letter whose line is gone, and that used to
+    write a real availability response for a practice that isn't happening,
+    inflating every count the director reads.
+    """
+    poll, practice, user, slack_user, location = _setup(db_session, "111.30")
+    ids = _row_ids(poll, practice, user, slack_user, location)
+    practice.status = PracticeStatus.CANCELLED.value
+    db_session.commit()
+
+    try:
+        result = handle_availability_reaction(
+            channel=TEST_CHANNEL_ID, message_ts="111.30", reaction="letter_a",
+            slack_user_id=slack_user.slack_uid,
+        )
+
+        assert result == {"success": True, "ignored": "cancelled_practice"}
+        assert LeadAvailabilityResponse.query.filter_by(
+            poll_id=ids[0], practice_id=ids[1]).count() == 0, \
+            "no availability may be recorded for a cancelled session"
+    finally:
+        _cleanup(*ids)
+
+
+def test_withdrawing_a_reaction_on_a_cancelled_practice_still_cleans_up(db_session):
+    """The guard is one-directional on purpose: a response recorded before the
+    cancellation must still be removable, or a lead who un-reacts is stuck
+    counted for a session that isn't happening.
+    """
+    poll, practice, user, slack_user, location = _setup(db_session, "111.31")
+    ids = _row_ids(poll, practice, user, slack_user, location)
+
+    try:
+        handle_availability_reaction(
+            channel=TEST_CHANNEL_ID, message_ts="111.31", reaction="letter_a",
+            slack_user_id=slack_user.slack_uid,
+        )
+        assert LeadAvailabilityResponse.query.filter_by(
+            poll_id=ids[0], practice_id=ids[1]).count() == 1, "sanity"
+
+        practice.status = PracticeStatus.CANCELLED.value
+        db_session.commit()
+
+        handle_availability_reaction(
+            channel=TEST_CHANNEL_ID, message_ts="111.31", reaction="letter_a",
+            slack_user_id=slack_user.slack_uid, removed=True,
+        )
+        assert LeadAvailabilityResponse.query.filter_by(
+            poll_id=ids[0], practice_id=ids[1]).count() == 0, \
+            "withdrawal must still work after the practice is cancelled"
+    finally:
+        _cleanup(*ids)
+
+
+def test_reconcile_does_not_re_add_a_cancelled_practices_responses(db_session):
+    """The guard has to hold in reconcile too, or it is decorative.
+
+    reconcile_poll re-derives responses from Slack's live reactions, and the
+    cancelled session's pill is still on the message with the lead's reaction
+    on it — so without this, the very next nudge run would put back every row
+    handle_availability_reaction just declined to write.
+    """
+    poll, practice, user, slack_user, location = _setup(db_session, "111.32")
+    ids = _row_ids(poll, practice, user, slack_user, location)
+
+    try:
+        # Recorded while the practice was live, then cancelled.
+        handle_availability_reaction(
+            channel=TEST_CHANNEL_ID, message_ts="111.32", reaction="letter_a",
+            slack_user_id=slack_user.slack_uid,
+        )
+        practice.status = PracticeStatus.CANCELLED.value
+        db_session.commit()
+
+        client = MagicMock()
+        client.reactions_get.return_value = {
+            "message": {"reactions": [
+                {"name": "letter_a", "users": [slack_user.slack_uid]},
+            ]}
+        }
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client):
+            result = reconcile_poll(poll)
+
+        assert result.get("error") is None
+        assert LeadAvailabilityResponse.query.filter_by(
+            poll_id=ids[0], practice_id=ids[1]).count() == 0, (
+            "reconcile must drop the stale row for a cancelled session, not "
+            "re-add it from the surviving reaction pill"
         )
     finally:
         _cleanup(*ids)
