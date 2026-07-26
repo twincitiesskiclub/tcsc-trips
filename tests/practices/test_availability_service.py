@@ -15,6 +15,7 @@ from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from sqlalchemy import text
 
 from app.constants import UserStatus
 from app.models import Tag, User, db
@@ -261,6 +262,14 @@ def test_open_poll_posts_and_seeds_reactions(db_session, app):
         seeded = [c.kwargs["name"] for c in client.reactions_add.call_args_list]
         assert seeded == ["letter_a", "letter_b", "white_check_mark"], \
             "seed each session emoji plus done, so members tap rather than search"
+
+        # OPEN and the ts must be *committed*, not just pending on the
+        # session -- rollback would discard uncommitted state.
+        poll_id = poll.id
+        db.session.rollback()
+        stored = db.session.get(LeadAvailabilityPoll, poll_id)
+        assert stored.status == PollStatus.OPEN
+        assert stored.message_ts == "1785.1"
     finally:
         _cleanup_practices([first, second], poll)
 
@@ -291,6 +300,52 @@ def test_open_poll_seeding_survives_a_reaction_failure(db_session, app):
             "a failed reaction must not stop seeding of the remaining emoji"
     finally:
         _cleanup_practices([first, second], poll)
+
+
+def test_open_poll_commit_failure_reports_the_live_ts_and_rolls_back(db_session, app):
+    """A failed commit after the Slack post must not crash, must not claim
+    success, and must name the ts of the message that IS live -- that ts
+    exists nowhere else once the exception is swallowed, and a human needs
+    it to recover. The session must be rolled back so the caller isn't left
+    with a poisoned transaction, and the poll must land back in a clean
+    DRAFT state (no half-written OPEN with a dangling ts).
+    """
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+    poll_id = poll.id
+
+    def _abort_transaction():
+        # Poison the transaction at the DB level before "failing", so the
+        # session-usable assertion below is genuine: without open_poll's
+        # rollback, PostgreSQL keeps the transaction aborted and every
+        # later query raises (PendingRollbackError / InFailedSqlTransaction)
+        # rather than trivially passing.
+        db.session.execute(text("SELECT 1/0"))
+
+    try:
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ok": True, "ts": "1785.99"}
+
+        with patch("app.practices.availability.validate_emoji_available", return_value=(True, [])), \
+             patch("app.practices.availability.get_slack_client", return_value=client), \
+             patch.object(db.session, "commit", side_effect=_abort_transaction):
+            result = open_poll(poll)
+
+        assert result["success"] is False
+        assert "1785.99" in result["error"], \
+            "the error must name the live message ts -- it is the only place it survives"
+        client.reactions_add.assert_not_called(), \
+            "the poll never became OPEN, so there is nothing to seed onto"
+
+        # Genuine session-usable check (see _abort_transaction above): this
+        # query raises unless open_poll rolled the aborted transaction back.
+        stored = db.session.get(LeadAvailabilityPoll, poll_id)
+        assert stored.status == PollStatus.DRAFT
+        assert stored.message_ts is None, \
+            "rollback must discard the half-written ts, not leave it dangling"
+    finally:
+        _cleanup_practices([ready], poll)
 
 
 def test_build_poll_excludes_cancelled_practices(db_session):

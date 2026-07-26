@@ -293,10 +293,34 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
         current_app.logger.error("Availability poll failed to post: %s", exc)
         return {"success": False, "error": str(exc)}
 
-    poll.message_ts = response["ts"]
+    # Captured before the commit: if it fails, the rollback expires the poll
+    # object, and the ts of the now-live message exists nowhere else once the
+    # exception is swallowed -- these two values are what a human needs to
+    # recover.
+    poll_id = poll.id
+    posted_ts = response["ts"]
+
+    poll.message_ts = posted_ts
     poll.status = PollStatus.OPEN
     poll.opened_at = now_central_naive()
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception as exc:  # noqa: BLE001 - never raise; see module docstring
+        # Roll back so the caller isn't handed a poisoned session. The poll
+        # is back to DRAFT with no message_ts, but the Slack message IS live
+        # and collecting reactions that match nothing -- do NOT delete it as
+        # "cleanup" (that destroys the audit trail, and the delete can fail
+        # too). A human recovers by setting message_ts/status from this log
+        # line rather than re-opening, which would post a duplicate.
+        db.session.rollback()
+        message = (
+            f"availability poll {poll_id}: message posted to Slack "
+            f"(ts {posted_ts}) but the commit marking it OPEN failed: {exc}. "
+            f"The message is live; record ts {posted_ts} on the poll manually "
+            "instead of opening again."
+        )
+        current_app.logger.error(message)
+        return {"success": False, "error": message}
 
     # Seed every reaction so members tap an existing pill rather than hunting
     # through the emoji picker for :letter_g:. The poll is already posted at
