@@ -20,7 +20,8 @@ function load() {
   global.document = dom.window.document;
   const module = {exports: {}};
   new Function('module', 'exports', 'window', 'document',
-    SOURCE + '\nmodule.exports = {leadCandidateLabel, renderLeadPicker};'
+    SOURCE + '\nmodule.exports = {leadCandidateLabel, renderLeadPicker, '
+    + 'resolveLeadIds, markLeadPickerReady};'
   )(module, module.exports, dom.window, dom.window.document);
   return {dom, ...module.exports};
 }
@@ -28,16 +29,20 @@ function load() {
 // Loads _detail_context.js with its collaborators stubbed, mirroring the
 // scope it gets in the rendered page (practiceId, loadLeadCandidates and
 // renderLeadPicker are all in scope there via _detail_script.js).
-function loadContext({loadLeadCandidates, renderLeadPicker} = {}) {
+function loadContext({loadLeadCandidates, renderLeadPicker,
+                      markLeadPickerReady} = {}) {
   const dom = new JSDOM(
     '<!doctype html><div id="lead-picker"><p class="pe-empty">Loading…</p></div>');
   const module = {exports: {}};
+  const readyCalls = [];
   new Function('module', 'exports', 'window', 'document',
     'practiceId', 'loadLeadCandidates', 'renderLeadPicker',
+    'markLeadPickerReady',
     CONTEXT_SOURCE + '\nmodule.exports = {loadLeadPicker};'
   )(module, module.exports, dom.window, dom.window.document,
-    42, loadLeadCandidates, renderLeadPicker);
-  return {dom, ...module.exports};
+    42, loadLeadCandidates, renderLeadPicker,
+    markLeadPickerReady || ((v) => readyCalls.push(v)));
+  return {dom, readyCalls, ...module.exports};
 }
 
 test('label shows availability and both load counts', () => {
@@ -128,4 +133,76 @@ test('a successful candidate load still renders the picker', async () => {
   });
   await loadLeadPicker();
   assert.deepEqual(calls, [42, payload]);
+});
+
+/* --------------------------------------------------------------------------
+   The save-wipe guard. The picker is the only lead-assignment control on the
+   practice form, and the form always submits lead_ids, so an empty checkbox
+   set is a destructive instruction: edit_practice deletes every coach/lead
+   row and re-adds only what the payload names. Before this guard, a picker
+   that failed to load (or hadn't finished) meant clicking Save deleted every
+   assigned lead and rewrote the member-facing announcement without them.
+   -------------------------------------------------------------------------- */
+
+test('an unrendered picker preserves the server-side assignment', () => {
+  const {resolveLeadIds, dom} = load();
+  const container = dom.window.document.getElementById('lead-picker');
+  // Exactly what a failed load leaves behind: the error node, no checkboxes.
+  container.innerHTML = '<p class="rail-error">Could not load lead availability.</p>';
+
+  const {ids, preserved} = resolveLeadIds(container, [7, 9]);
+  assert.deepEqual(ids, [7, 9],
+    'must resubmit the already-assigned leads, not an empty set');
+  assert.equal(preserved, true, 'caller needs to know the edit did not take');
+});
+
+test('a still-loading picker preserves the server-side assignment', () => {
+  const {resolveLeadIds, dom} = load();
+  const container = dom.window.document.getElementById('lead-picker');
+  container.innerHTML = '<p class="pe-empty">Loading…</p>';
+
+  const {ids, preserved} = resolveLeadIds(container, [3]);
+  assert.deepEqual(ids, [3]);
+  assert.equal(preserved, true);
+});
+
+test('a rendered picker is authoritative, including deselect-to-none', () => {
+  const {renderLeadPicker, resolveLeadIds, dom} = load();
+  const container = dom.window.document.getElementById('lead-picker');
+  renderLeadPicker(container, {
+    leads_needed: 2,
+    assigned: [1],
+    candidates: [
+      {user_id: 1, name: 'Ada L', available: true, responded: true,
+       stale: false, led_in_block: 0, led_last_90d: 1},
+      {user_id: 2, name: 'Zoe L', available: true, responded: true,
+       stale: false, led_in_block: 0, led_last_90d: 0},
+    ],
+  });
+
+  // Reflects the checkboxes, not the server's list.
+  assert.deepEqual(resolveLeadIds(container, [1]).ids, [1]);
+
+  container.querySelectorAll('input[type=checkbox]')[1].checked = true;
+  assert.deepEqual(resolveLeadIds(container, [1]).ids, [1, 2],
+    'a newly ticked candidate must reach the payload');
+
+  // Deliberately clearing every lead must still be possible — the guard is
+  // about an *unknown* state, not about refusing to unassign.
+  container.querySelectorAll('input[type=checkbox]').forEach((b) => {
+    b.checked = false;
+  });
+  const cleared = resolveLeadIds(container, [1]);
+  assert.deepEqual(cleared.ids, [],
+    'unassigning every lead on a rendered picker must still be honoured');
+  assert.equal(cleared.preserved, false);
+});
+
+test('reloading the picker withdraws trust until it re-renders', async () => {
+  const {loadLeadPicker, readyCalls} = loadContext({
+    loadLeadCandidates: async () => null,  // fails
+  });
+  await loadLeadPicker();
+  assert.deepEqual(readyCalls, [false],
+    'a failed reload must clear the flag, not leave a stale true standing');
 });

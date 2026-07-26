@@ -702,6 +702,37 @@ function leadCandidateLabel(candidate) {
   return `${candidate.name} · ${parts.join(' · ')}${warning}`;
 }
 
+/* Whether the picker on screen is a trustworthy statement of who is
+   assigned. False until renderLeadPicker has actually drawn it.
+
+   This matters because the picker is the ONLY lead-assignment control on the
+   practice form, so "no checkboxes are checked" is ambiguous: it means "no
+   leads" if the picker rendered, and "we don't know yet" if it failed or is
+   still loading. The form submits lead_ids unconditionally and edit_practice
+   deletes every coach/lead row before re-adding from the payload, so sending
+   the empty set in the second case silently deletes every assigned lead and
+   rewrites the member-facing announcement without them. */
+let leadPickerReady = false;
+
+function markLeadPickerReady(ready) {
+  leadPickerReady = ready;
+}
+
+/* Resolve the lead ids to submit. Falls back to the server-rendered
+   assignment (preserve, don't delete) whenever the picker isn't
+   trustworthy, and says so via `preserved` so the caller can tell the
+   admin their lead edits didn't take. */
+function resolveLeadIds(picker, serverAssigned) {
+  if (!leadPickerReady) {
+    return {ids: (serverAssigned || []).slice(), preserved: true};
+  }
+  return {
+    ids: Array.from(picker.querySelectorAll('input[type=checkbox]:checked'))
+      .map(el => parseInt(el.value, 10)),
+    preserved: false,
+  };
+}
+
 function renderLeadPicker(container, payload) {
   const assigned = new Set(payload.assigned || []);
   container.innerHTML = '';
@@ -741,4 +772,7 @@ function renderLeadPicker(container, payload) {
     row.appendChild(text);
     container.appendChild(row);
   });
+
+  // Only now is an unchecked box meaningful — see markLeadPickerReady.
+  markLeadPickerReady(true);
 }

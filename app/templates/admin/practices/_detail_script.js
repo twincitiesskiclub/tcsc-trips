@@ -23,8 +23,16 @@ function selectedTagIds(containerId) {
 function collectLeadIds() {
     const picker = document.getElementById('lead-picker');
     if (picker) {
-        return Array.from(picker.querySelectorAll('input[type=checkbox]:checked'))
-            .map(el => parseInt(el.value, 10));
+        // resolveLeadIds preserves the server-rendered assignment when the
+        // picker failed or hasn't finished loading -- an empty checkbox set
+        // would otherwise tell edit_practice to delete every assigned lead.
+        const {ids, preserved} = resolveLeadIds(picker, selLeads);
+        if (preserved) {
+            showToast(
+                'Lead availability never loaded — saved everything else and '
+                + 'left the assigned leads unchanged.', 'error');
+        }
+        return ids;
     }
     return peCollectIds('leads-pills');
 }

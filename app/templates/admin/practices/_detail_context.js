@@ -63,6 +63,10 @@ async function loadLeadConfirmations() {
 async function loadLeadPicker() {
     const container = document.getElementById('lead-picker');
     if (!container) return;
+    // Not trustworthy until renderLeadPicker draws it. Cleared here rather
+    // than only on failure so a reload can't leave a stale `true` standing
+    // over a container that is back to "Loading…".
+    markLeadPickerReady(false);
     try {
         const payload = await loadLeadCandidates(practiceId);
         if (!payload) {
