@@ -18,7 +18,7 @@ from ..practices.models import (
     practice_types_junction
 )
 from ..practices.availability_models import LeadAvailabilityPoll, PollStatus
-from ..practices.drafting import DEFAULT_PRACTICE_DAYS
+from ..practices.drafting import default_practice_days
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
 from ..practices.lead_candidates import lead_candidates
 from ..practices.publishing import publish_blockers, publish_practices
@@ -1615,9 +1615,10 @@ def trigger_weekly_summary():
 @admin_required
 def settings_data():
     """Return practice-related settings from AppConfig."""
-    # Get practice_days config (shared default — see DEFAULT_PRACTICE_DAYS in
-    # app/practices/drafting.py for why there is exactly one copy).
-    practice_days = AppConfig.get('practice_days', DEFAULT_PRACTICE_DAYS)
+    # Get practice_days config (shared default — see default_practice_days in
+    # app/practices/drafting.py for why there is exactly one source and why
+    # it returns a fresh copy).
+    practice_days = AppConfig.get('practice_days', default_practice_days())
 
     return jsonify({
         'practice_days': practice_days

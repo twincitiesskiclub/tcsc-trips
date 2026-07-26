@@ -156,7 +156,7 @@ def test_default_practice_days_include_saturday(no_practice_days_row):
 
 
 def test_default_practice_days_is_one_shared_constant():
-    """Every site that defaults `practice_days` must share the ONE constant.
+    """Every site that defaults `practice_days` must share the ONE source.
 
     The bug this pins: drafting had its own Tue/Thu copy while the coach
     post, refresh, and the admin settings endpoint each carried a Tue/Thu/Sat
@@ -167,9 +167,25 @@ def test_default_practice_days_is_one_shared_constant():
     from app.slack.practices import coach_review, refresh
 
     for module in (admin_practices, coach_review, refresh):
-        assert module.DEFAULT_PRACTICE_DAYS is drafting.DEFAULT_PRACTICE_DAYS, (
-            f"{module.__name__} must import the shared default, not carry a copy"
+        assert module.default_practice_days is drafting.default_practice_days, (
+            f"{module.__name__} must import the shared default helper, not carry a copy"
         )
+
+
+def test_default_practice_days_copies_are_independent():
+    """AppConfig.get(key, default) hands the default object itself to the
+    caller, so a shared mutable default means one consumer writing
+    entry['active'] = False would corrupt the drafting schedule process-wide
+    until restart. Each call must return a fresh, independently mutable copy."""
+    from app.practices.drafting import default_practice_days
+
+    first = default_practice_days()
+    first[0]["active"] = False
+    first.append({"day": "monday", "time": "00:00", "active": True})
+
+    second = default_practice_days()
+    assert second[0]["active"] is True, "mutating one copy must not leak into the next"
+    assert all(entry["day"] != "monday" for entry in second)
 
 
 def test_end_of_next_month_spans_year_boundaries():

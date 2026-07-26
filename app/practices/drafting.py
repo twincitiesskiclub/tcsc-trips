@@ -20,18 +20,32 @@ WEEKDAYS = {
 # The built-in schedule when no `practice_days` AppConfig row exists — which
 # is the live state of dev (and, as far as we know, prod) today, so this
 # default IS the schedule, not a formality. It lives here because this module
-# owns the practice_days schedule semantics (see the module docstring), and it
-# is imported by every other site that defaults the key (coach weekly summary,
-# post refresh, the admin settings endpoint): the drafting copy once said
-# Tue/Thu while the coach post said Tue/Thu/Sat, so Saturday practices were
-# never drafted while the coach post rendered a permanent empty Saturday
-# "Add Practice" placeholder — the duplicate-on-top-of-a-draft trap that
-# coach_visible_practices() exists to prevent. One constant, one schedule.
-DEFAULT_PRACTICE_DAYS = [
+# owns the practice_days schedule semantics (see the module docstring), and
+# every other site that defaults the key (coach weekly summary, post refresh,
+# the admin settings endpoint) imports default_practice_days() below: the
+# drafting copy once said Tue/Thu while the coach post said Tue/Thu/Sat, so
+# Saturday practices were never drafted while the coach post rendered a
+# permanent empty Saturday "Add Practice" placeholder — the
+# duplicate-on-top-of-a-draft trap coach_visible_practices() exists to
+# prevent. One source, one schedule. A tuple so the sequence itself can't be
+# appended to in place.
+DEFAULT_PRACTICE_DAYS = (
     {"day": "tuesday", "time": "18:00", "active": True},
     {"day": "thursday", "time": "18:00", "active": True},
     {"day": "saturday", "time": "09:00", "active": True},
-]
+)
+
+
+def default_practice_days() -> list[dict]:
+    """A fresh copy of the default schedule, safe to hand to any caller.
+
+    AppConfig.get(key, default) returns the default object itself when the
+    row is missing, so passing the shared constant would let one consumer's
+    in-place edit (e.g. entry['active'] = False) silently corrupt the
+    drafting schedule process-wide until restart. Every read site uses this
+    helper instead of the constant.
+    """
+    return [dict(entry) for entry in DEFAULT_PRACTICE_DAYS]
 
 
 def end_of_next_month(day: date) -> date:
@@ -62,7 +76,7 @@ def expected_slots(start_date: date, end_date: date) -> list[datetime]:
     start_date.weekday() days (see end_of_next_month above). No slot earlier
     than start_date is ever returned.
     """
-    config = AppConfig.get("practice_days", DEFAULT_PRACTICE_DAYS) or []
+    config = AppConfig.get("practice_days", default_practice_days()) or []
 
     times_by_weekday: dict[int, list[tuple[int, int]]] = {}
     for entry in config:

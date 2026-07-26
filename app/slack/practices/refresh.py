@@ -11,7 +11,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import update
 from sqlalchemy.orm.attributes import set_committed_value
 
-from app.practices.drafting import DEFAULT_PRACTICE_DAYS
+from app.practices.drafting import default_practice_days
 from app.practices.models import Practice, PracticeSummaryPost
 from app.slack.practices.summary_posts import (
     COACH_SUMMARY,
@@ -346,9 +346,10 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
             )
         practices_for_week = week_query.order_by(Practice.date).all()
 
-        # Shared default — see DEFAULT_PRACTICE_DAYS in app/practices/
-        # drafting.py for why there is exactly one copy.
-        expected_days = AppConfig.get('practice_days', DEFAULT_PRACTICE_DAYS)
+        # Shared default — see default_practice_days in app/practices/
+        # drafting.py for why there is exactly one source and why it
+        # returns a fresh copy.
+        expected_days = AppConfig.get('practice_days', default_practice_days())
         practice_infos = [
             convert_practice_to_info(practice)
             for practice in practices_for_week

@@ -8,7 +8,7 @@ from slack_sdk.errors import SlackApiError
 from app.models import db
 from app.slack.client import get_slack_client, get_channel_id_by_name
 from app.slack.blocks import build_collab_practice_blocks
-from app.practices.drafting import DEFAULT_PRACTICE_DAYS
+from app.practices.drafting import default_practice_days
 from app.practices.models import Practice
 
 from app.slack.practices._config import (
@@ -444,9 +444,9 @@ def post_coach_weekly_summary(
     from app.slack.blocks import build_coach_weekly_summary_blocks
 
     # Get expected practice days from config (shared default — see
-    # DEFAULT_PRACTICE_DAYS in app/practices/drafting.py for why there is
-    # exactly one copy).
-    expected_days = AppConfig.get('practice_days', DEFAULT_PRACTICE_DAYS)
+    # default_practice_days in app/practices/drafting.py for why there is
+    # exactly one source and why it returns a fresh copy).
+    expected_days = AppConfig.get('practice_days', default_practice_days())
 
     # Query practices for the week — drafts INCLUDED. This post is the coaches'
     # working surface: drafts are exactly what they are here to fill in, and
