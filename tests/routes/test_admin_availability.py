@@ -8,6 +8,7 @@ import pytest
 
 from app.models import AppConfig, db
 from app.practices.availability import PollNotReadyError
+from app.practices.availability_emoji import EmojiSupplyError
 from app.practices.availability_models import LeadAvailabilityPoll
 from app.practices.models import Practice, PracticeLocation, PracticeType
 from app.slack.practices._config import COORD_CHANNEL_ID
@@ -63,6 +64,24 @@ def test_create_reports_incomplete_drafts_as_a_400(admin_client):
 
     assert response.status_code == 400
     assert "needs location" in response.get_json()["error"]
+
+
+def test_create_reports_emoji_shortage_as_a_400(admin_client):
+    """Too many sessions for the configured letters is a 4xx, not a 500.
+
+    A 500 tells the director nothing; the message names the actual fix (add
+    letters to config/practices.yaml, or split the block), so it has to reach
+    them instead of being swallowed by the generic error handler.
+    """
+    with patch("app.routes.admin_availability.build_poll",
+               side_effect=EmojiSupplyError(
+                   "poll needs 30 distinct emoji but only 26 are configured")):
+        response = admin_client.post("/admin/availability/polls/create", json={
+            "starts_on": "2026-08-01", "ends_on": "2026-10-31",
+        })
+
+    assert response.status_code == 400
+    assert "only 26 are configured" in response.get_json()["error"]
 
 
 def test_create_uses_shadow_flag_from_config(admin_client, db_session):

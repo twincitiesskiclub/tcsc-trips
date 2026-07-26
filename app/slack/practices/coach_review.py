@@ -9,7 +9,6 @@ from app.models import db
 from app.slack.client import get_slack_client, get_channel_id_by_name
 from app.slack.blocks import build_collab_practice_blocks
 from app.practices.models import Practice
-from app.practices.service import published_practices
 
 from app.slack.practices._config import (
     LOGGING_CHANNEL_ID,
@@ -437,7 +436,10 @@ def post_coach_weekly_summary(
     """
     from datetime import timedelta
     from app.models import AppConfig, Tag
-    from app.practices.service import convert_practice_to_info
+    from app.practices.service import (
+        coach_visible_practices,
+        convert_practice_to_info,
+    )
     from app.slack.blocks import build_coach_weekly_summary_blocks
 
     # Get expected practice days from config
@@ -447,9 +449,12 @@ def post_coach_weekly_summary(
         {"day": "saturday", "time": "09:00", "active": True}
     ])
 
-    # Query practices for the week
+    # Query practices for the week — drafts INCLUDED. This post is the coaches'
+    # working surface: drafts are exactly what they are here to fill in, and
+    # hiding them made every drafted slot render as an empty "Add Practice"
+    # placeholder, inviting a second practice on top of the draft.
     week_end = week_start + timedelta(days=7)
-    practices = published_practices().filter(
+    practices = coach_visible_practices().filter(
         Practice.date >= week_start,
         Practice.date < week_end
     ).order_by(Practice.date).all()

@@ -70,6 +70,14 @@
 #practice-list .pl-status.is-completed{background:#f1f5f9;color:#64748b}
 #practice-list .pl-status.is-cancelled{background:#fde8e8;color:#c53030}
 
+/* draft badge + publish banner — a draft is invisible to members, so it must
+   never read as a live practice at a glance (text, not color alone) */
+#practice-list .pl-draft{font-size:10px;font-weight:800;letter-spacing:.04em;color:#92400e;background:#fef3c7;border-radius:6px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+#practice-list .pl-row-draft{border-style:dashed}
+#practice-list .pl-draft-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;background:#fffbeb;border:1.5px solid #fde68a;border-radius:11px;padding:13px 16px;margin-bottom:18px;font-size:13.5px;color:#78350f}
+#practice-list .pl-draft-detail{font-size:12.5px;color:#92400e;margin-top:4px}
+#practice-list .pl-draft-banner .pl-btn-primary[disabled]{opacity:.5;cursor:not-allowed}
+
 /* past section */
 #practice-list .pl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#f1f4f8;border:1px solid #e1e6ee;border-radius:11px;padding:13px 15px;color:#475569;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;font-family:inherit;margin-top:28px}
 #practice-list .pl-past-toggle .chev{transition:transform .15s;color:#94a3b8}

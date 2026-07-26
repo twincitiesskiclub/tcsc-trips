@@ -31,6 +31,12 @@ from app.utils import now_central_naive
 # Every tag that makes a member eligible to be asked for availability.
 ELIGIBLE_TAGS = ["PRACTICES_LEAD", "PRACTICES_DIRECTOR", "HEAD_COACH", "ASSISTANT_COACH"]
 
+# The tags that keep an ALUMNI member in the pool. Mirrors the coach override in
+# the Slack tier logic (see CLAUDE.md): coaches at this club are routinely
+# ALUMNI-status while actively coaching, so the coach tag — not membership
+# status — is what says "this person still runs practice".
+COACH_TAGS = frozenset({"HEAD_COACH", "ASSISTANT_COACH"})
+
 
 class PollNotReadyError(RuntimeError):
     """Raised when practices in range still lack location, type or time."""
@@ -53,22 +59,38 @@ def eligible_leads() -> list[User]:
     season with the old spreadsheet.
 
     Excludes DROPPED members: a former member who kept a tag should not still
-    be DMed. ALUMNI is deliberately NOT filtered here -- coaches are routinely
-    ALUMNI-status while actively coaching (see the coach override in Slack
-    tier logic), so excluding ALUMNI would drop real, active coaches from the
-    pool. Whether ALUMNI leads (not just coaches) should also be nudged is an
-    open question for the practices director, not settled by this fix.
+    be DMed.
+
+    ALUMNI is a partial exclusion, decided by the practices director: an
+    ALUMNI member stays in the pool only if they hold a coach tag. Coaches are
+    routinely ALUMNI-status while actively coaching (see the coach override in
+    Slack tier logic), so a blanket status filter would drop real, active
+    coaches -- but a *lead*-tagged alumnus has stepped back from the club, and
+    DMing them every block is how the bot gets muted by the people it depends
+    on. Keeping someone in the pool after they lapse is now a matter of
+    tagging them as a coach, not of the availability code guessing.
     """
     tag_ids = [t.id for t in Tag.query.filter(Tag.name.in_(ELIGIBLE_TAGS)).all()]
     if not tag_ids:
         return []
-    return (
+    candidates = (
         User.query.options(joinedload(User.tags))
         .filter(User.tags.any(Tag.id.in_(tag_ids)))
         .filter(User.status != UserStatus.DROPPED)
         .order_by(User.first_name)
         .all()
     )
+    # Filtered in Python rather than SQL because tags are already eager-loaded
+    # here, so this costs nothing and keeps the rule readable next to the
+    # docstring that explains why it exists.
+    return [user for user in candidates if _may_be_asked(user)]
+
+
+def _may_be_asked(user) -> bool:
+    """Whether this eligible-tagged user should still receive availability DMs."""
+    if user.status != UserStatus.ALUMNI:
+        return True
+    return any(tag.name in COACH_TAGS for tag in user.tags)
 
 
 def shadow_roster_leads() -> list[User]:

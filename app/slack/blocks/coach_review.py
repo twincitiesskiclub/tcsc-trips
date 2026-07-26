@@ -132,6 +132,22 @@ def build_coach_weekly_summary_blocks(
             if needs_attention:
                 header_text += " :warning:"
 
+            # A draft is invisible to every member-facing surface, so say so on
+            # the row. Without this a coach reads the week and reasonably
+            # assumes the club can already see it.
+            if getattr(practice, 'is_draft', False):
+                missing = list(getattr(practice, 'missing_details', []) or [])
+                header_text += "  `DRAFT`"
+                if missing:
+                    header_text += (
+                        f"\n:warning: _Draft — not visible to members; "
+                        f"needs {', '.join(missing)}_"
+                    )
+                else:
+                    header_text += (
+                        "\n_Draft — not visible to members until published_"
+                    )
+
             # Header section (no accessory - Edit button moved to bottom for mobile)
             blocks.append({
                 "type": "section",
@@ -261,13 +277,55 @@ def build_coach_weekly_summary_blocks(
         blocks.append({"type": "divider"})
 
     # ==========================================================================
+    # PUBLISH — batch, because the Sunday review IS the weekly batch
+    # ==========================================================================
+    # One button for the week rather than one per practice: the coaches fill in
+    # details and assign leads across the whole week in this post, then the
+    # block goes out together. Only offered when something is actually ready —
+    # a button that always errors teaches people to ignore it.
+    drafts = [p for p in practices if getattr(p, 'is_draft', False)]
+    publishable = [
+        p for p in drafts if not (getattr(p, 'missing_details', []) or [])
+    ]
+    if publishable:
+        blocks.append({
+            "type": "actions",
+            "elements": [{
+                "type": "button",
+                "text": {
+                    "type": "plain_text",
+                    "text": f":rocket: Publish {len(publishable)} "
+                            f"{'practice' if len(publishable) == 1 else 'practices'}",
+                    "emoji": True,
+                },
+                "action_id": "publish_week_drafts",
+                # Just the week: the handler re-reads which drafts are ready
+                # from the database, since this post may be days old by the
+                # time someone clicks and the ids baked in at render time
+                # could be stale.
+                "value": week_start.strftime('%Y-%m-%d'),
+                "style": "primary",
+            }],
+        })
+
+    # ==========================================================================
     # FOOTER
     # ==========================================================================
+    footer = (
+        ":bulb: Click *Edit* to update workout details. Changes will notify "
+        "this thread unless unchecked."
+    )
+    if drafts:
+        footer += (
+            f"\n:page_facing_up: {len(drafts)} "
+            f"{'draft' if len(drafts) == 1 else 'drafts'} in this week — "
+            "members can't see a draft until it's published."
+        )
     blocks.append({
         "type": "context",
         "elements": [{
             "type": "mrkdwn",
-            "text": ":bulb: Click *Edit* to update workout details. Changes will notify this thread unless unchecked."
+            "text": footer
         }]
     })
 

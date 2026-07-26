@@ -19,6 +19,7 @@ from ..practices.models import (
 )
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
 from ..practices.lead_candidates import lead_candidates
+from ..practices.publishing import publish_blockers, publish_practices
 from ..practices.plan_reaction_queries import (
     PlanReactionSourceSelectionError,
     load_all_plan_reaction_sources,
@@ -288,9 +289,47 @@ def practices_data():
             'cancellation_reason': practice.cancellation_reason or '',
             'workout_description': practice.workout_description or '',
             'logistics_notes': practice.logistics_notes or '',
+            # Drafts are invisible to members until published. The grid needs
+            # both flags: is_draft to badge and offer the row for selection,
+            # missing_details to explain why a row can't be published yet
+            # rather than letting the director find out by clicking.
+            'is_draft': practice.is_draft,
+            'missing_details': publish_blockers(practice) if practice.is_draft else [],
         })
 
     return jsonify({'practices': practices_data})
+
+
+@admin_practices_bp.route('/publish', methods=['POST'])
+@admin_required
+def publish_practices_route():
+    """Publish a selection of drafts, making them visible to members.
+
+    Bulk rather than per-practice because the Sunday workflow is a batch: a
+    block of drafts gets its details and leads filled in together, then goes
+    out together. Partial success is normal and is reported rather than raised
+    -- some rows in a week-wide selection are routinely already live or still
+    missing details.
+    """
+    data = request.get_json() or {}
+    practice_ids = data.get('practice_ids')
+    if not practice_ids or not isinstance(practice_ids, list):
+        return jsonify({'error': 'practice_ids must be a non-empty list'}), 400
+
+    practices = Practice.query.filter(Practice.id.in_(practice_ids)).all()
+    found = {practice.id for practice in practices}
+    missing_ids = [pid for pid in practice_ids if pid not in found]
+    if missing_ids:
+        # Refuse the whole batch rather than publishing part of a stale grid
+        # selection: publishing is member-visible and awkward to undo, so a
+        # selection that no longer matches the database is worth a re-check.
+        return jsonify({
+            'error': 'unknown practice id(s): '
+                     + ', '.join(str(pid) for pid in missing_ids),
+        }), 404
+
+    result = publish_practices(practices)
+    return jsonify(result)
 
 
 @admin_practices_bp.route('/<int:practice_id>')

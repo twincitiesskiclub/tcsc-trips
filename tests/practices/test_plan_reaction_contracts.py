@@ -57,10 +57,14 @@ def test_practice_info_includes_snapshot_and_session_emoji():
         updated_at=None,
         plan_reactions=[{"emoji": "athletic_shoe", "label": "Run"}],
         slack_session_emoji="six",
+        # Non-nullable on the model, so the read contract always carries it.
+        is_draft=False,
     )
     info = convert_practice_to_info(practice)
     assert info.plan_reactions == [{"emoji": "athletic_shoe", "label": "Run"}]
     assert info.slack_session_emoji == "six"
+    assert info.is_draft is False
+    assert info.missing_details == []
 
 
 def test_models_define_callable_reaction_defaults_and_nullable_session_emoji():

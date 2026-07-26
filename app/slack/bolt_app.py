@@ -18,7 +18,7 @@ import os
 import logging
 import threading
 from collections.abc import Mapping
-from datetime import datetime
+from datetime import datetime, timedelta
 from types import SimpleNamespace
 from typing import Optional
 
@@ -689,6 +689,17 @@ if _bot_token:
 
             client.views_open(trigger_id=trigger_id, view=modal)
 
+    @bolt_app.action("publish_week_drafts")
+    def handle_publish_week_drafts(ack, body, action, client, logger):
+        """Handle Publish click on the Sunday coach review post."""
+        return _handle_publish_week_drafts(
+            ack=ack,
+            body=body,
+            action=action,
+            client=client,
+            logger=logger,
+        )
+
     @bolt_app.action("create_practice_from_summary")
     def handle_create_practice_from_summary(ack, body, action, client, logger):
         """Handle Add Practice button click from weekly summary placeholder.
@@ -1277,6 +1288,91 @@ else:
 # =============================================================================
 # Helper Functions (always defined)
 # =============================================================================
+
+def _handle_publish_week_drafts(ack, body, action, client, logger) -> None:
+    """Publish the ready drafts in one week from the Sunday coach review post.
+
+    The button carries only the week, not a list of practice ids: the Sunday
+    post lives for a week, so by the time someone clicks, the set of ready
+    drafts has usually moved on (details filled in, one already published, a
+    practice cancelled). Re-reading from the database is the only way the click
+    means "publish what is ready now" rather than "publish what was ready when
+    this message was rendered".
+
+    Feedback is ephemeral to the clicker. The post itself refreshes through
+    refresh_practice_posts() as part of publishing, so a channel-wide reply
+    would just duplicate what the updated post already shows.
+    """
+    ack()
+
+    user_id = body["user"]["id"]
+    channel_id = body.get("channel", {}).get("id")
+    raw_value = (action or {}).get("value") or ""
+
+    def tell(text):
+        if not channel_id:
+            logger.warning("publish_week_drafts had no channel to reply in")
+            return
+        client.chat_postEphemeral(channel=channel_id, user=user_id, text=text)
+
+    try:
+        week_start = datetime.strptime(raw_value, '%Y-%m-%d')
+    except ValueError:
+        logger.error("Invalid week date on publish_week_drafts: %r", raw_value)
+        tell(":warning: Could not read the week date on that button. "
+             "Refresh the post and try again.")
+        return
+
+    with get_app_context():
+        from app.practices.models import Practice
+        from app.practices.publishing import publish_practices
+        from app.practices.service import coach_visible_practices
+
+        week_end = week_start + timedelta(days=7)
+        drafts = coach_visible_practices().filter(
+            Practice.date >= week_start,
+            Practice.date < week_end,
+            Practice.is_draft.is_(True),
+        ).order_by(Practice.date).all()
+
+        if not drafts:
+            tell(":white_check_mark: Every practice this week is already "
+                 "published — nothing left to do.")
+            return
+
+        result = publish_practices(drafts, actor_slack_id=user_id)
+        published = len(result.get("published", []))
+        skipped = result.get("skipped", [])
+
+        if published:
+            parts = [
+                f":rocket: Published {published} "
+                f"{'practice' if published == 1 else 'practices'}. "
+                "Members can see them now; announcements go out on the "
+                "normal schedule."
+            ]
+        else:
+            parts = [":warning: Nothing was ready to publish."]
+
+        if skipped:
+            by_id = {p.id: p for p in drafts}
+            detail = "; ".join(
+                f"{by_id[item['practice_id']].date:%a %-m/%-d} needs "
+                f"{', '.join(item['missing'])}"
+                for item in skipped
+                if item["practice_id"] in by_id
+            )
+            parts.append(
+                f"Still waiting on {len(skipped)}: {detail}. "
+                "Use *Edit* to fill in the missing details."
+            )
+
+        tell("\n".join(parts))
+        logger.info(
+            "publish_week_drafts by %s for week %s: %d published, %d skipped",
+            user_id, week_start.date(), published, len(skipped),
+        )
+
 
 def _handle_tcsc_command(ack, command: dict, client, logger) -> None:
     """Route /tcsc while keeping Practice Preview isolated from persistence."""

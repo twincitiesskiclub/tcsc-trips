@@ -104,6 +104,7 @@ function render() {
   pastL.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   let html = '';
+  html += draftBannerHtml(upcomingRows());
   html += section('Today', todayL, true);
   html += section('This week', weekL, false);
   html += section('Later', laterL, false);
@@ -170,14 +171,112 @@ function rowHtml(p, isToday) {
   const st = p.status || 'scheduled';
   const status = `<span class="pl-status is-${esc(st)}">${esc(STATUS_LABEL[st] || st)}</span>`;
   const flag = isToday ? '<span class="pl-today-flag">Today</span>' : '';
-  return `<button type="button" class="pl-row${isToday ? ' today' : ''}" data-id="${p.id}" `
-    + `aria-label="${esc(p.location_name || 'Practice')} ${esc(time)}, ${esc(STATUS_LABEL[st] || st)}">`
+  // A draft looks like any other practice in this list but no member can see
+  // it, so it is badged on the row itself — a director reading the week needs
+  // to know which of these are actually live without cross-checking anything.
+  const missing = (p.missing_details || []);
+  const draftBadge = p.is_draft
+    ? `<span class="pl-draft">Draft${missing.length ? ` · needs ${esc(missing.join(', '))}` : ''}</span>`
+    : '';
+  return `<button type="button" class="pl-row${isToday ? ' today' : ''}${p.is_draft ? ' pl-row-draft' : ''}" data-id="${p.id}" `
+    + `aria-label="${esc(p.location_name || 'Practice')} ${esc(time)}, ${esc(STATUS_LABEL[st] || st)}${p.is_draft ? ', draft, not visible to members' : ''}">`
     + `<div class="pl-row-main"><div class="pl-row-top"><span class="pl-loc">${esc(p.location_name || 'No Location')}</span>`
     + `<span class="pl-time">${esc(time)}</span>${flag}</div>`
     + `<div class="pl-meta">${pills}${inds}</div>`
     + peopleLine(p)
     + `</div>`
-    + `<div class="pl-row-aside">${status}</div></button>`;
+    + `<div class="pl-row-aside">${status}${draftBadge}</div></button>`;
+}
+
+/* ---------- drafts → published ---------- */
+
+/* The practices the draft banner speaks for: everything matching the current
+   filters from today onward. Shared with publishReadyDrafts() so the button's
+   count and the ids it actually posts can never disagree — publishing a draft
+   in the past would announce a practice that has already happened. */
+function upcomingRows() {
+  const today = chicagoTodayYMD();
+  return practicesData.filter(matchesFilters).filter(p => ymd(p.date) >= today);
+}
+
+function readyDrafts(list) {
+  return (list || []).filter(p => p.is_draft && !(p.missing_details || []).length);
+}
+
+function draftBannerHtml(list) {
+  const drafts = (list || []).filter(p => p.is_draft);
+  if (!drafts.length) return '';
+  const ready = readyDrafts(drafts);
+  const blocked = drafts.filter(p => (p.missing_details || []).length);
+
+  const count = drafts.length === 1
+    ? '1 draft is not visible to members yet'
+    : `${drafts.length} drafts are not visible to members yet`;
+
+  let detail = '';
+  if (blocked.length) {
+    const items = blocked.map(p => {
+      const d = new Date(p.date);
+      const when = d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
+      return `${esc(when)} needs ${esc((p.missing_details || []).join(', '))}`;
+    });
+    detail = `<div class="pl-draft-detail">${items.join(' · ')}</div>`;
+  }
+
+  // The button stays visible but disabled when nothing is ready: hiding it
+  // would read as "there is nothing to publish", when the truth is "someone
+  // has to fill in the missing details first".
+  const button = `<button type="button" id="pl-publish-btn" class="pl-btn pl-btn-primary"`
+    + `${ready.length ? '' : ' disabled'}>Publish ${ready.length} ready</button>`;
+
+  return `<div class="pl-draft-banner" role="status">`
+    + `<div><strong>${esc(count)}</strong>${detail}</div>${button}</div>`;
+}
+
+/* Publishing is member-visible and announces to the club, so it gets a
+   confirmation — the same treatment as opening the availability poll. */
+function confirmPublishReadyDrafts() {
+  const ready = readyDrafts(upcomingRows());
+  if (!ready.length) return;
+  const plural = ready.length === 1 ? 'practice' : 'practices';
+  if (!window.confirm(
+      `Publish ${ready.length} ${plural}? Members will see them and `
+      + 'announcements will go out on the normal schedule.')) return;
+  publishReadyDrafts();
+}
+
+async function publishReadyDrafts() {
+  const ids = readyDrafts(upcomingRows()).map(p => p.id);
+  if (!ids.length) return;
+
+  const btn = document.getElementById('pl-publish-btn');
+  if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
+
+  try {
+    const r = await fetch('/admin/practices/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ practice_ids: ids }),
+    });
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+
+    const published = (body.published || []).length;
+    const skipped = (body.skipped || []).length;
+    showToast(
+      `Published ${published} practice${published === 1 ? '' : 's'}`
+        + (skipped ? `, ${skipped} still need details` : ''),
+      skipped ? 'warning' : 'success');
+
+    await loadPractices();
+    render();
+  } catch (e) {
+    console.error(e);
+    showToast(e.message || 'Failed to publish practices', 'error');
+    // Re-render so the button returns to a usable state rather than sitting
+    // on "Publishing…" forever after a failure.
+    render();
+  }
 }
 
 /* ---------- events ---------- */
@@ -187,6 +286,10 @@ function attachEventListeners() {
   document.getElementById('pl-location-filter').addEventListener('change', render);
 
   document.getElementById('pl-list').addEventListener('click', (e) => {
+    // Checked before .pl-row: the banner sits outside any row, but keeping
+    // this first means a future move inside one can't turn the publish click
+    // into a drawer-open.
+    if (e.target.closest('#pl-publish-btn')) { confirmPublishReadyDrafts(); return; }
     const row = e.target.closest('.pl-row');
     if (row) { openDrawer(parseInt(row.dataset.id), row); return; }
     if (e.target.closest('#pl-past-toggle')) { pastExpanded = !pastExpanded; pastLimit = 20; render(); return; }

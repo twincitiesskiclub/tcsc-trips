@@ -15,6 +15,7 @@ from flask import Blueprint, jsonify, request
 from ..auth import admin_required
 from ..models import AppConfig
 from ..practices.availability import PollNotReadyError, build_poll, open_poll
+from ..practices.availability_emoji import EmojiSupplyError
 from ..practices.availability_models import LeadAvailabilityPoll
 
 admin_availability_bp = Blueprint(
@@ -61,6 +62,12 @@ def create_poll():
         poll = build_poll(starts_on, ends_on, is_shadow=_shadow_mode())
     except PollNotReadyError as exc:
         # Surfaced verbatim: the director needs to know which practice to fix.
+        return jsonify({"error": str(exc)}), 400
+    except EmojiSupplyError as exc:
+        # A range with more sessions than there are configured letter emoji is
+        # bad input, not a server fault -- and the message names the two real
+        # fixes (add letters, or split the block), so it has to reach the
+        # director rather than becoming an opaque 500.
         return jsonify({"error": str(exc)}), 400
 
     # channel_id/is_shadow are surfaced so the admin UI can name the target

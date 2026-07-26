@@ -16,6 +16,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from app.constants import UserStatus
 from app.models import Tag, User, db
 from app.practices.availability import (
     PollNotReadyError,
@@ -128,6 +129,59 @@ def test_eligible_leads_comes_from_tags(db_session):
         assert "TEST Nobody" not in names, "untagged members are not asked"
     finally:
         _cleanup_users([lead, coach, untagged])
+
+
+def test_eligible_leads_excludes_alumni_without_a_coach_tag(db_session):
+    """A lapsed member who kept a lead tag should stop getting availability DMs.
+
+    ALUMNI is not a blanket exclusion (see the next test) — coaches at this
+    club are routinely ALUMNI-status while actively coaching. The line is the
+    coach tag: a lead-tagged alumnus has stepped back from the club, and DMing
+    them every block is how the bot earns a mute.
+    """
+    lapsed = _tagged_user("Lapsed")
+    lapsed.status = UserStatus.ALUMNI
+    db_session.commit()
+
+    try:
+        names = {u.first_name for u in eligible_leads()}
+        assert "TEST Lapsed" not in names
+    finally:
+        _cleanup_users([lapsed])
+
+
+def test_eligible_leads_keeps_alumni_who_coach(db_session):
+    """The reason ALUMNI can't be filtered wholesale.
+
+    Real head/assistant coaches hold ALUMNI status while actively coaching —
+    the same carve-out the Slack tier logic makes. Dropping them would empty
+    the pool of exactly the people who run practice.
+    """
+    head = _tagged_user("AlumHead", "HEAD_COACH")
+    assistant = _tagged_user("AlumAssistant", "ASSISTANT_COACH")
+    head.status = UserStatus.ALUMNI
+    assistant.status = UserStatus.ALUMNI
+    db_session.commit()
+
+    try:
+        names = {u.first_name for u in eligible_leads()}
+        assert "TEST AlumHead" in names
+        assert "TEST AlumAssistant" in names
+    finally:
+        _cleanup_users([head, assistant])
+
+
+def test_eligible_leads_still_excludes_dropped_coaches(db_session):
+    """DROPPED outranks the coach carve-out — removed for cause means removed."""
+    dropped = _tagged_user("DroppedCoach", "HEAD_COACH")
+    dropped.status = UserStatus.DROPPED
+    db_session.commit()
+
+    try:
+        names = {u.first_name for u in eligible_leads()}
+        assert "TEST DroppedCoach" not in names
+    finally:
+        _cleanup_users([dropped])
 
 
 def test_build_poll_assigns_emoji_in_chronological_order(db_session):

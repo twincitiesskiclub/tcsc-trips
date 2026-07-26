@@ -315,7 +315,10 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
     """Rebuild the registered Coach summary for one calendar week."""
     try:
         from app.models import AppConfig
-        from app.practices.service import convert_practice_to_info, published_practices
+        from app.practices.service import (
+            coach_visible_practices,
+            convert_practice_to_info,
+        )
         from app.slack.blocks import build_coach_weekly_summary_blocks
         from app.slack.client import get_slack_client
         from app.slack.practices._config import (
@@ -328,7 +331,11 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
             return {"skipped": "absent"}
 
         week_start, week_end = _week_bounds(value)
-        week_query = published_practices().filter(
+        # Drafts included: this is the coaches' own working post, and it must
+        # match what post_coach_weekly_summary() originally rendered — otherwise
+        # publishing one practice would silently drop the week's other drafts
+        # out of the post when it gets rebuilt.
+        week_query = coach_visible_practices().filter(
             Practice.date >= week_start,
             Practice.date < week_end,
         )
