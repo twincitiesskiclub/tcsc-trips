@@ -21,8 +21,11 @@ from app.practices.models import Practice, PracticeLocation, PracticeType
 from app.practices.service import published_practices
 import app.slack.bolt_app as bolt_module
 
-# A Monday far in the future, in its own reserved week.
-_WEEK_START = datetime(2126, 10, 5)
+# A real Monday, verified — 2126-10-05 is a Saturday, which this previously
+# claimed was a Monday. The handler queries by date range so the assertions held
+# either way, but a date whose comment lies about its weekday is a trap for the
+# next person, and the day_of_week values below have to match reality.
+_WEEK_START = datetime(2126, 10, 7)  # Monday; +1 = Tue 10/8, +3 = Thu 10/10
 _MARKER = "TEST publish_week_drafts"
 
 
