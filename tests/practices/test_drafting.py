@@ -18,6 +18,7 @@ from app.practices.drafting import (
     end_of_next_month,
     expected_slots,
     generate_draft_block,
+    undrafted_next_month,
 )
 from app.practices.models import Practice
 
@@ -578,3 +579,93 @@ def test_out_of_range_time_skips_one_entry_without_killing_the_run(
     assert slots == [datetime(2026, 8, 6, 18, 15)], (
         "an unusable hour must skip its own entry and leave the rest intact"
     )
+
+
+# -----------------------------------------------------------------------
+# The absence detector. A missed monthly bootstrap is silent by
+# construction: the daily readiness nudge only chases drafts that EXIST, so
+# a month nobody drafted produces no drafts to chase and the nudge stays
+# quiet — indistinguishable from "everything is published and fine". The
+# monthly overlap gives exactly one run of fault tolerance, so two
+# consecutive misses leave a whole month with no practices in it.
+#
+# Rob's call was detect-and-alert rather than drafting from the daily job:
+# daily drafting would resurrect any draft a coach deliberately deleted, the
+# very next morning.
+# -----------------------------------------------------------------------
+
+def test_a_wholly_undrafted_next_month_is_reported(practice_days_generate):
+    """The missed-bootstrap signature."""
+    # today in Nov 2099 -> next month is December, and the reserved 2099-12
+    # window has no practices in it.
+    missing = undrafted_next_month(date(2099, 11, 15))
+
+    assert missing, "an empty next month must be reported"
+    assert all(slot.year == 2099 and slot.month == 12 for slot in missing)
+    assert missing[0].strftime("%B %Y") == "December 2099"
+
+
+def test_a_drafted_next_month_is_quiet(practice_days_generate):
+    """Steady state: the bootstrap ran, so next month is full. No alert."""
+    created = generate_draft_block(date(2099, 12, 1), date(2099, 12, 31))
+    slots = expected_slots(date(2099, 12, 1), date(2099, 12, 31))
+    try:
+        assert created, "sanity: the fixture must produce slots to draft"
+        assert undrafted_next_month(date(2099, 11, 15)) == []
+    finally:
+        _delete_practices_in_slots(slots)
+
+
+def test_a_published_practice_counts_as_drafted(practice_days_generate):
+    """The check is "does a practice exist", not "is there a draft" — once a
+    block is published its rows flip to is_draft=False, and that must not read
+    as a hole.
+    """
+    created = generate_draft_block(date(2099, 12, 1), date(2099, 12, 31))
+    slots = expected_slots(date(2099, 12, 1), date(2099, 12, 31))
+    try:
+        for practice in created:
+            practice.is_draft = False
+        db.session.commit()
+
+        assert undrafted_next_month(date(2099, 11, 15)) == [], (
+            "a published block must not be mistaken for an undrafted month"
+        )
+    finally:
+        _delete_practices_in_slots(slots)
+
+
+def test_one_deleted_draft_does_not_trigger_the_alert(practice_days_generate):
+    """Deliberately deleting a single draft must stay quiet.
+
+    Drafting windows overlap by a month, so a partial hole would otherwise
+    re-alert every single morning for the rest of the block — which is exactly
+    the noise that trains people to ignore the channel.
+    """
+    created = generate_draft_block(date(2099, 12, 1), date(2099, 12, 31))
+    slots = expected_slots(date(2099, 12, 1), date(2099, 12, 31))
+    try:
+        assert len(created) > 1, "sanity: need more than one slot to leave a partial hole"
+        db.session.delete(created[0])
+        db.session.commit()
+
+        assert undrafted_next_month(date(2099, 11, 15)) == [], (
+            "one intentionally removed draft is not a missed bootstrap run"
+        )
+    finally:
+        _delete_practices_in_slots(slots)
+
+
+def test_no_configured_slots_means_nothing_to_report(no_practice_days_row):
+    """With a config that produces no slots in the month, there is no hole to
+    report — silence is correct, not a missed signal.
+    """
+    from app.models import AppConfig, db as _db
+
+    AppConfig.set(key="practice_days", value=[], description="test",
+                  category="practices")
+    _db.session.commit()
+    try:
+        assert undrafted_next_month(date(2099, 11, 15)) == []
+    finally:
+        _db.session.rollback()

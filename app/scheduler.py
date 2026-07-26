@@ -41,6 +41,7 @@ from app.practices.drafting import (
     end_of_next_month,
     generate_draft_block,
     is_ready,
+    undrafted_next_month,
 )
 from app.slack.practices.drafts import post_readiness_digest
 
@@ -481,6 +482,23 @@ def run_practice_readiness_nudge_job(app: Flask):
         # the bootstrap created, and a shorter window would silently stop
         # chasing the tail of the drafted block.
         drafts = drafted_practices_in_window(start, end_of_next_month(start))
+
+        # "No drafts" is ambiguous: it means everything is published and fine,
+        # OR that the monthly bootstrap never ran and a whole month has no
+        # practices at all. The second is silent by construction -- this job
+        # only chases drafts that exist -- so two missed runs could leave 31
+        # undrafted days with nothing anywhere saying so. Detect and alert
+        # rather than drafting here: drafting daily would resurrect any draft
+        # a coach deliberately deleted, the next morning.
+        missing = undrafted_next_month(start)
+        if missing:
+            app.logger.error(
+                "Practice drafting has a hole: all %d configured slots in "
+                "%s have no practice. The monthly bootstrap job (1st, 08:00 "
+                "Central) has probably not run -- check its logs, then "
+                "trigger it manually. Nothing else will notice this.",
+                len(missing), missing[0].strftime("%B %Y"),
+            )
 
         if not drafts or all(is_ready(p) for p in drafts):
             app.logger.info("Readiness nudge: nothing outstanding, staying quiet")

@@ -208,6 +208,48 @@ def drafted_practices_in_window(start_date: date, end_date: date) -> list[Practi
     )
 
 
+def undrafted_next_month(today: date) -> list[datetime]:
+    """Configured slots in NEXT calendar month that have no practice at all.
+
+    The absence detector for a missed bootstrap run. The monthly job drafts
+    through the end of next month, so in steady state next month is always
+    fully drafted by the time the current month starts; the overlap gives
+    exactly one run of fault tolerance, and two consecutive misses leave a
+    whole month with no practices in it. That failure is silent by
+    construction: the readiness nudge only chases drafts that EXIST, so a
+    month nobody drafted produces no drafts to chase and the nudge stays
+    quiet, indistinguishable from "everything is published and fine".
+
+    Scoped to next month rather than the whole horizon on purpose. A missed
+    bootstrap empties an entire month, while a coach deleting one draft leaves
+    a single hole -- and drafting deliberately overlaps, so a deleted draft
+    inside the current month would otherwise re-alert every morning. Reporting
+    only when the whole of next month is empty keeps the signal to the failure
+    it is meant to catch. Returns [] when nothing is configured for that month.
+
+    Counts practices of ANY kind (draft or published, including cancelled): a
+    slot that already has a real practice is not undrafted.
+    """
+    first_of_next = end_of_next_month(today).replace(day=1)
+    last_of_next = end_of_next_month(today)
+
+    slots = expected_slots(first_of_next, last_of_next)
+    if not slots:
+        return []
+
+    existing = {
+        row[0] for row in
+        Practice.query
+        .filter(Practice.date.in_(slots))
+        .with_entities(Practice.date)
+        .all()
+    }
+    missing = [slot for slot in slots if slot not in existing]
+
+    # Only a wholly empty month is the missed-run signature.
+    return missing if len(missing) == len(slots) else []
+
+
 def readiness_summary(practices: list[Practice]) -> dict:
     """Counts plus the incomplete drafts and what each is missing."""
     incomplete = [(p, missing_fields(p)) for p in practices if not is_ready(p)]
