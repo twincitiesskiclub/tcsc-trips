@@ -189,7 +189,10 @@ def test_three_nudges_is_the_ceiling(db_session):
     db_session.commit()
 
     try:
-        assert participants_to_nudge(poll, now=OPENED + timedelta(days=30)) == [], \
+        # Day 20 is still inside the block (ends 2099-08-13): past the end,
+        # participants_to_nudge short-circuits on the ended-block gate and
+        # this would pass without MAX_NUDGES doing any work.
+        assert participants_to_nudge(poll, now=OPENED + timedelta(days=20)) == [], \
             "3 sends is the ceiling; more trains people to mute the bot"
     finally:
         _cleanup(poll_id, [user_id])
@@ -300,7 +303,36 @@ def test_max_nudges_still_caps_at_fixed_morning_runs(db_session):
     db_session.commit()
 
     try:
-        assert participants_to_nudge(poll, now=datetime(2099, 8, 20, 8, 0)) == []
+        # Inside the block window on purpose -- see test_three_nudges_is_the
+        # _ceiling: a `now` past ends_on passes on the ended-block gate instead.
+        assert participants_to_nudge(poll, now=datetime(2099, 8, 10, 8, 0)) == []
+    finally:
+        _cleanup(poll_id, [user_id])
+
+
+def test_nobody_is_nudged_once_the_block_has_ended(db_session):
+    """The nudge job runs 08:00 and the close job 08:30, so the morning after
+    a block's last day the poll is still OPEN when nudges are computed. DMing
+    someone for availability on a block that has already finished is noise
+    they can do nothing about, so that final run is skipped -- on the poll's
+    own dates, not on the close job having got there first.
+    """
+    poll = _poll(db_session)
+    user = _user(db_session, "Ada")
+    poll_id, user_id = poll.id, user.id
+    _participant(db_session, poll, user, status=ParticipantStatus.PENDING)
+    db_session.commit()
+
+    try:
+        # 08:00 on the block's last day: still due, the block is live today.
+        assert len(participants_to_nudge(
+            poll, now=datetime(_ENDS_ON.year, _ENDS_ON.month, _ENDS_ON.day, 8, 0))) == 1
+
+        # 08:00 the next morning, 30 minutes before the close job runs.
+        day_after = _ENDS_ON + timedelta(days=1)
+        assert participants_to_nudge(
+            poll, now=datetime(day_after.year, day_after.month, day_after.day, 8, 0)) == [], \
+            "the block ended yesterday; there is nothing left to volunteer for"
     finally:
         _cleanup(poll_id, [user_id])
 

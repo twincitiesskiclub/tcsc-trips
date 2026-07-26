@@ -405,8 +405,17 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
     the follow-up to day 6. An off-by-one in the other direction DMs
     everyone every morning, which is the fastest way to get the bot muted by
     the people it depends on.
+
+    Nobody is nudged once the block has ended. The nudge job runs 08:00 and
+    the close job 08:30, so on the morning after a block's last day the poll
+    is still OPEN when this is computed -- and a DM asking for availability on
+    a block that already finished is noise the recipient can do nothing about.
+    The gate is the poll's own ends_on, not "has the close job run yet", so
+    reordering the two schedules can't reintroduce it.
     """
     if not poll.opened_at:
+        return []
+    if poll.ends_on and now.date() > poll.ends_on:
         return []
     if (now.date() - poll.opened_at.date()).days < FIRST_NUDGE_AFTER_DAYS:
         return []
