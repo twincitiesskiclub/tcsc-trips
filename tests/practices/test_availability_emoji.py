@@ -6,8 +6,8 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from app.practices.availability_emoji import (
-    DONE_EMOJI,
     EmojiSupplyError,
+    done_emoji,
     letter_emoji,
     validate_emoji_available,
 )
@@ -27,7 +27,58 @@ def test_letter_emoji_refuses_to_run_short(app):
 
 def test_done_emoji_is_never_a_session(app):
     with app.app_context():
-        assert DONE_EMOJI not in letter_emoji(26)
+        assert done_emoji() not in letter_emoji(26)
+
+
+def test_done_emoji_reads_the_config_key(app):
+    """config/practices.yaml defines lead_availability.done_emoji, and this
+    module's whole argument is that the emoji set lives in config because a
+    rename once broke a live poll — so editing the key must actually change
+    the emoji, not silently do nothing against a hardcoded constant."""
+    with patch(
+        "app.slack.practices._config._load_practice_config",
+        return_value={"lead_availability": {"done_emoji": "TEST_custom_done"}},
+    ):
+        assert done_emoji() == "TEST_custom_done"
+
+
+def test_done_emoji_falls_back_to_white_check_mark(app):
+    with patch(
+        "app.slack.practices._config._load_practice_config",
+        return_value={},
+    ):
+        assert done_emoji() == "white_check_mark"
+
+
+def test_configured_done_emoji_reaches_the_poll_message(app):
+    """The consumer-side proof: the poll's instruction line must render the
+    CONFIGURED done emoji, not a hardcoded one."""
+    from app.slack.blocks.availability import build_poll_blocks
+
+    with patch(
+        "app.slack.practices._config._load_practice_config",
+        return_value={"lead_availability": {"done_emoji": "TEST_custom_done"}},
+    ):
+        blocks = build_poll_blocks([], "Aug 1", "Aug 31")
+
+    instruction = blocks[1]["elements"][0]["text"]
+    assert ":TEST_custom_done:" in instruction
+    assert ":white_check_mark:" not in instruction
+
+
+def test_configured_custom_done_emoji_is_validated_like_any_custom_emoji(app):
+    """white_check_mark is skipped from validation because it's native and
+    emoji.list never returns it — but a CUSTOM done emoji from config must be
+    validated, or a typo'd config value ships an unanswerable poll."""
+    client = MagicMock()
+    client.emoji_list.return_value = {"emoji": {"letter_a": "u"}}
+
+    with patch("app.practices.availability_emoji.get_slack_client", return_value=client):
+        with app.app_context():
+            ok, missing = validate_emoji_available(["letter_a", "TEST_custom_done"])
+
+    assert ok is False
+    assert missing == ["TEST_custom_done"]
 
 
 def test_validation_reports_missing_emoji(app):

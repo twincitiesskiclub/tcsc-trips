@@ -9,7 +9,7 @@ from sqlalchemy.orm import joinedload
 from app.constants import UserStatus
 from app.models import AppConfig, SlackUser, Tag, User, db
 from app.practices.availability_emoji import (
-    DONE_EMOJI,
+    done_emoji,
     letter_emoji,
     validate_emoji_available,
 )
@@ -260,7 +260,8 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
         return {"success": False, "error": message}
 
     names = [m.emoji for m in poll.practices]
-    ok, missing = validate_emoji_available(names + [DONE_EMOJI])
+    done = done_emoji()
+    ok, missing = validate_emoji_available(names + [done])
     if not ok:
         message = (
             "cannot open poll: missing workspace emoji "
@@ -326,7 +327,7 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
     # through the emoji picker for :letter_g:. The poll is already posted at
     # this point, so a failure to seed one reaction is logged, not raised --
     # it must never fail the whole open.
-    for name in names + [DONE_EMOJI]:
+    for name in names + [done]:
         try:
             client.reactions_add(channel=poll.channel_id, timestamp=poll.message_ts, name=name)
         except SlackApiError as exc:

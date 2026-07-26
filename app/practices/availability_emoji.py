@@ -13,45 +13,47 @@ Hence the two rules this module enforces:
   -- posting a poll nobody can answer is worse than posting nothing.
 """
 
-import os
-from typing import Optional
-
-import yaml
 from flask import current_app
 from slack_sdk.errors import SlackApiError
 
 from app.slack.client import get_slack_client
 
 FALLBACK_LETTERS = [f"letter_{c}" for c in "abcdefghijklmnopqrstuvwxyz"]
-DONE_EMOJI = "white_check_mark"
+DEFAULT_DONE_EMOJI = "white_check_mark"
 
 # emoji.list only returns CUSTOM workspace emoji -- native emoji like
 # white_check_mark are never in that response and must not be reported
-# missing just because they're absent from it.
-NATIVE_EMOJI = {DONE_EMOJI}
-
-# Module-level config cache (loaded once per process), matching the pattern
-# in app/slack/practices/_config.py.
-_config_cache: Optional[dict] = None
+# missing just because they're absent from it. A CUSTOM done emoji set via
+# config is deliberately NOT in this set: it must be validated like any
+# other custom emoji, or a typo'd config value ships an unanswerable poll.
+NATIVE_EMOJI = {DEFAULT_DONE_EMOJI}
 
 
-def _load_config() -> dict:
-    """Load the lead_availability section of practices.yaml (cached after first load)."""
-    global _config_cache
-    if _config_cache is None:
-        path = os.path.join(
-            os.path.dirname(__file__), "..", "..", "config", "practices.yaml"
-        )
-        with open(path, "r", encoding="utf-8") as handle:
-            _config_cache = yaml.safe_load(handle) or {}
-    return _config_cache
+def _practice_config() -> dict:
+    """The shared practices.yaml config, via the one process-wide cache.
+
+    Reuses _config.py's cache instead of keeping a second module-level copy
+    of practices.yaml here: two caches meant that wiring reload_config on
+    one side only would silently leave the other serving stale values.
+    Imported lazily because app.slack.practices.__init__ imports modules
+    (availability_reactions) that import this module back -- same pattern
+    as _target_channel in app/practices/availability.py.
+    """
+    from app.slack.practices._config import _load_practice_config
+
+    return _load_practice_config()
 
 
-def reload_config() -> dict:
-    """Force reload of config from disk (useful for testing or config changes)."""
-    global _config_cache
-    _config_cache = None
-    return _load_config()
+def done_emoji() -> str:
+    """The "that's everything from me" emoji, from config.
+
+    config/practices.yaml lead_availability.done_emoji, falling back to the
+    native white_check_mark. Read from config for the same reason the letter
+    emoji are: a rename once silently broke a live poll, and a config key
+    nothing reads is worse than no key at all.
+    """
+    value = _practice_config().get("lead_availability", {}).get("done_emoji")
+    return str(value) if value else DEFAULT_DONE_EMOJI
 
 
 class EmojiSupplyError(RuntimeError):
@@ -67,7 +69,8 @@ def letter_emoji(count: int) -> list[str]:
     something to paper over.
     """
     letters = (
-        _load_config().get("lead_availability", {}).get("letter_emoji") or FALLBACK_LETTERS
+        _practice_config().get("lead_availability", {}).get("letter_emoji")
+        or FALLBACK_LETTERS
     )
     if count > len(letters):
         raise EmojiSupplyError(
@@ -81,8 +84,9 @@ def letter_emoji(count: int) -> list[str]:
 def validate_emoji_available(names: list[str]) -> tuple[bool, list[str]]:
     """Check every custom emoji in `names` actually exists before a poll opens.
 
-    Native emoji (currently just DONE_EMOJI) are skipped, since emoji.list
-    never returns them and they'd otherwise always be reported as missing.
+    Native emoji (currently just white_check_mark, the default done emoji)
+    are skipped, since emoji.list never returns them and they'd otherwise
+    always be reported as missing.
 
     If emoji.list itself can't be reached, that is an unverifiable state,
     not a pass -- we refuse (ok=False) and report every requested custom

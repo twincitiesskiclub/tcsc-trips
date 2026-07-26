@@ -4,12 +4,18 @@ Copy here is approved verbatim from the Phase 0 preview. Do not reword it
 without re-previewing — it was revised four times against real Slack renders.
 """
 
-from app.practices.availability_emoji import DONE_EMOJI
+from app.practices.availability_emoji import done_emoji
 
-INSTRUCTION = (
-    "React to each session you can lead. · "
-    f":{DONE_EMOJI}: when you're done, even if you picked nothing."
-)
+
+def _instruction() -> str:
+    # Computed at build time, not import time: the done emoji comes from
+    # config (config/practices.yaml lead_availability.done_emoji), and a
+    # module-level constant would bake in whatever the config said when the
+    # process imported this module.
+    return (
+        "React to each session you can lead. · "
+        f":{done_emoji()}: when you're done, even if you picked nothing."
+    )
 
 
 def _time_label(when) -> str:
@@ -39,7 +45,7 @@ def build_poll_blocks(rows: list[dict], start_label: str, end_label: str) -> lis
     blocks: list[dict] = [
         {"type": "header", "text": {"type": "plain_text",
          "text": f"Practice Leads {start_label} - {end_label}", "emoji": True}},
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": INSTRUCTION}]},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": _instruction()}]},
     ]
 
     week_labels = list(dict.fromkeys(row["week_label"] for row in rows))
@@ -73,7 +79,7 @@ def build_nudge_blocks(start_label: str, end_label: str, channel_id: str,
                  f"in <#{channel_id}>"}},
         {"type": "context", "elements": [{"type": "mrkdwn",
          "text": "To suppress these, if you can't lead at all just hit the "
-                 f":{DONE_EMOJI}: on the post there."}]},
+                 f":{done_emoji()}: on the post there."}]},
     ]
     if permalink:
         blocks.append({"type": "actions", "elements": [{
