@@ -301,6 +301,12 @@
         </div>
         <div class="field">
           <label>Leads</label>
+          {# Deliberate create/edit split (product decision, Jul 2026): the
+             ranked availability picker needs a practice id for
+             /admin/practices/<id>/lead-candidates, which doesn't exist on
+             "New". Practices are auto-drafted now, so edit is the normal
+             Sunday path; create keeps the older pill picker rather than
+             drafting an orphan row or reworking the endpoint to take a date. #}
           {% if practice %}
           <div id="lead-picker" class="lead-picker" aria-live="polite">
             <p class="pe-empty">Loading…</p>

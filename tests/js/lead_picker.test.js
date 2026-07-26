@@ -9,6 +9,10 @@ const {JSDOM} = require('jsdom');
 const ROOT = path.resolve(__dirname, '../..');
 const SOURCE = fs.readFileSync(
   path.join(ROOT, 'app/static/admin_practices.js'), 'utf8');
+// Pure JS despite living under templates/ — it's {% include %}d verbatim
+// into _detail_script.js, so it can be evaluated directly here.
+const CONTEXT_SOURCE = fs.readFileSync(
+  path.join(ROOT, 'app/templates/admin/practices/_detail_context.js'), 'utf8');
 
 function load() {
   const dom = new JSDOM('<!doctype html><div id="lead-picker"></div>');
@@ -18,6 +22,21 @@ function load() {
   new Function('module', 'exports', 'window', 'document',
     SOURCE + '\nmodule.exports = {leadCandidateLabel, renderLeadPicker};'
   )(module, module.exports, dom.window, dom.window.document);
+  return {dom, ...module.exports};
+}
+
+// Loads _detail_context.js with its collaborators stubbed, mirroring the
+// scope it gets in the rendered page (practiceId, loadLeadCandidates and
+// renderLeadPicker are all in scope there via _detail_script.js).
+function loadContext({loadLeadCandidates, renderLeadPicker} = {}) {
+  const dom = new JSDOM(
+    '<!doctype html><div id="lead-picker"><p class="pe-empty">Loading…</p></div>');
+  const module = {exports: {}};
+  new Function('module', 'exports', 'window', 'document',
+    'practiceId', 'loadLeadCandidates', 'renderLeadPicker',
+    CONTEXT_SOURCE + '\nmodule.exports = {loadLeadPicker};'
+  )(module, module.exports, dom.window, dom.window.document,
+    42, loadLeadCandidates, renderLeadPicker);
   return {dom, ...module.exports};
 }
 
@@ -75,4 +94,38 @@ test('capacity is rendered and unavailable candidates stay selectable', () => {
   assert.equal(boxes[0].checked, true, 'already-assigned lead is checked');
   assert.equal(boxes[1].disabled, false,
     'unavailable leads must stay selectable — the picker informs the choice, it does not block it');
+});
+
+test('failed candidate load replaces Loading… with a visible error', async () => {
+  const {loadLeadPicker, dom} = loadContext({
+    // loadLeadCandidates resolves null after showing its toast (non-ok response)
+    loadLeadCandidates: async () => null,
+  });
+  await loadLeadPicker();
+  const container = dom.window.document.getElementById('lead-picker');
+  assert.doesNotMatch(container.textContent, /Loading…/,
+    'a failed load must not leave the loading state on screen');
+  assert.ok(container.querySelector('.rail-error'),
+    'renders an in-place error like the sibling loaders');
+});
+
+test('a rejected candidate fetch also lands as an in-place error', async () => {
+  const {loadLeadPicker, dom} = loadContext({
+    loadLeadCandidates: async () => { throw new Error('network down'); },
+  });
+  await loadLeadPicker();
+  const container = dom.window.document.getElementById('lead-picker');
+  assert.doesNotMatch(container.textContent, /Loading…/);
+  assert.ok(container.querySelector('.rail-error'));
+});
+
+test('a successful candidate load still renders the picker', async () => {
+  const payload = {leads_needed: 2, assigned: [], candidates: []};
+  const calls = [];
+  const {loadLeadPicker} = loadContext({
+    loadLeadCandidates: async (id) => { calls.push(id); return payload; },
+    renderLeadPicker: (container, p) => { calls.push(p); },
+  });
+  await loadLeadPicker();
+  assert.deepEqual(calls, [42, payload]);
 });

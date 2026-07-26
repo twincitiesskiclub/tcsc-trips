@@ -63,9 +63,16 @@ async function loadLeadConfirmations() {
 async function loadLeadPicker() {
     const container = document.getElementById('lead-picker');
     if (!container) return;
-    const payload = await loadLeadCandidates(practiceId);
-    if (!payload) return; // loadLeadCandidates already showed a toast
-    renderLeadPicker(container, payload);
+    try {
+        const payload = await loadLeadCandidates(practiceId);
+        if (!payload) {
+            // loadLeadCandidates already showed a toast; replace the
+            // "Loading…" state so the picker doesn't look stuck.
+            container.innerHTML = '<p class="rail-error">Could not load lead availability. Reload the page to retry.</p>';
+            return;
+        }
+        renderLeadPicker(container, payload);
+    } catch (err) { container.innerHTML = `<p class="rail-error">${err.message}</p>`; }
 }
 
 async function toggleLeadConfirmation(leadId) {
