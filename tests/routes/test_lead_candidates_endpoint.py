@@ -8,11 +8,16 @@ import pytest
 from app.models import db, User
 from app.practices.models import Practice, PracticeLead
 
-# Reserved test date/time, matching the sweep convention already used
-# elsewhere in tests/routes/ (e.g. test_admin_practice_leads_needed.py):
-# owning an exact moment lets teardown clean up every row that landed
-# there, including ones created by a path this suite didn't anticipate.
-_TEST_DATE = datetime(2026, 8, 4, 18, 15)
+# Reserved test moment, owned solely by this module. Year 2099 per
+# tests/practices/conftest.py: the sweep below deletes every practice at this
+# exact timestamp regardless of who created it, which is only safe on a moment
+# no real practice can occupy. It previously read 2026-08-04 18:15 -- a real
+# Tuesday in the near future, at the exact time every other availability suite
+# uses as "the club's practice slot" -- so a local bootstrap draft or a
+# hand-created practice at that slot was deleted, with its lead assignments,
+# three times per run. April 2099 and the 19:45 time are unused by any other
+# suite, so even a same-date collision can't reach this module's rows.
+_TEST_DATE = datetime(2099, 4, 7, 19, 45)
 
 
 _TEST_EMAIL_PREFIX = "test.lead-candidates-endpoint-"
@@ -20,6 +25,15 @@ _TEST_EMAIL_PREFIX = "test.lead-candidates-endpoint-"
 
 @pytest.fixture(autouse=True)
 def cleanup_test_practices(db_session):
+    # Pre-flight: the teardown below is an unconditional sweep of this exact
+    # timestamp, so refuse to run at all if anything already occupies it
+    # rather than deleting a row this suite didn't create.
+    collisions = Practice.query.filter(Practice.date == _TEST_DATE).count()
+    assert collisions == 0, (
+        "Reserved test moment for lead-candidates tests already has "
+        f"{collisions} practice(s); refusing to run against unexpected "
+        "dev-db state"
+    )
     yield
     db.session.rollback()
     for practice in Practice.query.filter(Practice.date == _TEST_DATE).all():

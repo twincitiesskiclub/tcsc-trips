@@ -222,10 +222,10 @@ def _delete_practices_in_slots(slots):
     db.session.commit()
 
 
-def test_generate_creates_drafts(practice_days):
-    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 16))
+def test_generate_creates_drafts(practice_days_generate):
+    slots = expected_slots(date(2099, 12, 7), date(2099, 12, 20))
     try:
-        created = generate_draft_block(date(2026, 8, 3), date(2026, 8, 16))
+        created = generate_draft_block(date(2099, 12, 7), date(2099, 12, 20))
         assert len(created) == 6
         assert all(p.is_draft is True for p in created)
         assert all(p.leads_needed == 2 for p in created)
@@ -233,11 +233,11 @@ def test_generate_creates_drafts(practice_days):
         _delete_practices_in_slots(slots)
 
 
-def test_generate_is_idempotent(practice_days):
-    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 16))
+def test_generate_is_idempotent(practice_days_generate):
+    slots = expected_slots(date(2099, 12, 7), date(2099, 12, 20))
     try:
-        first = generate_draft_block(date(2026, 8, 3), date(2026, 8, 16))
-        second = generate_draft_block(date(2026, 8, 3), date(2026, 8, 16))
+        first = generate_draft_block(date(2099, 12, 7), date(2099, 12, 20))
+        second = generate_draft_block(date(2099, 12, 7), date(2099, 12, 20))
 
         assert len(first) == 6
         assert second == [], "re-running must create nothing"
@@ -256,10 +256,39 @@ def test_generate_is_idempotent(practice_days):
 @pytest.fixture()
 def practice_days_with_duplicate_entry(db_session):
     """Two config entries with the same day AND time — reachable from the
-    admin UI, since update_practice_days does not dedupe."""
+    admin UI, since update_practice_days does not dedupe.
+
+    Uses the generation suite's reserved 20:05 time rather than 18:15: this
+    fixture drives a test that WRITES rows and cleans up by exact datetime.
+    """
     yield from _save_restore_practice_days([
-        {"day": "tuesday", "time": "18:15", "active": True},
-        {"day": "tuesday", "time": "18:15", "active": True},
+        {"day": "tuesday", "time": "20:05", "active": True},
+        {"day": "tuesday", "time": "20:05", "active": True},
+    ])
+
+
+@pytest.fixture()
+def practice_days_generate(db_session):
+    """Config for the tests that actually WRITE practices.
+
+    Deliberately Tue 20:05 + Thu 20:05/21:10 — times no other suite uses —
+    because _delete_practices_in_slots sweeps every row at these datetimes
+    "regardless of who created it". Paired with the reserved 2099-12 window
+    in those tests, that sweep cannot reach a real practice. These tests
+    previously ran over 2026-08-03..08-16 at 18:15: real near-term dates, at
+    the exact time every other availability suite treats as the club's
+    practice slot, so a failing assertion deleted a genuine practice along
+    with its RSVPs, leads and junction rows.
+
+    Same shape as the unrestricted `practice_days` fixture (1 Tuesday slot,
+    2 Thursday slots, an inactive Sunday) so the counts the tests assert are
+    unchanged.
+    """
+    yield from _save_restore_practice_days([
+        {"day": "tuesday", "time": "20:05", "active": True},
+        {"day": "thursday", "time": "20:05", "active": True},
+        {"day": "thursday", "time": "21:10", "active": True},
+        {"day": "sunday", "time": "09:00", "active": False},
     ])
 
 
@@ -269,10 +298,10 @@ def test_generate_creates_one_draft_for_duplicated_config_entries(
     """expected_slots yields the duplicated datetime twice; generation must
     still create exactly one row for it — this is the one function whose
     idempotency is load-bearing."""
-    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))
+    slots = expected_slots(date(2099, 12, 7), date(2099, 12, 13))
     assert len(slots) == 2, "sanity: the duplicated config entry reaches the slot list"
     try:
-        created = generate_draft_block(date(2026, 8, 3), date(2026, 8, 9))
+        created = generate_draft_block(date(2099, 12, 7), date(2099, 12, 13))
         assert len(created) == 1
         assert Practice.query.filter(Practice.date.in_(slots)).count() == 1, (
             "a duplicated day+time config entry must not double-draft the slot"
@@ -281,20 +310,21 @@ def test_generate_creates_one_draft_for_duplicated_config_entries(
         _delete_practices_in_slots(slots)
 
 
-def test_generate_skips_slots_that_already_have_a_real_practice(practice_days):
-    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))
+def test_generate_skips_slots_that_already_have_a_real_practice(practice_days_generate):
+    slots = expected_slots(date(2099, 12, 7), date(2099, 12, 13))
     existing = Practice(
-        date=datetime(2026, 8, 4, 18, 15),
+        date=datetime(2099, 12, 8, 20, 5),
         day_of_week="Tuesday",
         is_draft=False,
+        logistics_notes="TEST drafting collision practice",
     )
     db.session.add(existing)
     db.session.commit()
 
     try:
-        created = generate_draft_block(date(2026, 8, 3), date(2026, 8, 9))
+        created = generate_draft_block(date(2099, 12, 7), date(2099, 12, 13))
         assert len(created) == 2, "must not duplicate an already-published practice"
-        assert Practice.query.filter_by(date=datetime(2026, 8, 4, 18, 15)).count() == 1
+        assert Practice.query.filter_by(date=datetime(2099, 12, 8, 20, 5)).count() == 1
     finally:
         _delete_practices_in_slots(slots)
 

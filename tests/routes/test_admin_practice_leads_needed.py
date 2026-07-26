@@ -14,7 +14,7 @@ from app.practices.models import Practice, PracticeLead, PracticeLocation
 # register the practice_id it created) means teardown can sweep up any row
 # that landed here, including ones created by a code path this test suite
 # didn't anticipate -- e.g. a validation bug that lets a bad request through.
-_TEST_DATE = datetime(2026, 8, 4, 18, 15)
+_TEST_DATE = datetime(2099, 11, 3, 19, 45)
 
 
 # `location_id: 1` below is a hardcoded value from the task brief. The dev
@@ -71,7 +71,7 @@ def no_slack_refresh(monkeypatch):
 @pytest.mark.parametrize("value", [0, 4, -1, "two", True, False])
 def test_invalid_leads_needed_is_rejected(admin_client, value):
     response = admin_client.post("/admin/practices/create", json={
-        "date": "2026-08-04T18:15:00",
+        "date": "2099-11-03T19:45:00",
         "location_id": 1,
         "leads_needed": value,
     })
@@ -88,7 +88,7 @@ def test_invalid_leads_needed_is_rejected(admin_client, value):
 @pytest.mark.parametrize("value", [True, False])
 def test_invalid_leads_needed_is_rejected_on_edit(admin_client, value):
     create_response = admin_client.post("/admin/practices/create", json={
-        "date": "2026-08-04T18:15:00",
+        "date": "2099-11-03T19:45:00",
         "location_id": 1,
     })
     assert create_response.status_code == 200
@@ -103,7 +103,7 @@ def test_invalid_leads_needed_is_rejected_on_edit(admin_client, value):
 
 def test_valid_leads_needed_is_stored(admin_client, db_session):
     response = admin_client.post("/admin/practices/create", json={
-        "date": "2026-08-04T18:15:00",
+        "date": "2099-11-03T19:45:00",
         "location_id": 1,
         "leads_needed": 3,
     })
@@ -114,7 +114,7 @@ def test_valid_leads_needed_is_stored(admin_client, db_session):
 
 def test_leads_needed_defaults_to_two_when_omitted(admin_client):
     response = admin_client.post("/admin/practices/create", json={
-        "date": "2026-08-04T18:15:00",
+        "date": "2099-11-03T19:45:00",
         "location_id": 1,
     })
     assert response.status_code == 200
@@ -124,7 +124,7 @@ def test_leads_needed_defaults_to_two_when_omitted(admin_client):
 
 def test_assist_ids_are_ignored(admin_client):
     response = admin_client.post("/admin/practices/create", json={
-        "date": "2026-08-04T18:15:00",
+        "date": "2099-11-03T19:45:00",
         "location_id": 1,
         "assist_ids": [1, 2],
     })
