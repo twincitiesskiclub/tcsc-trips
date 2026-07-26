@@ -272,3 +272,46 @@ test('a hostile lead name cannot inject markup into the confirmations rail', asy
   assert.match(label, /Confirm Zoe/);
   assert.equal(c.querySelector('input[type=checkbox]').getAttribute('onerror'), null);
 });
+
+test('candidates outside the lead pool are labelled and classed', () => {
+  const {leadCandidateLabel, renderLeadPicker, dom} = load();
+
+  const outsider = leadCandidateLabel({
+    name: 'Jane L', available: true, responded: true, stale: false,
+    led_in_block: 0, led_last_90d: 0, in_pool: false,
+  });
+  assert.match(outsider, /not in the lead pool/,
+    'picking someone outside the pool is a different decision — say so');
+
+  const regular = leadCandidateLabel({
+    name: 'Ada L', available: true, responded: true, stale: false,
+    led_in_block: 0, led_last_90d: 0, in_pool: true,
+  });
+  assert.doesNotMatch(regular, /not in the lead pool/,
+    'positive control: a normal candidate must not be flagged');
+
+  // A payload with no in_pool key (an older cached response) must read as a
+  // normal candidate, not flag every single person.
+  const legacy = leadCandidateLabel({
+    name: 'Kai L', available: true, responded: true, stale: false,
+    led_in_block: 0, led_last_90d: 0,
+  });
+  assert.doesNotMatch(legacy, /not in the lead pool/);
+
+  const container = dom.window.document.getElementById('lead-picker');
+  renderLeadPicker(container, {
+    leads_needed: 2,
+    assigned: [1],
+    candidates: [
+      {user_id: 1, name: 'Jane L', available: false, responded: false,
+       stale: false, led_in_block: 0, led_last_90d: 0, in_pool: false},
+      {user_id: 2, name: 'Ada L', available: true, responded: true,
+       stale: false, led_in_block: 0, led_last_90d: 0, in_pool: true},
+    ],
+  });
+  const rows = container.querySelectorAll('.lead-option');
+  assert.ok(rows[0].classList.contains('outside-pool'));
+  assert.ok(!rows[1].classList.contains('outside-pool'));
+  assert.equal(rows[0].querySelector('input').checked, true,
+    'an assigned out-of-pool lead stays checked, so saving keeps them');
+});

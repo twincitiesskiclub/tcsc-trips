@@ -109,6 +109,11 @@
 #workout-editor .lead-option.unavailable{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
 #workout-editor .lead-option.no-response{border-style:dotted;color:#94a3b8}
 #workout-editor .lead-option.stale{border-style:dashed;border-color:#f59e0b}
+/* Outside the eligible pool: either already assigned (so they must stay
+   listed or the next save deletes them) or a non-tagged member who offered to
+   lead this session. Muted rather than alarming — both are legitimate picks,
+   they just aren't ordinary candidates. */
+#workout-editor .lead-option.outside-pool{border-style:dashed;border-color:#c7d2fe;background:#f8fafc}
 #workout-editor .lead-option:focus-within{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
 
 /* ── selected summary chips ── */

@@ -426,3 +426,95 @@ def test_responded_flag_distinguishes_silence_from_unavailable(db_session):
         assert rows[declined_id]["available"] is False
     finally:
         _cleanup(users=[silent_id, declined_id], practices=[practice_id], polls=[poll_id])
+
+
+def _untagged_user(name):
+    """A member with no eligible tag: absent from eligible_leads()."""
+    unique = uuid.uuid4().hex[:8]
+    user = User(first_name=f"TEST {name}", last_name="Outsider",
+                email=f"test-leadcand-{name.lower()}-{unique}@example.invalid")
+    db.session.add(user)
+    db.session.flush()
+    return user
+
+
+def test_an_assigned_lead_outside_the_pool_still_appears(db_session):
+    """Otherwise the next save deletes them.
+
+    The picker is the only lead-assignment control on the form and submits
+    exactly the checked boxes, so anyone assigned but missing from the list is
+    removed by saving any field. eligible_leads() excludes ALUMNI without a
+    coach tag and DROPPED members, while the old pill picker applied no status
+    filter -- so assignments predating the narrower rule land here.
+    """
+    lapsed = _untagged_user("Lapsed")
+    practice = _practice(4)
+    practice_id, lapsed_id = practice.id, lapsed.id
+    db.session.add(PracticeLead(practice_id=practice_id, user_id=lapsed_id, role="lead"))
+    db_session.commit()
+
+    try:
+        rows = {r["user_id"]: r for r in lead_candidates(practice)}
+        assert lapsed_id in rows, (
+            "an assigned lead must never vanish from the picker -- saving the "
+            "form would delete them"
+        )
+        assert rows[lapsed_id]["in_pool"] is False, \
+            "and must be flagged so the picker can say why they're listed"
+    finally:
+        _cleanup(users=[lapsed_id], practices=[practice_id])
+
+
+def test_a_non_pool_volunteer_is_surfaced_not_dropped(db_session):
+    """The design spec's requirement: reactions from outside the eligible pool
+    are recorded AND flagged, so a willing non-tagged member is visible to the
+    director rather than silently dropped. Recording already worked; the picker
+    iterated the pool, so the offer sat unseen in the database.
+    """
+    volunteer = _untagged_user("Volunteer")
+    practice = _practice(6)
+    poll = _open_poll(practice)
+    practice_id, poll_id, volunteer_id = practice.id, poll.id, volunteer.id
+    _available(poll, practice, volunteer)
+    db_session.commit()
+
+    try:
+        rows = {r["user_id"]: r for r in lead_candidates(practice)}
+        assert volunteer_id in rows, \
+            "someone who offered to lead this session must reach the director"
+        assert rows[volunteer_id]["available"] is True
+        assert rows[volunteer_id]["in_pool"] is False
+        # available sorts first, so the volunteer is not buried.
+        assert lead_candidates(practice)[0]["user_id"] == volunteer_id
+    finally:
+        _cleanup(users=[volunteer_id], practices=[practice_id], polls=[poll_id])
+
+
+def test_pool_members_are_flagged_in_pool(db_session):
+    """Positive control for the flag: a normally-tagged lead is in_pool=True,
+    so `in_pool` can't pass by being uniformly False.
+    """
+    lead = _lead_user("Regular")
+    practice = _practice(8)
+    practice_id, lead_id = practice.id, lead.id
+    db_session.commit()
+
+    try:
+        rows = {r["user_id"]: r for r in lead_candidates(practice)}
+        assert rows[lead_id]["in_pool"] is True
+    finally:
+        _cleanup(users=[lead_id], practices=[practice_id])
+
+
+def test_an_outsider_who_neither_answered_nor_is_assigned_stays_out(db_session):
+    """The union is scoped: it does not turn the picker into a member list."""
+    bystander = _untagged_user("Bystander")
+    practice = _practice(10)
+    practice_id, bystander_id = practice.id, bystander.id
+    db_session.commit()
+
+    try:
+        ids = {r["user_id"] for r in lead_candidates(practice)}
+        assert bystander_id not in ids
+    finally:
+        _cleanup(users=[bystander_id], practices=[practice_id])

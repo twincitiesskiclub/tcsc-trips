@@ -699,7 +699,16 @@ function leadCandidateLabel(candidate) {
   parts.push(`led ${candidate.led_in_block} this block`);
   parts.push(`${candidate.led_last_90d} in 90d`);
   const warning = candidate.stale ? ' ⚠ answered before this practice changed' : '';
-  return `${candidate.name} · ${parts.join(' · ')}${warning}`;
+  // in_pool is false for two kinds of person the server deliberately adds
+  // outside the eligible pool: someone already assigned to this practice (who
+  // would be deleted by the next save if they weren't listed), and a
+  // non-tagged member who reacted offering to lead this session. Both need to
+  // read differently from a normal candidate, since picking them is a
+  // different decision. `!== false` so a payload without the key (an older
+  // cached response) reads as a normal candidate rather than flagging
+  // everyone.
+  const outside = candidate.in_pool === false ? ' · not in the lead pool' : '';
+  return `${candidate.name} · ${parts.join(' · ')}${outside}${warning}`;
 }
 
 /* Whether the picker on screen is a trustworthy statement of who is
@@ -758,6 +767,7 @@ function renderLeadPicker(container, payload) {
       row.classList.add('no-response');
     }
     if (candidate.stale) row.classList.add('stale');
+    if (candidate.in_pool === false) row.classList.add('outside-pool');
 
     const box = document.createElement('input');
     box.type = 'checkbox';

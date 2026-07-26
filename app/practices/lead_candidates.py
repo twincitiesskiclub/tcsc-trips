@@ -7,6 +7,7 @@ but every eligible lead/coach is always present in the returned list.
 
 from datetime import timedelta
 
+from app.models import User
 from app.practices.availability import eligible_leads
 from app.practices.availability_models import (
     LeadAvailabilityParticipant,
@@ -93,10 +94,29 @@ def lead_candidates(practice: Practice) -> list[dict]:
     Ordering: available first, then fewest led_in_block, then fewest
     led_last_90d, then name. Unavailable and no-response candidates are never
     removed -- they simply sort last.
+
+    Two kinds of person appear who are NOT in the current eligible pool, both
+    flagged `in_pool: False` so the picker can render them distinctly:
+
+    - Anyone already assigned to this practice. The picker is the only
+      lead-assignment control on the form and it submits exactly the checked
+      boxes, so a lead who is assigned but absent from the list would be
+      deleted by the next save of any field. That is reachable without anyone
+      doing anything odd: eligible_leads() excludes ALUMNI without a coach tag
+      and DROPPED members, and the old pill picker applied no status filter at
+      all, so existing assignments predate the narrower rule.
+    - Anyone who answered this poll for this practice from outside the pool.
+      The design spec requires that reactions from outside the eligible pool
+      are "recorded and flagged rather than discarded, so a willing non-tagged
+      member is visible to the director rather than silently dropped". The
+      recording half already worked -- responses key on user_id, not on pool
+      membership -- but the picker iterated the pool, so an untagged member
+      offering to lead a session the pool couldn't cover was invisible while
+      their offer sat in the database.
     """
     poll = _poll_for_practice(practice)
     users = eligible_leads()
-    user_ids = [u.id for u in users]
+    pool_ids = {u.id for u in users}
 
     responses: dict[int, LeadAvailabilityResponse] = {}
     responded: set[int] = set()
@@ -110,6 +130,15 @@ def lead_candidates(practice: Practice) -> list[dict]:
             if p.status in _RESPONDED_STATUSES
         }
 
+    assigned_ids = {
+        lead.user_id for lead in practice.leads
+        if lead.role == "lead" and lead.user_id is not None
+    }
+    extra_ids = (assigned_ids | set(responses)) - pool_ids
+    extras = User.query.filter(User.id.in_(extra_ids)).all() if extra_ids else []
+    users = list(users) + extras
+
+    user_ids = [u.id for u in users]
     in_block, recent = _load_counts(user_ids, poll, practice.date)
 
     rows = []
@@ -123,6 +152,7 @@ def lead_candidates(practice: Practice) -> list[dict]:
             "stale": response is not None and _is_stale(response, practice),
             "led_in_block": in_block.get(user.id, 0),
             "led_last_90d": recent.get(user.id, 0),
+            "in_pool": user.id in pool_ids,
         })
 
     rows.sort(key=lambda r: (
