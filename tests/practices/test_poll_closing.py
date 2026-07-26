@@ -10,9 +10,58 @@ practice data. See test_availability_service.py for the same adaptation.
 from datetime import date, datetime
 from unittest.mock import patch
 
+import pytest
+
 from app.models import db
 from app.practices.availability import close_poll
 from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+
+# The faked clock the batch-job tests run the scheduler under. Deliberately a
+# module constant: `protect_foreign_polls` below has to know the same date the
+# tests patch in, because that date is what decides which rows the job's
+# unscoped query will sweep.
+_JOB_TODAY = date(2099, 8, 15)
+
+
+@pytest.fixture
+def protect_foreign_polls(db_session):
+    """Snapshot and restore every OPEN poll this file didn't create.
+
+    `run_close_expired_polls_job` queries `status == OPEN AND ends_on < today`
+    with no other scope, and these tests patch `today_central` to 2099 — so
+    the job closes EVERY open poll in the database, not just the test's own.
+    Against the real local dev database (see tests/practices/conftest.py) that
+    means a live shadow-mode poll gets silently CLOSED: the nudge job stops
+    chasing it, the lead picker treats partial availability as final, and the
+    only recovery is a manual UPDATE.
+
+    Restoring rather than refusing keeps the test running in every DB state.
+    `reconcile_poll` is patched out in all three job tests, so close_poll's
+    only writes are `status` and `closed_at` — both restored exactly here.
+    """
+    before = [
+        (poll.id, poll.status, poll.closed_at)
+        for poll in LeadAvailabilityPoll.query.filter(
+            LeadAvailabilityPoll.status == PollStatus.OPEN,
+            LeadAvailabilityPoll.ends_on < _JOB_TODAY,
+        ).all()
+    ]
+    try:
+        yield
+    finally:
+        db.session.rollback()
+        restored = []
+        for poll_id, status, closed_at in before:
+            poll = db.session.get(LeadAvailabilityPoll, poll_id)
+            if poll is not None and poll.status != status:
+                poll.status = status
+                poll.closed_at = closed_at
+                restored.append(poll_id)
+        if restored:
+            db.session.commit()
+            # Loud on purpose: it means a poll outside this suite was live in
+            # the dev database and the job reached it.
+            print(f"\nprotect_foreign_polls: restored OPEN status on poll(s) {restored}")
 
 
 def _poll(db_session, ends_on):
@@ -109,7 +158,7 @@ def test_closing_twice_is_harmless(db_session):
         _cleanup_poll(poll_id)
 
 
-def test_expired_polls_close_automatically(db_session, app):
+def test_expired_polls_close_automatically(db_session, app, protect_foreign_polls):
     from app.scheduler import run_close_expired_polls_job
 
     past = _poll(db_session, date(2099, 8, 1))
@@ -119,7 +168,7 @@ def test_expired_polls_close_automatically(db_session, app):
 
     try:
         with patch("app.practices.availability.reconcile_poll", return_value={}), \
-             patch("app.scheduler.today_central", return_value=date(2099, 8, 15)):
+             patch("app.scheduler.today_central", return_value=_JOB_TODAY):
             run_close_expired_polls_job(app)
 
         # The job runs its own `with app.app_context():`, which is a second,
@@ -136,7 +185,7 @@ def test_expired_polls_close_automatically(db_session, app):
         _cleanup_poll(future_id)
 
 
-def test_poll_ending_today_does_not_close(db_session, app):
+def test_poll_ending_today_does_not_close(db_session, app, protect_foreign_polls):
     """The rule is `ends_on < today`, not `<=` -- a block that ends today is
     still in progress and must stay OPEN through the day it ends.
     """
@@ -147,7 +196,7 @@ def test_poll_ending_today_does_not_close(db_session, app):
 
     try:
         with patch("app.practices.availability.reconcile_poll", return_value={}), \
-             patch("app.scheduler.today_central", return_value=date(2099, 8, 15)):
+             patch("app.scheduler.today_central", return_value=_JOB_TODAY):
             run_close_expired_polls_job(app)
 
         db_session.expire_all()
@@ -156,7 +205,7 @@ def test_poll_ending_today_does_not_close(db_session, app):
         _cleanup_poll(today_id)
 
 
-def test_one_poll_failing_does_not_block_others(db_session, app):
+def test_one_poll_failing_does_not_block_others(db_session, app, protect_foreign_polls):
     """One poll's close() raising must not abort the whole batch, leaving
     later expired polls open for that run -- each poll is handled in its
     own try/except, matching run_lead_availability_nudge_job.
@@ -182,7 +231,7 @@ def test_one_poll_failing_does_not_block_others(db_session, app):
         # anything already bound in app.scheduler's namespace.
         with patch("app.practices.availability.close_poll", side_effect=_flaky_close_poll), \
              patch("app.practices.availability.reconcile_poll", return_value={}), \
-             patch("app.scheduler.today_central", return_value=date(2099, 8, 15)):
+             patch("app.scheduler.today_central", return_value=_JOB_TODAY):
             run_close_expired_polls_job(app)
 
         db_session.expire_all()
