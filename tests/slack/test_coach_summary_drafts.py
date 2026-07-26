@@ -8,8 +8,7 @@ the auto-drafted practices coaches are supposed to fill in were invisible in
 the one place they'd look, and each drafted slot rendered as an empty
 placeholder inviting a coach to create a *second* practice on top of it.
 
-This is also the surface where publishing happens, since it's already the
-weekly batch review.
+Publishing does NOT happen here — see test_the_post_offers_no_publish_button.
 """
 
 import json
@@ -93,30 +92,25 @@ def test_a_draft_slot_does_not_also_offer_add_practice():
     )
 
 
-def test_a_ready_draft_offers_publish():
-    blocks = build_coach_weekly_summary_blocks(
-        [_practice(5, is_draft=True)], _EXPECTED_DAYS, _WEEK_START)
-    text = json.dumps(blocks)
-
-    assert "publish_week_drafts" in text
-    assert "Publish 1" in text
-
-
-def test_a_draft_missing_details_cannot_be_published_yet():
-    """Location/type/time are what a member needs; publishing without them
-    puts a broken practice in front of the club."""
+def test_a_draft_missing_details_says_what_it_needs():
+    """Location/type/time are what a lead needs to judge availability and what a
+    member needs to show up, so the post names the gap."""
     blocks = build_coach_weekly_summary_blocks(
         [_practice(5, is_draft=True, missing=["location"])],
         _EXPECTED_DAYS, _WEEK_START)
-    text = json.dumps(blocks)
 
-    assert "needs location" in text
-    assert "publish_week_drafts" not in text, (
-        "nothing is publishable, so the button must not be offered"
-    )
+    assert "needs location" in json.dumps(blocks)
 
 
-def test_publish_counts_only_the_ready_drafts():
+def test_the_post_offers_no_publish_button():
+    """Publishing is not this post's job.
+
+    The Sunday evening flow (weekly summary + announcement job) already puts the
+    coming week in front of members with nobody clicking anything -- gating that
+    on a human click would break a workflow that already works. Blocks are
+    published from the availability poll that collected leads for them, weeks
+    earlier. A draft surfacing here is a flag, not an action.
+    """
     blocks = build_coach_weekly_summary_blocks(
         [
             _practice(5, is_draft=True, id=1),
@@ -125,28 +119,24 @@ def test_publish_counts_only_the_ready_drafts():
         _EXPECTED_DAYS, _WEEK_START)
     text = json.dumps(blocks)
 
-    assert "Publish 1" in text
-    assert "needs type" in text
+    assert "publish_week_drafts" not in text
+    assert "Publish" not in text
 
 
-def test_publish_button_carries_the_week_it_belongs_to():
-    """The handler re-reads the week from the database rather than trusting a
-    list of ids baked into a post that may be days old."""
+def test_a_lingering_draft_is_flagged_in_the_footer():
+    """A draft still sitting in the coming week means it never made it into a
+    poll -- worth saying out loud, since nothing else will catch it."""
     blocks = build_coach_weekly_summary_blocks(
         [_practice(5, is_draft=True)], _EXPECTED_DAYS, _WEEK_START)
-    buttons = [
-        element
-        for block in blocks if block.get("type") == "actions"
-        for element in block["elements"]
-        if element.get("action_id") == "publish_week_drafts"
-    ]
+    footer = json.dumps(blocks[-1])
 
-    assert len(buttons) == 1
-    assert buttons[0]["value"] == "2099-05-04"
+    assert "still a draft" in footer
+    assert "availability block" in footer
 
 
-def test_a_week_with_no_drafts_offers_no_publish_button():
+def test_a_week_with_no_drafts_says_nothing_about_drafts():
     blocks = build_coach_weekly_summary_blocks(
         [_practice(5)], _EXPECTED_DAYS, _WEEK_START)
+    footer = json.dumps(blocks[-1])
 
-    assert "publish_week_drafts" not in json.dumps(blocks)
+    assert "draft" not in footer.lower()

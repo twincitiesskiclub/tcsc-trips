@@ -106,7 +106,9 @@ def test_the_sunday_post_shows_a_drafted_practice(db_session, drafted_week):
     text = json.dumps(client.chat_postMessage.call_args.kwargs["blocks"])
     assert _MARKER in text, "the drafted practice must appear in the post"
     assert "Draft" in text
-    assert "publish_week_drafts" in text, "and it must be publishable from here"
+    assert "publish_week_drafts" not in text, (
+        "flagged, not actioned — publishing belongs to the availability poll"
+    )
 
 
 def test_the_drafted_slot_does_not_also_invite_a_duplicate(db_session, drafted_week):

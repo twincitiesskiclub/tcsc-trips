@@ -1,9 +1,11 @@
-"""The bulk publish endpoint behind the practices list.
+"""The publish-by-id endpoint behind the practices list drawer.
 
-The Sunday workflow is a batch: a director fills in details for a week or a
-block of drafts, assigns leads, then publishes the lot. This endpoint is the
-one that makes them member-visible, so its contract matters — a partial
-success has to say exactly which practices did not go out and why.
+This is the escape hatch, not the main route: blocks are normally published
+from the availability poll that collected leads for them (see
+tests/routes/test_admin_poll_publish.py). It exists for a draft whose block
+never got a poll, which would otherwise have no route to being published at
+all. Its contract still matters — a partial success has to say exactly which
+practices did not go out and why.
 
 This runs against the real local dev database; see tests/routes/conftest.py
 and tests/practices/conftest.py for the cleanup conventions (year 2099,
@@ -96,7 +98,7 @@ def test_publish_reports_drafts_that_are_missing_details(admin_client, scratch):
     """Partial success: publish what's ready, name what isn't.
 
     The director needs the list of what stayed behind — otherwise the only
-    signal is a count that doesn't match what they selected.
+    signal is a count that doesn't match what they asked for.
     """
     ready = scratch(6)
     incomplete = scratch(7, with_location=False)

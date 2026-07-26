@@ -19,7 +19,7 @@ function load() {
   global.document = dom.window.document;
   const module = {exports: {}};
   new Function('module', 'exports', 'window', 'document',
-    SOURCE + '\nmodule.exports = {draftBannerHtml, readyDrafts, rowHtml};'
+    SOURCE + '\nmodule.exports = {draftPublishHtml, rowHtml};'
   )(module, module.exports, dom.window, dom.window.document);
   return {dom, ...module.exports};
 }
@@ -54,46 +54,33 @@ test('a published row carries no draft badge', () => {
 
 test('a draft missing details says what it needs, on the row', () => {
   const {rowHtml} = load();
-  const html = rowHtml(BLOCKED, false);
+  assert.match(rowHtml(BLOCKED, false), /needs location, type/);
+});
+
+test('the drawer offers a single-practice publish escape hatch', () => {
+  // Blocks are normally published from their availability poll. This exists for
+  // a draft whose block never got one, which would otherwise be unpublishable.
+  const {draftPublishHtml} = load();
+  const html = draftPublishHtml(READY);
+  assert.match(html, /pl-publish-one/);
+  assert.match(html, /availability block/);
+});
+
+test('a draft missing details is explained, not offered a publish button', () => {
+  const {draftPublishHtml} = load();
+  const html = draftPublishHtml(BLOCKED);
   assert.match(html, /needs location, type/);
+  assert.doesNotMatch(html, /pl-publish-one/);
 });
 
-test('readyDrafts counts only drafts with every required detail', () => {
-  const {readyDrafts} = load();
-  const ready = readyDrafts([READY, BLOCKED, PUBLISHED]);
-  assert.deepEqual(ready.map(p => p.id), [1]);
+test('a published practice gets no draft notice in the drawer', () => {
+  const {draftPublishHtml} = load();
+  assert.equal(draftPublishHtml(PUBLISHED), '');
 });
 
-test('the banner offers to publish exactly the ready drafts', () => {
-  const {draftBannerHtml} = load();
-  const html = draftBannerHtml([READY, BLOCKED, PUBLISHED]);
-  assert.match(html, /2 drafts/);
-  assert.match(html, /Publish 1 ready/);
-  assert.doesNotMatch(html, /disabled/);
-});
-
-test('the banner names the drafts that are holding things up', () => {
-  const {draftBannerHtml} = load();
-  const html = draftBannerHtml([READY, BLOCKED]);
-  assert.match(html, /needs location, type/);
-});
-
-test('nothing ready means the publish button is disabled, not hidden', () => {
-  // Hiding it would read as "there is nothing to publish", when the truth is
-  // "someone has to fill in the missing details first".
-  const {draftBannerHtml} = load();
-  const html = draftBannerHtml([BLOCKED]);
-  assert.match(html, /disabled/);
-  assert.match(html, /Publish 0 ready/);
-});
-
-test('no drafts means no banner at all', () => {
-  const {draftBannerHtml} = load();
-  assert.equal(draftBannerHtml([PUBLISHED]), '');
-});
-
-test('draft counts ignore practices that already went out', () => {
-  const {draftBannerHtml} = load();
-  const html = draftBannerHtml([READY, PUBLISHED]);
-  assert.match(html, /1 draft is not visible/);
+test('there is no week-level or list-level publish control', () => {
+  // The Sunday evening flow already sends the coming week to members with no
+  // human in the loop; a batch publish here would gate a working workflow.
+  assert.doesNotMatch(SOURCE, /pl-publish-btn/);
+  assert.doesNotMatch(SOURCE, /draftBannerHtml/);
 });

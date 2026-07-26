@@ -104,7 +104,6 @@ function render() {
   pastL.sort((a, b) => new Date(b.date) - new Date(a.date));
 
   let html = '';
-  html += draftBannerHtml(upcomingRows());
   html += section('Today', todayL, true);
   html += section('This week', weekL, false);
   html += section('Later', laterL, false);
@@ -188,94 +187,63 @@ function rowHtml(p, isToday) {
     + `<div class="pl-row-aside">${status}${draftBadge}</div></button>`;
 }
 
-/* ---------- drafts → published ---------- */
+/* ---------- drafts → published ----------
 
-/* The practices the draft banner speaks for: everything matching the current
-   filters from today onward. Shared with publishReadyDrafts() so the button's
-   count and the ids it actually posts can never disagree — publishing a draft
-   in the past would announce a practice that has already happened. */
-function upcomingRows() {
-  const today = chicagoTodayYMD();
-  return practicesData.filter(matchesFilters).filter(p => ymd(p.date) >= today);
-}
+   Blocks are normally published from the availability poll that collected
+   leads for them (POST /admin/availability/polls/<id>/publish), which is the
+   batch a director actually thinks in. There is no week-level or list-level
+   publish here on purpose: the Sunday evening flow already puts the coming
+   week in front of members with nobody clicking anything.
 
-function readyDrafts(list) {
-  return (list || []).filter(p => p.is_draft && !(p.missing_details || []).length);
-}
+   What lives here is the single-practice escape hatch, in the drawer. A draft
+   whose block never got a poll has no other route to being published, and an
+   unpublishable practice is the exact failure this whole feature exists to
+   prevent. */
 
-function draftBannerHtml(list) {
-  const drafts = (list || []).filter(p => p.is_draft);
-  if (!drafts.length) return '';
-  const ready = readyDrafts(drafts);
-  const blocked = drafts.filter(p => (p.missing_details || []).length);
-
-  const count = drafts.length === 1
-    ? '1 draft is not visible to members yet'
-    : `${drafts.length} drafts are not visible to members yet`;
-
-  let detail = '';
-  if (blocked.length) {
-    const items = blocked.map(p => {
-      const d = new Date(p.date);
-      const when = d.toLocaleDateString([], { weekday: 'short', month: 'numeric', day: 'numeric' });
-      return `${esc(when)} needs ${esc((p.missing_details || []).join(', '))}`;
-    });
-    detail = `<div class="pl-draft-detail">${items.join(' · ')}</div>`;
+function draftPublishHtml(p) {
+  if (!p.is_draft) return '';
+  const missing = (p.missing_details || []);
+  if (missing.length) {
+    return `<div class="pl-draft-note">Draft — members can't see this yet; `
+      + `needs ${esc(missing.join(', '))}.</div>`;
   }
-
-  // The button stays visible but disabled when nothing is ready: hiding it
-  // would read as "there is nothing to publish", when the truth is "someone
-  // has to fill in the missing details first".
-  const button = `<button type="button" id="pl-publish-btn" class="pl-btn pl-btn-primary"`
-    + `${ready.length ? '' : ' disabled'}>Publish ${ready.length} ready</button>`;
-
-  return `<div class="pl-draft-banner" role="status">`
-    + `<div><strong>${esc(count)}</strong>${detail}</div>${button}</div>`;
+  return `<div class="pl-draft-note">Draft — members can't see this yet. `
+    + `Normally published with its availability block.`
+    + `<button type="button" class="pl-act pl-act-ghost" id="pl-publish-one" `
+    + `style="margin-top:9px">Publish this practice</button></div>`;
 }
 
-/* Publishing is member-visible and announces to the club, so it gets a
-   confirmation — the same treatment as opening the availability poll. */
-function confirmPublishReadyDrafts() {
-  const ready = readyDrafts(upcomingRows());
-  if (!ready.length) return;
-  const plural = ready.length === 1 ? 'practice' : 'practices';
-  if (!window.confirm(
-      `Publish ${ready.length} ${plural}? Members will see them and `
-      + 'announcements will go out on the normal schedule.')) return;
-  publishReadyDrafts();
-}
-
-async function publishReadyDrafts() {
-  const ids = readyDrafts(upcomingRows()).map(p => p.id);
-  if (!ids.length) return;
-
-  const btn = document.getElementById('pl-publish-btn');
+async function publishOnePractice(id) {
+  const btn = document.getElementById('pl-publish-one');
   if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
 
   try {
     const r = await fetch('/admin/practices/publish', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ practice_ids: ids }),
+      body: JSON.stringify({ practice_ids: [id] }),
     });
     const body = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
 
-    const published = (body.published || []).length;
-    const skipped = (body.skipped || []).length;
-    showToast(
-      `Published ${published} practice${published === 1 ? '' : 's'}`
-        + (skipped ? `, ${skipped} still need details` : ''),
-      skipped ? 'warning' : 'success');
+    if ((body.published || []).length) {
+      showToast('Practice published — members can see it now', 'success');
+    } else {
+      const skipped = (body.skipped || [])[0];
+      showToast(
+        skipped ? `Still needs ${skipped.missing.join(', ')}`
+                : 'Practice was already published',
+        skipped ? 'warning' : 'info');
+    }
 
     await loadPractices();
     render();
+    const fresh = findPractice(id);
+    if (fresh && currentDrawerId === id) populateDrawer(fresh);
   } catch (e) {
     console.error(e);
-    showToast(e.message || 'Failed to publish practices', 'error');
-    // Re-render so the button returns to a usable state rather than sitting
-    // on "Publishing…" forever after a failure.
-    render();
+    showToast(e.message || 'Failed to publish practice', 'error');
+    if (btn) { btn.disabled = false; btn.textContent = 'Publish this practice'; }
   }
 }
 
@@ -286,10 +254,6 @@ function attachEventListeners() {
   document.getElementById('pl-location-filter').addEventListener('change', render);
 
   document.getElementById('pl-list').addEventListener('click', (e) => {
-    // Checked before .pl-row: the banner sits outside any row, but keeping
-    // this first means a future move inside one can't turn the publish click
-    // into a drawer-open.
-    if (e.target.closest('#pl-publish-btn')) { confirmPublishReadyDrafts(); return; }
     const row = e.target.closest('.pl-row');
     if (row) { openDrawer(parseInt(row.dataset.id), row); return; }
     if (e.target.closest('#pl-past-toggle')) { pastExpanded = !pastExpanded; pastLimit = 20; render(); return; }
@@ -360,7 +324,12 @@ function populateDrawer(p) {
   badges += '<span id="pl-skipper-slot" aria-live="polite"></span>';
   document.getElementById('pl-badges').innerHTML = badges;
 
-  document.getElementById('pl-dwbody').innerHTML = drawerBody(p);
+  document.getElementById('pl-dwbody').innerHTML = draftPublishHtml(p) + drawerBody(p);
+
+  const publishOne = document.getElementById('pl-publish-one');
+  if (publishOne) {
+    publishOne.addEventListener('click', () => publishOnePractice(p.id));
+  }
 
   const edit = document.getElementById('pl-edit');
   edit.setAttribute('href', '/admin/practices/' + p.id);

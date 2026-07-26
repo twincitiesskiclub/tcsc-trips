@@ -303,13 +303,17 @@ def practices_data():
 @admin_practices_bp.route('/publish', methods=['POST'])
 @admin_required
 def publish_practices_route():
-    """Publish a selection of drafts, making them visible to members.
+    """Publish specific drafts by id — the escape hatch, not the main route.
 
-    Bulk rather than per-practice because the Sunday workflow is a batch: a
-    block of drafts gets its details and leads filled in together, then goes
-    out together. Partial success is normal and is reported rather than raised
-    -- some rows in a week-wide selection are routinely already live or still
-    missing details.
+    Blocks are normally published from the availability poll that collected
+    leads for them (`POST /admin/availability/polls/<id>/publish`), which is the
+    batch a director actually thinks in. This exists for a draft whose block
+    never got a poll: without it such a practice has no route to being
+    published at all, which is the exact failure the drafting feature would
+    otherwise reintroduce. The practices list drawer is its only caller.
+
+    Nothing here is week-scoped on purpose. The Sunday evening flow already
+    sends the coming week to members with no human in the loop.
     """
     data = request.get_json() or {}
     practice_ids = data.get('practice_ids')

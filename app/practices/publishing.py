@@ -7,6 +7,13 @@ end of that: flipping `is_draft` back to False is the *only* thing standing
 between a fully-staffed practice and every member-facing surface, all of which
 read through `published_practices()`.
 
+The unit of publishing is the availability block: one poll's worth of
+practices, sent live together once the leads are assigned, weeks before any of
+them reach their own Sunday. That is the batch the practices director already
+thinks in, and it is the *only* human gate — the Sunday evening flow (weekly
+summary + announcement job) puts the coming week in front of members on its own
+and must stay that way.
+
 Publishing deliberately does not post the announcement itself. The
 announcement job already scans `published_practices()` for rows with no
 `slack_message_ts` and posts them on the configured schedule, so flipping the

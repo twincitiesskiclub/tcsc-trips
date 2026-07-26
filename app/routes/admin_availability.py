@@ -10,13 +10,14 @@ regardless of whatever the config flag says later when someone opens it.
 
 from datetime import date
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
 from ..auth import admin_required
 from ..models import AppConfig
 from ..practices.availability import PollNotReadyError, build_poll, open_poll
 from ..practices.availability_emoji import EmojiSupplyError
 from ..practices.availability_models import LeadAvailabilityPoll
+from ..practices.publishing import publish_blockers, publish_practices
 
 admin_availability_bp = Blueprint(
     "admin_availability", __name__, url_prefix="/admin/availability")
@@ -44,8 +45,64 @@ def dashboard():
             "status": p.status,
             "is_shadow": p.is_shadow,
             "sessions": len(p.practices),
+            # A closed poll whose practices are still drafts is the failure this
+            # surfaces: availability was collected, leads were assigned, and
+            # nobody ever sent the block live. Both counts are shown because
+            # "2 unpublished, 0 publishable" is a different problem from
+            # "2 unpublished, 2 publishable" -- the first needs details filled
+            # in, the second just needs the button.
+            **_publish_counts(p),
         } for p in polls],
     })
+
+
+def _poll_practices(poll):
+    """The Practice rows a poll covers, in poll order."""
+    return [
+        mapping.practice for mapping in poll.practices
+        if mapping.practice is not None
+    ]
+
+
+def _publish_counts(poll) -> dict:
+    practices = _poll_practices(poll)
+    drafts = [p for p in practices if p.is_draft]
+    return {
+        "unpublished": len(drafts),
+        "publishable": sum(1 for p in drafts if not publish_blockers(p)),
+    }
+
+
+@admin_availability_bp.route("/polls/<int:poll_id>/publish", methods=["POST"])
+@admin_required
+def publish_poll_block(poll_id):
+    """Send this block's practices live — the one human publish gate.
+
+    The poll is the unit because it is the batch the director already thinks
+    in: one block of practices goes out to the leads for availability, gets its
+    leads assigned, and then goes live together.
+
+    Deliberately not tied to the coming week. The Sunday evening flow (weekly
+    summary + the announcement job, both reading published_practices()) already
+    puts the coming week in front of members with no human in the loop, and
+    gating that on a click would break a workflow that works. A block is
+    published weeks before any of its practices reach their own Sunday.
+
+    Partial success is normal and reported rather than raised: a block with one
+    practice still missing its location should send the other eleven, and name
+    the one it held back.
+    """
+    poll = LeadAvailabilityPoll.query.get_or_404(poll_id)
+    practices = _poll_practices(poll)
+    if not practices:
+        return jsonify({"error": f"poll #{poll_id} covers no practices"}), 400
+
+    result = publish_practices(practices)
+    current_app.logger.info(
+        "Poll %s publish by admin: %d published, %d skipped",
+        poll_id, len(result["published"]), len(result["skipped"]),
+    )
+    return jsonify(result)
 
 
 @admin_availability_bp.route("/polls/create", methods=["POST"])
