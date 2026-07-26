@@ -1,10 +1,12 @@
 # Lead availability branch — handoff
 
-> **Status:** Feature-complete and green. Not yet merged. Three decisions need
-> Rob, and a fresh whole-branch review is recommended before merge.
-> **Prepared:** 2026-07-26. **Updated:** 2026-07-26, end of the P4 follow-up session.
-> **Branch:** `lead-availability`, 69 commits on top of `main` (base `0b229ec`).
-> **Tests:** 1494 Python (baseline before the branch: 1270), 74 JS.
+> **Status:** Feature-complete and green. Not yet merged. All three open
+> decisions are resolved (see below); the fresh whole-branch review is in
+> progress.
+> **Prepared:** 2026-07-26. **Updated:** 2026-07-26, after applying Rob's three
+> decisions.
+> **Branch:** `lead-availability`, 72 commits on top of `main` (base `0b229ec`).
+> **Tests:** 1496 Python (baseline before the branch: 1270), 74 JS.
 > **Migrations:** single head `539ad532aeb3`, dev DB at head, chain linear and reversible.
 > Nothing merged. Nothing has posted to the club's real Slack channels except the
 > readiness digest, which is live by design (see Shadow mode).
@@ -12,9 +14,8 @@
 ## Suggested next-session prompt
 
 > Read `docs/superpowers/notes/2026-07-26-lead-availability-handoff.md` completely.
-> Get Rob's answers to the three open decisions, apply them, then run a fresh
-> whole-branch review (the last one ran at `b76b341` and 15 commits have landed
-> since), triage its findings against the Known minors list below, and take the
+> The three open decisions are resolved and applied. Finish triaging the
+> whole-branch review findings against the Known minors list below, then take the
 > branch to a PR. Use `.venv`, not `env/`. The test database is the real local
 > dev database — follow `tests/practices/conftest.py` conventions exactly.
 > `.superpowers/sdd/progress.md` is the full task-by-task ledger if you need the
@@ -90,24 +91,44 @@ Publishing does call `refresh_practice_posts(change_type='create')`.
 greppable counterpart to `published_practices()` — it INCLUDES drafts and is for
 coach/director surfaces only. Never use it for anything a member can see.
 
-## Open decisions — need Rob
+## Open decisions — all three resolved 2026-07-26
 
-**1. `open_poll` posture after a failed DB commit.** The commit is now guarded: it
-rolls back, logs `poll.id` and the *live* Slack message ts at error level, and
-returns failure naming that ts. But the poll returns to DRAFT, so the
-re-entrancy guard (`status != DRAFT`) no longer blocks a re-open — a duplicate
-Slack post is one click away. The error text warns against it. The alternative
-was auto-deleting the posted message, which trades a recoverable inconsistency
-for a destroyed audit trail and can itself fail. Confirm manual recovery is
-acceptable, or ask for something else.
+**1. `open_poll` posture after a failed DB commit — resolved: leave nothing
+behind.** Rob's call was no manual cleanup. On commit failure `open_poll` now
+rolls back *and* `chat_delete`s the message it just posted, so a failed open is a
+true no-op and the director simply clicks open again — which is safe precisely
+because the poll is back to DRAFT. Nobody can have reacted to a message that
+lived for the length of one failed commit, so no record is lost. The older
+loud-log-naming-the-live-ts path survives for the case where the cleanup delete
+*also* fails: two independent failures, and the only one that still needs a
+person. (`785bf03`)
 
-**2. Nudge/close ordering.** The availability nudge runs 08:00 Central, the poll
-close runs 08:30. So a final round of DMs can go out the morning *after* a block
-ends. Acceptable, or swap the times?
+**2. Nudge/close ordering — resolved: skip that day's nudge.** Schedule times
+are unchanged (nudge 08:00, close 08:30). `participants_to_nudge()` now returns
+nothing once `today > poll.ends_on`, so the morning after a block ends nobody is
+DMed even though the poll is still OPEN for another 30 minutes. The gate is the
+poll's own `ends_on` rather than "has the close job run yet", so the two
+schedules can be reordered later without reintroducing the stray DM. Two
+existing MAX_NUDGES tests drove `now` past `ends_on`; both were moved inside the
+block window so they still exercise the ceiling instead of passing on the new
+gate. (`66e5e07`)
 
-**3. Pre-deploy prod query.** Check for `role='assist'` PracticeLead rows on
-FUTURE practices. The assist role is retired from the UI, so any existing future
-assist is unremovable via the form yet still shows in announcements.
+**3. Pre-deploy prod query — resolved: nothing to do.** Queried prod read-only
+on 2026-07-26: `practice_leads` holds 73 `coach` and 102 `lead` rows and **zero
+`assist` rows**, on any practice, past or future. So there is no cleanup, no
+migration and no code change needed.
+
+For the record, since the question came up: nothing about the role key changed.
+`role='assist'` is still a valid value (`LeadRole.ASSIST`,
+`app/practices/interfaces.py`), the rows still read, and announcements still
+render them. What changed in `b2a64bc` is that the practice *edit* path used to
+delete every `PracticeLead` row for the practice and rewrite them from the form,
+and now deletes only `role in ('coach', 'lead')` — deliberately, so historical
+assists survive an edit. Since the form no longer offers an assists field, no
+submission can clear an assist row; on a *future* practice that would mean a row
+that still shows in announcements with no UI to remove it. Prod has none, so the
+preserve-history branch is inert. If assist rows ever reappear, the cheap fix is
+to scope the preservation to practices whose date is in the past.
 
 ## Recommended before merge
 
@@ -228,6 +249,11 @@ Carried from the per-task and whole-branch reviews. Ship-as-is unless noted.
 - Set `lead_availability.shadow_roster` before anything runs. Unset means zero
   nudges with only a warning — a shadow month that produces no data looks
   identical to one that worked.
+- Local `main` is **8 commits ahead of `origin/main`** (all of them the design
+  spec, the three implementation plans and `scripts/preview_lead_availability_ui.py`,
+  committed to main but never pushed). A PR opened against `origin/main` will
+  therefore include those commits alongside the branch's own. Push `main` first
+  if you want the PR diff to be the feature alone.
 
 ## Shadow mode
 
