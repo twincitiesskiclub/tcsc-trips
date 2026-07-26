@@ -517,6 +517,16 @@ def test_non_shadow_poll_uses_the_live_pool(db_session):
         _cleanup(poll_id, user_ids)
 
 
+def test_shadow_roster_null_config_row_resolves_to_an_empty_roster(db_session):
+    """A `lead_availability.shadow_roster` row storing JSON null must fail
+    closed to an empty roster, exactly like a missing row -- AppConfig.get
+    returns the row's value (None) whenever the row exists, and falling back
+    to the live tag pool here would DM the real 10-17 person lead pool during
+    the shadow month."""
+    with patch("app.models.AppConfig.get", return_value=None):
+        assert shadow_roster_leads() == []
+
+
 def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
     """Unit-level check on shadow_roster_leads() itself, independent of
     sync_participants: unknown slack uids in the roster are skipped rather

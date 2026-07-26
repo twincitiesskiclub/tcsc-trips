@@ -28,7 +28,14 @@ def _shadow_mode() -> bool:
     # a shadow month first, and there is no UI that writes this key, so an
     # unset key must resolve to the safe channel. An explicit `False` row is
     # a deliberate act, not the out-of-the-box behavior of every environment.
-    return bool(AppConfig.get("lead_availability.shadow_mode", True))
+    #
+    # A row storing JSON null is NOT a deliberate act: AppConfig.get returns
+    # the row's value whenever the ROW exists, so the default only covers a
+    # missing row, and `bool(None)` would silently flip shadow OFF -- one
+    # `AppConfig.set(key, None)` away from routing a poll to the live
+    # 64-member channel. Treat null exactly like a missing row: fail closed.
+    value = AppConfig.get("lead_availability.shadow_mode", True)
+    return True if value is None else bool(value)
 
 
 @admin_availability_bp.route("/")

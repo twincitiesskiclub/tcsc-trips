@@ -165,6 +165,35 @@ def test_create_defaults_to_shadow_channel_with_no_config_row(admin_client, db_s
         _cleanup_ready_practice_range(practice, location, ptype, poll_id)
 
 
+def test_create_with_null_config_row_fails_closed_to_shadow(admin_client, db_session):
+    """A row storing JSON null must fail CLOSED, exactly like a missing row.
+
+    AppConfig.get(key, default) returns the row's value whenever the row
+    exists, so a null row yields None and `bool(None)` would flip shadow OFF
+    -- routing the next poll to the live 64-member channel off the back of a
+    one-line `AppConfig.set(key, None)`. Shadow mode exists specifically so
+    a misconfiguration cannot reach the live channel.
+    """
+    AppConfig.set(key=_SHADOW_MODE_KEY, value=None, description="t",
+                  category="practices")
+    db.session.commit()
+    practice, location, ptype = _ready_practice_range()
+    poll_id = None
+    try:
+        response = admin_client.post("/admin/availability/polls/create", json={
+            "starts_on": _DEFAULT_TEST_START, "ends_on": _DEFAULT_TEST_END,
+        })
+        body = response.get_json()
+        assert body["success"] is True
+        poll_id = body["poll_id"]
+        assert body["is_shadow"] is True, (
+            "a JSON-null shadow_mode row must resolve to shadow ON, never OFF"
+        )
+        assert body["channel_id"] == _SHADOW_CHANNEL_ID
+    finally:
+        _cleanup_ready_practice_range(practice, location, ptype, poll_id)
+
+
 def test_create_explicit_false_resolves_to_live_channel(admin_client, db_session):
     """An explicit `False` row is a deliberate act, so it must still route to
     the real coordination channel."""
