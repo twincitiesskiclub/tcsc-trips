@@ -18,18 +18,42 @@
 ## Resolved in `161c8a3`
 
 **The publish blocker is closed.** `app/practices/publishing.py` holds
-`publish_practice()` / `publish_practices()` / `publish_blockers()`. Two
-surfaces, both batch:
+`publish_practice()` / `publish_practices()` / `publish_blockers()`.
 
-1. **The Sunday coach review post** (`coach_weekly_summary`, Sun 08:00 to
-   `#collab-coaches-practices`) — Rob's call, since that post is already where
-   coaches do the weekly work. It had been querying `published_practices()`,
-   so drafts were invisible there *and* each drafted slot rendered as an empty
-   "Add Practice" placeholder inviting a duplicate practice on top of the
-   draft. Drafts now render with a `DRAFT` label and their missing details,
-   plus one `publish_week_drafts` button for the week.
-2. **A banner on the admin practices list** — same batch from the web side,
-   `POST /admin/practices/publish`.
+**The unit of publishing is the availability block, not the week.** Rob's call,
+and it matters: the Sunday evening flow already sends the coming week to members
+on its own (weekly summary Sun 20:30 + the announcement job, both reading
+`published_practices()`). Gating that on a human click would break a workflow
+that already works. Draft state exists for exactly one reason — the bucket of
+practices leads are asked to give availability on — so that bucket is what gets
+published:
+
+```
+POST /admin/availability/polls/<id>/publish
+```
+
+One click per month, weeks before any of those practices reach their own Sunday.
+The dashboard (`GET /admin/availability/`) reports `unpublished` and
+`publishable` per poll: *2 unpublished / 0 publishable* needs details filled in,
+*2 unpublished / 2 publishable* just needs the button.
+
+An earlier pass (`161c8a3`) put a `publish_week_drafts` button on the Sunday
+coach post and a batch banner on the practices list. Both were removed in
+`4b8f89b` — see that commit message for why. `tests/js/draft_publish.test.js`
+asserts no week- or list-level publish control exists so it can't creep back.
+
+**Two things deliberately kept:**
+
+- **Drafts still show in the Sunday coach post.** That post had been querying
+  `published_practices()`, so drafts were invisible in the one place coaches
+  would look for them, *and* each drafted slot rendered as an empty "Add
+  Practice" placeholder inviting a duplicate practice on top of the draft. They
+  now render with a `DRAFT` label, their missing details, and a footer flag —
+  informational, not actionable. A draft still sitting in the coming week means
+  it never made it into a poll, which nothing else would catch.
+- **Single-practice publish in the list drawer**, via
+  `POST /admin/practices/publish`. A draft whose block never got a poll would
+  otherwise have no route to being published at all.
 
 Publishing does **not** post the announcement. The announcement job already
 scans `published_practices()` for rows with no `slack_message_ts`, so flipping
@@ -47,8 +71,10 @@ pool is now a tagging act, not a guess in the availability code.
 **Also fixed:** `EmojiSupplyError` on the create-poll route is now a 400
 naming the fix rather than a 500.
 
-Tests: **1437 Python** (was 1405), **64 JS** (was 55) — including the
-member-visibility assertion the branch never had.
+Tests: **1439 Python** (was 1405), **62 JS** (was 55) — including the
+member-visibility assertion the branch never had, and an integration test that
+runs `post_coach_weekly_summary()` against a real draft row, since the bug lived
+in that query rather than in the block builder.
 
 ## What the branch is
 
@@ -231,8 +257,8 @@ it without re-previewing.
 | `app/practices/drafting.py` | Monthly draft generation, `drafted_practices_in_window` |
 | `app/practices/publishing.py` | `publish_practice`, `publish_practices`, `publish_blockers` — the draft → member-visible step |
 | `app/practices/service.py` | `published_practices()` (excludes drafts) and `coach_visible_practices()` (includes them, coach surfaces only) |
-| `app/slack/blocks/coach_review.py` | Sunday post blocks: DRAFT labels + `publish_week_drafts` button |
-| `app/slack/bolt_app.py` | `_handle_publish_week_drafts` — re-reads the week rather than trusting baked-in ids |
+| `app/routes/admin_availability.py` | `publish_poll_block` — the one human publish gate, per block |
+| `app/slack/blocks/coach_review.py` | Sunday post blocks: DRAFT labels, footer flag, deliberately no publish button |
 | `app/practices/availability_emoji.py` | Emoji assignment + validation, `EmojiSupplyError` |
 | `app/routes/admin_availability.py` | Poll create/open routes, `_shadow_mode()` |
 | `app/slack/blocks/availability.py` | Director-approved poll/nudge/digest copy |
