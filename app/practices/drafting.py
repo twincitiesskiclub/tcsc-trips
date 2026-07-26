@@ -122,6 +122,12 @@ def generate_draft_block(start_date: date, end_date: date) -> list[Practice]:
         )
         db.session.add(practice)
         created.append(practice)
+        # Mark the slot taken NOW: practice_days can hold two entries with
+        # the same day and time (update_practice_days does not dedupe), and
+        # expected_slots then yields the datetime twice — without this, one
+        # admin-UI duplicate would double-draft the slot in the one function
+        # whose idempotency is load-bearing.
+        taken.add(slot)
 
     if created:
         db.session.commit()

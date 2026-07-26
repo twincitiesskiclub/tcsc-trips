@@ -228,6 +228,34 @@ def test_generate_is_idempotent(practice_days):
         _delete_practices_in_slots(slots)
 
 
+@pytest.fixture()
+def practice_days_with_duplicate_entry(db_session):
+    """Two config entries with the same day AND time — reachable from the
+    admin UI, since update_practice_days does not dedupe."""
+    yield from _save_restore_practice_days([
+        {"day": "tuesday", "time": "18:15", "active": True},
+        {"day": "tuesday", "time": "18:15", "active": True},
+    ])
+
+
+def test_generate_creates_one_draft_for_duplicated_config_entries(
+    practice_days_with_duplicate_entry,
+):
+    """expected_slots yields the duplicated datetime twice; generation must
+    still create exactly one row for it — this is the one function whose
+    idempotency is load-bearing."""
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))
+    assert len(slots) == 2, "sanity: the duplicated config entry reaches the slot list"
+    try:
+        created = generate_draft_block(date(2026, 8, 3), date(2026, 8, 9))
+        assert len(created) == 1
+        assert Practice.query.filter(Practice.date.in_(slots)).count() == 1, (
+            "a duplicated day+time config entry must not double-draft the slot"
+        )
+    finally:
+        _delete_practices_in_slots(slots)
+
+
 def test_generate_skips_slots_that_already_have_a_real_practice(practice_days):
     slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))
     existing = Practice(
