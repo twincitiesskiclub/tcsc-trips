@@ -308,9 +308,10 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
 
     # Captured before the commit: if it fails, the rollback expires the poll
     # object, and the ts of the now-live message exists nowhere else once the
-    # exception is swallowed -- these two values are what a human needs to
-    # recover.
+    # exception is swallowed -- these values are what the cleanup below (and,
+    # if that also fails, a human) needs to recover.
     poll_id = poll.id
+    posted_channel = poll.channel_id
     posted_ts = response["ts"]
 
     poll.message_ts = posted_ts
@@ -322,18 +323,37 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
     try:
         db.session.commit()
     except Exception as exc:  # noqa: BLE001 - never raise; see module docstring
-        # Roll back so the caller isn't handed a poisoned session. The poll
-        # is back to DRAFT with no message_ts, but the Slack message IS live
-        # and collecting reactions that match nothing -- do NOT delete it as
-        # "cleanup" (that destroys the audit trail, and the delete can fail
-        # too). A human recovers by setting message_ts/status from this log
-        # line rather than re-opening, which would post a duplicate.
+        # Roll back so the caller isn't handed a poisoned session, then undo
+        # the Slack side too: the poll is DRAFT again, which means the
+        # re-entrancy guard above no longer blocks a second open, so leaving
+        # the message up would turn the obvious recovery (click open again)
+        # into a duplicate poll in the channel. Nobody can have reacted to a
+        # message that has existed for the length of one failed commit, so
+        # there is no record to preserve -- delete it and let the director
+        # retry. Rollback first: chat_delete needs no DB, and a poisoned
+        # session must not outlive this handler either way.
         db.session.rollback()
+        try:
+            client.chat_delete(channel=posted_channel, timestamp=posted_ts)
+        except Exception as cleanup_exc:  # noqa: BLE001 - never raise; see module docstring
+            # Two independent failures: the message really is live and
+            # recorded nowhere, so name the ts -- this is the one path that
+            # still needs a human.
+            message = (
+                f"availability poll {poll_id}: message posted to Slack "
+                f"(ts {posted_ts}) but the commit marking it OPEN failed "
+                f"({exc}), and deleting the posted message failed too "
+                f"({cleanup_exc}). The message is live; delete it in Slack or "
+                f"record ts {posted_ts} on the poll manually before opening "
+                "again, or the channel gets a duplicate poll."
+            )
+            current_app.logger.error(message)
+            return {"success": False, "error": message}
+
         message = (
-            f"availability poll {poll_id}: message posted to Slack "
-            f"(ts {posted_ts}) but the commit marking it OPEN failed: {exc}. "
-            f"The message is live; record ts {posted_ts} on the poll manually "
-            "instead of opening again."
+            f"availability poll {poll_id}: the commit marking it OPEN failed "
+            f"({exc}), so the poll it posted (ts {posted_ts}) was deleted "
+            "again. Nothing was left in the channel — try again."
         )
         current_app.logger.error(message)
         return {"success": False, "error": message}

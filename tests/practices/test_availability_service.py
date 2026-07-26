@@ -15,6 +15,7 @@ from datetime import date, datetime
 from unittest.mock import MagicMock, patch
 
 import pytest
+from slack_sdk.errors import SlackApiError
 from sqlalchemy import text
 
 from app.constants import UserStatus
@@ -302,26 +303,31 @@ def test_open_poll_seeding_survives_a_reaction_failure(db_session, app):
         _cleanup_practices([first, second], poll)
 
 
-def test_open_poll_commit_failure_reports_the_live_ts_and_rolls_back(db_session, app):
-    """A failed commit after the Slack post must not crash, must not claim
-    success, and must name the ts of the message that IS live -- that ts
-    exists nowhere else once the exception is swallowed, and a human needs
-    it to recover. The session must be rolled back so the caller isn't left
-    with a poisoned transaction, and the poll must land back in a clean
-    DRAFT state (no half-written OPEN with a dangling ts).
+def _abort_transaction():
+    # Poison the transaction at the DB level before "failing", so the
+    # session-usable assertions below are genuine: without open_poll's
+    # rollback, PostgreSQL keeps the transaction aborted and every later
+    # query raises (PendingRollbackError / InFailedSqlTransaction) rather
+    # than trivially passing.
+    db.session.execute(text("SELECT 1/0"))
+
+
+def test_open_poll_commit_failure_deletes_the_orphaned_message(db_session, app):
+    """A failed commit after the Slack post must leave NOTHING behind.
+
+    The poll rolls back to DRAFT, which means the re-entrancy guard no
+    longer blocks a second open -- so if the posted message survived, the
+    obvious recovery (click open again) would produce a duplicate poll in
+    the channel. Rather than asking a human to reconcile that by hand, the
+    orphan is deleted: nobody can have reacted to a message that has
+    existed for the length of one failed commit, so there is no data to
+    lose, and the director's next click is a clean retry.
     """
     ready = _ready_practice(4)
     db_session.commit()
     poll = build_poll(_START, _END)
     poll_id = poll.id
-
-    def _abort_transaction():
-        # Poison the transaction at the DB level before "failing", so the
-        # session-usable assertion below is genuine: without open_poll's
-        # rollback, PostgreSQL keeps the transaction aborted and every
-        # later query raises (PendingRollbackError / InFailedSqlTransaction)
-        # rather than trivially passing.
-        db.session.execute(text("SELECT 1/0"))
+    channel_id = poll.channel_id
 
     try:
         client = MagicMock()
@@ -333,13 +339,54 @@ def test_open_poll_commit_failure_reports_the_live_ts_and_rolls_back(db_session,
             result = open_poll(poll)
 
         assert result["success"] is False
-        assert "1785.99" in result["error"], \
-            "the error must name the live message ts -- it is the only place it survives"
-        client.reactions_add.assert_not_called(), \
+        client.chat_delete.assert_called_once_with(channel=channel_id, timestamp="1785.99")
+        assert "try again" in result["error"].lower(), (
+            "the retry is the whole point of deleting the orphan -- the error "
+            "must tell the director to re-open rather than warn them off it"
+        )
+        assert client.reactions_add.call_count == 0, \
             "the poll never became OPEN, so there is nothing to seed onto"
 
         # Genuine session-usable check (see _abort_transaction above): this
         # query raises unless open_poll rolled the aborted transaction back.
+        stored = db.session.get(LeadAvailabilityPoll, poll_id)
+        assert stored.status == PollStatus.DRAFT
+        assert stored.message_ts is None, \
+            "rollback must discard the half-written ts, not leave it dangling"
+    finally:
+        _cleanup_practices([ready], poll)
+
+
+def test_open_poll_commit_failure_reports_the_live_ts_when_delete_fails(db_session, app):
+    """When the cleanup delete ALSO fails, the message really is live and
+    unrecorded -- that ts exists nowhere else once the exception is
+    swallowed, so the error and the log must name it. This is the only path
+    that still needs a human, and it takes two independent failures to
+    reach.
+    """
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+    poll_id = poll.id
+
+    try:
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ok": True, "ts": "1785.99"}
+        client.chat_delete.side_effect = SlackApiError(
+            "cant_delete_message", {"ok": False, "error": "cant_delete_message"}
+        )
+
+        with patch("app.practices.availability.validate_emoji_available", return_value=(True, [])), \
+             patch("app.practices.availability.get_slack_client", return_value=client), \
+             patch.object(db.session, "commit", side_effect=_abort_transaction):
+            result = open_poll(poll)
+
+        assert result["success"] is False
+        assert "1785.99" in result["error"], \
+            "the error must name the live message ts -- it is the only place it survives"
+        assert client.reactions_add.call_count == 0, \
+            "the poll never became OPEN, so there is nothing to seed onto"
+
         stored = db.session.get(LeadAvailabilityPoll, poll_id)
         assert stored.status == PollStatus.DRAFT
         assert stored.message_ts is None, \
