@@ -28,6 +28,10 @@ current app context the moment it's accessed (even just to capture the
 """
 
 from types import SimpleNamespace
+
+from sqlalchemy import text
+
+from app.models import db
 from unittest.mock import patch
 
 import pytest
@@ -149,3 +153,56 @@ def test_reconcile_error_skips_nudges_for_that_poll(app):
 
     sync_mock.assert_not_called()
     send_mock.assert_not_called()
+
+
+def test_a_poisoned_session_does_not_abort_the_other_polls(app):
+    """Isolation has to survive a SESSION-POISONING error, not just a tidy one.
+
+    test_one_poll_raising_does_not_abort_others raises a plain RuntimeError,
+    which never touches the transaction -- so it passed even while the except
+    block had no rollback. Every poll in a run shares one session, so a real
+    failure (an IntegrityError on the participant unique index when a reaction
+    event races the reconcile commit) left the session in a failed-flush state:
+    the next poll's first query raised PendingRollbackError, was caught, and
+    was logged as a second, unrelated failure. This drives the real thing by
+    aborting the transaction at the database.
+    """
+    from app.scheduler import run_lead_availability_nudge_job
+
+    poll_bad = SimpleNamespace(id=1)
+    poll_good = SimpleNamespace(id=2)
+    sync_calls = []
+
+    def _reconcile(p):
+        if p.id == poll_bad.id:
+            # Poison the transaction the way a failed flush does, so the next
+            # poll's queries raise unless the job rolled back.
+            db.session.execute(text("SELECT 1/0"))
+        return {"added": 0, "removed": 0}
+
+    def _sync(p):
+        # A real query, so a poisoned session actually shows up here rather
+        # than being masked by a mock that never touches the DB.
+        db.session.execute(text("SELECT 1"))
+        sync_calls.append(p.id)
+        return 0
+
+    with app.app_context():
+        try:
+            with patch("app.practices.availability_models.LeadAvailabilityPoll.query") as q, \
+                 patch("app.slack.practices.availability_reactions.reconcile_poll",
+                       side_effect=_reconcile), \
+                 patch("app.practices.availability.sync_participants", side_effect=_sync), \
+                 patch("app.practices.availability.send_nudges",
+                       return_value={"sent": 0, "skipped": 0}):
+                q.filter_by.return_value.all.return_value = [poll_bad, poll_good]
+                run_lead_availability_nudge_job(app)
+        finally:
+            # This test deliberately aborts a transaction; leave the shared
+            # dev-database session clean for whatever runs next.
+            db.session.rollback()
+
+    assert sync_calls == [poll_good.id], (
+        "the good poll must still be processed -- a DB-level failure on the "
+        "first poll must not poison the session for the rest of the run"
+    )

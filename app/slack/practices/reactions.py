@@ -50,6 +50,16 @@ def handle_attendance_reaction(
             slack_user_id=slack_user_id, removed=removed,
         )
     except Exception:
+        # Rollback before falling through. handle_availability_reaction does
+        # db.session.add() before its commits, so the likeliest exception here
+        # is a flush/constraint error (Slack retries an unacked event within
+        # 3s, and two deliveries racing violate the response unique index) --
+        # which leaves the session poisoned. Without this, the fall-through
+        # below immediately raises PendingRollbackError out of
+        # handle_attendance_reaction, so the guard re-raises on the very error
+        # class it was written for and the log line claiming a fallback
+        # happened is a lie.
+        db.session.rollback()
         logger.error(
             "Availability reaction handling failed for channel=%s ts=%s "
             "reaction=%s; falling through to attendance handling",

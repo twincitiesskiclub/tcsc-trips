@@ -973,6 +973,15 @@ def run_lead_availability_nudge_job(app: Flask):
                     f"skipped={result.get('skipped', 0)}"
                 )
             except Exception as e:
+                # Rollback FIRST. Every poll in this run shares one session
+                # (one app_context), so an exception that left a failed flush
+                # behind -- an IntegrityError on the participant unique index
+                # when a reaction event races the reconcile commit, say --
+                # poisons the session. Without this, the next poll's first
+                # query raises PendingRollbackError and is logged as an
+                # unrelated failure: "one poll's failure must not block the
+                # others" would hold only for errors that never touch the DB.
+                db.session.rollback()
                 app.logger.error(
                     f"Lead availability nudge failed for poll {poll.id}: {e}", exc_info=True
                 )
@@ -1004,6 +1013,10 @@ def run_close_expired_polls_job(app: Flask):
             try:
                 close_poll(poll)
             except Exception as e:
+                # See run_lead_availability_nudge_job: shared session, so a
+                # poisoned one would leave every later expired poll OPEN and
+                # the nudge job DMing about a block that already ended.
+                db.session.rollback()
                 app.logger.error(
                     f"Failed to close availability poll {poll.id}: {e}", exc_info=True
                 )
