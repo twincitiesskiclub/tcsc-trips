@@ -85,12 +85,26 @@ def expected_slots(start_date: date, end_date: date) -> list[datetime]:
         weekday = WEEKDAYS.get(str(entry.get("day", "")).lower())
         if weekday is None:
             continue
-        raw_time = str(entry.get("time", "18:00"))
+        # `or "18:00"`, not just a dict default: the admin UI's
+        # <input type="time"> submits "" when the field is cleared, and an
+        # empty string would otherwise fail to parse and drop this weekday out
+        # of the whole horizon -- a silent absence, which is the failure class
+        # this module exists to eliminate. A stored "" now means "the default
+        # time", which is the least surprising reading of an unset field.
+        raw_time = str(entry.get("time") or "18:00")
         try:
             hour, minute = (int(part) for part in raw_time.split(":", 1))
+            # Range-checked here, inside the guard, because an out-of-range
+            # hour parses cleanly as an int and only explodes when the datetime
+            # is constructed below -- which used to happen outside any try and
+            # took down the whole bootstrap run (no drafts, no digest) for one
+            # bad config row.
+            datetime(2000, 1, 1, hour, minute)
         except ValueError:
             current_app.logger.warning(
-                "practice_days entry has unparseable time %r; skipping", raw_time
+                "practice_days entry for %s has an unusable time %r; skipping "
+                "that entry (no practices will be drafted for it)",
+                entry.get("day"), raw_time,
             )
             continue
         times_by_weekday.setdefault(weekday, []).append((hour, minute))

@@ -171,6 +171,23 @@ def test_default_practice_days_is_one_shared_constant():
             f"{module.__name__} must import the shared default helper, not carry a copy"
         )
 
+    # bolt_app is the fourth site and was missed by the identity check above,
+    # because it imports lazily inside the handler (this file's deliberate
+    # style, to avoid import cycles) so there is no module attribute to
+    # compare. Asserted on the source instead -- with a positive control, so
+    # renaming the helper can't turn this into a vacuous pass.
+    import inspect
+    from app.slack import bolt_app
+    source = inspect.getsource(bolt_app)
+    assert "AppConfig.get('practice_days', default_practice_days())" in source, (
+        "bolt_app must default practice_days from the shared helper: with no "
+        "config row, [] matches no entry and the coach post's Saturday 09:00 "
+        "placeholder opens a create modal prefilled 18:00"
+    )
+    assert "AppConfig.get('practice_days', [])" not in source, (
+        "the bare [] default must not come back"
+    )
+
 
 def test_default_practice_days_copies_are_independent():
     """AppConfig.get(key, default) hands the default object itself to the
@@ -512,3 +529,52 @@ def test_drafted_practices_in_window_orders_by_date(db_session):
         )
     finally:
         _delete_practices_in_slots([middle_slot, latest_slot, earliest_slot])
+
+
+# -----------------------------------------------------------------------
+# A bad `time` in the practice_days config used to erase a whole weekday.
+#
+# expected_slots skipped an unparseable time with one log line, so that day
+# vanished from drafting for the entire two-month horizon while the readiness
+# digest still reported every surviving draft as ready — nothing anywhere said
+# a third of the schedule was missing. The admin UI's <input type="time">
+# submits "" whenever the field is cleared, so this was one keystroke away.
+# An out-of-range hour was worse: it parsed as ints and then raised when the
+# datetime was built, outside any guard, killing the bootstrap job.
+# -----------------------------------------------------------------------
+
+@pytest.fixture()
+def practice_days_blank_time(db_session):
+    yield from _save_restore_practice_days([
+        {"day": "tuesday", "time": "", "active": True},
+        {"day": "thursday", "time": "18:15", "active": True},
+    ])
+
+
+@pytest.fixture()
+def practice_days_out_of_range_time(db_session):
+    yield from _save_restore_practice_days([
+        {"day": "tuesday", "time": "25:00", "active": True},
+        {"day": "thursday", "time": "18:15", "active": True},
+    ])
+
+
+def test_blank_time_falls_back_to_the_default_instead_of_dropping_the_day(
+    practice_days_blank_time,
+):
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))  # Mon..Sun
+    assert slots == [
+        datetime(2026, 8, 4, 18, 0),   # Tuesday, defaulted — NOT missing
+        datetime(2026, 8, 6, 18, 15),
+    ], "a cleared time field must default, not silently erase Tuesday"
+
+
+def test_out_of_range_time_skips_one_entry_without_killing_the_run(
+    practice_days_out_of_range_time,
+):
+    # The surviving day must still be drafted: the failure is contained to the
+    # bad entry rather than raising out of expected_slots.
+    slots = expected_slots(date(2026, 8, 3), date(2026, 8, 9))
+    assert slots == [datetime(2026, 8, 6, 18, 15)], (
+        "an unusable hour must skip its own entry and leave the rest intact"
+    )

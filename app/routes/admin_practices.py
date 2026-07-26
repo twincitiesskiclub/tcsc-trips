@@ -9,6 +9,7 @@ from flask import (
     request,
     url_for,
 )
+import re
 from datetime import datetime, timedelta
 from ..auth import admin_required
 from ..models import db, User, Tag, AppConfig
@@ -35,6 +36,10 @@ from ..practices.plan_reactions import (
     validate_authorized_plan_reactions,
 )
 from sqlalchemy.orm import joinedload
+
+# HH:MM, 00:00-23:59. Used to validate practice_days entries -- see
+# update_practice_days for why a bad time must be rejected at the door.
+TIME_OF_DAY_RE = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
 _EDIT_UNSYNCED_ERROR = (
@@ -1647,6 +1652,21 @@ def update_practice_days():
             return jsonify({'error': 'Each entry must have a day field'}), 400
         if entry['day'].lower() not in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']:
             return jsonify({'error': f'Invalid day: {entry["day"]}'}), 400
+        # `time` must be validated here, because a bad one is silent
+        # downstream: expected_slots() skips an unparseable time with a single
+        # log line, so this whole weekday vanishes from drafting for the full
+        # two-month horizon while the readiness digest still reports every
+        # remaining draft as ready. An out-of-range hour is worse -- it parses
+        # as ints and then kills the bootstrap job when the datetime is built.
+        # The UI's <input type="time"> submits "" whenever the field is
+        # cleared, so this is one keystroke away, not a hand-crafted payload.
+        if 'time' in entry:
+            time_value = entry['time']
+            if not isinstance(time_value, str) or not TIME_OF_DAY_RE.match(time_value):
+                return jsonify({
+                    'error': f'Invalid time for {entry["day"]}: '
+                             f'{time_value!r}. Use HH:MM, 00:00-23:59.'
+                }), 400
         defaults = entry.get('defaults')
         if defaults is not None and not isinstance(defaults, dict):
             return jsonify({'error': 'defaults must be an object or null'}), 400
