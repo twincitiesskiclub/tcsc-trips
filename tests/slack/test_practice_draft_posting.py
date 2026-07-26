@@ -212,6 +212,110 @@ def test_nudge_without_a_recorded_digest_posts_top_level_and_records(app):
             _delete_digest_records(FALLBACK_BLOCK_START)
 
 
+def test_deleted_thread_parent_clears_the_record_and_reposts_top_level(app):
+    """If the recorded digest post was deleted in Slack, every later nudge
+    would thread onto a dead ts, fail, and only log — silently stopping the
+    chase for the rest of the block. The record is only a cache of where to
+    thread: on message_not_found, drop it, post top-level, and record the
+    new post so tomorrow's nudge threads onto IT."""
+    from slack_sdk.errors import SlackApiError
+
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.side_effect = [
+        SlackApiError("boom", response={"error": "message_not_found"}),
+        {"ok": True, "ts": "1785000020.5"},
+    ]
+
+    with app.app_context():
+        assert not _digest_records(THREADED_BLOCK_START), (
+            "reserved 2099 block anchor already occupied in the dev database"
+        )
+        record = PracticeSummaryPost(
+            week_start=THREADED_BLOCK_START,
+            surface=READINESS_DIGEST,
+            channel_id="C-TEST-DIGEST",
+            message_ts="1785000000.42",  # deleted in Slack
+        )
+        db.session.add(record)
+        db.session.commit()
+        try:
+            with patch(
+                "app.slack.practices.drafts.get_slack_client", return_value=client
+            ):
+                result = post_readiness_digest(
+                    [_practice(4)], "Jul 21", "Aug 13",
+                    block_start=THREADED_BLOCK_START,
+                )
+
+            assert result["success"] is True
+            assert result["ts"] == "1785000020.5"
+
+            first, second = client.chat_postMessage.call_args_list
+            assert first.kwargs["thread_ts"] == "1785000000.42"
+            assert "thread_ts" not in second.kwargs, (
+                "the retry must be a top-level post, not another dead thread"
+            )
+
+            records = _digest_records(THREADED_BLOCK_START)
+            assert len(records) == 1, "the dead record must be replaced, not kept"
+            assert records[0].message_ts == "1785000020.5", (
+                "the new top-level post must become the block's digest identity"
+            )
+        finally:
+            db.session.rollback()
+            _delete_digest_records(THREADED_BLOCK_START)
+
+
+def test_other_slack_errors_while_threading_keep_the_record(app):
+    """Only a dead parent means the record is stale. A transient failure
+    (ratelimited, outage) must not delete the identity — tomorrow's nudge
+    should still thread onto the same post."""
+    from slack_sdk.errors import SlackApiError
+
+    from app.slack.practices.drafts import post_readiness_digest
+
+    client = MagicMock()
+    client.chat_postMessage.side_effect = SlackApiError(
+        "boom", response={"error": "ratelimited"}
+    )
+
+    with app.app_context():
+        assert not _digest_records(THREADED_BLOCK_START), (
+            "reserved 2099 block anchor already occupied in the dev database"
+        )
+        record = PracticeSummaryPost(
+            week_start=THREADED_BLOCK_START,
+            surface=READINESS_DIGEST,
+            channel_id="C-TEST-DIGEST",
+            message_ts="1785000000.42",
+        )
+        db.session.add(record)
+        db.session.commit()
+        try:
+            with patch(
+                "app.slack.practices.drafts.get_slack_client", return_value=client
+            ):
+                result = post_readiness_digest(
+                    [_practice(4)], "Jul 21", "Aug 13",
+                    block_start=THREADED_BLOCK_START,
+                )
+
+            assert result["success"] is False
+            assert result["error"] == "ratelimited"
+            client.chat_postMessage.assert_called_once(), "no retry on transient errors"
+
+            records = _digest_records(THREADED_BLOCK_START)
+            assert len(records) == 1
+            assert records[0].message_ts == "1785000000.42", (
+                "a transient error must not destroy the digest identity"
+            )
+        finally:
+            db.session.rollback()
+            _delete_digest_records(THREADED_BLOCK_START)
+
+
 def test_recording_failure_still_reports_a_successful_post(app):
     """The message went out; a bookkeeping failure must not turn that into an
     error (or raise) — tomorrow's nudge just falls back to top-level again."""

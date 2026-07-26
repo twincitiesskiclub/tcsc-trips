@@ -15,6 +15,11 @@ from app.slack.practices.summary_posts import (
     stage_readiness_digest_post,
 )
 
+# Slack errors that mean the recorded thread parent no longer exists (the
+# digest message was deleted in Slack). Anything else — ratelimited, outage,
+# bad channel — is transient or unrelated, and must NOT clear the record.
+_DEAD_THREAD_PARENT_ERRORS = frozenset({"message_not_found", "thread_not_found"})
+
 
 def post_readiness_digest(
     practices: list,
@@ -49,6 +54,7 @@ def post_readiness_digest(
     try:
         channel = COLLAB_CHANNEL_ID
         thread_ts = None
+        record = None
         if block_start is not None:
             record = find_readiness_digest_post(block_start)
             if record is not None:
@@ -59,7 +65,29 @@ def post_readiness_digest(
         if thread_ts is not None:
             kwargs["thread_ts"] = thread_ts
 
-        response = get_slack_client().chat_postMessage(**kwargs)
+        client = get_slack_client()
+        try:
+            response = client.chat_postMessage(**kwargs)
+        except SlackApiError as exc:
+            error = exc.response.get("error", str(exc))
+            if thread_ts is None or error not in _DEAD_THREAD_PARENT_ERRORS:
+                raise
+            # The recorded digest post was deleted in Slack (e.g. a coach
+            # tidying the collab channel). The record is only a cache of
+            # where to thread — keeping it would aim every future nudge at a
+            # dead ts and silently stop the chase for the rest of the block.
+            # Drop it and post top-level; the staging below records the new
+            # post as the block's digest identity.
+            current_app.logger.warning(
+                "Readiness digest thread parent %s in %s is gone (%s); "
+                "clearing the stale record and posting top-level",
+                thread_ts, channel, error,
+            )
+            db.session.delete(record)
+            db.session.commit()
+            thread_ts = None
+            del kwargs["thread_ts"]
+            response = client.chat_postMessage(**kwargs)
         ts = response["ts"]
     except SlackApiError as exc:
         error = exc.response.get("error", str(exc))
