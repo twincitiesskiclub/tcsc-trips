@@ -6,6 +6,8 @@ import pytest
 from slack_sdk.errors import SlackApiError
 
 from app.practices.availability_emoji import (
+    MAX_POLL_SESSIONS,
+    MAX_SEEDED_REACTIONS,
     EmojiSupplyError,
     done_emoji,
     letter_emoji,
@@ -26,8 +28,10 @@ def test_letter_emoji_refuses_to_run_short(app):
 
 
 def test_done_emoji_is_never_a_session(app):
+    # MAX_POLL_SESSIONS, not 26: the bot may only seed 23 reactions on one
+    # message, so a full-alphabet poll is refused outright now.
     with app.app_context():
-        assert done_emoji() not in letter_emoji(26)
+        assert done_emoji() not in letter_emoji(MAX_POLL_SESSIONS)
 
 
 def test_done_emoji_reads_the_config_key(app):
@@ -174,3 +178,45 @@ def test_transport_failure_refuses_rather_than_raises(app):
 
     assert ok is False
     assert missing == ["letter_a", "letter_b"]
+
+
+# ---------------------------------------------------------------------------
+# Slack lets ONE user put at most 23 reactions on a message, and open_poll
+# seeds every letter plus the done emoji as the bot. Past that, reactions.add
+# returns too_many_reactions, which the seeding loop only warns about -- so the
+# poll used to ship with no pill on its tail sessions and still report success.
+# A session with no pill, on a message where every other line has one, reads as
+# "not an option". The drafting horizon reaches ~61 days = up to 27 Tue/Thu/Sat
+# sessions, so polling a whole drafted block gets there; the design assumed
+# ~12-session blocks.
+# ---------------------------------------------------------------------------
+
+def test_a_poll_at_the_seeding_limit_is_allowed(app):
+    with app.app_context():
+        names = letter_emoji(MAX_POLL_SESSIONS)
+    assert len(names) == MAX_POLL_SESSIONS
+    assert len(names) + 1 == MAX_SEEDED_REACTIONS, \
+        "the limit is sessions plus the one done emoji"
+
+
+def test_a_poll_past_the_seeding_limit_is_refused(app):
+    """Refused even though 26 letters are configured -- the binding constraint
+    is Slack's per-user reaction cap, not the emoji supply.
+    """
+    with app.app_context():
+        with pytest.raises(EmojiSupplyError) as exc:
+            letter_emoji(MAX_POLL_SESSIONS + 1)
+
+    message = str(exc.value)
+    assert str(MAX_POLL_SESSIONS + 1) in message, "name the session count"
+    assert "split" in message.lower(), \
+        "and name the fix, since the director is the one who has to act"
+
+
+def test_the_full_alphabet_is_past_the_limit(app):
+    """The concrete regression: 26 configured letters used to be accepted, and
+    a 26-session poll then posted with three unseeded sessions.
+    """
+    with app.app_context():
+        with pytest.raises(EmojiSupplyError):
+            letter_emoji(26)

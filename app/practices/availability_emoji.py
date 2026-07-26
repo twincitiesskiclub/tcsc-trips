@@ -28,6 +28,22 @@ DEFAULT_DONE_EMOJI = "white_check_mark"
 # other custom emoji, or a typo'd config value ships an unanswerable poll.
 NATIVE_EMOJI = {DEFAULT_DONE_EMOJI}
 
+# Slack caps the reactions ONE user may add to a single message at 23, and
+# open_poll seeds every letter plus the done emoji as the bot. Past the cap
+# reactions.add fails with `too_many_reactions`, which the seeding loop only
+# warns about -- so the poll shipped with no pill on its tail sessions and
+# still reported success. Leads can technically still add those reactions from
+# the picker (each person has their own budget), but a session with no visible
+# pill on a message where every other line has one reads as "not an option".
+#
+# 22 letters + 1 done emoji = the 23 the bot may add. The drafting horizon
+# reaches ~61 days, which on a Tue/Thu/Sat schedule is up to 27 sessions, so
+# this is reachable by polling a whole drafted block -- the design assumed
+# ~12-session blocks. Refusing names the fix, and splitting the block into two
+# polls is the intended answer.
+MAX_SEEDED_REACTIONS = 23
+MAX_POLL_SESSIONS = MAX_SEEDED_REACTIONS - 1
+
 
 def _practice_config() -> dict:
     """The shared practices.yaml config, via the one process-wide cache.
@@ -77,6 +93,18 @@ def letter_emoji(count: int) -> list[str]:
             f"poll needs {count} distinct emoji but only {len(letters)} are configured; "
             "add more to config/practices.yaml lead_availability.letter_emoji "
             "or split the block into shorter polls"
+        )
+    # Configuring 26 letters isn't enough on its own: the bot can only put 23
+    # reactions on one message, so beyond MAX_POLL_SESSIONS the tail sessions
+    # would post with no pill and open_poll would still report success. Refuse
+    # here, where the number is known and the message can name the real fix.
+    if count > MAX_POLL_SESSIONS:
+        raise EmojiSupplyError(
+            f"poll covers {count} sessions but Slack lets the bot seed only "
+            f"{MAX_SEEDED_REACTIONS} reactions on one message "
+            f"({MAX_POLL_SESSIONS} sessions plus the done emoji); the sessions "
+            "past that would post with no reaction pill. Split the block into "
+            "two shorter polls"
         )
     return list(letters[:count])
 

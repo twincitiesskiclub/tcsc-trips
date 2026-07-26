@@ -368,3 +368,104 @@ def test_admin_create_logs_returned_refresh_failure_without_rolling_back(
     assert db.session.get(Practice, admin_create_records.practice_id) is not None
     assert "coach_summary" in caplog.text
     assert "summary unavailable" in caplog.text
+
+
+def test_admin_edit_warns_when_a_practice_moves_into_an_open_poll(
+    admin_client,
+    admin_create_records,
+    open_poll_covering_create_date,
+    monkeypatch,
+    caplog,
+):
+    """Rescheduling INTO an open poll's range is the same failure as creating
+    there, and had no check at all.
+
+    The poll's emoji mapping is fixed at build time, so the moved practice gets
+    no letter and collects no availability — and the poll-message refresh can't
+    catch it either, since that surface only finds polls that already map this
+    practice. Rescheduling is routine, so this path is arguably likelier than
+    the create path that was already covered.
+    """
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: {},
+    )
+
+    # Created OUTSIDE the poll's range (the poll covers the 1st-28th), so the
+    # create response is quiet and only the edit can produce the warning.
+    outside = ADMIN_CREATE_REFRESH_DATE.replace(month=9)
+    created = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": outside.isoformat(),
+            "location_id": admin_create_records.location_id,
+        },
+    )
+    assert created.status_code == 200
+    body = created.get_json()
+    practice_id = body["practice_id"]
+    assert not body.get("availability_warning"), \
+        "sanity: the practice must start outside the poll's range"
+
+    try:
+        with caplog.at_level(logging.ERROR):
+            edited = admin_client.post(
+                f"/admin/practices/{practice_id}/edit",
+                json={"date": ADMIN_CREATE_REFRESH_DATE.isoformat()},
+            )
+
+        assert edited.status_code == 200
+        warning = edited.get_json().get("availability_warning")
+        assert warning, "moving a practice into an open poll must warn"
+        assert f"#{open_poll_covering_create_date.id}" in warning
+        assert str(practice_id) in warning
+        assert "OPEN availability poll" in caplog.text
+    finally:
+        db.session.rollback()
+        stored = db.session.get(Practice, practice_id)
+        if stored is not None:
+            db.session.delete(stored)
+            db.session.commit()
+
+
+def test_admin_edit_is_quiet_for_a_practice_the_poll_already_covers(
+    admin_client,
+    admin_create_records,
+    open_poll_covering_create_date,
+    db_session,
+    monkeypatch,
+):
+    """Positive control. A practice that IS on the poll must not warn — the
+    check is "inside the range but unmapped", not "inside the range".
+    Otherwise every edit to every polled practice would cry wolf.
+    """
+    from app.practices.availability_models import LeadAvailabilityPollPractice
+
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *args, **kwargs: {},
+    )
+
+    created = admin_client.post(
+        "/admin/practices/create",
+        json={
+            "date": ADMIN_CREATE_REFRESH_DATE.isoformat(),
+            "location_id": admin_create_records.location_id,
+        },
+    )
+    practice_id = created.get_json()["practice_id"]
+    admin_create_records.practice_id = practice_id
+
+    db.session.add(LeadAvailabilityPollPractice(
+        poll_id=open_poll_covering_create_date.id,
+        practice_id=practice_id, emoji="letter_a", position=0))
+    db.session.commit()
+
+    edited = admin_client.post(
+        f"/admin/practices/{practice_id}/edit",
+        json={"workout": "TEST edited workout"},
+    )
+    assert edited.status_code == 200
+    assert not edited.get_json().get("availability_warning"), (
+        "a practice already on the poll collects availability normally"
+    )
