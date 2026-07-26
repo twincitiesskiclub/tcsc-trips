@@ -37,7 +37,8 @@ def send_nudge_dm(poll, slack_uid: str, permalink: str | None) -> bool:
     """
     start_label = poll.starts_on.strftime("%b %-d")
     end_label = poll.ends_on.strftime("%b %-d")
-    blocks = build_nudge_blocks(start_label, end_label, poll.channel_id, permalink)
+    blocks = build_nudge_blocks(start_label, end_label, poll.channel_id, permalink,
+                                done=poll.resolved_done_emoji)
     fallback = f"Reminder: provide lead availability for {start_label} – {end_label}"
 
     try:

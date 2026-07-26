@@ -7,14 +7,10 @@ without re-previewing — it was revised four times against real Slack renders.
 from app.practices.availability_emoji import done_emoji
 
 
-def _instruction() -> str:
-    # Computed at build time, not import time: the done emoji comes from
-    # config (config/practices.yaml lead_availability.done_emoji), and a
-    # module-level constant would bake in whatever the config said when the
-    # process imported this module.
+def _instruction(done: str) -> str:
     return (
         "React to each session you can lead. · "
-        f":{done_emoji()}: when you're done, even if you picked nothing."
+        f":{done}: when you're done, even if you picked nothing."
     )
 
 
@@ -36,16 +32,25 @@ def _line(row: dict) -> str:
     )
 
 
-def build_poll_blocks(rows: list[dict], start_label: str, end_label: str) -> list[dict]:
+def build_poll_blocks(
+    rows: list[dict], start_label: str, end_label: str, *, done: str | None = None
+) -> list[dict]:
     """Build the lead-availability poll message.
 
     One section per week, one line (with a distinct letter emoji) per
     session. No deadline footer -- one was drafted and deliberately cut.
+
+    ``done`` is the poll's SNAPSHOTTED done emoji
+    (poll.resolved_done_emoji) -- callers rendering an existing poll must
+    pass it, or a config rename mid-poll would make the message tell people
+    to react with an emoji the poll's accounting never counts. The config
+    fallback is only for building copy with no poll in hand.
     """
+    done = done or done_emoji()
     blocks: list[dict] = [
         {"type": "header", "text": {"type": "plain_text",
          "text": f"Practice Leads {start_label} - {end_label}", "emoji": True}},
-        {"type": "context", "elements": [{"type": "mrkdwn", "text": _instruction()}]},
+        {"type": "context", "elements": [{"type": "mrkdwn", "text": _instruction(done)}]},
     ]
 
     week_labels = list(dict.fromkeys(row["week_label"] for row in rows))
@@ -67,19 +72,21 @@ def poll_fallback_text(rows: list[dict], start_label: str, end_label: str) -> st
 
 
 def build_nudge_blocks(start_label: str, end_label: str, channel_id: str,
-                        permalink: str | None) -> list[dict]:
+                        permalink: str | None, *, done: str | None = None) -> list[dict]:
     """Build the lead-availability nudge DM.
 
     A Slack URL button with no `url` is rejected by the API, so when no
-    permalink is available the button is omitted entirely.
+    permalink is available the button is omitted entirely. ``done`` follows
+    the same snapshot rule as build_poll_blocks.
     """
+    done = done or done_emoji()
     blocks: list[dict] = [
         {"type": "section", "text": {"type": "mrkdwn",
          "text": f"Reminder: Provide lead availability for *{start_label} – {end_label}* "
                  f"in <#{channel_id}>"}},
         {"type": "context", "elements": [{"type": "mrkdwn",
          "text": "To suppress these, if you can't lead at all just hit the "
-                 f":{done_emoji()}: on the post there."}]},
+                 f":{done}: on the post there."}]},
     ]
     if permalink:
         blocks.append({"type": "actions", "elements": [{

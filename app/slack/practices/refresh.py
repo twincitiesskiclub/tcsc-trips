@@ -616,7 +616,10 @@ def _refresh_availability_poll(practice, change_type, **_context):
                 client.chat_update(
                     channel=poll.channel_id,
                     ts=poll.message_ts,
-                    blocks=build_poll_blocks(rows, start_label, end_label),
+                    blocks=build_poll_blocks(
+                        rows, start_label, end_label,
+                        done=poll.resolved_done_emoji,
+                    ),
                     text=poll_fallback_text(rows, start_label, end_label),
                 )
                 updated.append(poll.id)

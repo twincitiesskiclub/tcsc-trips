@@ -23,9 +23,10 @@ RELEASE_TIMEOUT_SECONDS = 30
 E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
-# Head as of the readiness-digest surface migration (down_revision is
-# LEAD_AVAILABILITY_REVISION above) — bump whenever a new migration lands.
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
+# Head as of the done-emoji snapshot migration (down_revision is
+# READINESS_DIGEST_REVISION above) — bump whenever a new migration lands.
+HEAD_REVISION = "539ad532aeb3"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -238,7 +239,7 @@ def test_release_lifecycle_upgrades_e36_orphan_to_head_without_consumers(
     assert "Socket Mode" not in output
     with engine.connect() as connection:
         _use_schema(connection, release_schema)
-        assert _revision(connection) == READINESS_DIGEST_REVISION
+        assert _revision(connection) == HEAD_REVISION
         assert _c4_columns(connection) == EXPECTED_C4_COLUMNS
         after = summary_catalog_snapshot(connection)
         defaults = {row[1]: row[6] for row in after["columns"]}
@@ -326,7 +327,7 @@ def test_readiness_digest_migration_applies_and_reverses(
 
     with engine.begin() as connection:
         _use_schema(connection, release_schema)
-        assert _revision(connection) == READINESS_DIGEST_REVISION
+        assert _revision(connection) == HEAD_REVISION
         assert _try_insert_readiness_digest(connection) is None, (
             "head must accept surface='readiness_digest'"
         )
@@ -359,5 +360,5 @@ def test_readiness_digest_migration_applies_and_reverses(
 
     with engine.begin() as connection:
         _use_schema(connection, release_schema)
-        assert _revision(connection) == READINESS_DIGEST_REVISION
+        assert _revision(connection) == HEAD_REVISION
         assert _try_insert_readiness_digest(connection) is None

@@ -34,6 +34,14 @@ class LeadAvailabilityPoll(db.Model):
 
     channel_id = db.Column(db.String(50), nullable=False)
     message_ts = db.Column(db.String(50))
+    # Snapshotted at build time, exactly like the letter emoji mapping: a
+    # config edit while a poll is open must not change which reactions count
+    # as "done" -- reconcile would otherwise compute done_user_ids from the
+    # new name only, demote every already-DONE participant, and the nudge
+    # job would DM leads who had declared themselves finished. Nullable for
+    # polls that predate the column; resolved_done_emoji falls back to the
+    # config value for those (and open_poll backfills it).
+    done_emoji = db.Column(db.String(80))
 
     # Central like opened_at/closed_at (which are written with
     # now_central_naive()) -- a utcnow default here would sit 5-6 hours off
@@ -50,6 +58,16 @@ class LeadAvailabilityPoll(db.Model):
         "LeadAvailabilityParticipant", backref="poll", cascade="all, delete-orphan")
     responses = db.relationship(
         "LeadAvailabilityResponse", backref="poll", cascade="all, delete-orphan")
+
+    @property
+    def resolved_done_emoji(self) -> str:
+        """The done emoji this poll actually uses -- snapshot first, config
+        as fallback for rows that predate the done_emoji column."""
+        if self.done_emoji:
+            return self.done_emoji
+        from app.practices.availability_emoji import done_emoji
+
+        return done_emoji()
 
     def __repr__(self):
         return f"<LeadAvailabilityPoll {self.starts_on}..{self.ends_on} {self.status}>"

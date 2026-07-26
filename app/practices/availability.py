@@ -190,6 +190,10 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
         ends_on=ends_on,
         is_shadow=is_shadow,
         channel_id=_target_channel(is_shadow),
+        # Snapshot the done emoji alongside the letter mapping: a config
+        # edit while this poll is open must not change which reactions count
+        # as "done" (see LeadAvailabilityPoll.done_emoji).
+        done_emoji=done_emoji(),
     )
     db.session.add(poll)
     db.session.flush()
@@ -260,13 +264,21 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
         return {"success": False, "error": message}
 
     names = [m.emoji for m in poll.practices]
-    done = done_emoji()
+    done = poll.resolved_done_emoji
     ok, missing = validate_emoji_available(names + [done])
     if not ok:
+        # Name the config key(s) that actually govern what's missing: telling
+        # the director to edit letter_emoji when the DONE emoji is the broken
+        # one sends them to the wrong key.
+        keys = []
+        if any(name in missing for name in names):
+            keys.append("lead_availability.letter_emoji")
+        if done in missing:
+            keys.append("lead_availability.done_emoji")
         message = (
             "cannot open poll: missing workspace emoji "
             f"{', '.join(missing)} — re-add them or update "
-            "config/practices.yaml lead_availability.letter_emoji"
+            f"config/practices.yaml {' / '.join(keys)}"
         )
         current_app.logger.error(message)
         return {"success": False, "error": message}
@@ -283,7 +295,7 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
         client = get_slack_client()
         response = client.chat_postMessage(
             channel=poll.channel_id,
-            blocks=build_poll_blocks(rows, start_label, end_label),
+            blocks=build_poll_blocks(rows, start_label, end_label, done=done),
             text=poll_fallback_text(rows, start_label, end_label),
         )
     except SlackApiError as exc:
@@ -304,6 +316,9 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
     poll.message_ts = posted_ts
     poll.status = PollStatus.OPEN
     poll.opened_at = now_central_naive()
+    # Backfill for polls built before the done_emoji column existed, so the
+    # snapshot is durable from the moment the poll goes live.
+    poll.done_emoji = done
     try:
         db.session.commit()
     except Exception as exc:  # noqa: BLE001 - never raise; see module docstring

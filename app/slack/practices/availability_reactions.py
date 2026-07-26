@@ -18,7 +18,6 @@ from flask import current_app
 from slack_sdk.errors import SlackApiError
 
 from app.models import User, db
-from app.practices.availability_emoji import done_emoji
 from app.practices.availability_models import (
     LeadAvailabilityParticipant,
     LeadAvailabilityPoll,
@@ -73,7 +72,10 @@ def handle_availability_reaction(*, channel, message_ts, reaction, slack_user_id
             "Availability reaction from unlinked Slack user %s", slack_user_id)
         return {"success": True, "ignored": "unlinked_user"}
 
-    if reaction == done_emoji():
+    # The poll's SNAPSHOTTED done emoji, never the live config value: a
+    # config rename mid-poll must not stop counting reactions leads already
+    # gave (see LeadAvailabilityPoll.done_emoji).
+    if reaction == poll.resolved_done_emoji:
         participant = _participant(poll.id, user.id)
         participant.status = (
             ParticipantStatus.PENDING if removed else ParticipantStatus.DONE
@@ -176,7 +178,10 @@ def reconcile_poll(poll) -> dict:
 
     done_user_ids = {
         slack_uid_to_user[uid].id
-        for uid in by_emoji.get(done_emoji(), set())
+        # Snapshot, not live config: reading the renamed config value here
+        # would demote every already-DONE participant and re-enroll them for
+        # nudges (see LeadAvailabilityPoll.done_emoji).
+        for uid in by_emoji.get(poll.resolved_done_emoji, set())
         if uid in slack_uid_to_user
     }
     responded_user_ids = {

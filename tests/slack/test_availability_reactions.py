@@ -393,3 +393,68 @@ def test_reconcile_survives_a_non_slack_api_error(db_session):
         assert "error" in result
     finally:
         _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+# ---------------------------------------------------------------------------
+# Done-emoji snapshot (mirrors the letter mapping): editing
+# lead_availability.done_emoji while a poll is open must not change which
+# reactions count as "done" for that poll.
+# ---------------------------------------------------------------------------
+
+
+def test_done_reaction_matches_the_polls_snapshot_not_current_config(db_session):
+    poll, practice, user, slack_user, location = _setup(db_session, "111.20")
+    try:
+        poll.done_emoji = "TEST_snap_done"
+        db_session.commit()
+
+        with patch(
+            "app.slack.practices._config._load_practice_config",
+            return_value={"lead_availability": {"done_emoji": "TEST_renamed_done"}},
+        ):
+            handle_availability_reaction(
+                channel=TEST_CHANNEL_ID, message_ts="111.20",
+                reaction="TEST_snap_done", slack_user_id=slack_user.slack_uid,
+                removed=False)
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.DONE, (
+            "the poll's snapshotted done emoji must keep working after a "
+            "config rename"
+        )
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)
+
+
+def test_reconcile_counts_done_under_the_polls_snapshotted_emoji(db_session):
+    """The dangerous half: reconcile computing done_user_ids from the NEW
+    config value would demote every already-DONE participant, and the nudge
+    job would then DM leads who had declared themselves finished -- exactly
+    the bug class the persisted letter mapping exists to prevent."""
+    poll, practice, user, slack_user, location = _setup(db_session, "111.21")
+    try:
+        poll.done_emoji = "TEST_snap_done"
+        db_session.add(LeadAvailabilityParticipant(
+            poll_id=poll.id, user_id=user.id, status=ParticipantStatus.DONE))
+        db_session.commit()
+
+        client = MagicMock()
+        client.reactions_get.return_value = {
+            "message": {"reactions": [
+                {"name": "TEST_snap_done", "users": [slack_user.slack_uid]}]}
+        }
+
+        with patch("app.slack.practices.availability_reactions.get_slack_client",
+                   return_value=client), \
+             patch("app.slack.practices._config._load_practice_config",
+                   return_value={"lead_availability": {"done_emoji": "TEST_renamed_done"}}):
+            reconcile_poll(poll)
+
+        participant = LeadAvailabilityParticipant.query.filter_by(
+            poll_id=poll.id, user_id=user.id).one()
+        assert participant.status == ParticipantStatus.DONE, (
+            "a mid-poll config rename must not demote DONE participants"
+        )
+    finally:
+        _cleanup(poll.id, practice.id, user.id, slack_user.id, location.id)

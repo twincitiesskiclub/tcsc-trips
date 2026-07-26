@@ -508,3 +508,94 @@ def test_open_poll_survives_a_non_slack_api_error(db_session, app):
         assert poll.status == PollStatus.DRAFT
     finally:
         _cleanup_practices([ready], poll)
+
+
+# ---------------------------------------------------------------------------
+# Done-emoji snapshot: like the letter emoji, the done emoji is fixed per
+# poll at build time. A config edit while a poll is open must not change
+# which reactions count as "done" -- reconcile would demote every
+# already-DONE participant and the nudge job would DM leads who had
+# declared themselves finished.
+# ---------------------------------------------------------------------------
+
+
+def test_build_poll_snapshots_the_done_emoji(db_session):
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = None
+    try:
+        with patch(
+            "app.slack.practices._config._load_practice_config",
+            return_value={"lead_availability": {"done_emoji": "TEST_snap_done"}},
+        ):
+            poll = build_poll(_START, _END)
+        assert poll.done_emoji == "TEST_snap_done", (
+            "build_poll must persist the config's done emoji on the poll row, "
+            "exactly as it persists the letter mapping"
+        )
+    finally:
+        _cleanup_practices([ready], poll)
+
+
+def test_open_poll_validates_and_seeds_the_snapshotted_done_emoji(db_session, app):
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+    poll.done_emoji = "TEST_snap_done"
+    db_session.commit()
+    try:
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ok": True, "ts": "999.1"}
+        with patch(
+            "app.practices.availability.validate_emoji_available",
+            return_value=(True, []),
+        ) as validate, patch(
+            "app.practices.availability.get_slack_client", return_value=client
+        ), patch(
+            "app.slack.practices._config._load_practice_config",
+            return_value={"lead_availability": {"done_emoji": "TEST_renamed_done"}},
+        ):
+            result = open_poll(poll)
+
+        assert result["success"] is True
+        assert validate.call_args.args[0][-1] == "TEST_snap_done", (
+            "validation must check the poll's snapshot, not the current config"
+        )
+        seeded = [c.kwargs["name"] for c in client.reactions_add.call_args_list]
+        assert "TEST_snap_done" in seeded
+        assert "TEST_renamed_done" not in seeded, (
+            "seeding the renamed config value would put a reaction on the "
+            "message that the poll's accounting never counts"
+        )
+    finally:
+        _cleanup_practices([ready], poll)
+
+
+def test_open_poll_missing_done_emoji_names_the_done_config_key(db_session, app):
+    """The refusal message must point at lead_availability.done_emoji when the
+    DONE emoji is what's missing -- naming letter_emoji sends the director to
+    the wrong key."""
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+    poll.done_emoji = "TEST_custom_done"
+    db_session.commit()
+    try:
+        client = MagicMock()
+        client.emoji_list.return_value = {"emoji": {"letter_a": "u"}}
+        with patch(
+            "app.practices.availability_emoji.get_slack_client", return_value=client
+        ), patch(
+            "app.practices.availability.get_slack_client", return_value=client
+        ):
+            result = open_poll(poll)
+
+        assert result["success"] is False
+        assert "TEST_custom_done" in result["error"]
+        assert "lead_availability.done_emoji" in result["error"]
+        assert "letter_emoji" not in result["error"], (
+            "no letter is missing here; naming letter_emoji is misdirection"
+        )
+        client.chat_postMessage.assert_not_called()
+    finally:
+        _cleanup_practices([ready], poll)
