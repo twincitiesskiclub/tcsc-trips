@@ -207,9 +207,18 @@ def _delete_practices_in_slots(slots):
     can't include rows the code under test wrongly created (e.g. a broken
     collision check creating unexpected duplicates), so it can't be trusted
     to enumerate everything that needs deleting. Cleanup must hold even when
-    an assertion above it fails and the test never reaches a "success" path.
+    an assertion above it fails and the test never reaches a "success" path
+    — hence the rollback first, so a poisoned session can't abort it.
+
+    ORM deletes, never a bulk .delete(): practice deletes must go through
+    db.session.delete() so the ORM-level cascades (poll mappings, responses,
+    junction rows) fire — a bulk delete skips them and dies on the first FK
+    reference, which inside a finally would leak every remaining row into
+    the shared dev database with no second cleanup path.
     """
-    Practice.query.filter(Practice.date.in_(slots)).delete(synchronize_session=False)
+    db.session.rollback()
+    for practice in Practice.query.filter(Practice.date.in_(slots)).all():
+        db.session.delete(practice)
     db.session.commit()
 
 
