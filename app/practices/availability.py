@@ -36,6 +36,15 @@ class PollNotReadyError(RuntimeError):
     """Raised when practices in range still lack location, type or time."""
 
 
+class DuplicatePollError(PollNotReadyError):
+    """Raised when a DRAFT/OPEN poll already covers an overlapping range.
+
+    Subclasses PollNotReadyError so existing callers (the admin route's
+    `except PollNotReadyError` -> 400 with the message verbatim) keep working
+    without change.
+    """
+
+
 def eligible_leads() -> list[User]:
     """Everyone who may be asked, computed live from tags.
 
@@ -110,7 +119,28 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
     so every practice in range must have all three before a poll can be
     built — the error names which practice needs what, since the director
     is the one who has to go fix it.
+
+    Also refuses to build a second poll whose date range overlaps an
+    existing DRAFT or OPEN poll. Two overlapping live polls would both nudge
+    the same leads about the same sessions, and reactions on the older one
+    become invisible to whichever poll a lead happens to answer -- a
+    confusing, silent way to under-count availability. CLOSED polls don't
+    block a rebuild of the same range.
     """
+    overlapping = (
+        LeadAvailabilityPoll.query
+        .filter(LeadAvailabilityPoll.status.in_([PollStatus.DRAFT, PollStatus.OPEN]))
+        .filter(LeadAvailabilityPoll.starts_on <= ends_on,
+                LeadAvailabilityPoll.ends_on >= starts_on)
+        .first()
+    )
+    if overlapping is not None:
+        raise DuplicatePollError(
+            f"poll #{overlapping.id} ({overlapping.status}, "
+            f"{overlapping.starts_on}..{overlapping.ends_on}) already covers "
+            f"this range -- close or complete it before building another"
+        )
+
     practices = (
         Practice.query
         .filter(Practice.date >= datetime.combine(starts_on, datetime.min.time()),
@@ -172,7 +202,23 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
     Refuses to post at all if any letter emoji are missing — the letter
     emoji are custom workspace emoji that were renamed once already, silently
     breaking a live poll, and a poll nobody can answer is worse than no poll.
+
+    Also refuses to run at all unless the poll is still DRAFT. Calling this
+    twice on the same poll would post a second Slack message and overwrite
+    `poll.message_ts` with the new one -- orphaning every reaction on the
+    first message, since reaction lookup matches only the current ts. A
+    later `reconcile_poll` against that orphaned message sees zero reactions
+    and deletes every stored response, demoting participants to PENDING: a
+    double-open silently destroys the only durable record of who can lead.
     """
+    if poll.status != PollStatus.DRAFT:
+        message = (
+            f"poll {poll.id} is already {poll.status} -- refusing to post "
+            "again and overwrite its message_ts"
+        )
+        current_app.logger.warning(message)
+        return {"success": False, "error": message}
+
     names = [m.emoji for m in poll.practices]
     ok, missing = validate_emoji_available(names + [DONE_EMOJI])
     if not ok:

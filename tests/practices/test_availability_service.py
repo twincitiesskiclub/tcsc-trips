@@ -287,6 +287,98 @@ def test_build_poll_targets_channel_by_shadow_flag(db_session):
         _cleanup_practices([shadow_practice], shadow_poll)
 
 
+def test_open_poll_refuses_to_re_post_an_already_open_poll(db_session, app):
+    """Fix for: calling open_poll twice posts a second Slack message and
+    overwrites poll.message_ts, orphaning the first message's reactions --
+    a later reconcile_poll against the orphaned ts sees zero reactions and
+    wipes every stored response. Once a poll is no longer DRAFT, open_poll
+    must refuse rather than post again.
+    """
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+    poll.status = PollStatus.OPEN
+    poll.message_ts = "111111.1111"
+    db_session.commit()
+
+    try:
+        client = MagicMock()
+        with patch("app.practices.availability.validate_emoji_available", return_value=(True, [])), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            result = open_poll(poll)
+
+        assert result["success"] is False
+        assert str(poll.id) in result["error"]
+        client.chat_postMessage.assert_not_called(), \
+            "must never post a second time once the poll is no longer DRAFT"
+        assert poll.message_ts == "111111.1111", \
+            "the original message_ts must survive untouched"
+    finally:
+        _cleanup_practices([ready], poll)
+
+
+def test_build_poll_refuses_a_second_poll_over_the_same_range(db_session):
+    """Fix for: building twice over the same range yields two live polls
+    that would both nudge leads about the same sessions."""
+    first_practice = _ready_practice(4)
+    db_session.commit()
+    first_poll = build_poll(_START, _END)
+
+    try:
+        with pytest.raises(PollNotReadyError) as exc:
+            build_poll(_START, _END)
+        assert str(first_poll.id) in str(exc.value), \
+            "the error must name the existing poll so the director can find it"
+        assert LeadAvailabilityPoll.query.filter_by(
+            starts_on=_START, ends_on=_END
+        ).count() == 1, "a refused duplicate build must leave no second poll row behind"
+    finally:
+        _cleanup_practices([first_practice], first_poll)
+
+
+def test_build_poll_refuses_a_partially_overlapping_open_poll(db_session):
+    """The guard must compare ranges, not require an exact match."""
+    from datetime import date as _date
+
+    first_practice = _ready_practice(4)
+    db_session.commit()
+    first_poll = build_poll(_START, _END)
+    first_poll.status = PollStatus.OPEN
+    db_session.commit()
+
+    later_start = _date(2099, 8, 20)
+    later_end = _date(2099, 9, 15)
+    try:
+        with pytest.raises(PollNotReadyError) as exc:
+            build_poll(later_start, later_end)
+        assert str(first_poll.id) in str(exc.value)
+    finally:
+        _cleanup_practices([first_practice], first_poll)
+
+
+def test_build_poll_allows_a_new_poll_once_the_old_one_is_closed(db_session):
+    """A CLOSED poll must not block rebuilding the same range."""
+    first_practice = _ready_practice(4)
+    db_session.commit()
+    first_poll = build_poll(_START, _END)
+    first_poll.status = PollStatus.CLOSED
+    db_session.commit()
+
+    second_practice = _ready_practice(6)
+    db_session.commit()
+    second_poll = None
+    try:
+        second_poll = build_poll(_START, _END)
+        assert second_poll.id != first_poll.id
+    finally:
+        # first_poll must be removed (and its poll-practice mapping to
+        # first_practice cascaded away) before first_practice itself is
+        # deleted below, or the FK from poll-practice -> practice would
+        # dangle mid-cleanup.
+        _cleanup_practices([], first_poll)
+        _cleanup_practices([first_practice, second_practice], second_poll)
+
+
 def test_open_poll_survives_a_non_slack_api_error(db_session, app):
     """get_slack_client() raises plain ValueError when SLACK_BOT_TOKEN is
     unset, and transport failures raise TimeoutError -- neither is a

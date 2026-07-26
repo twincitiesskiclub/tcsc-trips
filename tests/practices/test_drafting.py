@@ -34,6 +34,24 @@ def db_session(app):
 
 @pytest.fixture()
 def practice_days(db_session):
+    """Save and restore the real `practice_days` AppConfig row.
+
+    This is the real local dev database. The previous version of this
+    fixture unconditionally deleted the `practice_days` row on teardown --
+    if a human (or another script) had ever seeded a real value, running
+    this module would silently wipe it. Capture whatever was there before
+    the test (if anything) and put it back exactly afterward, deleting only
+    if there was no row to begin with -- never assume delete is the correct
+    restore.
+    """
+    db.session.rollback()
+    existing = AppConfig.query.filter_by(key="practice_days").first()
+    had_row = existing is not None
+    original = (
+        (existing.value, existing.description, existing.category)
+        if had_row else None
+    )
+
     AppConfig.set(
         key="practice_days",
         value=[
@@ -47,9 +65,13 @@ def practice_days(db_session):
     )
     db.session.commit()
     yield
-    # This is the real local dev database — remove the config row we created
-    # rather than leaving test data behind for the next run/developer.
-    AppConfig.query.filter_by(key="practice_days").delete()
+    db.session.rollback()
+    if had_row:
+        value, description, category = original
+        AppConfig.set(key="practice_days", value=value,
+                      description=description, category=category)
+    else:
+        AppConfig.query.filter_by(key="practice_days").delete()
     db.session.commit()
 
 

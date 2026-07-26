@@ -1,6 +1,7 @@
 """Database-backed coverage for Slack reaction attendance routing."""
 
 from datetime import datetime
+from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
@@ -380,6 +381,32 @@ def test_invalid_reaction_event_is_ignored(
 
     assert result == {"success": True, "ignored": "invalid_event"}
     assert _rsvps_for(practice).count() == 0
+
+
+def test_availability_reaction_failure_does_not_break_attendance_rsvp(
+    db_session, linked_user
+):
+    """Fix for: handle_availability_reaction() is called first, unguarded,
+    inside handle_attendance_reaction. Any exception there (a new, less
+    battle-tested code path) must not take down practice RSVP -- an
+    independent, member-facing feature in daily use for every announcement.
+    """
+    user, slack_user_id = linked_user
+    practice = _practice(db_session)
+
+    with patch(
+        "app.slack.practices.availability_reactions.handle_availability_reaction",
+        side_effect=RuntimeError("boom"),
+    ):
+        result = _react(practice, slack_user_id, "white_check_mark")
+
+    assert result == {
+        "success": True,
+        "action": "upserted",
+        "practice_id": practice.id,
+    }
+    rsvp = _rsvps_for(practice, user).one()
+    assert rsvp.status == RSVPStatus.GOING.value
 
 
 def test_bolt_reaction_removed_delegates_with_removed_true(monkeypatch):

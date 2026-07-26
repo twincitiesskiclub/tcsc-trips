@@ -22,7 +22,11 @@ admin_availability_bp = Blueprint(
 
 
 def _shadow_mode() -> bool:
-    return bool(AppConfig.get("lead_availability.shadow_mode", False))
+    # Defaults to True (shadow ON) with no config row -- the rollout plan is
+    # a shadow month first, and there is no UI that writes this key, so an
+    # unset key must resolve to the safe channel. An explicit `False` row is
+    # a deliberate act, not the out-of-the-box behavior of every environment.
+    return bool(AppConfig.get("lead_availability.shadow_mode", True))
 
 
 @admin_availability_bp.route("/")
@@ -59,7 +63,16 @@ def create_poll():
         # Surfaced verbatim: the director needs to know which practice to fix.
         return jsonify({"error": str(exc)}), 400
 
-    return jsonify({"success": True, "poll_id": poll.id})
+    # channel_id/is_shadow are surfaced so the admin UI can name the target
+    # channel in a confirmation step before the caller hits /open and
+    # actually posts -- see app/static/admin_practices.js's
+    # openAvailabilityPoll().
+    return jsonify({
+        "success": True,
+        "poll_id": poll.id,
+        "channel_id": poll.channel_id,
+        "is_shadow": poll.is_shadow,
+    })
 
 
 @admin_availability_bp.route("/polls/<int:poll_id>/open", methods=["POST"])

@@ -34,12 +34,27 @@ def handle_attendance_reaction(
 
     # Availability polls live in the same channels as announcements, so check
     # them first. Returns None when this message is not a poll.
+    #
+    # This call is wrapped defensively: availability handling is new and
+    # this function is the entry point for practice RSVP via reactions,
+    # which every member relies on daily. An unguarded exception here would
+    # propagate out of handle_attendance_reaction and take down attendance
+    # RSVP for every announcement -- previously independent of, and much
+    # older and more relied-upon than, availability polling.
     from app.slack.practices.availability_reactions import handle_availability_reaction
 
-    availability = handle_availability_reaction(
-        channel=channel, message_ts=message_ts, reaction=reaction,
-        slack_user_id=slack_user_id, removed=removed,
-    )
+    availability = None
+    try:
+        availability = handle_availability_reaction(
+            channel=channel, message_ts=message_ts, reaction=reaction,
+            slack_user_id=slack_user_id, removed=removed,
+        )
+    except Exception:
+        logger.error(
+            "Availability reaction handling failed for channel=%s ts=%s "
+            "reaction=%s; falling through to attendance handling",
+            channel, message_ts, reaction, exc_info=True,
+        )
     if availability is not None:
         return availability
 

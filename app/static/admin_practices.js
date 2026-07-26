@@ -388,6 +388,20 @@ async function deletePractice(id) {
 }
 
 /* ---------- lead availability poll trigger ---------- */
+// Friendly names for the only two channels a poll can ever target -- see
+// app/practices/availability.py's _target_channel(). Falls back to the raw
+// id below for anything unrecognized rather than guessing a name.
+const AVAILABILITY_CHANNEL_NAMES = {
+  'C02J4DGCFL2': '#coord-practices-leads-assists (the live, 64-member channel)',
+  'C0B3Y71PG92': '#collab-asset-mgmt-practices (shadow test channel)',
+};
+
+function describeAvailabilityChannel(channelId, isShadow) {
+  const known = AVAILABILITY_CHANNEL_NAMES[channelId];
+  if (known) return known;
+  return isShadow ? `${channelId} (shadow)` : `${channelId} (live)`;
+}
+
 async function openAvailabilityPoll() {
   const startsOn = document.getElementById('pl-poll-start').value;
   const endsOn = document.getElementById('pl-poll-end').value;
@@ -399,7 +413,8 @@ async function openAvailabilityPoll() {
     // Step 1: build the DRAFT poll. build_poll() refuses (400) if any
     // practice in range is missing location/type/time -- that error names
     // exactly which practice needs what, so it's shown verbatim, not
-    // replaced with a generic message.
+    // replaced with a generic message. This step only writes a DRAFT row;
+    // nothing is posted to Slack yet.
     const createResult = await fetch('/admin/availability/polls/create', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -407,6 +422,19 @@ async function openAvailabilityPoll() {
     }).then(r => r.json());
     if (!createResult.success) {
       showToast(createResult.error || 'Failed to create poll', 'error');
+      return;
+    }
+
+    // Confirm before the one step that actually posts to Slack, naming the
+    // resolved target channel explicitly -- a one-click "Open Availability
+    // Poll" button with no confirmation is how a shadow-mode misconfig
+    // reaches all 64 real members instead of the 5-person test channel.
+    const channelLabel = describeAvailabilityChannel(createResult.channel_id, createResult.is_shadow);
+    const proceed = confirm(
+      `This will post the availability poll to ${channelLabel}. Continue?`
+    );
+    if (!proceed) {
+      showToast('Poll created as a draft; not posted to Slack', 'success');
       return;
     }
 
@@ -421,7 +449,7 @@ async function openAvailabilityPoll() {
       return;
     }
 
-    showToast('Availability poll posted to Slack', 'success');
+    showToast(`Availability poll posted to ${channelLabel}`, 'success');
   } catch (e) {
     showToast('Failed to open availability poll', 'error');
   } finally {
