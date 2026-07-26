@@ -563,7 +563,7 @@ def _refresh_availability_poll(practice, change_type, **_context):
 
     The poll's channel/ts live on the poll row, not the practice, so this
     surface registers with ts_field=None and reports "no poll covers this
-    practice" as {"skipped": "absent"} itself. A cancelled practice drops
+    practice" as {"skipped": "no_poll"} itself. A cancelled practice drops
     out of the rebuilt message via poll_rows' status filter; a deleted one
     is excluded explicitly because the delete route refreshes before the
     row disappears.
@@ -595,7 +595,10 @@ def _refresh_availability_poll(practice, change_type, **_context):
             .all()
         )
         if not polls:
-            return {"skipped": "absent"}
+            # The normal case for any ordinary practice edit — nothing to
+            # do here. Deliberately NOT "absent": _log_refresh_results()
+            # warns about "absent" as a genuinely missing linked post.
+            return {"skipped": "no_poll"}
 
         exclude_practice_id = (
             practice.id if change_type == "delete" else None
@@ -628,7 +631,13 @@ def _refresh_availability_poll(practice, change_type, **_context):
                 errors.append(f"poll #{poll.id}: {exc}")
 
         if errors:
-            return {"success": False, "error": "; ".join(errors)}
+            # Keep the ids that DID update so the logs show what went
+            # through despite the failure.
+            return {
+                "success": False,
+                "error": "; ".join(errors),
+                "polls": updated,
+            }
         return {"success": True, "polls": updated}
     except Exception as exc:
         logger.warning(

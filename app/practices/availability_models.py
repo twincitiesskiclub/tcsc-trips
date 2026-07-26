@@ -63,7 +63,17 @@ class LeadAvailabilityPollPractice(db.Model):
     emoji = db.Column(db.String(80), nullable=False)
     position = db.Column(db.Integer, nullable=False)
 
-    practice = db.relationship("Practice")
+    # Deleting a Practice must take its poll rows with it, or the delete
+    # fails on the FK. The cascade is ORM-level, matching how every other
+    # Practice child (leads, rsvps, cancellation_requests) is handled —
+    # practice deletes always go through db.session.delete(), and this
+    # avoids a migration to rewrite the DB constraints. Plain "delete"
+    # (not delete-orphan): the poll side already owns the delete-orphan
+    # lifecycle for these rows.
+    practice = db.relationship(
+        "Practice",
+        backref=db.backref("availability_poll_links", cascade="all, delete"),
+    )
 
     __table_args__ = (
         db.UniqueConstraint("poll_id", "emoji", name="uq_poll_emoji"),
@@ -107,7 +117,12 @@ class LeadAvailabilityResponse(db.Model):
     answered_for_location_id = db.Column(db.Integer)
 
     user = db.relationship("User")
-    practice = db.relationship("Practice")
+    # ORM-level delete cascade from the Practice side — see the comment on
+    # LeadAvailabilityPollPractice.practice.
+    practice = db.relationship(
+        "Practice",
+        backref=db.backref("availability_responses", cascade="all, delete"),
+    )
 
     __table_args__ = (
         db.UniqueConstraint("poll_id", "practice_id", "user_id", name="uq_poll_practice_user"),
