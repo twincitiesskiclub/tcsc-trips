@@ -32,15 +32,52 @@ def app():
 def test_bootstrap_drafts_and_posts_digest(app):
     from app.scheduler import run_practice_block_bootstrap_job
 
-    with patch("app.scheduler.generate_draft_block") as gen, \
+    drafted = [
+        Practice(date=datetime(2026, 8, 4, 18, 15), day_of_week="Tuesday", is_draft=True)
+    ]
+    with patch("app.scheduler.generate_draft_block", return_value=drafted) as gen, \
+         patch("app.scheduler.drafted_practices_in_window", return_value=drafted), \
          patch("app.scheduler.post_readiness_digest") as post:
-        gen.return_value = [
-            Practice(date=datetime(2026, 8, 4, 18, 15), day_of_week="Tuesday", is_draft=True)
-        ]
         run_practice_block_bootstrap_job(app)
 
     gen.assert_called_once()
     post.assert_called_once()
+
+
+def test_bootstrap_digest_covers_the_whole_window_not_just_new_rows(app):
+    """After the first run, `created` only ever contains the FOLLOWING
+    month's rows — the current month was drafted by the previous run and
+    idempotency skips it. A digest computed over `created` would state a
+    range including the current month while omitting its drafts from the
+    count and the incomplete list, so a director reads "all ready" while
+    current-month drafts still lack details. The digest must summarise the
+    whole drafted window and label the range from what it actually covers."""
+    from app.scheduler import run_practice_block_bootstrap_job
+
+    created_oct_only = [
+        Practice(date=datetime(2099, 10, 6, 18, 15), day_of_week="Tuesday", is_draft=True),
+        Practice(date=datetime(2099, 10, 29, 18, 15), day_of_week="Thursday", is_draft=True),
+    ]
+    whole_window = [
+        Practice(date=datetime(2099, 9, 3, 18, 15), day_of_week="Thursday", is_draft=True),
+        *created_oct_only,
+    ]
+
+    with patch("app.utils.today_central", return_value=date(2099, 9, 1)), \
+         patch("app.scheduler.generate_draft_block", return_value=created_oct_only), \
+         patch("app.scheduler.drafted_practices_in_window",
+               return_value=whole_window) as window, \
+         patch("app.scheduler.post_readiness_digest") as post:
+        run_practice_block_bootstrap_job(app)
+
+    assert window.call_args.args == (date(2099, 9, 1), date(2099, 10, 31))
+    args = post.call_args.args
+    assert args[0] == whole_window, (
+        "the digest must summarise every draft in the window, not only this "
+        "run's new rows"
+    )
+    assert args[1] == "Sep 3", "start label must be the first draft actually covered"
+    assert args[2] == "Oct 29", "end label must be the last draft actually covered"
 
 
 def test_bootstrap_skips_digest_when_nothing_was_drafted(app):
@@ -131,12 +168,13 @@ def test_bootstrap_anchors_the_digest_to_the_first_of_the_month(app):
     computes the same anchor, can always find the post to thread onto."""
     from app.scheduler import run_practice_block_bootstrap_job
 
+    drafted = [
+        Practice(date=datetime(2099, 7, 21, 18, 15), day_of_week="Tuesday", is_draft=True)
+    ]
     with patch("app.utils.today_central", return_value=date(2099, 7, 15)), \
-         patch("app.scheduler.generate_draft_block") as gen, \
+         patch("app.scheduler.generate_draft_block", return_value=drafted), \
+         patch("app.scheduler.drafted_practices_in_window", return_value=drafted), \
          patch("app.scheduler.post_readiness_digest") as post:
-        gen.return_value = [
-            Practice(date=datetime(2099, 7, 21, 18, 15), day_of_week="Tuesday", is_draft=True)
-        ]
         run_practice_block_bootstrap_job(app)
 
     assert post.call_args.kwargs["block_start"] == date(2099, 7, 1)

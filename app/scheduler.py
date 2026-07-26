@@ -423,22 +423,36 @@ def run_practice_block_bootstrap_job(app: Flask):
         app.logger.info("Starting practice block bootstrap job")
 
         start = today_central()
-        created = generate_draft_block(start, end_of_next_month(start))
+        horizon = end_of_next_month(start)
+        created = generate_draft_block(start, horizon)
         if not created:
             app.logger.info("Draft bootstrap: nothing to create, block already drafted")
             return
 
-        end = max(p.date for p in created)
+        # Summarise the WHOLE drafted window, not just this run's new rows.
+        # After the first run, `created` only ever contains the following
+        # month's rows — the current month was drafted by the previous run
+        # and idempotency skips it — so a digest computed over `created`
+        # would state a range that includes the current month while omitting
+        # its drafts from both the count and the incomplete list. A director
+        # reading that digest would conclude the month is fully specified
+        # while drafts may still be missing location or type. The window
+        # query is what the digest claims to describe, so it is what gets
+        # summarised, and the labels come from the drafts it actually covers.
+        drafts = drafted_practices_in_window(start, horizon) or created
+        first = min(p.date for p in drafts)
+        end = max(p.date for p in drafts)
         result = post_readiness_digest(
-            created,
-            start.strftime("%b %-d"),
-            # Honest about what was actually drafted this run: the label ends
-            # at the last row created, not the nominal horizon.
+            drafts,
+            first.strftime("%b %-d"),
             end.strftime("%b %-d"),
             block_start=_block_anchor(start),
         )
         if result.get("success"):
-            app.logger.info(f"Draft bootstrap: drafted {len(created)} practices, digest posted")
+            app.logger.info(
+                f"Draft bootstrap: drafted {len(created)} new practices, "
+                f"digest posted over {len(drafts)} in window"
+            )
         else:
             app.logger.warning(
                 f"Drafted {len(created)} practices but the digest failed: {result.get('error')}"
