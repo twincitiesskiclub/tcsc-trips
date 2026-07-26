@@ -1,19 +1,54 @@
 # Lead availability branch — handoff
 
-> **Status:** NOT ready to merge. One Critical open, two decisions needed from Rob.
-> **Prepared:** 2026-07-26.
-> **Branch:** `lead-availability`, 41 commits on top of `main` (base `0b229ec`).
+> **Status:** Blocker closed. Both decisions made. Remaining work is the
+> "fix soon after" list below, then review and merge.
+> **Prepared:** 2026-07-26. **Updated:** 2026-07-26 (publish path landed).
+> **Branch:** `lead-availability`, 43 commits on top of `main` (base `0b229ec`).
 > Nothing merged. Nothing has posted to the club's real Slack channel.
 
 ## Suggested next-session prompt
 
 > Read `docs/superpowers/notes/2026-07-26-lead-availability-handoff.md`
-> completely. Make the two pending decisions (publish control, ALUMNI
-> nudging), implement the publish path with a test that a practice actually
-> becomes member-visible, work the before-merge findings, then take the
-> branch through review and merge. Use `.venv`, not `env/`. The test
-> database is the real local dev database — follow
-> `tests/practices/conftest.py` conventions exactly.
+> completely. The publish path and both pending decisions are done (see
+> "Resolved" below). Work the "fix soon after" findings, then take the branch
+> through review and merge. Use `.venv`, not `env/`. The test database is the
+> real local dev database — follow `tests/practices/conftest.py` conventions
+> exactly.
+
+## Resolved in `161c8a3`
+
+**The publish blocker is closed.** `app/practices/publishing.py` holds
+`publish_practice()` / `publish_practices()` / `publish_blockers()`. Two
+surfaces, both batch:
+
+1. **The Sunday coach review post** (`coach_weekly_summary`, Sun 08:00 to
+   `#collab-coaches-practices`) — Rob's call, since that post is already where
+   coaches do the weekly work. It had been querying `published_practices()`,
+   so drafts were invisible there *and* each drafted slot rendered as an empty
+   "Add Practice" placeholder inviting a duplicate practice on top of the
+   draft. Drafts now render with a `DRAFT` label and their missing details,
+   plus one `publish_week_drafts` button for the week.
+2. **A banner on the admin practices list** — same batch from the web side,
+   `POST /admin/practices/publish`.
+
+Publishing does **not** post the announcement. The announcement job already
+scans `published_practices()` for rows with no `slack_message_ts`, so flipping
+the flag hands the practice to the existing pipeline with its timing rules
+intact. Publishing does call `refresh_practice_posts(change_type='create')`.
+
+`coach_visible_practices()` in `app/practices/service.py` is the new named
+counterpart to `published_practices()` — the greppable, deliberate
+draft-including read. Coach surfaces use it; nothing member-facing may.
+
+**Decision 2 (ALUMNI):** filtered. `eligible_leads()` keeps ALUMNI only when
+they hold `HEAD_COACH` or `ASSISTANT_COACH`. Keeping a lapsed member in the
+pool is now a tagging act, not a guess in the availability code.
+
+**Also fixed:** `EmojiSupplyError` on the create-poll route is now a 400
+naming the fix rather than a 500.
+
+Tests: **1437 Python** (was 1405), **64 JS** (was 55) — including the
+member-visibility assertion the branch never had.
 
 ## What the branch is
 
@@ -48,53 +83,22 @@ Full task-by-task ledger with every deferred finding:
 | Implementation | 19/19 tasks across 3 plans, each with an independent review + fix round |
 | Tests | 1405 Python passing (baseline before branch: 1270), 55 JS passing |
 | Migrations | Linear chain `d4e7f9a1b2c3 → 1b29976741b6 → 3d34ea39db0f`, round-tripped against a production-shaped clone |
-| Whole-branch review | **Not ready to merge.** 4 Criticals; 3 fixed in `63f2726`, 1 open (below) |
+| Whole-branch review | 4 Criticals; 3 fixed in `63f2726`, the publish blocker in `161c8a3` |
 | Slack | Only Phase 0 previews to the shadow channel. No production posts |
 
-## THE BLOCKER: drafts are never published
+## How the publish blocker happened (kept for the postmortem)
 
-Nothing on this branch sets `is_draft = False`. The whole-branch reviewer
-traced the chain end to end: all four test practices finished still
-`is_draft=True`, invisible to every member-facing surface — announcements,
-`/tcsc practice`, App Home, coach weekly summary, Skipper routines all read
-through `published_practices()`, which excludes drafts. A director can
-draft, poll, and assign leads to a practice that no member will ever see.
+Nothing on the branch set `is_draft = False`. All four test practices finished
+still `is_draft=True`, invisible to every member-facing surface. This was a
+planning failure, not an implementation one: the design overview names the step
+(`Publish → is_draft=False → refresh_practice_posts()`) and no task was ever
+written for it. Nineteen per-task reviews each correctly confirmed their own
+task; only a whole-branch trace could see the gap. And 1405 tests passed
+because nothing in the suite asserted a practice ever becomes member-visible —
+the missing test was itself part of the gap.
 
-This was a planning failure, not an implementation one. The design overview
-names the step (`Publish → is_draft=False → refresh_practice_posts()`) and
-no task was ever written for it. Nineteen per-task reviews each correctly
-confirmed their own task; only a whole-branch trace could see the gap.
-
-Note also: 1405 tests pass because nothing in the suite asserts a practice
-ever becomes member-visible. When implementing the publish path, add that
-assertion — the missing test is itself part of the gap.
-
-## Decision 1 — where the publish control lives
-
-| Option | Notes |
-|---|---|
-| Publish button per practice on the edit form | Matches the design overview's flow literally |
-| Bulk publish on the practices list page | The Sunday workflow is a batch; publishes a block at once |
-| Automatic once a practice has its full complement of leads | No extra click, but removes the explicit human gate |
-
-Recommendation from the review: **bulk**. The Sunday workflow is a batch
-operation, and twelve individual clicks is how a tool gets abandoned. The
-other two are viable; per-practice is closest to the approved design,
-auto-on-assignment trades the explicit gate for zero friction.
-
-Whichever wins: publish must call `refresh_practice_posts()` so
-announcements fire, and the new test must assert the practice appears in
-`published_practices()` afterwards.
-
-## Decision 2 — should ALUMNI leads be nudged?
-
-`eligible_leads()` excludes DROPPED members but deliberately keeps ALUMNI,
-because this club's coaches are legitimately ALUMNI-status while still
-actively coaching — a blanket status filter would drop real coaches. The
-open question is ALUMNI members holding a *lead* tag (not a coach tag):
-should they get availability DMs? Unresolved; flagged during P2 Task 6
-review. Options: leave as-is (they're tagged, they get asked), or filter
-ALUMNI unless they hold `HEAD_COACH`/`ASSISTANT_COACH`.
+Worth carrying forward: per-task review cannot catch a step nobody wrote a task
+for. An end-to-end "can a member see this yet?" assertion would have.
 
 ## Deploy-order constraint
 
@@ -139,11 +143,9 @@ orphaned reactions and reconcile then deleted every stored response),
 availability branch in `reactions.py` guarded so it can't take down
 attendance RSVPs.
 
-**Fix before merge:**
-
-- The publish path (above), with a member-visibility test.
-- `EmojiSupplyError` escapes the create-poll route as a 500. Should be a
-  clear 4xx with the message (too many sessions for 26 letters).
+Fixed in `161c8a3`: the publish path with a member-visibility test, the
+`EmojiSupplyError` 500, and the ALUMNI decision. Nothing is left on the
+before-merge list.
 
 **Fix soon after (shadow month is the buffer):**
 
@@ -177,8 +179,9 @@ attendance RSVPs.
   practice_id-only / user_id-only lookups are unindexed. Fine at club
   scale.
 - `shadow_roster` has no isinstance guard (fails closed anyway).
-- Stale "Assists" label at `app/static/admin_practices.js:301` and in the
-  `practice_editor.js` docstring; dead `PracticeInfo.assist_user_ids`.
+- Stale "Assists" label at `app/static/admin_practices.js:408` (and the
+  `assists` reads at :72 / :391) plus the `practice_editor.js` docstring; dead
+  `PracticeInfo.assist_user_ids`. Line numbers moved in `161c8a3`.
 - `scheduler.py:663` broad except-Exception can hide a missing-column
   error (pre-existing, not introduced here).
 - Test retrofits: `test_practice_draft_schema.py` predates the conftest
@@ -226,6 +229,10 @@ it without re-previewing.
 |---|---|
 | `app/practices/availability.py` | Poll build/open/close, reconcile, eligible pool |
 | `app/practices/drafting.py` | Monthly draft generation, `drafted_practices_in_window` |
+| `app/practices/publishing.py` | `publish_practice`, `publish_practices`, `publish_blockers` — the draft → member-visible step |
+| `app/practices/service.py` | `published_practices()` (excludes drafts) and `coach_visible_practices()` (includes them, coach surfaces only) |
+| `app/slack/blocks/coach_review.py` | Sunday post blocks: DRAFT labels + `publish_week_drafts` button |
+| `app/slack/bolt_app.py` | `_handle_publish_week_drafts` — re-reads the week rather than trusting baked-in ids |
 | `app/practices/availability_emoji.py` | Emoji assignment + validation, `EmojiSupplyError` |
 | `app/routes/admin_availability.py` | Poll create/open routes, `_shadow_mode()` |
 | `app/slack/blocks/availability.py` | Director-approved poll/nudge/digest copy |
