@@ -142,16 +142,32 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
     built — the error names which practice needs what, since the director
     is the one who has to go fix it.
 
-    Also refuses to build a second poll whose date range overlaps an
-    existing DRAFT or OPEN poll. Two overlapping live polls would both nudge
-    the same leads about the same sessions, and reactions on the older one
-    become invisible to whichever poll a lead happens to answer -- a
-    confusing, silent way to under-count availability. CLOSED polls don't
-    block a rebuild of the same range.
+    Refuses to build a second poll whose range overlaps an existing OPEN
+    poll. Two overlapping live polls would both nudge the same leads about the
+    same sessions, and reactions on the older one become invisible to
+    whichever poll a lead happens to answer -- a confusing, silent way to
+    under-count availability. CLOSED polls don't block a rebuild of the same
+    range.
+
+    An overlapping *unopened DRAFT* is replaced rather than treated as a
+    blocker. The admin flow creates the DRAFT before asking the director to
+    confirm the channel it's about to post to, so cancelling that dialog --
+    which is exactly what the dialog is for, since it's the shadow-mode safety
+    prompt -- left a DRAFT behind that nothing could open or discard: there is
+    no UI or route for either, and the close job only touches OPEN polls. The
+    range was then permanently unpollable, recoverable only by hand-editing
+    the database. Nothing has been posted for a DRAFT poll, so deleting it
+    cannot orphan a reaction; its baked channel_id is stale anyway.
+
+    Only DRAFT practices are polled. A poll exists to collect availability for
+    a block that hasn't been published yet, so including already-published
+    practices would ask leads to cover sessions that are already settled, and
+    -- worse -- one published practice missing a location would refuse the
+    whole poll over a field the director has no reason to fill in.
     """
     overlapping = (
         LeadAvailabilityPoll.query
-        .filter(LeadAvailabilityPoll.status.in_([PollStatus.DRAFT, PollStatus.OPEN]))
+        .filter(LeadAvailabilityPoll.status == PollStatus.OPEN)
         .filter(LeadAvailabilityPoll.starts_on <= ends_on,
                 LeadAvailabilityPoll.ends_on >= starts_on)
         .first()
@@ -160,19 +176,38 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
         raise DuplicatePollError(
             f"poll #{overlapping.id} ({overlapping.status}, "
             f"{overlapping.starts_on}..{overlapping.ends_on}) already covers "
-            f"this range -- close or complete it before building another"
+            f"this range -- close it before building another"
         )
+
+    abandoned = (
+        LeadAvailabilityPoll.query
+        .filter(LeadAvailabilityPoll.status == PollStatus.DRAFT)
+        .filter(LeadAvailabilityPoll.starts_on <= ends_on,
+                LeadAvailabilityPoll.ends_on >= starts_on)
+        .all()
+    )
+    for stale_poll in abandoned:
+        current_app.logger.info(
+            "Replacing abandoned DRAFT availability poll %s (%s..%s), never "
+            "posted to Slack", stale_poll.id, stale_poll.starts_on, stale_poll.ends_on,
+        )
+        db.session.delete(stale_poll)
+    if abandoned:
+        db.session.flush()
 
     practices = (
         Practice.query
         .filter(Practice.date >= datetime.combine(starts_on, datetime.min.time()),
                 Practice.date <= datetime.combine(ends_on, datetime.max.time()),
-                Practice.status != PracticeStatus.CANCELLED.value)
+                Practice.status != PracticeStatus.CANCELLED.value,
+                Practice.is_draft.is_(True))
         .order_by(Practice.date)
         .all()
     )
     if not practices:
-        raise PollNotReadyError(f"no practices between {starts_on} and {ends_on}")
+        raise PollNotReadyError(
+            f"no unpublished practices between {starts_on} and {ends_on}"
+        )
 
     incomplete = [(p, missing_fields(p)) for p in practices if not is_ready(p)]
     if incomplete:

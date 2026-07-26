@@ -474,23 +474,37 @@ def test_open_poll_refuses_to_re_post_an_already_open_poll(db_session, app):
         _cleanup_practices([ready], poll)
 
 
-def test_build_poll_refuses_a_second_poll_over_the_same_range(db_session):
-    """Fix for: building twice over the same range yields two live polls
-    that would both nudge leads about the same sessions."""
+def test_build_poll_replaces_an_abandoned_draft_over_the_same_range(db_session):
+    """A DRAFT poll nobody opened must not brick the range.
+
+    The admin flow creates the DRAFT and *then* asks the director to confirm
+    which channel it's about to post to — the shadow-mode safety prompt. So
+    cancelling that dialog is the intended use of the dialog, and it left a
+    DRAFT behind that nothing could open or discard: no UI, no route, and the
+    close job only touches OPEN polls. Every overlapping range then refused
+    forever, recoverable only by editing the database. Nothing has been posted
+    for a DRAFT, so replacing it cannot orphan a reaction.
+    """
     first_practice = _ready_practice(4)
     db_session.commit()
-    first_poll = build_poll(_START, _END)
+    abandoned = build_poll(_START, _END)
+    abandoned_id = abandoned.id
+    assert abandoned.status == PollStatus.DRAFT
 
+    replacement = None
     try:
-        with pytest.raises(PollNotReadyError) as exc:
-            build_poll(_START, _END)
-        assert str(first_poll.id) in str(exc.value), \
-            "the error must name the existing poll so the director can find it"
+        replacement = build_poll(_START, _END)
+
+        assert replacement.id != abandoned_id, "a fresh poll, not the old row"
+        assert db.session.get(LeadAvailabilityPoll, abandoned_id) is None, \
+            "the abandoned draft must be gone, not left to block the range again"
         assert LeadAvailabilityPoll.query.filter_by(
             starts_on=_START, ends_on=_END
-        ).count() == 1, "a refused duplicate build must leave no second poll row behind"
+        ).count() == 1, "exactly one poll may cover the range"
+        assert [m.emoji for m in replacement.practices] == ["letter_a"], \
+            "the replacement gets its own complete emoji mapping"
     finally:
-        _cleanup_practices([first_practice], first_poll)
+        _cleanup_practices([first_practice], replacement)
 
 
 def test_build_poll_refuses_a_partially_overlapping_open_poll(db_session):
@@ -698,3 +712,63 @@ def test_open_poll_keeps_the_message_when_the_commit_actually_landed(db_session,
         assert stored.message_ts == "1786.55"
     finally:
         _cleanup_practices([ready], poll)
+
+
+def test_build_poll_covers_only_unpublished_practices(db_session):
+    """A poll collects availability for a block that isn't published yet.
+
+    Including already-published practices would ask leads to cover sessions
+    that are already settled and burn letter emoji on them. Previously
+    build_poll filtered only on CANCELLED, so this was undefined rather than
+    decided, and no test pinned it either way.
+    """
+    draft = _ready_practice(4)
+    published = _ready_practice(6)
+    published.is_draft = False
+    db_session.commit()
+
+    poll = None
+    try:
+        poll = build_poll(_START, _END)
+
+        assert [m.practice_id for m in poll.practices] == [draft.id], \
+            "only the unpublished practice belongs in the poll"
+        assert [m.emoji for m in poll.practices] == ["letter_a"], \
+            "and the published one must not consume a letter"
+    finally:
+        _cleanup_practices([draft, published], poll)
+
+
+def test_a_published_practice_missing_details_cannot_block_a_poll(db_session):
+    """The sharper edge of the same rule.
+
+    build_poll refuses when any practice in range lacks location/type/time.
+    While published practices were in scope, one published row missing a
+    location refused the entire poll over a field the director has no reason
+    to fill in — and no draft-side action could clear it.
+    """
+    draft = _ready_practice(4)
+    # Built incomplete from the start rather than by nulling out a ready
+    # practice: _cleanup_practices derives the location/type rows to delete
+    # from the practice's own attributes, so clearing them first would strip
+    # cleanup of the ids and leak both rows into the shared dev database (the
+    # unique PracticeType name then breaks every later run of this file).
+    published_incomplete = Practice(
+        date=datetime(2099, 8, 6, 18, 15), day_of_week="Thursday",
+        is_draft=False, location_id=None,
+    )
+    db_session.add(published_incomplete)
+    db_session.commit()
+    incomplete_id = published_incomplete.id
+
+    poll = None
+    try:
+        poll = build_poll(_START, _END)  # must not raise
+        assert [m.practice_id for m in poll.practices] == [draft.id]
+    finally:
+        db.session.rollback()
+        stranded = db.session.get(Practice, incomplete_id)
+        if stranded is not None:
+            db.session.delete(stranded)
+        db.session.commit()
+        _cleanup_practices([draft], poll)
