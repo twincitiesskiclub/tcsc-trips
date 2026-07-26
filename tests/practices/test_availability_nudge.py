@@ -522,9 +522,38 @@ def test_shadow_roster_null_config_row_resolves_to_an_empty_roster(db_session):
     closed to an empty roster, exactly like a missing row -- AppConfig.get
     returns the row's value (None) whenever the row exists, and falling back
     to the live tag pool here would DM the real 10-17 person lead pool during
-    the shadow month."""
-    with patch("app.models.AppConfig.get", return_value=None):
-        assert shadow_roster_leads() == []
+    the shadow month.
+
+    Writes a REAL null row rather than mocking AppConfig.get: mocking the
+    getter would merely stipulate that a null row yields None instead of
+    proving it. Save/restore, never unconditional delete -- real
+    configuration lives in this database.
+    """
+    key = "lead_availability.shadow_roster"
+    db.session.rollback()
+    existing = AppConfig.query.filter_by(key=key).first()
+    had_row = existing is not None
+    original = (
+        (existing.value, existing.description, existing.category)
+        if had_row else None
+    )
+    AppConfig.set(key=key, value=None, description="TEST null roster",
+                  category="practices")
+    db.session.commit()
+    try:
+        assert shadow_roster_leads() == [], (
+            "a JSON-null shadow_roster row must resolve to an empty roster, "
+            "never fall back to the live tag pool"
+        )
+    finally:
+        db.session.rollback()
+        if had_row:
+            value, description, category = original
+            AppConfig.set(key=key, value=value,
+                          description=description, category=category)
+        else:
+            AppConfig.query.filter_by(key=key).delete()
+        db.session.commit()
 
 
 def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
