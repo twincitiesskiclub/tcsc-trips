@@ -203,11 +203,29 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
     return poll
 
 
-def poll_rows(poll: LeadAvailabilityPoll) -> list[dict]:
-    """Render rows for the block builder."""
+def poll_rows(
+    poll: LeadAvailabilityPoll, *, exclude_practice_id: int | None = None
+) -> list[dict]:
+    """Render rows for the block builder.
+
+    Cancelled practices are skipped — a poll must not keep soliciting
+    availability for a session that isn't happening (build_poll never maps
+    them, but a practice can be cancelled after the poll opens).
+    `exclude_practice_id` drops a practice that is mid-delete: the delete
+    route refreshes Slack posts *before* removing the row, so the doomed
+    practice is still queryable when its poll message gets rebuilt. A
+    mapping whose practice row is already gone is skipped rather than
+    crashed on. Surviving rows keep their original letter emoji — the
+    emoji-to-practice mapping is persisted, so dropping a line never
+    shifts the letters under leads' existing reactions.
+    """
     rows = []
     for mapping in poll.practices:
         practice = mapping.practice
+        if practice is None or practice.id == exclude_practice_id:
+            continue
+        if practice.status == PracticeStatus.CANCELLED.value:
+            continue
         rows.append({
             "emoji": mapping.emoji,
             "date": practice.date,
