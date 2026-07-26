@@ -333,6 +333,43 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
         # retry. Rollback first: chat_delete needs no DB, and a poisoned
         # session must not outlive this handler either way.
         db.session.rollback()
+
+        # ...but first make sure the commit really didn't land. A connection
+        # dropped between COMMIT and its acknowledgement raises here while
+        # Postgres has already durably committed, so the poll is genuinely
+        # OPEN with the correct ts. Deleting the message then would strand a
+        # live poll pointing at a deleted message -- and the re-entrancy guard
+        # would refuse to re-open it, which is strictly worse than the
+        # duplicate-post risk this cleanup exists to remove. Re-read before
+        # destroying anything.
+        landed = False
+        try:
+            stored = db.session.get(LeadAvailabilityPoll, poll_id)
+            landed = (
+                stored is not None
+                and stored.status == PollStatus.OPEN
+                and stored.message_ts == posted_ts
+            )
+        except Exception as reread_exc:  # noqa: BLE001 - never raise; see module docstring
+            # Can't tell. Treat it as not-landed (the common case by far) but
+            # say so, since the cleanup below is destructive.
+            current_app.logger.error(
+                "availability poll %s: could not re-read the poll after a "
+                "failed commit (%s); assuming the commit did not land",
+                poll_id, reread_exc,
+            )
+
+        if landed:
+            current_app.logger.warning(
+                "availability poll %s: commit raised (%s) but the row is "
+                "OPEN with ts %s -- the transaction committed and only the "
+                "acknowledgement was lost. Keeping the posted message and "
+                "continuing.",
+                poll_id, exc, posted_ts,
+            )
+            # Fall through to seeding: the poll really is open.
+            return _seed_and_finish(client, poll, names, done)
+
         try:
             client.chat_delete(channel=posted_channel, timestamp=posted_ts)
         except Exception as cleanup_exc:  # noqa: BLE001 - never raise; see module docstring
@@ -358,10 +395,21 @@ def open_poll(poll: LeadAvailabilityPoll) -> dict:
         current_app.logger.error(message)
         return {"success": False, "error": message}
 
-    # Seed every reaction so members tap an existing pill rather than hunting
-    # through the emoji picker for :letter_g:. The poll is already posted at
-    # this point, so a failure to seed one reaction is logged, not raised --
-    # it must never fail the whole open.
+    return _seed_and_finish(client, poll, names, done)
+
+
+def _seed_and_finish(client, poll, names, done) -> dict:
+    """Seed every reaction pill, then report success.
+
+    Shared by the ordinary path and by the "commit raised but actually
+    landed" path in open_poll, so a poll that really is OPEN gets its pills
+    either way.
+
+    Seeding lets members tap an existing pill rather than hunting through the
+    emoji picker for :letter_g:. The poll is already posted by the time this
+    runs, so a failure to seed one reaction is logged, not raised -- it must
+    never fail the whole open.
+    """
     for name in names + [done]:
         try:
             client.reactions_add(channel=poll.channel_id, timestamp=poll.message_ts, name=name)

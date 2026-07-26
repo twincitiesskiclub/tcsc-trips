@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from slack_sdk.errors import SlackApiError
 from sqlalchemy import text
+from sqlalchemy.exc import OperationalError
 
 from app.constants import UserStatus
 from app.models import Tag, User, db
@@ -644,5 +645,56 @@ def test_open_poll_missing_done_emoji_names_the_done_config_key(db_session, app)
             "no letter is missing here; naming letter_emoji is misdirection"
         )
         client.chat_postMessage.assert_not_called()
+    finally:
+        _cleanup_practices([ready], poll)
+
+
+def test_open_poll_keeps_the_message_when_the_commit_actually_landed(db_session, app):
+    """A connection dropped between COMMIT and its acknowledgement raises here
+    while Postgres has already durably committed. Deleting the message then
+    would strand a genuinely OPEN poll pointing at a deleted ts -- and the
+    re-entrancy guard would refuse to re-open it, which is strictly worse than
+    the duplicate-post risk the cleanup exists to remove. So open_poll re-reads
+    the row before destroying anything, and when the commit did land it keeps
+    the message, seeds the pills and reports success.
+    """
+    ready = _ready_practice(4)
+    db_session.commit()
+    poll = build_poll(_START, _END)
+    poll_id = poll.id
+
+    real_commit = db.session.commit
+    calls = []
+
+    def _commit_then_lose_the_ack():
+        # Commit for real, THEN fail: exactly the dropped-ack shape.
+        if not calls:
+            calls.append(1)
+            real_commit()
+            raise OperationalError("SELECT 1", {}, Exception("server closed the connection"))
+        return real_commit()
+
+    try:
+        client = MagicMock()
+        client.chat_postMessage.return_value = {"ok": True, "ts": "1786.55"}
+
+        with patch("app.practices.availability.validate_emoji_available", return_value=(True, [])), \
+             patch("app.practices.availability.get_slack_client", return_value=client), \
+             patch.object(db.session, "commit", side_effect=_commit_then_lose_the_ack):
+            result = open_poll(poll)
+
+        assert client.chat_delete.call_count == 0, (
+            "the commit landed, so the live message belongs to an OPEN poll "
+            "and must not be deleted"
+        )
+        assert result["success"] is True, \
+            "the poll really is open; reporting failure would invite a duplicate"
+        assert result["ts"] == "1786.55"
+        assert client.reactions_add.call_count == 2, \
+            "an actually-open poll must still get its pills seeded"
+
+        stored = db.session.get(LeadAvailabilityPoll, poll_id)
+        assert stored.status == PollStatus.OPEN
+        assert stored.message_ts == "1786.55"
     finally:
         _cleanup_practices([ready], poll)
