@@ -30,7 +30,9 @@ def publish_app_home(user_slack_id: str) -> dict:
     now = now_central_naive()
     end_date = now + timedelta(days=14)
 
-    practices = Practice.query.filter(
+    from app.practices.service import published_practices
+
+    practices = published_practices().filter(
         Practice.date >= now,
         Practice.date <= end_date
     ).order_by(Practice.date).all()

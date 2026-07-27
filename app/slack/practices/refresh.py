@@ -11,6 +11,7 @@ from datetime import date, datetime, time, timedelta
 from sqlalchemy import update
 from sqlalchemy.orm.attributes import set_committed_value
 
+from app.practices.drafting import default_practice_days
 from app.practices.models import Practice, PracticeSummaryPost
 from app.slack.practices.summary_posts import (
     COACH_SUMMARY,
@@ -315,7 +316,10 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
     """Rebuild the registered Coach summary for one calendar week."""
     try:
         from app.models import AppConfig
-        from app.practices.service import convert_practice_to_info
+        from app.practices.service import (
+            coach_visible_practices,
+            convert_practice_to_info,
+        )
         from app.slack.blocks import build_coach_weekly_summary_blocks
         from app.slack.client import get_slack_client
         from app.slack.practices._config import (
@@ -328,7 +332,11 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
             return {"skipped": "absent"}
 
         week_start, week_end = _week_bounds(value)
-        week_query = Practice.query.filter(
+        # Drafts included: this is the coaches' own working post, and it must
+        # match what post_coach_weekly_summary() originally rendered — otherwise
+        # publishing one practice would silently drop the week's other drafts
+        # out of the post when it gets rebuilt.
+        week_query = coach_visible_practices().filter(
             Practice.date >= week_start,
             Practice.date < week_end,
         )
@@ -338,11 +346,10 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
             )
         practices_for_week = week_query.order_by(Practice.date).all()
 
-        expected_days = AppConfig.get('practice_days', [
-            {"day": "tuesday", "time": "18:00", "active": True},
-            {"day": "thursday", "time": "18:00", "active": True},
-            {"day": "saturday", "time": "09:00", "active": True}
-        ])
+        # Shared default — see default_practice_days in app/practices/
+        # drafting.py for why there is exactly one source and why it
+        # returns a fresh copy.
+        expected_days = AppConfig.get('practice_days', default_practice_days())
         practice_infos = [
             convert_practice_to_info(practice)
             for practice in practices_for_week
@@ -399,7 +406,7 @@ def _refresh_weekly_summary_for_week(value, *, exclude_practice_id=None):
     try:
         from app.integrations.weather import get_weather_for_location
         from app.practices.interfaces import PracticeStatus
-        from app.practices.service import convert_practice_to_info
+        from app.practices.service import convert_practice_to_info, published_practices
         from app.slack.blocks import (
             build_weekly_summary_blocks,
             build_weekly_summary_fallback_text,
@@ -411,7 +418,7 @@ def _refresh_weekly_summary_for_week(value, *, exclude_practice_id=None):
             return {"skipped": "absent"}
 
         week_start, week_end = _week_bounds(value)
-        week_query = Practice.query.filter(
+        week_query = published_practices().filter(
             Practice.date >= week_start,
             Practice.date < week_end,
             Practice.status.in_([
@@ -546,9 +553,111 @@ def _refresh_weekly_summary(
     )
 
 
+def _refresh_availability_poll(practice, change_type, **_context):
+    """Rewrite any OPEN lead-availability poll message covering this practice.
+
+    Leads react to the poll's per-session lines (date · time · location ·
+    type), so an edited practice must not leave the poll showing details
+    that are no longer true. Responses are stale-flagged separately via
+    their own snapshot; this keeps the *post* honest.
+
+    The poll's channel/ts live on the poll row, not the practice, so this
+    surface registers with ts_field=None and reports "no poll covers this
+    practice" as {"skipped": "no_poll"} itself. A cancelled practice drops
+    out of the rebuilt message via poll_rows' status filter; a deleted one
+    is excluded explicitly because the delete route refreshes before the
+    row disappears.
+    """
+    try:
+        from app.practices.availability import poll_rows
+        from app.practices.availability_models import (
+            LeadAvailabilityPoll,
+            LeadAvailabilityPollPractice,
+            PollStatus,
+        )
+        from app.slack.blocks.availability import (
+            build_poll_blocks,
+            poll_fallback_text,
+        )
+        from app.slack.client import get_slack_client
+
+        polls = (
+            LeadAvailabilityPoll.query
+            .join(
+                LeadAvailabilityPollPractice,
+                LeadAvailabilityPollPractice.poll_id
+                == LeadAvailabilityPoll.id,
+            )
+            .filter(
+                LeadAvailabilityPoll.status == PollStatus.OPEN,
+                LeadAvailabilityPollPractice.practice_id == practice.id,
+            )
+            .all()
+        )
+        if not polls:
+            # The normal case for any ordinary practice edit — nothing to
+            # do here. Deliberately NOT "absent": _log_refresh_results()
+            # warns about "absent" as a genuinely missing linked post.
+            return {"skipped": "no_poll"}
+
+        exclude_practice_id = (
+            practice.id if change_type == "delete" else None
+        )
+        client = get_slack_client()
+        updated = []
+        errors = []
+        for poll in polls:
+            rows = poll_rows(
+                poll, exclude_practice_id=exclude_practice_id
+            )
+            start_label = poll.starts_on.strftime("%B %-d")
+            end_label = poll.ends_on.strftime("%b %-d")
+            try:
+                client.chat_update(
+                    channel=poll.channel_id,
+                    ts=poll.message_ts,
+                    blocks=build_poll_blocks(
+                        rows, start_label, end_label,
+                        done=poll.resolved_done_emoji,
+                    ),
+                    text=poll_fallback_text(rows, start_label, end_label),
+                )
+                updated.append(poll.id)
+            except Exception as exc:
+                logger.warning(
+                    "Failed to refresh availability poll #%s for practice "
+                    "#%s: %s",
+                    poll.id,
+                    practice.id,
+                    exc,
+                )
+                errors.append(f"poll #{poll.id}: {exc}")
+
+        if errors:
+            # Keep the ids that DID update so the logs show what went
+            # through despite the failure.
+            return {
+                "success": False,
+                "error": "; ".join(errors),
+                "polls": updated,
+            }
+        return {"success": True, "polls": updated}
+    except Exception as exc:
+        logger.warning(
+            "Failed to refresh availability polls for practice #%s: %s",
+            practice.id,
+            exc,
+        )
+        return {"success": False, "error": str(exc)}
+
+
 WEEKLY_CHANGE_TYPES = tuple(
     change_type for change_type in ALL_CHANGE_TYPES if change_type != "rsvp"
 )
+
+# The poll lists date/location/type per session, so only changes that can
+# alter those lines (or remove a session) apply — not rsvp/workout churn.
+AVAILABILITY_POLL_CHANGE_TYPES = ("edit", "cancel", "delete")
 
 
 PRACTICE_SURFACES = [
@@ -565,6 +674,12 @@ PRACTICE_SURFACES = [
         None,
         WEEKLY_CHANGE_TYPES,
         _refresh_weekly_summary,
+    ),
+    PracticeSurface(
+        "availability_poll",
+        None,
+        AVAILABILITY_POLL_CHANGE_TYPES,
+        _refresh_availability_poll,
     ),
 ]
 

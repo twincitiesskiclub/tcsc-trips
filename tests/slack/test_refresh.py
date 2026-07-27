@@ -477,7 +477,8 @@ class TestSurfaceRegistry:
         from app.slack.practices.refresh import PRACTICE_SURFACES
         names = {s.name for s in PRACTICE_SURFACES}
         assert names == {
-            "announcement", "collab", "coach_summary", "weekly_summary"
+            "announcement", "collab", "coach_summary", "weekly_summary",
+            "availability_poll",
         }
 
     def test_surface_skips_when_ts_absent(self):

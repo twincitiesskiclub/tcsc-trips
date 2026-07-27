@@ -70,6 +70,29 @@
 #practice-list .pl-status.is-completed{background:#f1f5f9;color:#64748b}
 #practice-list .pl-status.is-cancelled{background:#fde8e8;color:#c53030}
 
+/* draft badge + publish banner — a draft is invisible to members, so it must
+   never read as a live practice at a glance (text, not color alone) */
+#practice-list .pl-draft{font-size:10px;font-weight:800;letter-spacing:.04em;color:#92400e;background:#fef3c7;border-radius:6px;padding:2px 7px;text-transform:uppercase;white-space:nowrap;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+#practice-list .pl-row-draft{border-style:dashed}
+#practice-list .pl-draft-note{background:#fffbeb;border:1.5px solid #fde68a;border-radius:11px;padding:13px 15px;margin-bottom:16px;font-size:13px;color:#78350f}
+#practice-list .pl-draft-note .pl-act{width:100%}
+
+/* availability poll cards — the block-level publish gate */
+#practice-list .pl-polls{display:flex;flex-direction:column;gap:7px;margin:-6px 0 18px}
+#practice-list .pl-polls:empty{display:none}
+#practice-list .pl-poll{display:flex;align-items:center;gap:10px;flex-wrap:wrap;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:9px 15px;font-size:13px;color:#475569}
+#practice-list .pl-poll-range{font-weight:600;color:#1c2c44;white-space:nowrap}
+#practice-list .pl-poll-status{display:inline-flex;align-items:center;font-size:11px;font-weight:600;padding:2px 8px;border-radius:7px;background:#f1f5f9;color:#64748b}
+#practice-list .pl-poll-status.is-open{background:#dcfce7;color:#166534}
+#practice-list .pl-poll-status.is-draft{background:#fef3c7;color:#92400e}
+#practice-list .pl-poll-sessions{color:#64748b}
+#practice-list .pl-poll-act{margin-left:auto;display:inline-flex;align-items:center;gap:9px;flex-wrap:wrap}
+#practice-list .pl-poll-note{color:#64748b}
+#practice-list .pl-poll-note.warn{color:#854d0e;font-weight:600}
+#practice-list .pl-poll-publish{background:#1c2c44;color:#fff;border:1.5px solid transparent;border-radius:9px;padding:6px 14px;font-size:12.5px;font-weight:600;cursor:pointer;font-family:inherit}
+#practice-list .pl-poll-publish:disabled{opacity:.6;cursor:default}
+#practice-list .pl-poll-publish:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+
 /* past section */
 #practice-list .pl-past-toggle{width:100%;display:flex;align-items:center;gap:8px;background:#f1f4f8;border:1px solid #e1e6ee;border-radius:11px;padding:13px 15px;color:#475569;font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;cursor:pointer;font-family:inherit;margin-top:28px}
 #practice-list .pl-past-toggle .chev{transition:transform .15s;color:#94a3b8}
@@ -174,6 +197,18 @@
       <option value="">All Locations</option>
     </select>
   </div>
+
+  <div class="pl-toolbar" style="margin-top:-10px">
+    <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em">Availability poll</span>
+    <input type="date" id="pl-poll-start" class="pl-select" aria-label="Poll start date">
+    <span style="color:#94a3b8;font-size:13px">to</span>
+    <input type="date" id="pl-poll-end" class="pl-select" aria-label="Poll end date">
+    <button type="button" id="pl-poll-btn" class="pl-btn pl-btn-ghost">Open Availability Poll</button>
+  </div>
+
+  <!-- Recent availability polls: the block-level publish gate. Per poll on
+       purpose — never per week, never automatic (see admin_practices.js). -->
+  <div id="pl-polls" class="pl-polls"></div>
 
   <div id="pl-list" aria-live="off"><p class="pl-empty">Loading practices…</p></div>
 

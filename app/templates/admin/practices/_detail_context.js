@@ -1,9 +1,21 @@
+/* Every value interpolated into innerHTML below goes through esc() (defined in
+   admin_practices.js, which the detail page loads first). Member names reach
+   these rails straight from the public season-registration form, and the admin
+   CSP allows 'unsafe-inline' for script-src -- so a last name of
+   `<img src=x onerror=...>` executed in the admin's session the moment they
+   opened the practice. renderLeadPicker next door uses createElement +
+   textContent, which is the better pattern; these four loaders build HTML
+   strings, so escaping at every hole is the equivalent discipline.
+
+   `rail-error` bodies escape too: err.message can carry server text, and
+   data.error is whatever the endpoint chose to say. */
+
 async function loadEvaluation() {
     const c = document.getElementById('evaluation-container');
     c.innerHTML = '<p class="pe-empty">Loading…</p>';
     try {
         const data = await fetch(`/admin/practices/${practiceId}/evaluation`).then(r => r.json());
-        if (!data.success) { c.innerHTML = `<p class="rail-error">${data.error}</p>`; return; }
+        if (!data.success) { c.innerHTML = `<p class="rail-error">${esc(data.error)}</p>`; return; }
         const ev = data.evaluation;
         let h = `<div class="rail-go-row"><span class="rail-go ${ev.is_go ? 'go' : 'nogo'}">${ev.is_go ? 'GO' : 'NO-GO'}</span>`
               + `<span class="rail-muted">${Math.round(ev.confidence * 100)}% confidence</span></div>`;
@@ -15,13 +27,13 @@ async function loadEvaluation() {
         }
         if (ev.violations && ev.violations.length) {
             for (const v of ev.violations) {
-                h += `<div class="rail-violation ${v.severity}"><b>${v.severity.toUpperCase()}</b> ${v.message}</div>`;
+                h += `<div class="rail-violation ${esc(v.severity)}"><b>${esc(String(v.severity).toUpperCase())}</b> ${esc(v.message)}</div>`;
             }
         } else {
             h += `<p class="rail-ok">No violations detected</p>`;
         }
         c.innerHTML = h;
-    } catch (err) { c.innerHTML = `<p class="rail-error">${err.message}</p>`; }
+    } catch (err) { c.innerHTML = `<p class="rail-error">${esc(err.message)}</p>`; }
 }
 
 async function loadRSVPs() {
@@ -35,11 +47,11 @@ async function loadRSVPs() {
         const list = document.getElementById('rsvp-list');
         if (!rsvps.length) { list.innerHTML = '<p class="pe-empty">No RSVPs yet</p>'; return; }
         list.innerHTML = rsvps.map(r =>
-            `<div class="rsvp-row"><span class="dot ${r.status}" aria-hidden="true"></span>`
-          + `<span class="rsvp-name">${r.user_name}</span><span class="rsvp-tag">${r.status.replace('_',' ')}</span></div>`
+            `<div class="rsvp-row"><span class="dot ${esc(r.status)}" aria-hidden="true"></span>`
+          + `<span class="rsvp-name">${esc(r.user_name)}</span><span class="rsvp-tag">${esc(String(r.status).replace('_',' '))}</span></div>`
         ).join('');
     } catch (err) {
-        document.getElementById('rsvp-list').innerHTML = `<p class="rail-error">${err.message}</p>`;
+        document.getElementById('rsvp-list').innerHTML = `<p class="rail-error">${esc(err.message)}</p>`;
     }
 }
 
@@ -51,13 +63,32 @@ async function loadLeadConfirmations() {
         c.innerHTML = leads.map(l => {
             const role = l.role === 'coach' ? 'Coach' : l.role === 'lead' ? 'Lead' : 'Assist';
             return `<div class="conf-row">`
-                 + `<span class="conf-name">${l.name} <span class="conf-role">${role}</span></span>`
+                 + `<span class="conf-name">${esc(l.name)} <span class="conf-role">${esc(role)}</span></span>`
                  + `<label class="toggle-row mini"><input type="checkbox" ${l.confirmed ? 'checked' : ''} `
-                 + `onchange="toggleLeadConfirmation(${l.id})" aria-label="Confirm ${l.name}">`
+                 + `onchange="toggleLeadConfirmation(${Number(l.id)})" aria-label="Confirm ${esc(l.name)}">`
                  + `<span class="toggle-track" aria-hidden="true"></span></label>`
                  + `<span class="conf-state ${l.confirmed ? 'on' : ''}">${l.confirmed ? 'Confirmed' : 'Pending'}</span></div>`;
         }).join('');
-    } catch (err) { c.innerHTML = `<p class="rail-error">${err.message}</p>`; }
+    } catch (err) { c.innerHTML = `<p class="rail-error">${esc(err.message)}</p>`; }
+}
+
+async function loadLeadPicker() {
+    const container = document.getElementById('lead-picker');
+    if (!container) return;
+    // Not trustworthy until renderLeadPicker draws it. Cleared here rather
+    // than only on failure so a reload can't leave a stale `true` standing
+    // over a container that is back to "Loading…".
+    markLeadPickerReady(false);
+    try {
+        const payload = await loadLeadCandidates(practiceId);
+        if (!payload) {
+            // loadLeadCandidates already showed a toast; replace the
+            // "Loading…" state so the picker doesn't look stuck.
+            container.innerHTML = '<p class="rail-error">Could not load lead availability. Reload the page to retry.</p>';
+            return;
+        }
+        renderLeadPicker(container, payload);
+    } catch (err) { container.innerHTML = `<p class="rail-error">${esc(err.message)}</p>`; }
 }
 
 async function toggleLeadConfirmation(leadId) {

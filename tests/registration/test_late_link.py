@@ -64,7 +64,6 @@ from app.models import Season, User, UserSeason, db
 @pytest.fixture
 def db_session(app):
     with app.app_context():
-        db.create_all()
         yield db
         db.session.rollback()
 

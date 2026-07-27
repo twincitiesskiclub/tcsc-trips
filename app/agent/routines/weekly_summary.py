@@ -8,7 +8,7 @@ from app.integrations.weather import get_weather_for_location
 from app.models import db
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
-from app.practices.service import convert_practice_to_info
+from app.practices.service import convert_practice_to_info, published_practices
 from app.slack.blocks import (
     build_weekly_summary_blocks,
     build_weekly_summary_fallback_text,
@@ -60,7 +60,7 @@ def run_weekly_summary(
     end = start + timedelta(days=7)
     config = load_skipper_config()
     dry_run = config.get("agent", {}).get("dry_run", True)
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= start,
         Practice.date < end,
         Practice.status.in_(

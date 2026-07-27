@@ -9,6 +9,7 @@ from flask import (
     request,
     url_for,
 )
+import re
 from datetime import datetime, timedelta
 from ..auth import admin_required
 from ..models import db, User, Tag, AppConfig
@@ -17,7 +18,15 @@ from ..practices.models import (
     PracticeLead, SocialLocation, practice_activities_junction,
     practice_types_junction
 )
+from ..practices.availability_models import (
+    LeadAvailabilityPoll,
+    LeadAvailabilityPollPractice,
+    PollStatus,
+)
+from ..practices.drafting import default_practice_days
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
+from ..practices.lead_candidates import lead_candidates
+from ..practices.publishing import publish_blockers, publish_practices
 from ..practices.plan_reaction_queries import (
     PlanReactionSourceSelectionError,
     load_all_plan_reaction_sources,
@@ -31,6 +40,10 @@ from ..practices.plan_reactions import (
     validate_authorized_plan_reactions,
 )
 from sqlalchemy.orm import joinedload
+
+# HH:MM, 00:00-23:59. Used to validate practice_days entries -- see
+# update_practice_days for why a bad time must be rejected at the door.
+TIME_OF_DAY_RE = re.compile(r'^([01]\d|2[0-3]):[0-5]\d$')
 
 admin_practices_bp = Blueprint('admin_practices', __name__, url_prefix='/admin/practices')
 _EDIT_UNSYNCED_ERROR = (
@@ -128,6 +141,58 @@ def _recover_failed_delete_once(
             context,
         )
     return recovery
+
+
+
+def _uncovered_by_open_poll_warning(practice):
+    """Warn when `practice` sits inside an OPEN poll that doesn't cover it.
+
+    A poll's emoji-to-practice mapping is fixed when the poll is built, and
+    appending a row would shift letters under reactions leads have already
+    given (the position guarantee on lead_availability_poll_practices is
+    load-bearing). So a practice that lands inside an open poll's dates
+    without a mapping gets no letter and no availability -- silently, unless
+    something says so.
+
+    Two paths reach that state and both must warn: creating a practice inside
+    the range, and *editing* an existing practice's date so it moves into the
+    range. The edit path is arguably the likelier one -- rescheduling is
+    routine -- and it had no check at all.
+
+    Best-effort: returns None on any failure rather than raising, since this
+    must never turn a successful save into an error response.
+    """
+    try:
+        practice_day = practice.date.date()
+        covering_poll = LeadAvailabilityPoll.query.filter(
+            LeadAvailabilityPoll.status == PollStatus.OPEN,
+            LeadAvailabilityPoll.starts_on <= practice_day,
+            LeadAvailabilityPoll.ends_on >= practice_day,
+        ).first()
+        if covering_poll is None:
+            return None
+
+        mapped = LeadAvailabilityPollPractice.query.filter_by(
+            poll_id=covering_poll.id, practice_id=practice.id
+        ).first()
+        if mapped is not None:
+            return None
+
+        warning = (
+            f"Practice {practice.id} ({practice.date:%a %-m/%-d}) falls "
+            f"inside OPEN availability poll #{covering_poll.id} "
+            f"({covering_poll.starts_on} – {covering_poll.ends_on}) but is "
+            "NOT on that poll — its emoji mapping was fixed when the poll "
+            "was built, so no availability will be collected for this "
+            "practice. Assign leads for it manually."
+        )
+        current_app.logger.error(warning)
+        return warning
+    except Exception:
+        current_app.logger.exception(
+            'Practice #%s: open-poll coverage check failed', practice.id
+        )
+        return None
 
 
 def _activity_json(activity):
@@ -287,9 +352,51 @@ def practices_data():
             'cancellation_reason': practice.cancellation_reason or '',
             'workout_description': practice.workout_description or '',
             'logistics_notes': practice.logistics_notes or '',
+            # Drafts are invisible to members until published. The grid needs
+            # both flags: is_draft to badge and offer the row for selection,
+            # missing_details to explain why a row can't be published yet
+            # rather than letting the director find out by clicking.
+            'is_draft': practice.is_draft,
+            'missing_details': publish_blockers(practice) if practice.is_draft else [],
         })
 
     return jsonify({'practices': practices_data})
+
+
+@admin_practices_bp.route('/publish', methods=['POST'])
+@admin_required
+def publish_practices_route():
+    """Publish specific drafts by id — the escape hatch, not the main route.
+
+    Blocks are normally published from the availability poll that collected
+    leads for them (`POST /admin/availability/polls/<id>/publish`), which is the
+    batch a director actually thinks in. This exists for a draft whose block
+    never got a poll: without it such a practice has no route to being
+    published at all, which is the exact failure the drafting feature would
+    otherwise reintroduce. The practices list drawer is its only caller.
+
+    Nothing here is week-scoped on purpose. The Sunday evening flow already
+    sends the coming week to members with no human in the loop.
+    """
+    data = request.get_json() or {}
+    practice_ids = data.get('practice_ids')
+    if not practice_ids or not isinstance(practice_ids, list):
+        return jsonify({'error': 'practice_ids must be a non-empty list'}), 400
+
+    practices = Practice.query.filter(Practice.id.in_(practice_ids)).all()
+    found = {practice.id for practice in practices}
+    missing_ids = [pid for pid in practice_ids if pid not in found]
+    if missing_ids:
+        # Refuse the whole batch rather than publishing part of a stale grid
+        # selection: publishing is member-visible and awkward to undo, so a
+        # selection that no longer matches the database is worth a re-check.
+        return jsonify({
+            'error': 'unknown practice id(s): '
+                     + ', '.join(str(pid) for pid in missing_ids),
+        }), 404
+
+    result = publish_practices(practices)
+    return jsonify(result)
 
 
 @admin_practices_bp.route('/<int:practice_id>')
@@ -326,6 +433,14 @@ def create_practice():
         return jsonify({'error': 'Date is required'}), 400
     if not data.get('location_id'):
         return jsonify({'error': 'Location is required'}), 400
+
+    leads_needed = data.get('leads_needed', 2)
+    if not isinstance(leads_needed, int) or isinstance(leads_needed, bool) \
+            or not 1 <= leads_needed <= 3:
+        return jsonify({
+            'error': 'leads_needed must be a whole number from 1 to 3',
+            'field': 'leads_needed',
+        }), 400
 
     for field, label in (
         ('workout_description', 'Workout'),
@@ -367,6 +482,7 @@ def create_practice():
             logistics_notes=data.get('logistics_notes') or None,
             plan_reactions=plan_reactions,
             is_dark_practice=data.get('is_dark_practice', False),
+            leads_needed=leads_needed,
         )
         practice.activities = list(selected.activities)
         practice.practice_types = list(selected.practice_types)
@@ -393,17 +509,20 @@ def create_practice():
                 )
                 db.session.add(lead)
 
-        # Add assists
-        if data.get('assist_ids'):
-            for user_id in data['assist_ids']:
-                assist = PracticeLead(
-                    practice_id=practice.id,
-                    user_id=user_id,
-                    role='assist'
-                )
-                db.session.add(assist)
+        # Assists are retired. Historical role='assist' rows stay readable, but
+        # no new ones are written and the role is no longer offered in the UI.
 
         db.session.commit()
+
+        # A practice created inside an OPEN availability poll's range is
+        # invisible to that poll: the emoji-to-practice mapping is fixed when
+        # the poll is built, and appending a row would shift letters under
+        # reactions leads have already given (the position guarantee on
+        # lead_availability_poll_practices is load-bearing). So no letter, no
+        # availability — which must be LOUD, not silent: log at error level
+        # and surface a warning in the response for the admin UI. Best-effort
+        # after the commit: a failure here must not fail the create.
+        availability_warning = _uncovered_by_open_poll_warning(practice)
 
         # The row is already committed, so summary refresh is best-effort and
         # must not turn a successful create into a false failure response.
@@ -431,11 +550,14 @@ def create_practice():
                 practice.id,
             )
 
-        return jsonify({
+        payload = {
             'success': True,
             'practice_id': practice.id,
             'message': 'Practice created successfully'
-        })
+        }
+        if availability_warning:
+            payload['availability_warning'] = availability_warning
+        return jsonify(payload)
 
     except Exception as e:
         db.session.rollback()
@@ -470,6 +592,15 @@ def edit_practice(practice_id):
                 return jsonify({
                     'error': f'{label} must be 2,500 characters or fewer',
                     'field': field,
+                }), 400
+
+        if 'leads_needed' in data:
+            leads_needed = data['leads_needed']
+            if not isinstance(leads_needed, int) or isinstance(leads_needed, bool) \
+                    or not 1 <= leads_needed <= 3:
+                return jsonify({
+                    'error': 'leads_needed must be a whole number from 1 to 3',
+                    'field': 'leads_needed',
                 }), 400
 
         try:
@@ -520,6 +651,9 @@ def edit_practice(practice_id):
         if 'status' in data:
             practice.status = data['status']
 
+        if 'leads_needed' in data:
+            practice.leads_needed = leads_needed
+
         # Update activities if provided
         if 'activity_ids' in data:
             practice.activities = list(selected.activities)
@@ -528,10 +662,15 @@ def edit_practice(practice_id):
         if 'type_ids' in data:
             practice.practice_types = list(selected.practice_types)
 
-        # Update coaches, leads, and assistants if provided (now using user_id)
-        if 'coach_ids' in data or 'lead_ids' in data or 'assist_ids' in data:
-            # Remove existing leads/coaches/assistants
-            PracticeLead.query.filter_by(practice_id=practice.id).delete()
+        # Update coaches and leads if provided (now using user_id).
+        # Assists are retired: no longer offered in the UI or written, but
+        # historical role='assist' rows are deliberately left untouched here
+        # so past schedules stay intact when a practice is later edited.
+        if 'coach_ids' in data or 'lead_ids' in data:
+            PracticeLead.query.filter(
+                PracticeLead.practice_id == practice.id,
+                PracticeLead.role.in_(('coach', 'lead')),
+            ).delete(synchronize_session=False)
 
             # Add coaches
             if data.get('coach_ids'):
@@ -553,18 +692,15 @@ def edit_practice(practice_id):
                     )
                     db.session.add(lead)
 
-            # Add assists
-            if data.get('assist_ids'):
-                for user_id in data['assist_ids']:
-                    assist = PracticeLead(
-                        practice_id=practice.id,
-                        user_id=user_id,
-                        role='assist'
-                    )
-                    db.session.add(assist)
-
         db.session.commit()
         practice_updated = True
+
+        # Rescheduling a practice INTO an open poll's range leaves it with no
+        # letter emoji and no availability, exactly like creating one there --
+        # and the poll-message refresh below can't surface it, since that
+        # surface only finds polls that already map this practice. Checked
+        # after the commit so it sees the new date.
+        availability_warning = _uncovered_by_open_poll_warning(practice)
 
         # Update all Slack posts
         from app.slack.practices import refresh_practice_posts
@@ -591,10 +727,13 @@ def edit_practice(practice_id):
                 'error': _EDIT_UNSYNCED_ERROR,
             }), 502
 
-        return jsonify({
+        payload = {
             'success': True,
-            'message': 'Practice updated successfully'
-        })
+            'message': 'Practice updated successfully',
+        }
+        if availability_warning:
+            payload['availability_warning'] = availability_warning
+        return jsonify(payload)
 
     except Exception as e:
         db.session.rollback()
@@ -1401,6 +1540,22 @@ def toggle_lead_confirmation(practice_id, lead_id):
         return jsonify({'error': str(e)}), 500
 
 
+@admin_practices_bp.route('/<int:practice_id>/lead-candidates')
+@admin_required
+def practice_lead_candidates(practice_id):
+    """Eligible leads for this practice, ranked by availability then load."""
+    practice = Practice.query.get_or_404(practice_id)
+    assigned = [
+        lead.user_id for lead in
+        PracticeLead.query.filter_by(practice_id=practice.id, role='lead').all()
+    ]
+    return jsonify({
+        'leads_needed': practice.leads_needed,
+        'assigned': assigned,
+        'candidates': lead_candidates(practice),
+    })
+
+
 @admin_practices_bp.route('/<int:practice_id>/leads/data')
 @admin_required
 def practice_leads_data(practice_id):
@@ -1510,12 +1665,10 @@ def trigger_weekly_summary():
 @admin_required
 def settings_data():
     """Return practice-related settings from AppConfig."""
-    # Get practice_days config
-    practice_days = AppConfig.get('practice_days', [
-        {"day": "tuesday", "time": "18:00", "active": True},
-        {"day": "thursday", "time": "18:00", "active": True},
-        {"day": "saturday", "time": "09:00", "active": True}
-    ])
+    # Get practice_days config (shared default — see default_practice_days in
+    # app/practices/drafting.py for why there is exactly one source and why
+    # it returns a fresh copy).
+    practice_days = AppConfig.get('practice_days', default_practice_days())
 
     return jsonify({
         'practice_days': practice_days
@@ -1544,6 +1697,21 @@ def update_practice_days():
             return jsonify({'error': 'Each entry must have a day field'}), 400
         if entry['day'].lower() not in ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']:
             return jsonify({'error': f'Invalid day: {entry["day"]}'}), 400
+        # `time` must be validated here, because a bad one is silent
+        # downstream: expected_slots() skips an unparseable time with a single
+        # log line, so this whole weekday vanishes from drafting for the full
+        # two-month horizon while the readiness digest still reports every
+        # remaining draft as ready. An out-of-range hour is worse -- it parses
+        # as ints and then kills the bootstrap job when the datetime is built.
+        # The UI's <input type="time"> submits "" whenever the field is
+        # cleared, so this is one keystroke away, not a hand-crafted payload.
+        if 'time' in entry:
+            time_value = entry['time']
+            if not isinstance(time_value, str) or not TIME_OF_DAY_RE.match(time_value):
+                return jsonify({
+                    'error': f'Invalid time for {entry["day"]}: '
+                             f'{time_value!r}. Use HH:MM, 00:00-23:59.'
+                }), 400
         defaults = entry.get('defaults')
         if defaults is not None and not isinstance(defaults, dict):
             return jsonify({'error': 'defaults must be an object or null'}), 400

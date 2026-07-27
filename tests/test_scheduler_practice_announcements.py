@@ -59,6 +59,7 @@ def test_scheduler_delegates_conditions_lookup_to_announcement_layer():
         date=_Column(),
         status=_Column(),
         slack_message_ts=_Column(),
+        is_draft=_Column(),
         query=_Query([practice]),
     )
 
@@ -132,6 +133,7 @@ def _run_scheduler(window, all_strength=None, combined_result=None):
         date=_Column(),
         status=_Column(),
         slack_message_ts=_Column(),
+        is_draft=_Column(),
         query=_Query(window),
     )
 

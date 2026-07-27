@@ -194,7 +194,6 @@ class TestUserGetSlackTierIntegration:
     def db_session(self, app):
         from app.models import db
         with app.app_context():
-            db.create_all()
             yield db.session
 
     def _unique_email(self, prefix='test'):

@@ -6,6 +6,7 @@ from app.models import db, User
 from app.utils import now_central_naive
 from app.practices.models import Practice, PracticeRSVP, PracticeLead
 from app.practices.interfaces import RSVPStatus
+from app.practices.service import published_practices
 
 
 def handle_tcsc_command(command_text: str, user_id: str, user_name: str) -> dict:
@@ -71,7 +72,7 @@ def _handle_practice_command(user_id: str) -> dict:
     week_end = today_start + timedelta(days=7)
 
     # Get upcoming practices
-    practices = Practice.query.filter(
+    practices = published_practices().filter(
         Practice.date >= today_start,
         Practice.date < week_end,
         Practice.status != 'cancelled'

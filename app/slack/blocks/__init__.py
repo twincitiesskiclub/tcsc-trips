@@ -5,6 +5,11 @@ existing imports like ``from app.slack.blocks import build_practice_announcement
 continue to work without change.
 """
 
+from app.slack.blocks.availability import (
+    build_nudge_blocks,
+    build_poll_blocks,
+    poll_fallback_text,
+)
 from app.slack.blocks.announcements import (
     build_practice_announcement_blocks,
     build_combined_fallback_text,
@@ -46,6 +51,9 @@ from app.slack.blocks.recap import (
 from app.slack.blocks.dispatch import (
     build_dispatch_submission_section,
 )
+from app.slack.blocks.practice_drafts import (
+    build_readiness_digest_blocks,
+)
 from app.slack.blocks.text import (
     BLOCKS_MAX,
     CONTEXT_TEXT_MAX,
@@ -59,6 +67,10 @@ from app.slack.blocks.text import (
 )
 
 __all__ = [
+    # availability
+    "build_nudge_blocks",
+    "build_poll_blocks",
+    "poll_fallback_text",
     # announcements
     "build_practice_announcement_blocks",
     "build_combined_fallback_text",
@@ -91,6 +103,8 @@ __all__ = [
     "build_daily_practice_recap_blocks",
     # dispatch
     "build_dispatch_submission_section",
+    # practice_drafts
+    "build_readiness_digest_blocks",
     # text
     "BLOCKS_MAX",
     "CONTEXT_TEXT_MAX",

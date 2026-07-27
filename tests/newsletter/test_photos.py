@@ -39,7 +39,6 @@ def db_session(app):
     """
     with app.app_context():
         # Create all tables
-        db.create_all()
 
         yield db
 

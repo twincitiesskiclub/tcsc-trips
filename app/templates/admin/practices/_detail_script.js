@@ -5,7 +5,6 @@ const selActivities = {{ (practice.activities | map(attribute='id') | list) | to
 const selTypes = {{ (practice.practice_types | map(attribute='id') | list) | tojson if practice else '[]' }};
 const selCoaches = {{ (practice.leads | selectattr('role','equalto','coach') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
 const selLeads = {{ (practice.leads | selectattr('role','equalto','lead') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
-const selAssists = {{ (practice.leads | selectattr('role','equalto','assist') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
 const savedPlanReactions = {{ (practice.plan_reactions or []) | tojson if practice else '[]' }};
 let activitiesData = [];
 let typesData = [];
@@ -16,6 +15,26 @@ const reactionSettingsLoadError =
 
 function selectedTagIds(containerId) {
     return peCollectIds(containerId);
+}
+
+/* Leads are collected from the availability picker when it's present
+   (editing an existing practice); new practices fall back to the plain
+   person-pill picker since lead-candidates needs a saved practice id. */
+function collectLeadIds() {
+    const picker = document.getElementById('lead-picker');
+    if (picker) {
+        // resolveLeadIds preserves the server-rendered assignment when the
+        // picker failed or hasn't finished loading -- an empty checkbox set
+        // would otherwise tell edit_practice to delete every assigned lead.
+        const {ids, preserved} = resolveLeadIds(picker, selLeads);
+        if (preserved) {
+            showToast(
+                'Lead availability never loaded — saved everything else and '
+                + 'left the assigned leads unchanged.', 'error');
+        }
+        return ids;
+    }
+    return peCollectIds('leads-pills');
 }
 
 function refreshPlanReactionSelection() {
@@ -54,6 +73,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         .toLocaleString([], {weekday: 'long', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'});
     loadRSVPs();
     loadLeadConfirmations();
+    loadLeadPicker();
     {% endif %}
 });
 
@@ -84,28 +104,15 @@ async function loadFormData() {
     const people = references.people;
     peRenderPersonPills('coaches-pills', 'coaches-summary', people.coaches, selCoaches);
     peRenderPersonPills('leads-pills', 'leads-summary', people.leads, selLeads);
-    peRenderPersonPills('assists-pills', 'assists-summary', people.assists, selAssists);
 
-    if (selAssists.length > 0) toggleAssists();
     document.getElementById('people-search').addEventListener('input', () =>
-        peFilterPeople('people-search', ['coaches-pills', 'leads-pills', 'assists-pills']));
+        peFilterPeople('people-search', ['coaches-pills', 'leads-pills']));
 
     if (references.failed.length) {
         formReferenceLoadError = 'Could not load form options. Refresh and try again.';
         console.error('Reference data failed:', references.failed.join(', '));
         showToast(formReferenceLoadError, 'error');
     }
-}
-
-function toggleAssists() {
-    const box = document.getElementById('assists-collapsible');
-    const btn = document.getElementById('assists-toggle');
-    const chevron = btn.querySelector('.chevron');
-    const text = document.getElementById('assists-toggle-text');
-    const nowOpen = box.classList.toggle('hidden') === false;
-    btn.setAttribute('aria-expanded', nowOpen ? 'true' : 'false');
-    chevron.classList.toggle('expanded', nowOpen);
-    text.textContent = nowOpen ? 'Hide' : 'Show';
 }
 
 document.getElementById('practice-form').addEventListener('submit', async (e) => {
@@ -131,8 +138,8 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         activity_ids: peCollectIds('activities-pills'),
         type_ids: peCollectIds('types-pills'),
         coach_ids: peCollectIds('coaches-pills'),
-        lead_ids: peCollectIds('leads-pills'),
-        assist_ids: peCollectIds('assists-pills'),
+        lead_ids: collectLeadIds(),
+        leads_needed: parseInt(fd.get('leads_needed'), 10),
         workout_description: fd.get('workout_description') || null,
         logistics_notes: fd.get('logistics_notes') || null,
         is_dark_practice: fd.get('is_dark_practice') === 'on',
@@ -155,6 +162,17 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         });
         const result = await resp.json();
         if (resp.ok && result.success) {
+            if (result.availability_warning) {
+                // The practice saved, but it fell inside an OPEN availability
+                // poll it can't join — no letter, no availability collected.
+                // Stashed rather than toasted here because this page redirects
+                // in 800ms; the list page flashes it on arrival (see
+                // flashPendingAvailabilityWarning in admin_practices.js).
+                try {
+                    window.sessionStorage.setItem(
+                        'tcsc-availability-warning', result.availability_warning);
+                } catch (e) { /* storage blocked; the server already logged it */ }
+            }
             showToast(result.message || 'Practice saved', 'success');
             setTimeout(() => { window.location.href = '/admin/practices'; }, 800);
         } else {

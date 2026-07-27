@@ -1,0 +1,153 @@
+"""Lead availability poll models.
+
+A poll owns one Slack message and the emoji-to-practice mapping for it. The
+mapping is persisted because inbound reaction events identify only an emoji
+name, and because the custom letter emoji have already been renamed once.
+"""
+
+from app.models import db
+from app.utils import now_central_naive
+
+
+class PollStatus:
+    """Plain strings, matching the project's status-field convention."""
+    DRAFT = "draft"
+    OPEN = "open"
+    CLOSED = "closed"
+
+
+class ParticipantStatus:
+    PENDING = "pending"
+    RESPONDED = "responded"
+    DONE = "done"
+    OPTED_OUT = "opted_out"
+
+
+class LeadAvailabilityPoll(db.Model):
+    __tablename__ = "lead_availability_polls"
+
+    id = db.Column(db.Integer, primary_key=True)
+    starts_on = db.Column(db.Date, nullable=False)
+    ends_on = db.Column(db.Date, nullable=False)
+    status = db.Column(db.String(20), nullable=False, default=PollStatus.DRAFT)
+    is_shadow = db.Column(db.Boolean, nullable=False, default=False)
+
+    channel_id = db.Column(db.String(50), nullable=False)
+    message_ts = db.Column(db.String(50))
+    # Snapshotted at build time, exactly like the letter emoji mapping: a
+    # config edit while a poll is open must not change which reactions count
+    # as "done" -- reconcile would otherwise compute done_user_ids from the
+    # new name only, demote every already-DONE participant, and the nudge
+    # job would DM leads who had declared themselves finished. Nullable for
+    # polls that predate the column; resolved_done_emoji falls back to the
+    # config value for those (and open_poll backfills it).
+    done_emoji = db.Column(db.String(80))
+
+    # Central like opened_at/closed_at (which are written with
+    # now_central_naive()) -- a utcnow default here would sit 5-6 hours off
+    # the other timestamps in the same row.
+    created_at = db.Column(db.DateTime, nullable=False, default=now_central_naive)
+    opened_at = db.Column(db.DateTime)
+    closed_at = db.Column(db.DateTime)
+
+    practices = db.relationship(
+        "LeadAvailabilityPollPractice", backref="poll",
+        cascade="all, delete-orphan", order_by="LeadAvailabilityPollPractice.position",
+    )
+    participants = db.relationship(
+        "LeadAvailabilityParticipant", backref="poll", cascade="all, delete-orphan")
+    responses = db.relationship(
+        "LeadAvailabilityResponse", backref="poll", cascade="all, delete-orphan")
+
+    @property
+    def resolved_done_emoji(self) -> str:
+        """The done emoji this poll actually uses -- snapshot first, config
+        as fallback for rows that predate the done_emoji column."""
+        if self.done_emoji:
+            return self.done_emoji
+        from app.practices.availability_emoji import done_emoji
+
+        return done_emoji()
+
+    def __repr__(self):
+        return f"<LeadAvailabilityPoll {self.starts_on}..{self.ends_on} {self.status}>"
+
+
+class LeadAvailabilityPollPractice(db.Model):
+    """Emoji-to-practice mapping. Position survives an emoji rename."""
+    __tablename__ = "lead_availability_poll_practices"
+
+    id = db.Column(db.Integer, primary_key=True)
+    poll_id = db.Column(db.Integer, db.ForeignKey("lead_availability_polls.id"), nullable=False)
+    practice_id = db.Column(db.Integer, db.ForeignKey("practices.id"), nullable=False)
+    emoji = db.Column(db.String(80), nullable=False)
+    position = db.Column(db.Integer, nullable=False)
+
+    # Deleting a Practice must take its poll rows with it, or the delete
+    # fails on the FK. The cascade is ORM-level, matching how every other
+    # Practice child (leads, rsvps, cancellation_requests) is handled —
+    # practice deletes always go through db.session.delete(), and this
+    # avoids a migration to rewrite the DB constraints. Plain "delete"
+    # (not delete-orphan): the poll side already owns the delete-orphan
+    # lifecycle for these rows.
+    practice = db.relationship(
+        "Practice",
+        backref=db.backref("availability_poll_links", cascade="all, delete"),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("poll_id", "emoji", name="uq_poll_emoji"),
+        db.UniqueConstraint("poll_id", "practice_id", name="uq_poll_practice"),
+    )
+
+
+class LeadAvailabilityParticipant(db.Model):
+    """Drives nudging: who was asked, who has answered, who opted out."""
+    __tablename__ = "lead_availability_participants"
+
+    id = db.Column(db.Integer, primary_key=True)
+    poll_id = db.Column(db.Integer, db.ForeignKey("lead_availability_polls.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default=ParticipantStatus.PENDING)
+    last_nudged_at = db.Column(db.DateTime)
+    nudge_count = db.Column(db.Integer, nullable=False, default=0)
+
+    user = db.relationship("User")
+
+    __table_args__ = (
+        db.UniqueConstraint("poll_id", "user_id", name="uq_poll_participant"),
+    )
+
+
+class LeadAvailabilityResponse(db.Model):
+    """A row means available. Un-reacting deletes it; there is no boolean."""
+    __tablename__ = "lead_availability_responses"
+
+    id = db.Column(db.Integer, primary_key=True)
+    poll_id = db.Column(db.Integer, db.ForeignKey("lead_availability_polls.id"), nullable=False)
+    practice_id = db.Column(db.Integer, db.ForeignKey("practices.id"), nullable=False)
+    user_id = db.Column(db.Integer, db.ForeignKey("users.id"), nullable=False)
+    # Central, matching poll.opened_at: the day-3 nudge rule compares against
+    # opened_at, and this is the timestamp a human reads when debugging
+    # staleness -- a utcnow default would skew it 5-6 hours in the same
+    # query result.
+    responded_at = db.Column(db.DateTime, nullable=False, default=now_central_naive)
+    source = db.Column(db.String(20), nullable=False, default="reaction")
+
+    # Snapshot of what the practice looked like when answered. Staleness is a
+    # mismatch against these, NOT against Practice.updated_at — that column has
+    # onupdate and a workout-text edit would mark every response stale.
+    answered_for_date = db.Column(db.DateTime)
+    answered_for_location_id = db.Column(db.Integer)
+
+    user = db.relationship("User")
+    # ORM-level delete cascade from the Practice side — see the comment on
+    # LeadAvailabilityPollPractice.practice.
+    practice = db.relationship(
+        "Practice",
+        backref=db.backref("availability_responses", cascade="all, delete"),
+    )
+
+    __table_args__ = (
+        db.UniqueConstraint("poll_id", "practice_id", "user_id", name="uq_poll_practice_user"),
+    )

@@ -709,6 +709,7 @@ if _bot_token:
 
         with get_app_context():
             from app.models import AppConfig, db
+            from app.practices.drafting import default_practice_days
             from app.practices.plan_reaction_editor import (
                 build_plan_reaction_editor_state,
             )
@@ -740,8 +741,13 @@ if _bot_token:
                 )
                 return
 
-            # Match config entry by (day, time) to find defaults
-            expected_days = AppConfig.get('practice_days', [])
+            # Match config entry by (day, time) to find defaults.
+            # default_practice_days(), not []: with no practice_days row (the
+            # state of dev and prod today) an empty list matches no entry, so
+            # the create modal opened prefilled 18:00 for a 09:00 Saturday
+            # slot with no activity/type presets -- the coach either retypes
+            # it or files a 6pm Saturday practice.
+            expected_days = AppConfig.get('practice_days', default_practice_days())
             default_time = "18:00"
             slot_defaults = None
 

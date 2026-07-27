@@ -28,6 +28,7 @@ from app.practices.interfaces import (
     RSVPStatus,
     LeadRole
 )
+from app.practices.publishing import publish_blockers
 
 
 def convert_social_location_to_info(location: Optional[SocialLocation]) -> Optional[SocialLocationInfo]:
@@ -197,6 +198,8 @@ def convert_practice_to_info(practice: Practice) -> PracticeInfo:
         slack_channel_id=practice.slack_channel_id,
         slack_session_emoji=practice.slack_session_emoji,
         cancellation_reason=practice.cancellation_reason,
+        is_draft=practice.is_draft,
+        missing_details=publish_blockers(practice) if practice.is_draft else [],
         airtable_id=practice.airtable_id,
         created_at=practice.created_at,
         updated_at=practice.updated_at
@@ -235,3 +238,41 @@ def convert_cancellation_to_proposal(request: CancellationRequest) -> Cancellati
         decision_notes=request.decision_notes,
         expires_at=request.expires_at
     )
+
+
+def published_practices():
+    """Practice query excluding drafts.
+
+    Drafts exist so availability can be collected against real details before
+    members see anything, so every member-visible read must go through here.
+    Returns a Query, so callers keep chaining .filter()/.order_by() as before.
+    """
+    # Re-imported here (Practice is already imported at module level above)
+    # so this resolves against app.practices.models.Practice at call time.
+    # Tests that patch that name via mock.patch("app.practices.models.Practice", ...)
+    # only affect that module attribute, not the module-level `Practice` name
+    # already bound in this file's namespace at import time; a local import
+    # re-reads the current attribute and picks up the patch.
+    from app.practices.models import Practice
+
+    return Practice.query.filter(Practice.is_draft.is_(False))
+
+
+def coach_visible_practices():
+    """Practice query INCLUDING drafts — for coach and director surfaces only.
+
+    The deliberate counterpart to published_practices(). Drafts exist for
+    coaches to fill in, so the surfaces coaches work in (the Sunday review post
+    above all) have to show them: filtering drafts out of the Sunday post hid
+    the auto-drafted practices in the one place coaches would look for them,
+    and made each drafted slot render as an empty "Add Practice" placeholder
+    inviting a duplicate practice on top of the draft.
+
+    Never use this for anything a member can see. It exists as a named function
+    rather than a bare `Practice.query` so every intentional draft-including
+    read is greppable and obviously deliberate, rather than looking like
+    someone forgot the gate.
+    """
+    from app.practices.models import Practice
+
+    return Practice.query

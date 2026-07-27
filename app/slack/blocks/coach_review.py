@@ -132,6 +132,22 @@ def build_coach_weekly_summary_blocks(
             if needs_attention:
                 header_text += " :warning:"
 
+            # A draft is invisible to every member-facing surface, so say so on
+            # the row. Without this a coach reads the week and reasonably
+            # assumes the club can already see it.
+            if getattr(practice, 'is_draft', False):
+                missing = list(getattr(practice, 'missing_details', []) or [])
+                header_text += "  `DRAFT`"
+                if missing:
+                    header_text += (
+                        f"\n:warning: _Draft — not visible to members; "
+                        f"needs {', '.join(missing)}_"
+                    )
+                else:
+                    header_text += (
+                        "\n_Draft — not visible to members until published_"
+                    )
+
             # Header section (no accessory - Edit button moved to bottom for mobile)
             blocks.append({
                 "type": "section",
@@ -263,11 +279,31 @@ def build_coach_weekly_summary_blocks(
     # ==========================================================================
     # FOOTER
     # ==========================================================================
+    # Deliberately no Publish button here. The Sunday evening flow (weekly
+    # summary + announcement job) already puts the coming week in front of
+    # members on its own, and gating that on a human click would break a
+    # workflow that works. Practices are published a block at a time from the
+    # availability poll that collected leads for them, weeks earlier — see
+    # app/routes/admin_availability.py. A draft still showing up here means it
+    # never made it into a poll, so it's flagged, not actioned.
+    drafts = [p for p in practices if getattr(p, 'is_draft', False)]
+
+    footer = (
+        ":bulb: Click *Edit* to update workout details. Changes will notify "
+        "this thread unless unchecked."
+    )
+    if drafts:
+        footer += (
+            f"\n:warning: {len(drafts)} "
+            f"{'practice' if len(drafts) == 1 else 'practices'} in this week "
+            f"{'is' if len(drafts) == 1 else 'are'} still a draft and can't be "
+            "seen by members — publish the availability block it belongs to."
+        )
     blocks.append({
         "type": "context",
         "elements": [{
             "type": "mrkdwn",
-            "text": ":bulb: Click *Edit* to update workout details. Changes will notify this thread unless unchecked."
+            "text": footer
         }]
     })
 

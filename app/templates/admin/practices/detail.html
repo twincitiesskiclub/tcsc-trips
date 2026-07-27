@@ -77,7 +77,7 @@
 #workout-editor .pe-pill:focus-visible{border-color:#1c2c44;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44;outline:none}
 #workout-editor .pe-empty{font-size:13px;color:#94a3b8;font-style:italic}
 
-/* ── person pills (coaches / leads / assists) ── */
+/* ── person pills (coaches / leads) ── */
 #workout-editor .person-pill-group{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
 #workout-editor .person-pill{
   display:inline-flex;align-items:center;gap:5px;
@@ -96,20 +96,32 @@
 #workout-editor .role-emoji{font-size:12px;line-height:1}
 #workout-editor .hidden{display:none!important}
 
+/* ── lead availability picker (edit mode) ── */
+#workout-editor .lead-picker{display:flex;flex-direction:column;gap:6px;margin-top:6px}
+#workout-editor .lead-capacity{font-size:12px;font-weight:600;color:#1c2c44;margin-bottom:2px}
+#workout-editor .lead-option{
+  display:flex;align-items:center;gap:8px;
+  padding:8px 10px;border-radius:10px;
+  font-size:13px;color:#475569;
+  border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;
+}
+#workout-editor .lead-option.available{border-color:#86efac;background:#f0fdf4;color:#166534}
+#workout-editor .lead-option.unavailable{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
+#workout-editor .lead-option.no-response{border-style:dotted;color:#94a3b8}
+#workout-editor .lead-option.stale{border-style:dashed;border-color:#f59e0b}
+/* Outside the eligible pool: either already assigned (so they must stay
+   listed or the next save deletes them) or a non-tagged member who offered to
+   lead this session. Muted rather than alarming — both are legitimate picks,
+   they just aren't ordinary candidates. */
+#workout-editor .lead-option.outside-pool{border-style:dashed;border-color:#c7d2fe;background:#f8fafc}
+#workout-editor .lead-option:focus-within{outline:none;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
+
 /* ── selected summary chips ── */
 #workout-editor .selected-summary{display:flex;flex-wrap:wrap;gap:6px;min-height:20px;margin-top:4px;margin-bottom:6px}
 #workout-editor .selected-chip{display:inline-flex;align-items:center;gap:4px;background:#1c2c44;color:#fff;border-radius:20px;padding:3px 8px 3px 12px;font-size:12px;font-weight:500}
 #workout-editor .selected-chip button{width:20px;height:20px;border-radius:50%;border:none;background:rgba(255,255,255,.2);color:#fff;font-size:13px;line-height:1;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;font-family:inherit;padding:0}
 #workout-editor .selected-chip button:hover{background:rgba(255,255,255,.35)}
 #workout-editor .none-text{font-size:12px;color:#94a3b8;font-style:italic}
-
-/* ── assists collapsible ── */
-#workout-editor .assists-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:4px}
-#workout-editor .assists-toggle{background:none;border:none;cursor:pointer;font-family:inherit;font-size:12px;font-weight:600;color:#475569;display:inline-flex;align-items:center;gap:4px;padding:0;width:auto;min-height:0}
-#workout-editor .assists-toggle:hover{color:#1c2c44}
-#workout-editor .assists-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px;border-radius:4px}
-#workout-editor .chevron{display:inline-block;font-size:10px;transition:transform .15s}
-#workout-editor .chevron.expanded{transform:rotate(90deg)}
 
 /* ── rail (context column) ── */
 #workout-editor .rail-col{position:sticky;top:16px}
@@ -276,7 +288,7 @@
 
       <section class="card">
         <div class="section-head">
-          <h2 class="section-label">Coaches · Leads · Assists</h2>
+          <h2 class="section-label">Coaches · Leads</h2>
           <input type="text" id="people-search" class="people-search" placeholder="Filter by name…" aria-label="Filter people by name">
         </div>
         <div class="field">
@@ -285,21 +297,30 @@
           <div id="coaches-pills" class="person-pill-group"></div>
         </div>
         <div class="field">
-          <label>Leads</label>
-          <div id="leads-summary" class="selected-summary"></div>
-          <div id="leads-pills" class="person-pill-group"></div>
+          <label for="leads-needed">Leads needed</label>
+          <select id="leads-needed" name="leads_needed">
+            <option value="1" {% if practice and practice.leads_needed == 1 %}selected{% endif %}>1</option>
+            <option value="2" {% if not practice or practice.leads_needed == 2 %}selected{% endif %}>2</option>
+            <option value="3" {% if practice and practice.leads_needed == 3 %}selected{% endif %}>3</option>
+          </select>
         </div>
         <div class="field">
-          <div class="assists-head">
-            <label>Assists</label>
-            <button type="button" id="assists-toggle" class="assists-toggle" aria-expanded="false" onclick="toggleAssists()">
-              <span class="chevron" aria-hidden="true">&#9654;</span><span id="assists-toggle-text">Show</span>
-            </button>
+          <label>Leads</label>
+          {# Deliberate create/edit split (product decision, Jul 2026): the
+             ranked availability picker needs a practice id for
+             /admin/practices/<id>/lead-candidates, which doesn't exist on
+             "New". Practices are auto-drafted now, so edit is the normal
+             Sunday path; create keeps the older pill picker rather than
+             drafting an orphan row or reworking the endpoint to take a date. #}
+          {% if practice %}
+          <div id="lead-picker" class="lead-picker" aria-live="polite">
+            <p class="pe-empty">Loading…</p>
           </div>
-          <div id="assists-summary" class="selected-summary"></div>
-          <div id="assists-collapsible" class="hidden">
-            <div id="assists-pills" class="person-pill-group"></div>
-          </div>
+          {% else %}
+          <p class="field-hint">Save the practice to see lead availability.</p>
+          <div id="leads-summary" class="selected-summary"></div>
+          <div id="leads-pills" class="person-pill-group"></div>
+          {% endif %}
         </div>
       </section>
 
@@ -379,6 +400,7 @@
 
 {% block extra_js %}
 <script src="{{ url_for('static', filename='practice_editor.js') }}"></script>
+<script src="{{ url_for('static', filename='admin_practices.js') }}"></script>
 <script src="{{ url_for('static', filename='practice_plan_reactions.js') }}"></script>
 <script src="{{ url_for('static', filename='practice_plan_reaction_editor.js') }}"></script>
 <script>

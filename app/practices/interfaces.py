@@ -164,6 +164,14 @@ class PracticeInfo:
     # Cancellation
     cancellation_reason: Optional[str] = None
 
+    # Drafting. A draft is invisible to every member-facing surface (see
+    # published_practices()), so surfaces that coaches use — the Sunday review
+    # post above all — have to be able to say so. missing_details carries the
+    # output of drafting.missing_fields(): what still has to be filled in
+    # before the practice can be published or polled against.
+    is_draft: bool = False
+    missing_details: list[str] = field(default_factory=list)
+
     # Metadata
     airtable_id: Optional[str] = None
     created_at: Optional[datetime] = None

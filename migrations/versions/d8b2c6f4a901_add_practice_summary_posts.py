@@ -33,8 +33,13 @@ _EXPECTED_CONSTRAINTS = (
         "ck_practice_summary_post_surface",
         "c",
         ("surface",),
+        # Tracks the CURRENT model's constraint (b4d1f8e6c2a7 added
+        # 'readiness_digest'): orphan recovery targets tables produced by
+        # db.create_all with today's code, so this fingerprint must follow
+        # the model, not the two-value shape this migration itself creates.
         "CHECK (surface::text = ANY (ARRAY['coach_summary'::character "
-        "varying, 'weekly_summary'::character varying]::text[]))",
+        "varying, 'weekly_summary'::character varying, "
+        "'readiness_digest'::character varying]::text[]))",
     ),
     (
         "practice_summary_posts_pkey",
@@ -64,9 +69,34 @@ _EXPECTED_INDEXES = (
 )
 
 
-def _refuse_orphan_recovery(invariant):
+def _refuse_orphan_recovery(invariant, expected=None, actual=None):
+    """Abort the recovery, saying enough to act on.
+
+    Failing closed here is correct -- this only ever fires when the table on
+    disk isn't the empty create_all() orphan this migration knows how to drop,
+    and guessing would destroy data. Failing *mutely* was the problem: the
+    message named one of nine invariants and nothing else, so a developer (or
+    Render's release phase) got one opaque line and had to read 350 lines of
+    pg_catalog queries to work out which comparison fired and what to do.
+
+    Note for whoever changes PracticeSummaryPost: _EXPECTED_CONSTRAINTS and
+    friends fingerprint the table as create_all() would build it *from today's
+    model*, so a new column or a new CHECK value re-breaks orphan recovery
+    until they are updated in lockstep.
+    """
+    detail = ""
+    if expected is not None or actual is not None:
+        detail = f"\n  expected: {expected!r}\n  found:    {actual!r}"
     raise RuntimeError(
-        "practice_summary_posts orphan recovery refused: " + invariant
+        "practice_summary_posts orphan recovery refused: " + invariant + detail
+        + "\n\nThis fires when a practice_summary_posts table exists that is "
+        "NOT the empty db.create_all() orphan this migration knows how to "
+        "drop, so it refuses rather than risk your data.\n"
+        "  - If the table is an unwanted create_all() orphan and holds nothing "
+        "you need, DROP TABLE practice_summary_posts and re-run the upgrade.\n"
+        "  - If it holds real rows, do NOT drop it; reconcile by hand.\n"
+        "  - If you just changed the PracticeSummaryPost model, update this "
+        "migration's _EXPECTED_* fingerprints to match."
     )
 
 
@@ -294,7 +324,8 @@ def _assert_exact_empty_create_all_orphan(bind, relation_oid):
     columns = fingerprint["columns"]
     shape = tuple(row[:6] for row in columns)
     if shape != _EXPECTED_COLUMN_SHAPE:
-        _refuse_orphan_recovery("column shape mismatch")
+        _refuse_orphan_recovery("column shape mismatch",
+                                _EXPECTED_COLUMN_SHAPE, shape)
     id_default = columns[0][6]
     if id_default != _EXPECTED_ID_DEFAULT:
         _refuse_orphan_recovery("id serial default mismatch")
@@ -317,9 +348,11 @@ def _assert_exact_empty_create_all_orphan(bind, relation_oid):
     if fingerprint["sequence"] != expected_sequence:
         _refuse_orphan_recovery("owned serial sequence mismatch")
     if fingerprint["constraints"] != _EXPECTED_CONSTRAINTS:
-        _refuse_orphan_recovery("constraint mismatch")
+        _refuse_orphan_recovery("constraint mismatch",
+                                _EXPECTED_CONSTRAINTS, fingerprint["constraints"])
     if fingerprint["indexes"] != _EXPECTED_INDEXES:
-        _refuse_orphan_recovery("index mismatch")
+        _refuse_orphan_recovery("index mismatch",
+                                _EXPECTED_INDEXES, fingerprint["indexes"])
     if fingerprint["has_external_dependencies"] is not False:
         _refuse_orphan_recovery("external dependency mismatch")
     if fingerprint["attached_behavior"] != (0, 0):

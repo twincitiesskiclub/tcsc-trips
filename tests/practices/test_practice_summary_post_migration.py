@@ -319,10 +319,16 @@ def _assert_upgrade_refused_without_mutation(
             "table contains rows",
         )
     }
+    # The refusal now carries recovery guidance (and, for a few invariants,
+    # the expected-vs-found values) after the reason line -- a bare
+    # "constraint mismatch" left whoever hit it reading 350 lines of
+    # pg_catalog queries to work out which of nine comparisons fired. Assert
+    # on the reason line, which is the part that identifies the invariant.
+    reason_line = str(refusal.value).splitlines()[0]
     if expected_invariant is None:
-        assert str(refusal.value) in allowed_messages
+        assert reason_line in allowed_messages
     else:
-        assert str(refusal.value) == (
+        assert reason_line == (
             "practice_summary_posts orphan recovery refused: "
             + expected_invariant
         )

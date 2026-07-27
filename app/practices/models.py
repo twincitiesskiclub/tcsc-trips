@@ -116,7 +116,12 @@ practice_types_junction = db.Table(
 # =============================================================================
 
 class PracticeSummaryPost(db.Model):
-    """Canonical Slack identity for one weekly practice-summary surface."""
+    """Canonical Slack identity for one weekly practice-summary surface.
+
+    The 'readiness_digest' surface bends the "weekly" framing: its post covers
+    a 4-week draft block, so week_start holds the block's start date (the 1st
+    of the month, per the bootstrap job's cadence) rather than a Monday.
+    """
 
     __tablename__ = "practice_summary_posts"
 
@@ -140,7 +145,7 @@ class PracticeSummaryPost(db.Model):
             name="uq_practice_summary_post_week_surface",
         ),
         db.CheckConstraint(
-            "surface IN ('coach_summary', 'weekly_summary')",
+            "surface IN ('coach_summary', 'weekly_summary', 'readiness_digest')",
             name="ck_practice_summary_post_surface",
         ),
     )
@@ -170,6 +175,14 @@ class Practice(db.Model):
 
     # Flags
     is_dark_practice = db.Column(db.Boolean, default=False, nullable=False)
+
+    # Drafts exist so availability can be collected against real details before
+    # members ever see the practice. Deliberately NOT a PracticeStatus member —
+    # cancellation logic reads status, and overloading it would couple the two.
+    is_draft = db.Column(db.Boolean, default=False, nullable=False)
+
+    # How many leads this practice wants. 1-3, validated at the route layer.
+    leads_needed = db.Column(db.Integer, default=2, nullable=False)
 
     # Slack integration
     slack_message_ts = db.Column(db.String(50))  # Message timestamp for updates
@@ -329,3 +342,12 @@ class CancellationRequest(db.Model):
 
     def __repr__(self):
         return f'<CancellationRequest Practice#{self.practice_id} {self.status}>'
+
+
+# Imported for Alembic metadata registration.
+from app.practices.availability_models import (  # noqa: E402,F401
+    LeadAvailabilityParticipant,
+    LeadAvailabilityPoll,
+    LeadAvailabilityPollPractice,
+    LeadAvailabilityResponse,
+)

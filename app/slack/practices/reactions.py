@@ -32,6 +32,42 @@ def handle_attendance_reaction(
     if not all((channel, message_ts, reaction, slack_user_id)):
         return {"success": True, "ignored": "invalid_event"}
 
+    # Availability polls live in the same channels as announcements, so check
+    # them first. Returns None when this message is not a poll.
+    #
+    # This call is wrapped defensively: availability handling is new and
+    # this function is the entry point for practice RSVP via reactions,
+    # which every member relies on daily. An unguarded exception here would
+    # propagate out of handle_attendance_reaction and take down attendance
+    # RSVP for every announcement -- previously independent of, and much
+    # older and more relied-upon than, availability polling.
+    from app.slack.practices.availability_reactions import handle_availability_reaction
+
+    availability = None
+    try:
+        availability = handle_availability_reaction(
+            channel=channel, message_ts=message_ts, reaction=reaction,
+            slack_user_id=slack_user_id, removed=removed,
+        )
+    except Exception:
+        # Rollback before falling through. handle_availability_reaction does
+        # db.session.add() before its commits, so the likeliest exception here
+        # is a flush/constraint error (Slack retries an unacked event within
+        # 3s, and two deliveries racing violate the response unique index) --
+        # which leaves the session poisoned. Without this, the fall-through
+        # below immediately raises PendingRollbackError out of
+        # handle_attendance_reaction, so the guard re-raises on the very error
+        # class it was written for and the log line claiming a fallback
+        # happened is a lie.
+        db.session.rollback()
+        logger.error(
+            "Availability reaction handling failed for channel=%s ts=%s "
+            "reaction=%s; falling through to attendance handling",
+            channel, message_ts, reaction, exc_info=True,
+        )
+    if availability is not None:
+        return availability
+
     from app.slack.practices.announcements import get_announcement_siblings
 
     siblings = get_announcement_siblings(SimpleNamespace(
