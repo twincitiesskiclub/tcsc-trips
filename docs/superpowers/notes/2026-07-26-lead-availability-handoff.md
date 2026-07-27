@@ -1,8 +1,8 @@
 # Lead availability branch — handoff
 
-> **Status:** Feature-complete and green. Ready for PR. All three open
-> decisions resolved and applied; second whole-branch review done, all five
-> blockers fixed.
+> **Status:** DEPLOYED to production 2026-07-27 (PR #224, merge `8a24d56`).
+> Shadow mode ON, roster set. See "Production state after deploy" below for
+> what is live and what still needs a human.
 > **Prepared:** 2026-07-26. **Updated:** 2026-07-26, after the second
 > whole-branch review.
 > **Branch:** `lead-availability`, 89 commits on top of `main` (base `0b229ec`).
@@ -21,6 +21,50 @@
 > `tests/practices/conftest.py` conventions exactly.
 > `.superpowers/sdd/progress.md` is the full task-by-task ledger if you need the
 > reasoning behind any decision.
+
+## Production state after deploy (2026-07-27)
+
+Merged as `8a24d56`; Render's release phase ran 4 migrations
+(`d4e7f9a1b2c3` → `539ad532aeb3`). Verified against prod, read-only:
+
+- All four `lead_availability_*` tables exist; both new `practices` columns are
+  NOT NULL with server defaults.
+- **77 existing practices, 0 drafts** — the backfill left every pre-existing
+  practice published, so nothing vanished from a member-visible surface.
+- Site returns 200.
+
+**The live pool is 57 people, not the 10–17 this document assumed.** 67 carry an
+eligible tag; 10 are ALUMNI without a coach tag and are excluded by the ALUMNI
+rule; the remaining 57 are all Slack-linked and DM-able. Re-check three things
+before shadow mode is turned off, all of which were reasoned about at ~15
+people: the lead picker renders one row per candidate, `_load_counts` scans
+lead history for the whole pool on every picker load, and
+`lead_availability_responses`' composite index leads with `poll_id`.
+
+**Config set in prod:**
+
+| Key | Value |
+|---|---|
+| `lead_availability.shadow_roster` | 6 UIDs — Ellie Thorsgaard, Rob Rutscher, Chris Frenier, Jacob Dean, Alex Gude, Augie Witkowski |
+| `lead_availability.shadow_mode` | no row → defaults ON (correct) |
+| everything else `lead_availability.*` | no row → config/practices.yaml defaults |
+
+**Two open items:**
+
+1. **Alex Gude and Augie Witkowski are on the roster but not in
+   `#collab-asset-mgmt-practices`, which is a PRIVATE channel** — so they can't
+   self-join. As it stands they would be enrolled as participants, DM'd a
+   permalink to a message they cannot open, stay PENDING through all three
+   nudges, and their silence would read as "didn't respond" rather than
+   "couldn't". Either invite them or drop them from the roster.
+2. **`practice_days` has no active Saturday.** Active slots are Tue 18:15,
+   Thu 18:05 and Thu 19:20. The row exists, so the Tue/Thu/Sat fallback in
+   `default_practice_days()` never applies and no Saturday practice will be
+   drafted. Fine for summer; add one before ski season.
+
+The Aug 1 08:00 bootstrap is the first thing that will run. Its readiness digest
+posts to the **real** coaches channel (not shadow-gated, by design), so that is
+what coaches see first.
 
 ## What the branch is
 
