@@ -265,3 +265,108 @@ def test_every_trip_status_is_represented(db_session):
     present = {t.status for t in core["trips"]}
     assert {"draft", "active", "completed", "canceled"} <= present
     assert "closed" not in present
+
+
+def test_domain_tables_are_populated(db_session):
+    from app.events.models import Event, EventParticipant, EventPriceOption, EventRegistration
+    from app.newsletter.models import Newsletter, NewsletterPrompt, NewsletterSubmission
+    from app.practices.availability_models import LeadAvailabilityPoll, LeadAvailabilityResponse
+    from app.practices.models import (
+        CancellationRequest,
+        Practice,
+        PracticeActivity,
+        PracticeLead,
+        PracticeLocation,
+        PracticeRSVP,
+        PracticeType,
+        SocialLocation,
+    )
+    from scripts.ui_audit.seed_fixtures import seed_core, seed_domain
+
+    core = seed_core({"users": 30, "seasons": 2, "trips": 3, "tags": 8})
+    seed_domain(core)
+
+    assert PracticeLocation.query.count() >= 3
+    assert SocialLocation.query.count() >= 2
+    assert PracticeType.query.count() >= 3
+    assert PracticeActivity.query.count() >= 5
+    assert Practice.query.count() >= 12
+    assert PracticeLead.query.count() > 0
+    assert PracticeRSVP.query.count() > 0
+    assert CancellationRequest.query.count() > 0
+    assert LeadAvailabilityPoll.query.count() > 0
+    assert LeadAvailabilityResponse.query.count() > 0
+    assert Event.query.count() >= 2
+    assert EventPriceOption.query.count() >= 3
+    assert EventRegistration.query.count() >= 5
+    assert EventParticipant.query.count() > 0
+    assert NewsletterPrompt.query.count() >= 1
+    assert Newsletter.query.count() > 0
+    assert NewsletterSubmission.query.count() > 0
+
+
+def test_practices_span_past_and_future(db_session):
+    """The practices list and calendar both need populated ranges."""
+    from datetime import date
+
+    from app.practices.models import Practice
+    from scripts.ui_audit.seed_fixtures import seed_core, seed_domain
+
+    core = seed_core({"users": 10, "seasons": 1, "trips": 1, "tags": 8})
+    seed_domain(core)
+
+    dates = [p.date.date() for p in Practice.query.all()]
+    today = date.today()
+    assert any(d < today for d in dates)
+    assert any(d > today for d in dates)
+
+
+def test_every_practice_status_is_represented(db_session):
+    """practices/list.html's filter and detail.html's edit <select> both offer
+    all five PracticeStatus values -- seed every one so none of those pills
+    or the edit form's dropdown renders against a status nobody has."""
+    from app.practices.models import Practice
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_all
+
+    seed_all(default_volumes())
+    present = {p.status for p in Practice.query.all()}
+    assert {"scheduled", "confirmed", "in_progress", "cancelled", "completed"} <= present
+
+
+def test_every_event_status_is_represented_by_the_edit_forms_vocabulary(db_session):
+    """event_form.html's <select> and events.html's filter both offer
+    draft/active/closed -- there is no 'published' EventStatus, despite the
+    brief asking for one -- so assert the real vocabulary is what's seeded."""
+    from app.events.models import Event
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_all
+
+    seed_all(default_volumes())
+    present = {e.status for e in Event.query.all()}
+    assert {"draft", "active", "closed"} <= present
+
+
+def test_every_registration_status_is_represented(db_session):
+    from app.events.models import EventRegistration
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_all
+
+    seed_all(default_volumes())
+    present = {r.status for r in EventRegistration.query.all()}
+    assert {"pending_payment", "confirmed", "cancelled", "refunded"} <= present
+
+
+def test_status_changes_populated_for_dropped_users(db_session):
+    """Prod has zero status_changes rows; seed them for DROPPED users so the
+    table isn't empty ahead of any admin surface reading it."""
+    from app.models import StatusChange
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_all
+
+    seed_all(default_volumes())
+    assert StatusChange.query.count() > 0
+
+
+def test_seed_all_runs_end_to_end(db_session):
+    from app.models import User
+    from scripts.ui_audit.seed_fixtures import seed_all
+
+    seed_all({"users": 20, "seasons": 2, "trips": 2, "tags": 8})
+    assert User.query.count() == 20

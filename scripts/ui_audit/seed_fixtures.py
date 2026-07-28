@@ -6,18 +6,51 @@ this seed exists to expose show up under ordinary data, so plausible content at
 roughly production volume is enough. Deterministic, so before/after screenshots
 are comparable across runs.
 
-Only builds the "core" tables (users/seasons/trips/tags + the payments and
-user_seasons that hang off them). Practices, events, and newsletter records
-are Task 5's job, layered on top of this function's return value.
+`seed_core()` builds the "core" tables (users/seasons/trips/tags + the
+payments and user_seasons that hang off them). `seed_domain()` layers
+practices, events, and newsletter records on top of `seed_core()`'s return
+value. `seed_all()` runs both.
 """
 
 import json
+from calendar import monthrange
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from random import Random
 
 from app.constants import UserSeasonStatus, UserStatus
-from app.models import Payment, Season, Tag, Trip, User, UserSeason, UserTag, db
+from app.events.models import (
+    Audience,
+    Event,
+    EventParticipant,
+    EventPriceOption,
+    EventRegistration,
+    EventStatus,
+    RegistrationStatus,
+)
+from app.models import Payment, Season, StatusChange, Tag, Trip, User, UserSeason, UserTag, db
+from app.newsletter.interfaces import NewsletterStatus, SubmissionStatus, SubmissionType
+from app.newsletter.models import Newsletter, NewsletterPrompt, NewsletterSubmission
+from app.practices.availability_models import (
+    LeadAvailabilityParticipant,
+    LeadAvailabilityPoll,
+    LeadAvailabilityPollPractice,
+    LeadAvailabilityResponse,
+    ParticipantStatus,
+    PollStatus,
+)
+from app.practices.interfaces import CancellationStatus, LeadRole, PracticeStatus, RSVPStatus
+from app.practices.models import (
+    CancellationRequest,
+    Practice,
+    PracticeActivity,
+    PracticeLead,
+    PracticeLocation,
+    PracticeRSVP,
+    PracticeType,
+    SocialLocation,
+)
+from app.utils import now_central_naive, today_central
 
 REPO = Path(__file__).resolve().parents[2]
 SEED = 20260728  # fixed so runs are reproducible
@@ -367,3 +400,722 @@ def seed_core(volumes: dict) -> dict:
 
     db.session.commit()
     return {"users": users, "seasons": seasons, "trips": trips, "tags": tags}
+
+
+# =============================================================================
+# Domain seed (Task 5): practices, events, newsletter
+# =============================================================================
+#
+# Enum vocabulary for every status/enum value below was verified against the
+# template that actually renders it -- not the model, not app/constants.py --
+# per the lesson from Task 4's seeded-but-unrenderable "closed" trip status:
+#
+#   - Practice.status: app/templates/admin/practices/list.html's filter and
+#     detail.html's <select> both offer all five PracticeStatus values
+#     (scheduled/confirmed/in_progress/cancelled/completed) -- all five used.
+#   - Event.status: event_form.html's <select> and events.html's filter both
+#     offer only draft/active/closed. EventStatus has no "published" value
+#     (the brief asked for one) -- "active" is the live-and-accepting state,
+#     used here for the second event so draft/active/closed are all covered.
+#   - EventRegistration.status: event_registrations.html's filter offers
+#     exactly RegistrationStatus.ALL (pending_payment/confirmed/cancelled/
+#     refunded) -- all four used.
+#   - PracticeLead.role: admin_practices.js's _detail_context.js maps
+#     lead/coach to display labels (assist is a retired, still-readable
+#     value per admin_practices.py's own comment) -- lead/coach used.
+#   - LeadAvailabilityPoll.status: admin_practices.js's POLL_STATUS_LABEL
+#     covers draft/open/closed -- all three used across the three polls.
+
+REGISTRATION_STATUSES = [
+    RegistrationStatus.PENDING_PAYMENT,
+    RegistrationStatus.CONFIRMED,
+    RegistrationStatus.CANCELLED,
+    RegistrationStatus.REFUNDED,
+]
+
+PRACTICE_LOCATION_SPECS = [
+    # name, spot, address, lat, lon, parking_notes
+    (
+        "Theodore Wirth Park", "Trailhead Chalet parking lot",
+        "1301 Theodore Wirth Pkwy, Golden Valley, MN", 45.0057, -93.3226,
+        "Lot fills by 5:30pm on weeknights; overflow parking along Wirth Pkwy.",
+    ),
+    (
+        "Hyland Hills", "Richardson Nature Center lot",
+        "10145 Bush Lake Rd, Bloomington, MN", 44.8398, -93.3654,
+        "Enter from Bush Lake Rd; trail access is behind the nature center.",
+    ),
+    (
+        "Elm Creek Park Reserve", "Chalet parking lot",
+        "14105 Elm Creek Rd, Maple Grove, MN", 45.1462, -93.4635,
+        "Chalet lot; groomed trail starts at the chalet's rear door.",
+    ),
+    (
+        "Battle Creek Regional Park", "Upper lot off Winthrop St",
+        "1000 Winthrop St S, St Paul, MN", 44.9336, -93.0102,
+        "Small lot -- carpool when possible.",
+    ),
+]
+
+SOCIAL_LOCATION_SPECS = [
+    ("Grumpy's NE", "2200 NE University Ave, Minneapolis, MN"),
+    ("Sisu Coffee Bar", "1223 Marshall St NE, Minneapolis, MN"),
+]
+
+PRACTICE_ACTIVITY_SPECS = [
+    ("Classic Skiing", ["classic skis", "poles", "kick wax"]),
+    ("Skate Skiing", ["skate skis", "poles"]),
+    ("Trail Running", ["trail shoes", "headlamp"]),
+    ("Roller Skiing", ["roller skis", "poles", "helmet"]),
+    ("Strength & Mobility", ["mat", "resistance band"]),
+]
+
+PRACTICE_TYPE_SPECS = [
+    # name, fitness_goals, has_intervals
+    ("Skate Technique", ["Technique", "Balance"], False),
+    ("Classic Distance", ["Aerobic Base", "Endurance"], False),
+    ("Strength & Balance", ["Strength", "Core"], False),
+    ("Trail Run", ["Aerobic Base"], False),
+    ("Interval Session", ["VO2 Max", "Threshold"], True),
+]
+
+# Weekday (Mon=0) -> (hour, minute). Tue/Thu evenings, Sat morning, matching
+# a realistic nordic-club practice cadence.
+PRACTICE_WEEKDAYS = {1: (17, 30), 3: (17, 30), 5: (9, 0)}
+
+WORKOUT_TEXTS = [
+    "6x3min @ threshold, 2min recovery between.",
+    "60min continuous distance at conversational pace.",
+    "4x8min @ tempo with active recovery.",
+    "Technique focus: diagonal stride drills, then 30min easy distance.",
+]
+
+CANCELLATION_REASON_TYPES = ["weather", "trail_conditions", "no_lead", "event_conflict"]
+CANCELLATION_SUMMARIES = {
+    "weather": "Wind chill forecast below -20F at practice time.",
+    "trail_conditions": "Trails not yet groomed after recent snowfall.",
+    "no_lead": "No confirmed lead within 24 hours of practice.",
+    "event_conflict": "Location closed for a permitted race.",
+}
+
+EVENT_SPECS = [
+    dict(
+        slug="frosty-5k-fun-run",
+        name="Frosty 5K Fun Run",
+        description=(
+            "A casual 5K out-and-back on groomed trail, open to the public. "
+            "Costumes encouraged."
+        ),
+        location="Theodore Wirth Park",
+        status=EventStatus.DRAFT,
+        audience=Audience.EXTERNAL,
+        days_from_today=45,
+        capacity=150,
+    ),
+    dict(
+        slug="tcsc-season-kickoff",
+        name="TCSC Season Kickoff Party",
+        description=(
+            "Kick off the season with the team: gear swap, wax demo, and potluck."
+        ),
+        location="Elm Creek Park Reserve Chalet",
+        status=EventStatus.ACTIVE,
+        audience=Audience.INTERNAL,
+        days_from_today=20,
+        capacity=80,
+    ),
+    dict(
+        slug="wax-clinic-gear-swap",
+        name="Wax Clinic & Gear Swap",
+        description="Hands-on wax clinic followed by a member gear swap.",
+        location="Hyland Hills",
+        status=EventStatus.CLOSED,
+        audience=Audience.BOTH,
+        days_from_today=-25,
+        capacity=60,
+    ),
+]
+
+NEWSLETTER_PROMPT_SPECS = [
+    (
+        "main",
+        "Primary generation prompt for weekly newsletters with full content.",
+        "You are drafting the TCSC Monthly Dispatch. Use a warm, upbeat club "
+        "voice and lead with the most exciting practice or trip news.",
+    ),
+    (
+        "quiet",
+        "Shorter prompt for weeks with minimal activity.",
+        "Activity was light this period -- keep the dispatch brief and focus "
+        "on upcoming practices and any open registrations.",
+    ),
+    (
+        "final",
+        "Prompt for generating the final polished version before publishing.",
+        "Polish the draft below for publishing: tighten language, keep the "
+        "section order, and preserve every link.",
+    ),
+]
+
+NEWSLETTER_STATUSES = [
+    NewsletterStatus.PUBLISHED,
+    NewsletterStatus.PUBLISHED,
+    NewsletterStatus.BUILDING,
+]
+
+SUBMISSION_SPECS = [
+    (
+        SubmissionType.CONTENT,
+        "Loved seeing everyone at Saturday's practice -- can't wait for the next one!",
+    ),
+    (
+        SubmissionType.SPOTLIGHT,
+        "Shoutout to our newest skate skiers who braved their first lesson this week.",
+    ),
+    (SubmissionType.EVENT, "Reminder: sign-ups for the Frosty 5K close next week."),
+    (
+        SubmissionType.ANNOUNCEMENT,
+        "Board meeting minutes from this month are posted in #announcements.",
+    ),
+]
+SUBMISSION_STATUSES = [
+    SubmissionStatus.INCLUDED,
+    SubmissionStatus.PENDING,
+    SubmissionStatus.PENDING,
+    SubmissionStatus.REJECTED,
+]
+
+DROP_REASONS = [
+    "Requested to be removed after moving out of state.",
+    "Dropped after non-payment following lottery placement.",
+    "Voluntary withdrawal -- schedule conflict with practices.",
+]
+
+
+def _make_practice_locations():
+    locations = []
+    for name, spot, address, lat, lon, notes in PRACTICE_LOCATION_SPECS:
+        location = PracticeLocation(
+            name=name, spot=spot, address=address,
+            google_maps_url=f"https://maps.google.com/?q={lat},{lon}",
+            latitude=lat, longitude=lon, parking_notes=notes,
+        )
+        db.session.add(location)
+        locations.append(location)
+    db.session.flush()
+    return locations
+
+
+def _make_social_locations():
+    socials = []
+    for name, address in SOCIAL_LOCATION_SPECS:
+        social = SocialLocation(
+            name=name, address=address,
+            google_maps_url=f"https://maps.google.com/?q={address.replace(' ', '+')}",
+        )
+        db.session.add(social)
+        socials.append(social)
+    db.session.flush()
+    return socials
+
+
+def _make_practice_activities():
+    activities = []
+    for name, gear in PRACTICE_ACTIVITY_SPECS:
+        activity = PracticeActivity(name=name, gear_required=gear)
+        db.session.add(activity)
+        activities.append(activity)
+    db.session.flush()
+    return activities
+
+
+def _make_practice_types():
+    types = []
+    for name, goals, has_intervals in PRACTICE_TYPE_SPECS:
+        practice_type = PracticeType(
+            name=name, fitness_goals=goals, has_intervals=has_intervals,
+        )
+        db.session.add(practice_type)
+        types.append(practice_type)
+    db.session.flush()
+    return types
+
+
+def _practice_dates():
+    """~36 Tue/Thu/Sat sessions spanning 6 weeks before through 6 weeks after
+    today -- both the practices list and the calendar need populated ranges
+    on either side of "now", not just a pile of future rows."""
+    anchor = today_central()
+    dates = []
+    for offset in range(-42, 42):
+        day = anchor + timedelta(days=offset)
+        time_of_day = PRACTICE_WEEKDAYS.get(day.weekday())
+        if time_of_day is None:
+            continue
+        hour, minute = time_of_day
+        dates.append(datetime(day.year, day.month, day.day, hour, minute))
+    return dates
+
+
+def _make_practices(locations, socials, activities, types, rng):
+    dates = _practice_dates()
+    today = today_central()
+    practices = []
+    past_count = future_count = 0
+
+    for index, practice_date in enumerate(dates):
+        is_future = practice_date.date() >= today
+        if is_future:
+            # First future session covers "happening now", second covers a
+            # confirmed-but-not-yet-started lead -- both filter pills need a
+            # row without waiting on random luck. A sparse cancellation
+            # further out shows the pill can occur even before the block.
+            if future_count == 0:
+                status = PracticeStatus.IN_PROGRESS.value
+            elif future_count == 1:
+                status = PracticeStatus.CONFIRMED.value
+            elif future_count % 7 == 0:
+                status = PracticeStatus.CANCELLED.value
+            else:
+                status = PracticeStatus.SCHEDULED.value
+            future_count += 1
+        else:
+            status = (
+                PracticeStatus.CANCELLED.value if past_count % 6 == 0
+                else PracticeStatus.COMPLETED.value
+            )
+            past_count += 1
+
+        location = locations[index % len(locations)]
+        is_dark = practice_date.hour >= 17
+        practice = Practice(
+            date=practice_date,
+            day_of_week=practice_date.strftime("%A"),
+            status=status,
+            location_id=location.id,
+            social_location_id=(
+                socials[index % len(socials)].id if index % 4 == 0 else None
+            ),
+            warmup_description="15min easy striding, dynamic stretching, drills.",
+            workout_description=WORKOUT_TEXTS[index % len(WORKOUT_TEXTS)],
+            cooldown_description="10min easy ski + static stretching.",
+            logistics_notes=(
+                "Bring lights -- low visibility after sunset." if is_dark else None
+            ),
+            is_dark_practice=is_dark,
+            leads_needed=rng.choice([1, 2, 2, 3]),
+            cancellation_reason=(
+                CANCELLATION_SUMMARIES[
+                    CANCELLATION_REASON_TYPES[index % len(CANCELLATION_REASON_TYPES)]
+                ] if status == PracticeStatus.CANCELLED.value else None
+            ),
+        )
+        practice.activities.append(activities[index % len(activities)])
+        if index % 3 == 0:
+            practice.activities.append(activities[(index + 1) % len(activities)])
+        practice.practice_types.append(types[index % len(types)])
+        db.session.add(practice)
+        practices.append(practice)
+
+    # The farthest-out block hasn't been published yet -- gives the
+    # availability-poll widget both a draft block to collect against and
+    # already-published sessions to compare it to. is_draft is deliberately
+    # independent of status (see the model's own comment), so these get
+    # bumped back to "scheduled" rather than staying whatever the modulo
+    # above assigned.
+    future_practices = [p for p in practices if p.date.date() >= today]
+    for practice in future_practices[-6:]:
+        practice.is_draft = True
+        practice.status = PracticeStatus.SCHEDULED.value
+
+    db.session.flush()
+    return practices
+
+
+def _make_practice_leads(practices, users, rng):
+    lead_candidates = users[: max(10, len(users) // 3)] or users
+    for index, practice in enumerate(practices):
+        if practice.status == PracticeStatus.CANCELLED.value and rng.random() < 0.5:
+            continue  # some cancelled practices never got a lead assigned
+        lead_user = lead_candidates[index % len(lead_candidates)]
+        confirmed = index % 3 != 0
+        db.session.add(
+            PracticeLead(
+                practice_id=practice.id, user_id=lead_user.id,
+                role=LeadRole.LEAD.value, confirmed=confirmed,
+                confirmed_at=now_central_naive() if confirmed else None,
+            )
+        )
+        if index % 4 == 0:
+            coach_user = lead_candidates[(index + 3) % len(lead_candidates)]
+            coach_confirmed = index % 5 != 0
+            db.session.add(
+                PracticeLead(
+                    practice_id=practice.id, user_id=coach_user.id,
+                    role=LeadRole.COACH.value, confirmed=coach_confirmed,
+                    confirmed_at=now_central_naive() if coach_confirmed else None,
+                )
+            )
+
+
+def _make_practice_rsvps(practices, users, rng):
+    """RSVPs on past practices only -- nobody RSVPs to a session that already happened."""
+    today = today_central()
+    past_practices = [p for p in practices if p.date.date() < today]
+    for practice in past_practices:
+        attendee_count = min(len(users), rng.randint(4, 10))
+        for user in rng.sample(users, k=attendee_count):
+            db.session.add(
+                PracticeRSVP(
+                    practice_id=practice.id, user_id=user.id,
+                    status=rng.choices(
+                        [RSVPStatus.GOING.value, RSVPStatus.MAYBE.value, RSVPStatus.NOT_GOING.value],
+                        weights=[0.7, 0.2, 0.1], k=1,
+                    )[0],
+                    responded_at=now_central_naive() - timedelta(days=rng.randint(1, 30)),
+                )
+            )
+
+
+def _make_cancellation_requests(practices, users, rng):
+    """One approved proposal per actually-cancelled practice, plus a rejected
+    and a still-pending/expired proposal against practices that were NOT
+    cancelled -- only an *approved* proposal cancels a practice, so seeding
+    'rejected' against a cancelled row would be an impossible state, exactly
+    the kind of brief-vs-template mismatch this file's header warns about."""
+    decider_pool = users[:10] or users
+    cancelled = [p for p in practices if p.status == PracticeStatus.CANCELLED.value]
+    non_cancelled = [p for p in practices if p.status != PracticeStatus.CANCELLED.value]
+
+    for index, practice in enumerate(cancelled):
+        reason_type = CANCELLATION_REASON_TYPES[index % len(CANCELLATION_REASON_TYPES)]
+        proposed_at = practice.date - timedelta(hours=20)
+        decider = decider_pool[index % len(decider_pool)]
+        db.session.add(
+            CancellationRequest(
+                practice_id=practice.id,
+                status=CancellationStatus.APPROVED.value,
+                reason_type=reason_type,
+                reason_summary=CANCELLATION_SUMMARIES[reason_type],
+                proposed_at=proposed_at,
+                expires_at=proposed_at + timedelta(hours=2),
+                decided_at=proposed_at + timedelta(hours=1),
+                decided_by_user_id=decider.id,
+                decision_notes="Approved -- conditions confirmed unsafe.",
+            )
+        )
+
+    now = now_central_naive()
+    extra_specs = [
+        (CancellationStatus.REJECTED.value, "Coaches judged conditions marginal but safe; practice proceeded."),
+        (CancellationStatus.PENDING.value, None),
+        (CancellationStatus.EXPIRED.value, None),
+    ]
+    for index, (cr_status, notes) in enumerate(extra_specs):
+        if index >= len(non_cancelled):
+            break
+        practice = non_cancelled[index]
+        reason_type = CANCELLATION_REASON_TYPES[index % len(CANCELLATION_REASON_TYPES)]
+        proposed_at = practice.date - timedelta(hours=20) if practice.date > now else now - timedelta(hours=1)
+        is_decided = cr_status in (CancellationStatus.REJECTED.value, CancellationStatus.EXPIRED.value)
+        db.session.add(
+            CancellationRequest(
+                practice_id=practice.id,
+                status=cr_status,
+                reason_type=reason_type,
+                reason_summary=CANCELLATION_SUMMARIES[reason_type],
+                proposed_at=proposed_at,
+                expires_at=proposed_at + timedelta(hours=2),
+                decided_at=proposed_at + timedelta(hours=2) if is_decided else None,
+                decided_by_user_id=(
+                    decider_pool[index % len(decider_pool)].id
+                    if cr_status == CancellationStatus.REJECTED.value else None
+                ),
+                decision_notes=notes,
+            )
+        )
+
+
+def _make_availability_polls(practices, users, rng):
+    """Prod has zero rows here, but /admin/availability/ backs a live widget
+    on the practices list page (admin_practices.js's pl-poll cards) -- an
+    empty response renders as an empty section, never screenshotted for
+    spacing. Seed one poll per PollStatus (draft/open/closed) so all three
+    status pills and the publish/unpublished-count layout get exercised."""
+    today = today_central()
+    participants_pool = users[:12] or users
+    future_drafts = [p for p in practices if p.is_draft]
+    published_future = [
+        p for p in practices if p.date.date() >= today and not p.is_draft
+    ]
+    recently_past = [p for p in practices if p.date.date() < today][-6:]
+
+    if not recently_past:
+        return  # degenerate practice list (shouldn't happen at real volume)
+
+    polls = []
+
+    closed_poll = LeadAvailabilityPoll(
+        starts_on=recently_past[0].date.date(), ends_on=recently_past[-1].date.date(),
+        status=PollStatus.CLOSED, is_shadow=True, channel_id="C0SEEDSHADOW1",
+        done_emoji="white_check_mark",
+        opened_at=now_central_naive() - timedelta(days=14),
+        closed_at=now_central_naive() - timedelta(days=7),
+    )
+    db.session.add(closed_poll)
+    polls.append((closed_poll, recently_past))
+
+    if published_future:
+        open_block = published_future[:6]
+        open_poll = LeadAvailabilityPoll(
+            starts_on=open_block[0].date.date(), ends_on=open_block[-1].date.date(),
+            status=PollStatus.OPEN, is_shadow=True, channel_id="C0SEEDSHADOW1",
+            done_emoji="white_check_mark",
+            opened_at=now_central_naive() - timedelta(days=2),
+        )
+        db.session.add(open_poll)
+        polls.append((open_poll, open_block))
+
+    if future_drafts:
+        draft_poll = LeadAvailabilityPoll(
+            starts_on=future_drafts[0].date.date(), ends_on=future_drafts[-1].date.date(),
+            status=PollStatus.DRAFT, is_shadow=True, channel_id="C0SEEDSHADOW1",
+        )
+        db.session.add(draft_poll)
+        polls.append((draft_poll, future_drafts))
+
+    db.session.flush()
+
+    letters = "abcdefghijklmnopqrstuvwxyz"
+    for poll, block in polls:
+        for position, practice in enumerate(block):
+            db.session.add(
+                LeadAvailabilityPollPractice(
+                    poll_id=poll.id, practice_id=practice.id,
+                    emoji=f"letter_{letters[position % len(letters)]}", position=position,
+                )
+            )
+
+        poll_participants = participants_pool[: min(len(participants_pool), 6)]
+        for index, user in enumerate(poll_participants):
+            status = (
+                ParticipantStatus.DONE if poll.status == PollStatus.CLOSED
+                else (ParticipantStatus.RESPONDED if index % 3 else ParticipantStatus.PENDING)
+            )
+            db.session.add(
+                LeadAvailabilityParticipant(
+                    poll_id=poll.id, user_id=user.id, status=status,
+                    nudge_count=0 if status == ParticipantStatus.PENDING else rng.randint(0, 2),
+                )
+            )
+
+        if poll.status == PollStatus.DRAFT:
+            continue  # a draft poll hasn't been posted, so it has no responses
+        for user in poll_participants:
+            for practice in block[: max(1, len(block) // 2)]:
+                if rng.random() < 0.6:
+                    db.session.add(
+                        LeadAvailabilityResponse(
+                            poll_id=poll.id, practice_id=practice.id, user_id=user.id,
+                            answered_for_date=practice.date,
+                            answered_for_location_id=practice.location_id,
+                        )
+                    )
+
+
+def _make_events():
+    events = []
+    for spec in EVENT_SPECS:
+        event_date = now_central_naive() + timedelta(days=spec["days_from_today"])
+        event = Event(
+            slug=spec["slug"], name=spec["name"], description=spec["description"],
+            location=spec["location"], event_date=event_date,
+            signup_start=event_date - timedelta(days=60),
+            signup_end=event_date - timedelta(days=7),
+            capacity=spec["capacity"], status=spec["status"], audience=spec["audience"],
+        )
+        db.session.add(event)
+        events.append(event)
+    db.session.flush()
+    return events
+
+
+def _make_event_price_options(events):
+    """Every event gets 2 price options: an individual and a family bundle,
+    so the participant-roles editor and the registration table's
+    participant_N columns both render with more than one shape."""
+    price_options = []
+    for event in events:
+        individual = EventPriceOption(
+            event_id=event.id, name="Individual", description="One registrant.",
+            price_cents=2500, member_price_cents=1500,
+            participant_roles=["Participant"], sort_order=0,
+        )
+        family = EventPriceOption(
+            event_id=event.id, name="Family (up to 4)", description="Up to four participants.",
+            price_cents=6000, member_price_cents=4000,
+            participant_roles=["Participant", "Participant", "Participant", "Participant"],
+            sort_order=1,
+        )
+        db.session.add_all([individual, family])
+        price_options.append((event, [individual, family]))
+    db.session.flush()
+    return price_options
+
+
+def _make_event_registrations(price_options, users, rng):
+    counter = 0
+    for event, options in price_options:
+        for offset in range(3):
+            option = options[offset % len(options)]
+            user = users[(counter * 3 + offset) % len(users)]
+            status = REGISTRATION_STATUSES[counter % len(REGISTRATION_STATUSES)]
+            registration = EventRegistration(
+                event_id=event.id, price_option_id=option.id,
+                contact_email=user.email, contact_phone=user.phone or "612-555-0100",
+                team_name=f"Team {user.last_name}" if len(option.participant_roles) > 1 else None,
+                emergency_contact_name=user.emergency_contact_name or f"{user.first_name} Contact",
+                emergency_contact_phone=user.emergency_contact_phone or "612-555-0199",
+                amount_cents=option.member_price_cents or option.price_cents,
+                discount_applied=counter % 5 == 0,
+                status=status,
+                payment_intent_id=(
+                    f"pi_seed_event_{counter:04d}"
+                    if status != RegistrationStatus.PENDING_PAYMENT else None
+                ),
+                created_at=now_central_naive() - timedelta(days=counter),
+            )
+            db.session.add(registration)
+            db.session.flush()
+            for position, role_label in enumerate(option.participant_roles, start=1):
+                participant_user = users[(counter * 3 + offset + position) % len(users)]
+                db.session.add(
+                    EventParticipant(
+                        registration_id=registration.id, position=position, role_label=role_label,
+                        name=participant_user.full_name,
+                        date_of_birth=participant_user.date_of_birth or date(1990, 1, 1),
+                        email=participant_user.email,
+                        phone=participant_user.phone or "612-555-0100",
+                    )
+                )
+            counter += 1
+
+
+def _make_newsletter_prompts():
+    for name, description, content in NEWSLETTER_PROMPT_SPECS:
+        db.session.add(
+            NewsletterPrompt(
+                name=name, description=description, content=content,
+                version=1, is_active=True,
+                created_by_email="admin@tcsc.org", updated_by_email="admin@tcsc.org",
+            )
+        )
+    db.session.flush()
+
+
+def _make_newsletters():
+    newsletters = []
+    anchor = today_central().replace(day=1)
+    for index in range(3):
+        # Walk back 2, 1, 0 months from the current month.
+        months_back = 2 - index
+        year = anchor.year
+        month = anchor.month - months_back
+        while month <= 0:
+            month += 12
+            year -= 1
+        period_start = datetime(year, month, 1)
+        _, last_day = monthrange(year, month)
+        period_end = datetime(year, month, last_day, 23, 59, 59)
+        status = NEWSLETTER_STATUSES[index]
+        newsletter = Newsletter(
+            week_start=period_start, week_end=period_end,
+            month_year=f"{year}-{month:02d}",
+            period_start=period_start, period_end=period_end,
+            publish_target_date=datetime(year, month, 15, 12, 0, 0),
+            qotm_question="What's one ski goal you're chasing this season?",
+            status=status.value,
+            current_version=2 if status != NewsletterStatus.BUILDING else 0,
+            published_at=period_end if status == NewsletterStatus.PUBLISHED else None,
+        )
+        db.session.add(newsletter)
+        newsletters.append(newsletter)
+    db.session.flush()
+    return newsletters
+
+
+def _make_newsletter_submissions(newsletters, users):
+    for index, (submission_type, content) in enumerate(SUBMISSION_SPECS):
+        user = users[index % len(users)]
+        status = SUBMISSION_STATUSES[index]
+        # The last submission predates any newsletter existing -- a real
+        # state per the model's own nullable=True comment ("may be
+        # submitted before newsletter exists").
+        newsletter = newsletters[index % len(newsletters)] if index < len(SUBMISSION_SPECS) - 1 else None
+        db.session.add(
+            NewsletterSubmission(
+                newsletter_id=newsletter.id if newsletter else None,
+                slack_user_id=f"U0SEED{index:03d}",
+                display_name=user.full_name,
+                submission_type=submission_type.value,
+                content=content,
+                permission_to_name=index % 2 == 0,
+                status=status.value,
+                included_in_version=2 if status == SubmissionStatus.INCLUDED else None,
+                submitted_at=now_central_naive() - timedelta(days=index * 3),
+            )
+        )
+
+
+def _make_status_changes(users, rng):
+    """Prod has zero status_changes rows. There's no admin surface reading
+    this table yet (grepped app/templates and app/routes -- only the
+    User.status_changes relationship exists), but the brief calls it out
+    explicitly as a table to populate ahead of that surface being built, so
+    seed it for DROPPED users regardless."""
+    for user in users:
+        if user.status != UserStatus.DROPPED:
+            continue
+        db.session.add(
+            StatusChange(
+                user_id=user.id, previous_status=UserStatus.ACTIVE, new_status=UserStatus.DROPPED,
+                reason=rng.choice(DROP_REASONS),
+                changed_at=now_central_naive() - timedelta(days=rng.randint(10, 200)),
+            )
+        )
+
+
+def seed_domain(core: dict) -> None:
+    """Populate practices, events, and newsletter tables on top of seed_core's output."""
+    rng = Random(SEED)
+    users = core["users"]
+
+    locations = _make_practice_locations()
+    socials = _make_social_locations()
+    activities = _make_practice_activities()
+    types = _make_practice_types()
+    practices = _make_practices(locations, socials, activities, types, rng)
+
+    _make_practice_leads(practices, users, rng)
+    _make_practice_rsvps(practices, users, rng)
+    _make_cancellation_requests(practices, users, rng)
+    _make_availability_polls(practices, users, rng)
+
+    events = _make_events()
+    price_options = _make_event_price_options(events)
+    _make_event_registrations(price_options, users, rng)
+
+    _make_newsletter_prompts()
+    newsletters = _make_newsletters()
+    _make_newsletter_submissions(newsletters, users)
+
+    _make_status_changes(users, rng)
+
+    db.session.commit()
+
+
+def seed_all(volumes: dict | None = None) -> None:
+    """Full seed. Safe to re-run against an empty database: seed_core and
+    seed_domain both only ever insert."""
+    core = seed_core(volumes or default_volumes())
+    seed_domain(core)
