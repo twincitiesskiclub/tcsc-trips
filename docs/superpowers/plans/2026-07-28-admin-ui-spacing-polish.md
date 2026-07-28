@@ -956,7 +956,7 @@ def seed_core(volumes: dict) -> dict:
 Run: `.venv-linux/bin/python -m pytest tests/test_ui_audit_seed.py -v`
 Expected: PASS, 5 passed
 
-If `flask db upgrade` in the fixture fails, check that `tests/_db_guard.py` (which enforces local-only database access) accepts the `tcsc_trips_uiaudit_test` name — it may need adding to its allowlist.
+`tests/_db_guard.py` checks the database *host*, not its name, so `tcsc_trips_uiaudit_test` on localhost passes without any change to the guard. If the fixture instead connects to `tcsc_trips` (the dev database), the cause is `pytest_configure` in `tests/conftest.py` defaulting `DATABASE_URL` — confirm `SQLALCHEMY_DATABASE_URI` is overridden before the first database access, since Flask-SQLAlchemy creates the engine lazily.
 
 - [ ] **Step 5: Commit**
 
@@ -1100,18 +1100,21 @@ git commit -m "feat(ui-audit): seed practices, events and newsletter records"
 
 ---
 
-### Task 6: Capture harness
+### Task 6: Capture harness, real manifest, and baseline triage
 
 **Files:**
 - Create: `scripts/ui_audit/surfaces.mjs` (the manifest)
 - Create: `scripts/ui_audit/capture.mjs` (the runner)
 - Create: `scripts/ui_audit/run.sh`
+- Create: `docs/superpowers/notes/2026-07-28-admin-ui-findings.md`
 
 **Interfaces:**
 - Consumes: the JSON line printed by `scripts/ui_audit/serve.py` (`{cookie_name, cookie_value, port}`).
-- Produces: `.ui-audit/<label>/<surface>--<state>--<viewport>.png` plus `.ui-audit/<label>/index.json` listing every capture.
+- Produces: `.ui-audit/<label>/<surface>--<state>--<viewport>.png` plus `.ui-audit/<label>/index.json`; `.ui-audit/before/` (the baseline gallery); and the findings inventory consumed by Tasks 8–13.
 
-- [ ] **Step 1: Write the surface manifest**
+**Note:** the manifest below is written with *placeholder* selectors as a starting skeleton. Steps 7–8 replace every one with a real selector found by grepping the templates and JS. This task is not complete until no guessed selector remains — a manifest whose selectors match nothing captures no interactive states, which is where most of the reported problems live.
+
+- [ ] **Step 1: Write the surface manifest skeleton**
 
 ```javascript
 // scripts/ui_audit/surfaces.mjs
@@ -1416,27 +1419,14 @@ print(im.size)
 "` — or simply open the file.
 Expected: the users list with seeded rows, not a login redirect. If it shows a login page, the cookie domain in `capture.mjs` does not match the host — align them.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Commit the harness**
 
 ```bash
 git add scripts/ui_audit/surfaces.mjs scripts/ui_audit/capture.mjs scripts/ui_audit/run.sh
 git commit -m "feat(ui-audit): capture every admin surface at three viewports"
 ```
 
----
-
-### Task 7: Expand the manifest and take the baseline
-
-The Task 6 manifest is a skeleton with guessed selectors. This task makes it real by reading the actual markup.
-
-**Files:**
-- Modify: `scripts/ui_audit/surfaces.mjs`
-- Create: `docs/superpowers/notes/2026-07-28-admin-ui-findings.md`
-
-**Interfaces:**
-- Produces: `.ui-audit/before/` (the baseline gallery) and the findings inventory consumed by Tasks 8–13.
-
-- [ ] **Step 1: Find every real interactive opener**
+- [ ] **Step 7: Replace every placeholder selector with a real one**
 
 ```bash
 grep -rnoE "id=\"[a-z-]*(drawer|modal|panel|dialog)[a-z-]*\"" app/templates/admin/ app/static/admin_*.js | sort -u
@@ -1446,7 +1436,7 @@ grep -rnoE "addEventListener\('click'" app/static/admin_*.js | wc -l
 
 Replace every guessed selector in `surfaces.mjs` with a real one. Add a state for every drawer, modal, inline editor, expanded row, filter panel, and tab found. Confirm each added selector is an opener, not a submit control.
 
-- [ ] **Step 2: Verify the manifest covers every admin route**
+- [ ] **Step 8: Verify no placeholder selector survives, and every route is covered**
 
 ```bash
 grep -rhoE "@[a-z_]+\.route\('([^']*)'\)" app/routes/admin*.py \
@@ -1456,14 +1446,28 @@ comm -23 /tmp/routes.txt /tmp/manifest.txt
 ```
 Expected: only JSON/action endpoints (`/data`, `/status`, `/run`, `/trigger/...`) remain. Any GET page route in the output must be added to the manifest.
 
-- [ ] **Step 3: Take the baseline**
+Then confirm no guessed selector is left. The skeleton's placeholders were `'table tbody tr'`, `'[data-filter-toggle], .admin-ui-filterbar'`, and `'[data-open-create-tag], button'` — the bare `button` and comma-fallback forms in particular were guesses:
+
+```bash
+grep -nE "click: '(\[[a-z-]+\], )?button'|data-filter-toggle|data-open-create-tag" scripts/ui_audit/surfaces.mjs
+```
+Expected: no output. Any hit is a placeholder that was never replaced.
+
+Finally, confirm the run actually exercised the states rather than skipping them:
+
+```bash
+scripts/ui_audit/run.sh manifest-check 2>&1 | grep -c "SKIP.*no match for"
+```
+Expected: `0`. A non-zero count means that many states have selectors matching nothing, and their markup will never be captured or reviewed.
+
+- [ ] **Step 9: Take the baseline**
 
 ```bash
 scripts/ui_audit/run.sh before --seed
 ```
 Expected: 250+ captures in `.ui-audit/before/`, zero `BLOCKED` lines.
 
-- [ ] **Step 4: Triage into a findings inventory**
+- [ ] **Step 10: Triage into a findings inventory**
 
 Review every capture. For each problem, record a row in `docs/superpowers/notes/2026-07-28-admin-ui-findings.md`:
 
@@ -1490,7 +1494,7 @@ codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
 
 Review every Codex finding against the screenshot before recording it.
 
-- [ ] **Step 5: Commit the baseline inventory**
+- [ ] **Step 11: Commit the real manifest and the baseline inventory**
 
 ```bash
 git add scripts/ui_audit/surfaces.mjs docs/superpowers/notes/2026-07-28-admin-ui-findings.md
@@ -1652,7 +1656,7 @@ grep -E "^\| *[0-9]+ *\| *members " docs/superpowers/notes/2026-07-28-admin-ui-f
   > .worktrees/ui-members/FINDINGS.md
 wc -l .worktrees/ui-members/FINDINGS.md
 ```
-Expected: one line per members finding. If zero, the findings table's Group column does not read `members` — check Task 7 Step 4's formatting.
+Expected: one line per members finding. If zero, the findings table's Group column does not read `members` — check Task 6 Step 10's formatting.
 
 - [ ] **Step 2: Dispatch the Codex agent**
 
@@ -2196,7 +2200,9 @@ git commit -m "docs(ui-audit): close out the spacing polish findings"
 
 ## Self-Review
 
-**Spec coverage:** Phase 1 → Tasks 3–5. Phase 2 → Tasks 1, 2, 6. Phase 3 → Task 7. Phase 4 layer A → Task 8 Steps 2–3; layer B → Task 8 Step 4 plus Tasks 9–13. Phase 5 → per-task verify steps plus Task 14. All four outbound safety layers appear: env isolation and `TCSC_MIGRATION_ONLY` in Task 2, socket guard in Task 1, non-GET abort in Task 6.
+**Spec coverage:** Phase 1 → Tasks 3–5. Phase 2 → Tasks 1, 2, 6 (Steps 1–8). Phase 3 → Task 6 (Steps 9–11). Phase 4 layer A → Task 8 Steps 2–3; layer B → Task 8 Step 4 plus Tasks 9–13. Phase 5 → per-task verify steps plus Task 14. All four outbound safety layers appear: env isolation and `TCSC_MIGRATION_ONLY` in Task 2, socket guard in Task 1, non-GET abort in Task 6.
+
+**Task numbering:** there is no Task 7 — the original harness/manifest split was merged into Task 6 so the harness and its real selectors land together. Tasks 8–14 keep their numbers.
 
 **Division of labour:** Tasks 1–8 and 14 are done by the orchestrator directly — they are harness, safety, and the shared spacing scale, where a mistake corrupts everything downstream. Tasks 9–13, the five surface-group fix passes, are performed by Codex `gpt-5.6-sol` agents at max reasoning effort, one per group, running concurrently in isolated worktrees. Every agent diff is reviewed, re-captured, and committed by the orchestrator; no agent commits or opens a PR. See the Codex Execution Model section.
 
@@ -2204,6 +2210,6 @@ git commit -m "docs(ui-audit): close out the spacing polish findings"
 
 **Verified while writing:** `db` is defined at `app/models.py:8` and imported from there. Blueprint prefixes confirmed — `/admin/practices`, `/admin/skipper`, `/admin/newsletter`, `/admin/availability` carry `url_prefix`; `admin_events_bp` declares absolute paths. All manifest paths correspond to real GET routes. `admin_required` gates on email domain only, so the minted cookie is sufficient. Playwright 1.62 and Chromium are installed globally; the repo venv is `.venv-linux`.
 
-**Known gaps to resolve during execution:** Task 5 Step 1 requires reading the domain models before writing that half of the seed, since their columns are not enumerated here — that is a deliberate read-first step, not a placeholder. Task 6's manifest selectors are guesses that Task 7 Step 1 replaces with real ones found by grepping the templates and JS; Task 6 is not complete without Task 7.
+**Known gaps to resolve during execution:** Task 5 Step 1 requires reading the domain models before writing that half of the seed, since their columns are not enumerated here — that is a deliberate read-first step, not a placeholder. Task 6's Step 1 manifest ships placeholder selectors that Steps 7–8 replace with real ones found by grepping; Step 8 fails the task if any placeholder survives or if any state's selector matches nothing.
 
-**Convention risk worth watching:** `tests/_db_guard.py` enforces local-only database access and `tests/conftest.py` has an autouse `_enforce_local_db` fixture. The seed tests create a new database (`tcsc_trips_uiaudit_test`), which may need allowlisting. Task 4 Step 4 notes this.
+**Convention risk worth watching:** this repo has a documented history of tests polluting the dev database — the previous project's progress ledger records three such incidents in four tasks, which is why `tests/practices/conftest.py` codifies "no `create_all`/`drop_all`, try/finally cleanup, scoped queries." The seed tests here write hundreds of rows, so they use a dedicated `tcsc_trips_uiaudit_test` database created via migrations (never `create_all`, which `tests/test_no_create_all.py` guards against) and dropped at session end. `tests/_db_guard.py` checks host rather than name, so this passes the guard unchanged.
