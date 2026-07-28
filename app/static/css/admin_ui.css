@@ -94,10 +94,12 @@
 .admin-ui-dw-sub{font-size:13px;color:#475569;margin:0 0 var(--admin-space-3)}
 .admin-ui-dw-desc{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:var(--admin-space-3)}
 /* Compact micro-chip: kept at a literal 1px vertical inset rather than
-   snapped to --admin-space-1 (4px). At 4px the pill's height roughly
-   doubles and it stops reading as an inline chip next to 13.5px text --
-   more than "polish" for a value this small. Horizontal 9px->8px is a
-   1px move onto the scale (nearest step), applied normally. */
+   snapped to --admin-space-1 (4px). Padding is only part of the box
+   (line-height contributes too), so 1px->4px is roughly a 33-50% height
+   increase, not a doubling -- but it's still enough for the pill to stop
+   reading as an inline chip next to 13.5px text, more than "polish" for a
+   value this small. Horizontal 9px->8px is a 1px move onto the scale
+   (nearest step), applied normally. */
 .admin-ui-dw-pill{display:inline-flex;align-items:center;border:1.5px solid #e5e7eb;border-radius:20px;padding:1px var(--admin-space-2);font-size:11.5px;font-weight:500;color:#475569}
 .admin-ui-dw-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:var(--admin-space-3) var(--admin-space-5);display:flex;gap:var(--admin-space-3);flex-wrap:wrap}
 .admin-ui-dw-btn-primary{flex:1;height:40px;background:#1c2c44;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
@@ -116,22 +118,29 @@
 .admin-ui-no-scroll { overflow: hidden; }
 
 /* --- Save bar (for bespoke edit pages) ---
-   Findings #4/#5: this used to be `position: sticky; bottom: 0`. Its sole
-   consumer (Roles Studio, app/templates/admin/roles.html) mounts it as the
-   last child of a short, fixed-height inner-scroll pane (#rs-editor,
-   height: calc(100vh - 220px)). Sticky elements reserve their static
-   position in flow but *paint* pinned to the container edge -- so as soon
-   as the field stack is taller than the pane (true on desktop and tablet
-   for every role), the bar renders pinned over whatever is currently in
-   that bottom band: the 2nd row of gradient swatches, the raw-gradient
-   input, the entire Description field. No padding-bottom on the container
-   fixes this -- it only affects the true scroll-end, not the every-frame
-   overlap while scrolling. Removing `position: sticky` makes it a normal
-   trailing row: Save/Delete are one scroll away like any other field,
-   nothing is ever rendered on top of unreadable content. */
+   Findings #4/#5: `position: sticky; bottom: 0` was correct behaviour for
+   this class -- the bug was placement, not stickiness. Its sole consumer
+   (Roles Studio, app/templates/admin/roles.html) used to mount this as the
+   LAST CHILD of a short, fixed-height inner-scroll pane (#rs-editor,
+   height: calc(100vh - 220px)). A sticky bottom-anchored element that is
+   also the final child of an overflowing scroll container has nowhere
+   left to scroll into, so it paints pinned from the very first frame --
+   covering the 2nd row of gradient swatches, the raw-gradient input, and
+   the Description field on desktop/tablet. No padding-bottom on the
+   scroll container fixed this; padding-bottom only reserves room at the
+   true scroll end, not at every intermediate scroll position.
+
+   Fix: roles.html now renders this bar into a sibling element
+   (#rs-editor-footer) OUTSIDE #rs-editor's scrolling pane, so there is no
+   scrolling ancestor left for it to paint over. `position: sticky` is
+   restored here because it's this class's correct, generic behaviour --
+   a future consumer that places it inside a container that actually
+   scrolls gets "pinned to the bottom" for free; it's simply inert
+   (behaves like a normal trailing block) when its container doesn't
+   scroll, as in Roles Studio today. */
 .admin-ui-sticky-bar {
   display: flex; gap: var(--admin-space-3); justify-content: flex-end;
-  margin-top: var(--admin-section-gap);
+  position: sticky; bottom: 0;
   padding: var(--admin-space-3) 0; background: #fff; border-top: 1px solid #e4e4e7;
 }
 
