@@ -16,7 +16,7 @@ def guard():
     runs inside the shared pytest process for the whole suite, so without a
     teardown here, every test file that happens to run afterward would inherit
     a blocked smtplib/Slack client for reasons that have nothing to do with its
-    own code. Save the four patched attributes, install, yield, then restore
+    own code. Save the five patched attributes, install, yield, then restore
     them and reset _INSTALLED so the module is left exactly as it was found.
     """
     import smtplib
