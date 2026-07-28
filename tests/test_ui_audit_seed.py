@@ -136,17 +136,55 @@ def test_some_users_carry_multiple_tags(seeded, db_session):
     assert any(len(u.tags) >= 2 for u in User.query.all())
 
 
+def _seed_fingerprint():
+    """Every rng-driven field, not just email (which is derived purely from
+    index + fixed name lists and would stay identical even if `rng` went
+    nondeterministic). Determinism matters here specifically because the
+    whole point of the seed is that before/after screenshots differ only
+    because of CSS changes -- if the data varies between runs, every capture
+    diff is noise.
+
+    Identifies each UserSeason's season by *name* rather than the raw
+    `season_id` FK: row deletion between the two seed_core() calls in
+    test_seed_is_deterministic doesn't reset the id sequence, so the same
+    logical (first, deterministic) season would otherwise compare unequal
+    across runs purely because of a monotonic counter, not real
+    nondeterminism.
+    """
+    season_names = {s.id: s.name for s in Season.query.all()}
+    users = User.query.order_by(User.id).all()
+    return [
+        (
+            u.email,
+            u.status,
+            u.seasons_since_active,
+            u.preferred_technique,
+            u.tshirt_size,
+            u.ski_experience,
+            tuple(sorted(t.name for t in u.tags)),
+            tuple(
+                (season_names[us.season_id], us.status, us.registration_type, us.registration_date)
+                for us in sorted(u.user_seasons, key=lambda us: season_names[us.season_id])
+            ),
+            tuple(sorted(p.status for p in u.payments)),
+        )
+        for u in users
+    ]
+
+
 def test_seed_is_deterministic(db_session):
     from scripts.ui_audit.seed_fixtures import seed_core
 
     volumes = {"users": 10, "seasons": 1, "trips": 1, "tags": 4}
-    first = [u.email for u in seed_core(volumes)["users"]]
+    seed_core(volumes)
+    first = _seed_fingerprint()
 
     for table in reversed(db.metadata.sorted_tables):
         db_session.execute(table.delete())
     db_session.commit()
 
-    second = [u.email for u in seed_core(volumes)["users"]]
+    seed_core(volumes)
+    second = _seed_fingerprint()
 
     assert first == second
 
@@ -180,25 +218,50 @@ def test_default_volumes_uses_prod_shape():
     assert volumes["tags"] == 20
 
 
+def _tag_saturation(volumes):
+    from scripts.ui_audit.seed_fixtures import seed_core
+
+    users = seed_core(volumes)["users"]
+    tagged = sum(1 for u in users if len(u.tags) > 0)
+    return tagged / len(users)
+
+
 def test_tag_saturation_is_near_production(db_session):
     """Production tags ~36% of members; the brief's every-6th-user version
     (~17%) would leave the roles column looking sparse. Seed at full volume
     and check the fraction lands in a plausible band around 36%."""
-    from scripts.ui_audit.seed_fixtures import default_volumes, seed_core
+    from scripts.ui_audit.seed_fixtures import default_volumes
 
-    core = seed_core(default_volumes())
-    users = core["users"]
-    tagged = sum(1 for u in users if len(u.tags) > 0)
-    fraction = tagged / len(users)
+    fraction = _tag_saturation(default_volumes())
+    assert 0.28 <= fraction <= 0.45, f"tag saturation {fraction:.2%} not near prod's 36%"
+
+
+def test_tag_saturation_is_near_production_at_small_volume(db_session):
+    """Regression test: an earlier version tagged with `index % 100 < 36`,
+    which only approximates 36% when there are many more than 100 users. At
+    exactly the 40-user volume this file's own `seeded` fixture uses, every
+    index in 0-35 satisfied that condition, tagging 90% of users instead of
+    36% -- masked because this test originally only exercised the 266-user
+    default volume, where the modulo wraparound happened to land near 40%."""
+    for table in reversed(db.metadata.sorted_tables):
+        db_session.execute(table.delete())
+    db_session.commit()
+
+    fraction = _tag_saturation({"users": 40, "seasons": 2, "trips": 2, "tags": 8})
     assert 0.28 <= fraction <= 0.45, f"tag saturation {fraction:.2%} not near prod's 36%"
 
 
 def test_every_trip_status_is_represented(db_session):
-    """Trip status drives an admin filter pill (draft/active/closed) plus a
-    'completed' option in the edit form -- an empty filter teaches us
-    nothing about its spacing, so seed all of them at real trip volume."""
+    """Trip status drives the edit form's <select> (draft/active/completed/
+    canceled, per app/templates/admin/trip_form.html) -- an empty option
+    teaches us nothing about its spacing, so seed all of them at real trip
+    volume. Deliberately excludes admin_trips.js's "closed" filter-pill value,
+    which has no matching <option> in the edit form: seeding it would make
+    that trip's own edit page silently pre-select "Draft" for a record that
+    isn't one."""
     from scripts.ui_audit.seed_fixtures import default_volumes, seed_core
 
     core = seed_core(default_volumes())
     present = {t.status for t in core["trips"]}
-    assert {"draft", "active", "closed", "completed"} <= present
+    assert {"draft", "active", "completed", "canceled"} <= present
+    assert "closed" not in present

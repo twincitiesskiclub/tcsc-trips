@@ -74,10 +74,15 @@ DROPPED_SEASON_STATUSES = [
     UserSeasonStatus.DROPPED_CAUSE,
 ]
 
-# Matches the <select> options in app/templates/admin/trip_form.html plus the
-# "closed" filter pill in admin_trips.js (a raw status value the form itself
-# never writes, but the JS still filters on).
-TRIP_STATUSES = ["draft", "active", "closed", "completed"]
+# Matches the <select> options in app/templates/admin/trip_form.html
+# (draft/active/completed/canceled). admin_trips.js's list-page filter pills
+# additionally recognize a "closed" status value, but the edit form has no
+# matching <option> for it -- seeding a trip with status="closed" would make
+# its own edit form silently pre-select "Draft" for a record that isn't one,
+# an impossible admin state we'd rather not hand the spacing screenshot pass.
+# Prod itself never wrote "closed" either (its trips.status enum was only
+# active/completed), so using the edit form's real four values loses nothing.
+TRIP_STATUSES = ["draft", "active", "completed", "canceled"]
 
 # Values the admin edit form's <select>s actually offer (see
 # app/templates/admin/user_edit.html) -- not app/constants.py's
@@ -234,15 +239,24 @@ def _make_users(volumes, rng):
     return users
 
 
+TAG_SATURATION = 0.36  # fraction of members carrying at least one tag
+
+
 def _tag_users(users, tags, rng):
     """Tag roughly production's ~36% of members, some with 2-3 roles.
 
     Production tags 95/266 (~36%) of members. The brief's every-6th-user
     version (~17%) would leave the roles column and every tag-badge cell
     looking sparse, so this samples closer to prod's real saturation.
+
+    Scaled off len(users), not a fixed modulo -- `index % 100 < 36` only
+    approximates 36% when there are many more than 100 users; at 40 users
+    (this project's own small-volume test fixture) every index in 0-35
+    satisfies `< 36`, tagging 90% of them instead of 36%.
     """
+    tagged_count = round(TAG_SATURATION * len(users))
     for index, user in enumerate(users):
-        if index % 100 >= 36:
+        if index >= tagged_count:
             continue
         for tag in rng.sample(tags, k=min(len(tags), rng.choice([1, 2, 2, 3]))):
             db.session.add(UserTag(user_id=user.id, tag_id=tag.id))
