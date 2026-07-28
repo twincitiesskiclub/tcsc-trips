@@ -20,6 +20,7 @@
 - Postgres is the Docker container `tcsc-postgres`, database `tcsc_trips`, user/password `tcsc`/`tcsc`.
 - Node Playwright is a global install; scripts need `NODE_PATH=$(npm root -g)`.
 - Spacing scale steps are exactly: `--admin-space-1: 4px`, `-2: 8px`, `-3: 12px`, `-4: 16px`, `-5: 24px`, `-6: 32px`.
+- **Seed exactly once, in Task 6 Step 9, and never re-seed.** The seed anchors practice, poll, and event dates to `today_central()`, so a second seeding shifts dates and makes every before/after diff noisy in a way that reads as a spacing change. Only Task 6 Step 9 passes `--seed`; every later capture run omits it. If the database is lost, re-take the `before` baseline as well — shots from different seedings are not comparable.
 
 **Branch:** all work happens on `admin-ui-spacing-polish` (already created, holds the design doc).
 
@@ -2155,8 +2156,12 @@ gh pr create --title "Admin UI polish 6/6: catalog" --body "..."
 - [ ] **Step 1: Full re-capture against the finished branch**
 
 ```bash
-scripts/ui_audit/run.sh final --seed
+scripts/ui_audit/run.sh final
 ```
+
+**No `--seed`.** The seed anchors practice, poll, and event dates to `today_central()` at seeding time, so re-seeding shifts which dates are cancelled, which fall in the draft block, and what the calendar renders. Those shifts would appear in the final-versus-baseline diff and be indistinguishable from spacing changes. The `before` gallery and every `after` gallery must come from **one** seeding — seed once in Task 6 Step 9 and never again for the rest of the project.
+
+If the database is lost or the seed must be re-run for any reason, re-take the `before` baseline too. A baseline and a comparison shot from different seedings are not comparable.
 
 - [ ] **Step 2: Confirm every finding is closed**
 
