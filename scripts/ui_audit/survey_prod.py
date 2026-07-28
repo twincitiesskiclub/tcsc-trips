@@ -59,12 +59,17 @@ def main() -> None:
                     out["row_counts"][table] = None  # table genuinely absent in prod
                 except psycopg2.Error as exc:
                     # Anything other than "table doesn't exist" (permission denied,
-                    # network blip, etc.) is NOT the same as "absent" -- don't let it
-                    # masquerade as None. Log the exception text (never row data) and
-                    # record a distinct, obviously-not-absent marker.
+                    # network blip, etc.) is NOT the same as "absent" -- but the JSON
+                    # contract (Task 4/5 depend on int | None, using `or fallback`) has
+                    # no room for a third value. Keep None so consumers still fall back
+                    # safely; put the distinguishing diagnostic on stderr only.
                     conn.rollback()
-                    print(f"survey_prod: query failed for table {table!r}: {exc}", file=sys.stderr)
-                    out["row_counts"][table] = "ERROR"
+                    print(
+                        f"survey_prod: query failed for table {table!r} "
+                        f"({type(exc).__name__}, not UndefinedTable): {exc}",
+                        file=sys.stderr,
+                    )
+                    out["row_counts"][table] = None
 
             for table, column in ENUM_COLUMNS:
                 key = f"{table}.{column}"
@@ -79,9 +84,15 @@ def main() -> None:
                     conn.rollback()
                     out["enums"][key] = None  # table or column genuinely absent in prod
                 except psycopg2.Error as exc:
+                    # Same reasoning as the row_counts loop: keep None for the JSON
+                    # contract, distinguish on stderr only.
                     conn.rollback()
-                    print(f"survey_prod: query failed for {key!r}: {exc}", file=sys.stderr)
-                    out["enums"][key] = "ERROR"
+                    print(
+                        f"survey_prod: query failed for {key!r} "
+                        f"({type(exc).__name__}, not Undefined{{Table,Column}}): {exc}",
+                        file=sys.stderr,
+                    )
+                    out["enums"][key] = None
 
     dest = REPO / ".ui-audit" / "prod-shape.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
