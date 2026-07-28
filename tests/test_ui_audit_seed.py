@@ -1,0 +1,204 @@
+"""Seed script tests.
+
+These run against a dedicated `tcsc_trips_uiaudit_test` database, created and
+dropped per session. The suite's usual `app` fixture points at the real local
+dev database and the convention is not to write to it -- this seed writes
+hundreds of rows, so it needs its own.
+"""
+
+import os
+import subprocess
+
+import pytest
+from sqlalchemy import create_engine
+
+from app import create_app
+from app.models import Payment, Season, Tag, Trip, User, UserSeason, db
+
+TEST_DB = "tcsc_trips_uiaudit_test"
+TEST_URL = f"postgresql://tcsc:tcsc@localhost:5432/{TEST_DB}"
+
+
+def _psql(sql, database="postgres"):
+    subprocess.run(
+        ["docker", "exec", "tcsc-postgres", "psql", "-U", "tcsc", "-d", database, "-c", sql],
+        check=True,
+        capture_output=True,
+    )
+
+
+@pytest.fixture(scope="session")
+def app():
+    _psql(f'DROP DATABASE IF EXISTS "{TEST_DB}"')
+    _psql(f'CREATE DATABASE "{TEST_DB}"')
+
+    # Flask-SQLAlchemy 3.x builds its engine *synchronously inside
+    # db.init_app()* (called from create_app()), keyed off whatever
+    # SQLALCHEMY_DATABASE_URI is in app.config at that exact moment -- see
+    # flask_sqlalchemy.extension.SQLAlchemy.init_app's own docstring:
+    # "Changes to application config after this call will not be reflected."
+    # So overriding application.config *after* create_app() returns (as an
+    # earlier version of this fixture did) is silently a no-op: the engine is
+    # already bound to whatever DATABASE_URL was in the environment when
+    # create_app() ran, which tests/conftest.py's pytest_configure defaults to
+    # the real dev database. That earlier version of this fixture in fact
+    # wrote hundreds of rows to the dev DB before this was caught -- see
+    # task-4-report.md's pollution-incident section. The fix is to point
+    # DATABASE_URL at the throwaway DB *before* create_app() runs.
+    previous_database_url = os.environ.get("DATABASE_URL")
+    os.environ["DATABASE_URL"] = TEST_URL
+    try:
+        application = create_app()
+    finally:
+        if previous_database_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = previous_database_url
+
+    application.config.update(TESTING=True, SECRET_KEY="test-secret-key")
+    assert application.config["SQLALCHEMY_DATABASE_URI"] == TEST_URL, (
+        "engine bound to the wrong database -- refusing to run seed tests"
+    )
+
+    with application.app_context():
+        # `flask db upgrade` cannot bootstrap a genuinely empty database in
+        # this repo: the oldest tracked migration (d3309936c477) only ALTERs
+        # `seasons` -- the base schema predates this repo's Alembic history
+        # entirely (it was created out-of-band before migrations were
+        # introduced, and the dev DB's `seasons` table already existed before
+        # that revision). A brand-new sibling database has none of that, so
+        # `flask db upgrade` dies with "relation seasons does not exist".
+        # Build the throwaway schema from the current models instead, via a
+        # bare engine + `db.metadata` rather than the shared `db` object --
+        # this is the escape hatch the `test_no_create_all` guard's own
+        # docstring names as sanctioned (see
+        # tests/practices/test_practice_migration_release.py's
+        # release_schema fixture and
+        # tests/scripts/test_seed_practice_plan_reaction_defaults.py).
+        engine = create_engine(TEST_URL)
+        db.metadata.create_all(engine)
+        engine.dispose()
+        yield application
+        # Postgres refuses DROP DATABASE while connections are still open;
+        # Flask-SQLAlchemy's pool holds several from the app-context db
+        # access above, so release them before the teardown drop below.
+        db.engine.dispose()
+
+    _psql(f'DROP DATABASE IF EXISTS "{TEST_DB}"')
+
+
+@pytest.fixture
+def db_session(app):
+    """Empty every table before each test so counts are exact."""
+    with app.app_context():
+        for table in reversed(db.metadata.sorted_tables):
+            db.session.execute(table.delete())
+        db.session.commit()
+        yield db.session
+        db.session.rollback()
+
+
+@pytest.fixture
+def seeded(db_session):
+    from scripts.ui_audit.seed_fixtures import seed_core
+
+    return seed_core({"users": 40, "seasons": 3, "trips": 4, "tags": 8})
+
+
+def test_every_core_table_is_populated(seeded, db_session):
+    assert User.query.count() == 40
+    assert Season.query.count() == 3
+    assert Trip.query.count() == 4
+    assert Tag.query.count() == 8
+    assert Payment.query.count() > 0
+    assert UserSeason.query.count() > 0
+
+
+def test_exactly_one_season_is_current(seeded, db_session):
+    assert Season.query.filter_by(is_current=True).count() == 1
+
+
+def test_every_user_status_is_represented(seeded, db_session):
+    """Admin filters by status; each filter must have rows behind it."""
+    from app.constants import UserStatus
+
+    present = {row.status for row in User.query.all()}
+    assert {
+        UserStatus.ACTIVE,
+        UserStatus.PENDING,
+        UserStatus.ALUMNI,
+        UserStatus.DROPPED,
+    } <= present
+
+
+def test_some_users_carry_multiple_tags(seeded, db_session):
+    """Tag badges wrapping in a table cell is a spacing surface worth capturing."""
+    assert any(len(u.tags) >= 2 for u in User.query.all())
+
+
+def test_seed_is_deterministic(db_session):
+    from scripts.ui_audit.seed_fixtures import seed_core
+
+    volumes = {"users": 10, "seasons": 1, "trips": 1, "tags": 4}
+    first = [u.email for u in seed_core(volumes)["users"]]
+
+    for table in reversed(db.metadata.sorted_tables):
+        db_session.execute(table.delete())
+    db_session.commit()
+
+    second = [u.email for u in seed_core(volumes)["users"]]
+
+    assert first == second
+
+
+def test_user_seasons_have_required_fields(seeded, db_session):
+    """registration_type and registration_date are NOT NULL columns -- a
+    naive UserSeason(...) call that omits them raises IntegrityError. Assert
+    they're actually populated, not just that the insert didn't blow up."""
+    for user_season in UserSeason.query.all():
+        assert user_season.registration_type in ("new", "returning")
+        assert user_season.registration_date is not None
+
+
+def test_tag_specs_have_twenty_unique_entries():
+    """Production carries 20 tags; the brief's reference list only had 8."""
+    from scripts.ui_audit.seed_fixtures import TAG_SPECS
+
+    assert len(TAG_SPECS) == 20
+    names = [spec[0] for spec in TAG_SPECS]
+    assert len(names) == len(set(names))
+
+
+def test_default_volumes_uses_prod_shape():
+    """.ui-audit/prod-shape.json on disk should drive the real volumes."""
+    from scripts.ui_audit.seed_fixtures import default_volumes
+
+    volumes = default_volumes()
+    assert volumes["users"] == 266
+    assert volumes["seasons"] == 5
+    assert volumes["trips"] == 8
+    assert volumes["tags"] == 20
+
+
+def test_tag_saturation_is_near_production(db_session):
+    """Production tags ~36% of members; the brief's every-6th-user version
+    (~17%) would leave the roles column looking sparse. Seed at full volume
+    and check the fraction lands in a plausible band around 36%."""
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_core
+
+    core = seed_core(default_volumes())
+    users = core["users"]
+    tagged = sum(1 for u in users if len(u.tags) > 0)
+    fraction = tagged / len(users)
+    assert 0.28 <= fraction <= 0.45, f"tag saturation {fraction:.2%} not near prod's 36%"
+
+
+def test_every_trip_status_is_represented(db_session):
+    """Trip status drives an admin filter pill (draft/active/closed) plus a
+    'completed' option in the edit form -- an empty filter teaches us
+    nothing about its spacing, so seed all of them at real trip volume."""
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_core
+
+    core = seed_core(default_volumes())
+    present = {t.status for t in core["trips"]}
+    assert {"draft", "active", "closed", "completed"} <= present
