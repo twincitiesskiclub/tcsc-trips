@@ -11,10 +11,12 @@ Usage:
 
 import json
 import os
+import sys
 from pathlib import Path
 
 import psycopg2
 from dotenv import load_dotenv
+from psycopg2 import errors as pg_errors
 
 REPO = Path(__file__).resolve().parents[2]
 load_dotenv(REPO / ".env")
@@ -52,21 +54,34 @@ def main() -> None:
                 try:
                     cur.execute(f'SELECT count(*) FROM "{table}"')
                     out["row_counts"][table] = cur.fetchone()[0]
-                except psycopg2.Error:
+                except pg_errors.UndefinedTable:
                     conn.rollback()
-                    out["row_counts"][table] = None  # table absent in prod
+                    out["row_counts"][table] = None  # table genuinely absent in prod
+                except psycopg2.Error as exc:
+                    # Anything other than "table doesn't exist" (permission denied,
+                    # network blip, etc.) is NOT the same as "absent" -- don't let it
+                    # masquerade as None. Log the exception text (never row data) and
+                    # record a distinct, obviously-not-absent marker.
+                    conn.rollback()
+                    print(f"survey_prod: query failed for table {table!r}: {exc}", file=sys.stderr)
+                    out["row_counts"][table] = "ERROR"
 
             for table, column in ENUM_COLUMNS:
+                key = f"{table}.{column}"
                 try:
                     cur.execute(
                         f'SELECT "{column}", count(*) FROM "{table}" GROUP BY 1 ORDER BY 2 DESC'
                     )
-                    out["enums"][f"{table}.{column}"] = {
+                    out["enums"][key] = {
                         str(row[0]): row[1] for row in cur.fetchall()
                     }
-                except psycopg2.Error:
+                except (pg_errors.UndefinedTable, pg_errors.UndefinedColumn):
                     conn.rollback()
-                    out["enums"][f"{table}.{column}"] = None
+                    out["enums"][key] = None  # table or column genuinely absent in prod
+                except psycopg2.Error as exc:
+                    conn.rollback()
+                    print(f"survey_prod: query failed for {key!r}: {exc}", file=sys.stderr)
+                    out["enums"][key] = "ERROR"
 
     dest = REPO / ".ui-audit" / "prod-shape.json"
     dest.parent.mkdir(parents=True, exist_ok=True)
