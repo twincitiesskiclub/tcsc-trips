@@ -23,8 +23,19 @@
 #roles-studio .rs-btn-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
 #roles-studio .rs-btn-danger[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 
-/* --- Two-column body --- */
-#rs-body{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 220px);overflow:hidden}
+/* --- Two-column body ---
+   Height is 100vh minus 220px of page chrome, PLUS the editor-footer's own
+   height (63px = 2*var(--admin-space-3) vertical padding + 1px border-top
+   on .admin-ui-sticky-bar + 38px .rs-btn button height). #rs-editor-footer
+   is now a flex sibling of #rs-editor (findings #4/#5 restructure) rather
+   than a non-consuming sticky child, so without the +63px the flex column
+   would divide the same calc(100vh-220px) between editor and footer,
+   shortening the editor's visible area by the footer's height and clipping
+   the last field's label. Adding it back here restores #rs-editor's own
+   flex-computed height to what it was before the restructure. #rs-list
+   grows by the same amount as a side effect of sharing this grid row --
+   harmless, it already scrolls internally. */
+#rs-body{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 220px + 63px);overflow:hidden}
 
 /* --- Left rail --- */
 #rs-list{overflow-y:auto;overflow-x:hidden;border-right:1px solid #e9edf3}

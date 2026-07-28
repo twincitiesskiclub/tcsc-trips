@@ -183,5 +183,6 @@
   .admin-ui-drawer { width: 100vw; }
   .admin-ui-dw-key{width:80px}
   .admin-ui-dw-footer{padding-bottom:calc(var(--admin-space-3) + env(safe-area-inset-bottom,0px))}
+  .admin-ui-sticky-bar{padding-bottom:calc(var(--admin-space-3) + env(safe-area-inset-bottom,0px))}
   .admin-ui-dw-btn-primary,.admin-ui-dw-btn-ghost,.admin-ui-dw-btn-success,.admin-ui-dw-btn-danger{min-height:44px}
 }

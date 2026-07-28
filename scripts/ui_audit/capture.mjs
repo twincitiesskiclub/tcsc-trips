@@ -193,8 +193,19 @@ const MEASURE_REVEAL = (limits) => {
     if (r.width < limits.minWidth || r.height < limits.minHeight) continue;
     const area = r.width * r.height;
     if (area < minArea) continue;
-    const positioned =
-      cs.position === 'fixed' || cs.position === 'absolute' || cs.position === 'sticky';
+    // `sticky` is deliberately excluded from the overlay bonus below. A
+    // fixed/absolute element is reliably an overlay root (a drawer, a modal)
+    // sitting above everything else on the page, so outranking all in-flow
+    // content by a flat huge margin is correct for those. `sticky` is not
+    // that: it is routinely a small bar (a save/delete footer, a table
+    // header) anchored *inside* an ordinary scrolling pane. Giving it the
+    // same 1e12 bonus let a ~60px sticky save bar outrank the real reveal --
+    // an entire field stack hundreds of px tall in #rs-editor on the roles
+    // surface -- because area could never close a 1e12 gap. Scoring sticky
+    // elements on area alone, like ordinary content, lets the actually-large
+    // reveal win; see the ancestor-walk in the scroller search below for the
+    // other half of this fix.
+    const positioned = cs.position === 'fixed' || cs.position === 'absolute';
     const z = Number.parseInt(cs.zIndex, 10) || 0;
     // Prefer a positioned overlay over in-flow content, a higher stacking
     // context over a lower one, and the bigger box over the smaller one. That
@@ -223,9 +234,21 @@ const MEASURE_REVEAL = (limits) => {
   root.setAttribute('data-uia-reveal', '1');
 
   // An overlay that scrolls internally cannot be reached by scrolling the page;
-  // the tallest such box inside the reveal is the one holding its content.
+  // the tallest such box holding the reveal's content is the scroller.
+  //
+  // Ancestors are searched as well as descendants. A drawer/modal root
+  // always scrolls via a child (its `__body`), which the descendant search
+  // alone used to find. But a reveal root chosen from in-flow content (see
+  // the sticky de-prioritisation above) can itself sit *inside* the actual
+  // scrolling pane -- on the roles surface, the newly-rendered field stack is
+  // a child of #rs-editor (overflow-y:auto), and #rs-editor is a sibling of
+  // the save bar, not its ancestor, so nothing under the reveal root would
+  // ever find it. Walking up as well as down covers both shapes without
+  // needing to know in advance which one a surface is.
   let scroller = null;
-  for (const el of [root, ...root.querySelectorAll('*')]) {
+  const ancestors = [];
+  for (let p = root.parentElement; p; p = p.parentElement) ancestors.push(p);
+  for (const el of [root, ...root.querySelectorAll('*'), ...ancestors]) {
     const cs = getComputedStyle(el);
     if (!['auto', 'scroll', 'overlay'].includes(cs.overflowY)) continue;
     if (el.scrollHeight - el.clientHeight <= 2) continue;
