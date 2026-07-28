@@ -20,6 +20,10 @@ class OutboundBlocked(RuntimeError):
 
 def _is_loopback(address) -> bool:
     """True when the connect target is on this machine."""
+    if isinstance(address, (str, bytes)):
+        # AF_UNIX socket paths (or an abstract-namespace name). A unix-domain
+        # socket can never leave the machine, so it's inherently loopback.
+        return True
     if not isinstance(address, tuple) or not address:
         return False
     host = address[0]
