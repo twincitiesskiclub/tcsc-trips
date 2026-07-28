@@ -65,3 +65,5 @@ migration/survey/
 migration/slack_facts/
 migration/survey-2026-06-10/
 .impeccable/
+.env.uiaudit
+.ui-audit/
