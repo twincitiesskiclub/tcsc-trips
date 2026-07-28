@@ -15,15 +15,37 @@ nothing here can disturb a registrant):
 
 Discount code on the event: `TCSC2026`.
 
-## Do not touch the template dropdown
+## Fast path: re-apply the dry_tri template
 
-On `/admin/events/<id>/edit`, changing **Event template** replaces every price
-option and question with the template's, which would wipe the three member
-prices above and silently stop `TCSC2026` from discounting anything. There is
-now a confirmation prompt on that dropdown — decline it. Everything below is
-done by hand in the Custom questions editor.
+The `dry_tri` template in `config/event_templates.yaml` now matches production
+exactly — same option names, descriptions, prices, and member prices — and
+carries the correctly scoped questions. So the quickest correct route is:
 
-## Steps
+1. `/admin/events` → **TCSC Dry Triathlon 2026** → Edit.
+2. Set **Event template** to **Dry Tri (race)** and accept the confirmation.
+3. Save. Spot-check the three options and their questions on
+   `/events/dry-tri-2026`.
+
+What this does and does not touch:
+
+- **Replaced:** price options and custom questions, with values identical to
+  what is already there apart from the question scopes.
+- **Untouched:** description, dates, location, capacity, status, and the
+  `TCSC2026` discount code. The dropdown only rewrites the two hidden JSON
+  fields client-side; the edit route never calls `apply_template`.
+- **Caveat:** it deletes and recreates the price option rows, so they get new
+  IDs. Harmless at 0 registrations, but `_replace_price_options` refuses to
+  remove an option that has registrations — so once anyone signs up, the
+  dropdown becomes a hard error. Do this before the event goes active.
+
+The confirmation prompt exists because for an event whose admin config has
+drifted from its template (the migrated socials, or a hand-tuned future Dry
+Tri), the same click would discard that drift, including member prices.
+
+## Manual path
+
+Use this if the template and the live event have diverged, or you would rather
+not recreate the price option rows.
 
 1. Go to `/admin/events`, open **TCSC Dry Triathlon 2026** → Edit.
 2. In **Custom questions**, each question now has an **Applies to options** row
