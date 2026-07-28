@@ -6,18 +6,38 @@
    and a class like `.modal{display:flex}` would otherwise override the UA [hidden] rule. */
 [hidden] { display: none !important; }
 
+/* --- Spacing scale ---
+   Every spacing value in admin surfaces resolves to one of these steps. The
+   drift this file accumulated came from ad-hoc pixel values (9px here, 13px
+   there) that disagreed between components; the scale is what stops that
+   recurring. Semantic aliases exist so a component expresses intent rather
+   than a number. */
+:root {
+  --admin-space-1: 4px;
+  --admin-space-2: 8px;
+  --admin-space-3: 12px;
+  --admin-space-4: 16px;
+  --admin-space-5: 24px;
+  --admin-space-6: 32px;
+
+  --admin-field-gap: var(--admin-space-4);    /* between form fields */
+  --admin-row-gap: var(--admin-space-2);      /* between rows within a field */
+  --admin-section-gap: var(--admin-space-5);  /* between titled sections */
+  --admin-drawer-pad: var(--admin-space-5);   /* drawer/modal inner padding */
+}
+
 /* --- Status badge --- */
 .admin-ui-badge {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 2px 10px; border-radius: 9999px;
+  display: inline-flex; align-items: center; gap: var(--admin-space-2);
+  padding: var(--admin-space-1) var(--admin-space-2); border-radius: 9999px;
   font-size: 12px; font-weight: 600; line-height: 1.4;
 }
 .admin-ui-badge__dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
 
 /* --- Pills (filter + form) --- */
 .admin-ui-pill {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 6px 12px; border-radius: 9999px;
+  display: inline-flex; align-items: center; gap: var(--admin-space-2);
+  padding: var(--admin-space-2) var(--admin-space-3); border-radius: 9999px;
   border: 1px solid #d4d4d8; background: #fff; color: #3f3f46;
   font-size: 13px; font-weight: 500; cursor: pointer;
 }
@@ -26,13 +46,13 @@
 
 /* --- Filter bar --- */
 .admin-ui-filterbar {
-  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 16px;
+  display: flex; flex-wrap: wrap; gap: var(--admin-space-2); align-items: center; margin-bottom: var(--admin-space-4);
 }
 .admin-ui-filterbar__search, .admin-ui-filterbar__select {
-  padding: 8px 12px; border: 1px solid #d4d4d8; border-radius: 8px; font-size: 14px;
+  padding: var(--admin-space-2) var(--admin-space-3); border: 1px solid #d4d4d8; border-radius: 8px; font-size: 14px;
 }
 .admin-ui-filterbar__search { flex: 1; min-width: 180px; }
-.admin-ui-filterbar__pills { display: flex; flex-wrap: wrap; gap: 6px; }
+.admin-ui-filterbar__pills { display: flex; flex-wrap: wrap; gap: var(--admin-space-2); }
 
 /* --- Drawer --- */
 .admin-ui-drawer-scrim { position: fixed; inset: 0; z-index: 60; background: rgba(0,0,0,0.3); }
@@ -46,64 +66,113 @@
 .admin-ui-drawer.is-open { transform: translateX(0); }
 .admin-ui-drawer__header {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 16px 20px; border-bottom: 1px solid #e4e4e7;
+  padding: var(--admin-space-4) var(--admin-space-5); border-bottom: 1px solid #e4e4e7;
 }
 .admin-ui-drawer__title { font-size: 16px; font-weight: 600; margin: 0; }
 .admin-ui-drawer__close {
   font-size: 22px; line-height: 1; background: none; border: 0;
-  cursor: pointer; color: #71717a; padding: 4px 8px;
+  cursor: pointer; color: #71717a; padding: var(--admin-space-1) var(--admin-space-2);
 }
 .admin-ui-drawer__close:focus-visible { outline: 2px solid #1c2c44; outline-offset: 2px; }
-.admin-ui-drawer__body { padding: 20px; overflow-y: auto; flex: 1; }
+.admin-ui-drawer__body { padding: var(--admin-drawer-pad); overflow-y: auto; flex: 1; }
 
 /* These shared families are copied verbatim from the Members .mr-dw-* canon; do not reformat. */
 /* --- Drawer content (shared, body-mounted) --- */
 .admin-ui-dw{display:flex;flex-direction:column;gap:0}
-.admin-ui-dw-sep{border:none;border-top:1px solid #f1f5f9;margin:16px 0}
-.admin-ui-dw-section{margin-bottom:4px}
-.admin-ui-dw-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:10px}
-.admin-ui-dw-kv{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.admin-ui-dw-sep{border:none;border-top:1px solid #f1f5f9;margin:var(--admin-space-4) 0}
+/* Was margin-bottom:4px -- titled sections separated by 4px read as one
+   undifferentiated block. --admin-section-gap (24px) is the fix; see commit
+   message / task report for before-after evidence. */
+.admin-ui-dw-section{margin-bottom:var(--admin-section-gap)}
+.admin-ui-dw-section-title{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;margin-bottom:var(--admin-space-3)}
+.admin-ui-dw-kv{display:flex;align-items:baseline;gap:var(--admin-space-2);margin-bottom:var(--admin-row-gap)}
 .admin-ui-dw-key{width:90px;flex-shrink:0;color:#64748b;font-size:13.5px}
 .admin-ui-dw-val{color:#1c2c44;font-weight:500;font-size:13.5px}
 .admin-ui-dw-val--empty{color:#94a3b8;font-weight:400}
 .admin-ui-dw-val--mono{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;word-break:break-all}
 .admin-ui-dw-note,.admin-ui-dw-empty{color:#94a3b8;font-size:13.5px}
-.admin-ui-dw-sub{font-size:13px;color:#475569;margin:0 0 12px}
-.admin-ui-dw-desc{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:9px 11px}
-.admin-ui-dw-pill{display:inline-flex;align-items:center;border:1.5px solid #e5e7eb;border-radius:20px;padding:1px 9px;font-size:11.5px;font-weight:500;color:#475569}
-.admin-ui-dw-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:13px 18px;display:flex;gap:9px;flex-wrap:wrap}
+.admin-ui-dw-sub{font-size:13px;color:#475569;margin:0 0 var(--admin-space-3)}
+.admin-ui-dw-desc{font-size:13px;color:#475569;line-height:1.55;white-space:pre-wrap;overflow-wrap:anywhere;background:#f8fafb;border:1px solid #eef1f5;border-left:3px solid #cbd5e1;border-radius:8px;padding:var(--admin-space-3)}
+/* Compact micro-chip: kept at a literal 1px vertical inset rather than
+   snapped to --admin-space-1 (4px). At 4px the pill's height roughly
+   doubles and it stops reading as an inline chip next to 13.5px text --
+   more than "polish" for a value this small. Horizontal 9px->8px is a
+   1px move onto the scale (nearest step), applied normally. */
+.admin-ui-dw-pill{display:inline-flex;align-items:center;border:1.5px solid #e5e7eb;border-radius:20px;padding:1px var(--admin-space-2);font-size:11.5px;font-weight:500;color:#475569}
+.admin-ui-dw-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:var(--admin-space-3) var(--admin-space-5);display:flex;gap:var(--admin-space-3);flex-wrap:wrap}
 .admin-ui-dw-btn-primary{flex:1;height:40px;background:#1c2c44;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 .admin-ui-dw-btn-primary:hover{background:#253c5e}
 .admin-ui-dw-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 .admin-ui-dw-btn-ghost{flex:1;height:40px;background:#fff;color:#475569;border:1.5px solid #e5e7eb;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;text-decoration:none;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 .admin-ui-dw-btn-ghost:hover{border-color:#1c2c44;color:#1c2c44}
 .admin-ui-dw-btn-ghost:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-.admin-ui-dw-btn-success{height:40px;padding:0 16px;background:#fff;color:#166534;border:1.5px solid #bbf7d0;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.admin-ui-dw-btn-success{height:40px;padding:0 var(--admin-space-4);background:#fff;color:#166534;border:1.5px solid #bbf7d0;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 .admin-ui-dw-btn-success:hover{border-color:#86efac}
 .admin-ui-dw-btn-success:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-.admin-ui-dw-btn-danger{height:40px;padding:0 16px;background:#fff;color:#c53030;border:1.5px solid #f3c9c9;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
+.admin-ui-dw-btn-danger{height:40px;padding:0 var(--admin-space-4);background:#fff;color:#c53030;border:1.5px solid #f3c9c9;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;display:inline-flex;align-items:center;justify-content:center;white-space:nowrap}
 .admin-ui-dw-btn-danger:hover{background:#fde8e8}
 .admin-ui-dw-btn-danger:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
 .admin-ui-no-scroll { overflow: hidden; }
 
-/* --- Sticky save bar (for bespoke edit pages) --- */
+/* --- Save bar (for bespoke edit pages) ---
+   Findings #4/#5: this used to be `position: sticky; bottom: 0`. Its sole
+   consumer (Roles Studio, app/templates/admin/roles.html) mounts it as the
+   last child of a short, fixed-height inner-scroll pane (#rs-editor,
+   height: calc(100vh - 220px)). Sticky elements reserve their static
+   position in flow but *paint* pinned to the container edge -- so as soon
+   as the field stack is taller than the pane (true on desktop and tablet
+   for every role), the bar renders pinned over whatever is currently in
+   that bottom band: the 2nd row of gradient swatches, the raw-gradient
+   input, the entire Description field. No padding-bottom on the container
+   fixes this -- it only affects the true scroll-end, not the every-frame
+   overlap while scrolling. Removing `position: sticky` makes it a normal
+   trailing row: Save/Delete are one scroll away like any other field,
+   nothing is ever rendered on top of unreadable content. */
 .admin-ui-sticky-bar {
-  position: sticky; bottom: 0;
-  display: flex; gap: 12px; justify-content: flex-end;
-  padding: 12px 0; background: #fff; border-top: 1px solid #e4e4e7;
+  display: flex; gap: var(--admin-space-3); justify-content: flex-end;
+  margin-top: var(--admin-section-gap);
+  padding: var(--admin-space-3) 0; background: #fff; border-top: 1px solid #e4e4e7;
 }
 
 /* --- CSV export (shared) --- */
-.admin-ui-export-bar{display:flex;justify-content:flex-end;margin-top:16px;padding-top:14px;border-top:1px solid #e4e4e7}
-.admin-ui-export-btn{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 14px;border:1.5px solid #e4e4e7;border-radius:10px;background:#fff;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s}
+.admin-ui-export-bar{display:flex;justify-content:flex-end;margin-top:var(--admin-space-4);padding-top:var(--admin-space-4);border-top:1px solid #e4e4e7}
+.admin-ui-export-btn{display:inline-flex;align-items:center;gap:var(--admin-space-2);height:38px;padding:0 var(--admin-space-3);border:1.5px solid #e4e4e7;border-radius:10px;background:#fff;color:#64748b;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit;transition:border-color .12s,color .12s}
 .admin-ui-export-btn:hover{border-color:#1c2c44;color:#1c2c44}
 .admin-ui-export-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
+/* --- Shared layout components ---
+   The admin_*.js files each hand-rolled these four patterns with slightly
+   different spacing, which is where most cross-surface inconsistency came
+   from. Consuming surfaces use these classes instead of inline spacing. */
+.admin-ui-form-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-field-gap);
+  align-items: flex-start;
+  margin-bottom: var(--admin-field-gap);
+}
+.admin-ui-field-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--admin-row-gap);
+  flex: 1 1 220px;
+  min-width: 0;
+}
+.admin-ui-section {
+  margin-bottom: var(--admin-section-gap);
+}
+.admin-ui-section:last-child { margin-bottom: 0; }
+.admin-ui-btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--admin-space-3);
+  margin-top: var(--admin-section-gap);
+}
+
 @media (max-width: 767px) {
   .admin-ui-drawer { width: 100vw; }
-  .admin-ui-sticky-bar { padding-bottom: calc(12px + env(safe-area-inset-bottom)); }
   .admin-ui-dw-key{width:80px}
-  .admin-ui-dw-footer{padding-bottom:calc(13px + env(safe-area-inset-bottom,0px))}
+  .admin-ui-dw-footer{padding-bottom:calc(var(--admin-space-3) + env(safe-area-inset-bottom,0px))}
   .admin-ui-dw-btn-primary,.admin-ui-dw-btn-ghost,.admin-ui-dw-btn-success,.admin-ui-dw-btn-danger{min-height:44px}
 }
