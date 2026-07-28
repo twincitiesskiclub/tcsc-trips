@@ -58,30 +58,28 @@ Phase 5  Verify              ──►  re-capture, diff, test, PR per surface g
 
 ## Phase 1 — Realistic data without PII
 
-### 1a. Survey production, read-only, aggregates only
+### 1a. Look at production, read-only
 
 `PROD_DATABASE_URL` is reachable from the dev container (verified: 266 users). No
 IP allowlist change is required.
 
-The survey extracts *shape*, never rows:
+The purpose is orientation, not measurement: which tables are populated, roughly how
+many rows each surface renders, which optional fields are actually filled in, and
+which enum values occur in practice. This is what keeps the seed from producing
+panes that are empty or in states the club never uses.
 
-- `max(length(...))` and p95 length for every text field surfaced in admin —
-  names, emails, Slack handles, trip/event titles, notes, tag labels
-- tag-count-per-user distribution
-- row counts per table
-- enum value distributions (`User.status`, `UserSeason.status`, payment states)
-
-Nothing identifying is read or written to disk. Output is a small JSON stats file.
+Nothing identifying is read or written to disk.
 
 ### 1b. Generate a synthetic fixture
 
-`scripts/seed_ui_fixtures.py` builds a fake club at production's measured density —
-~266 users with matching season, payment, practice, and event volume — with p95-
-and max-length values deliberately distributed through it.
+`scripts/seed_ui_fixtures.py` builds a fake club with enough ordinary data to fill
+every admin surface — users, seasons, payments, practices, events, tags, trips —
+at roughly production's volume, so lists are scrollable and tables are dense rather
+than one-row.
 
-This density is load-bearing. A field only overlaps its neighbour when someone has
-a 34-character name or six role tags; a generic seed of "Jane Smith" rows would
-render a clean UI and surface none of the reported problems.
+The bar is "every pane is populated with plausible content," not statistical
+fidelity. The reported spacing problems show up under normal data, so the seed only
+has to make the panes real.
 
 The seed is deterministic (fixed random seed) and re-runnable, so it also serves as
 a reusable fixture for future admin UI work.
@@ -226,7 +224,7 @@ reviewable independently. Shared primitives merges first.
 | Risk | Mitigation |
 |---|---|
 | A capture click triggers a member-facing send | Four independent outbound layers; non-GET requests aborted in-browser |
-| Synthetic seed misses a real data shape | Seed generated from measured prod distributions, including p95/max lengths |
+| A pane renders empty and hides its spacing problems | Prod is checked for which surfaces are populated; seed fills every pane before capture |
 | Snapping values regresses a deliberate spacing choice | Before/after diff per surface at three viewports; visual review per PR |
 | Markup changes break JS tests | Full JS + pytest suite run per surface group before PR |
 | Component pass changes more than intended | Non-goals are explicit; anything requiring an element to move is flagged, not done |
