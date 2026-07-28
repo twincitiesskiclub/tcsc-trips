@@ -16,6 +16,11 @@
 //   click     -- the opener
 //   pre       -- clicks needed to reach the opener (e.g. open a drawer first)
 //   viewports -- restrict to some viewports; omit for all three
+//
+// Surface field `longList: true` is the ONLY licence capture.mjs gives a base
+// shot to lose content to a height cap. Set it only where everything past the
+// cap is genuinely the same row repeating, and say why. Every other surface is
+// captured whole, and a surface that outgrows the safety cap fails the run.
 
 export const VIEWPORTS = [
   { name: 'desktop', width: 1440, height: 900 },
@@ -48,6 +53,9 @@ export const SURFACES = [
   {
     group: 'members',
     name: 'users-list',
+    // 266 identical .mr-row entries; 55,862 CSS px tall on mobile. Everything
+    // below the cap is another roster row.
+    longList: true,
     path: '/admin/users',
     states: [
       // The row handler ignores clicks that land on an `a` or `button`, so the
@@ -115,6 +123,9 @@ export const SURFACES = [
   {
     group: 'payments',
     name: 'payments',
+    // 367 identical .pw-row-item entries across four sections; 38,887 CSS px
+    // tall on mobile. All four section headers are above the cap.
+    longList: true,
     path: '/admin/payments',
     states: [
       // .pw-row-main only -- the row's action zone holds Accept/Refund, and
@@ -136,6 +147,9 @@ export const SURFACES = [
   {
     group: 'slack',
     name: 'slack-sync',
+    // 238 identical .ss-row entries; 32,277 CSS px tall on mobile. The tabs,
+    // toolbar and first rows are all above the cap.
+    longList: true,
     path: '/admin/slack',
     states: [
       { name: 'tab-all-db', click: '#ssync-tab-all_db' },
@@ -212,13 +226,22 @@ export const SURFACES = [
     group: 'practices',
     name: 'practices-new',
     path: '/admin/practices/new',
-    // Create mode: single-column, no rail, no lead picker -- a real layout variant.
-    //
-    // #leads-pills is deliberately NOT used as an opener: /people/data fills it
-    // from users tagged PRACTICES_LEAD, and no seeded user carries that tag, so
-    // it renders empty. #coaches-pills is the same component (peRenderPersonPills)
-    // with data, so the selected-chip spacing still gets captured.
-    states: [{ name: 'coach-selected', click: '#coaches-pills .person-pill' }],
+    // Create mode: single-column, no rail, and the older pill lead picker
+    // (#leads-pills) instead of the detail page's ranked #lead-picker -- a real
+    // layout variant, see the create/edit split note in detail.html.
+    states: [
+      { name: 'coach-selected', click: '#coaches-pills .person-pill' },
+      // /people/data fills this from users tagged PRACTICES_LEAD. It rendered
+      // empty until the audit database gained those tags; it now has 7 people.
+      { name: 'lead-selected', click: '#leads-pills .person-pill' },
+      // Pure opener: the handler only calls Model.setAddOpen(state, true) and
+      // re-renders. The catalog is built from every activity's and workout
+      // type's default_plan_reactions, so it only has options at all now that
+      // the audit database configures activity defaults. Create mode is where
+      // it is reachable -- with no activities selected nothing is inherited, so
+      // canAdd() is true and #add-plan-reaction is visible.
+      { name: 'plan-reaction-catalog', click: '#add-plan-reaction' },
+    ],
   },
   {
     group: 'practices',

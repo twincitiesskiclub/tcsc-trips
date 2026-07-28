@@ -13,7 +13,13 @@ a local-only key cannot.
 from flask import Flask
 from flask.sessions import SecureCookieSessionInterface
 
-AUDIT_ADMIN_EMAIL = "ui-audit@twincitiesskiclub.org"
+# Finance authorisation is an email allowlist hardcoded in app code
+# (app/routes/admin.py:FINANCE_AUTHORIZED_EMAILS). With any other address every
+# payment amount, the bulk sum and the drawer's currency rows render as an em
+# dash, so the spacing of populated currency cells could never be audited.
+# Minting the session as one of those addresses is the only way to reach that UI
+# without editing application code or mutating payment rows.
+AUDIT_ADMIN_EMAIL = "admin@twincitiesskiclub.org"
 
 
 def mint_admin_cookie(app: Flask) -> tuple[str, str]:

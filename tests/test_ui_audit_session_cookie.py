@@ -37,6 +37,20 @@ def test_email_is_on_the_allowed_domain():
     assert AUDIT_ADMIN_EMAIL.endswith(ALLOWED_EMAIL_DOMAIN)
 
 
+def test_email_is_finance_authorized():
+    """Payment amounts are gated on an email allowlist, not on any DB state.
+
+    With an address outside FINANCE_AUTHORIZED_EMAILS, /admin/payments/data
+    returns amount: None for every row, and the UI audit's screenshots show an
+    em dash in every currency cell and in the bulk-selection sum -- so the
+    spacing of populated currency cells never gets reviewed, and nothing in the
+    screenshots says why. Keep the audit identity finance-authorized.
+    """
+    from app.routes.admin import FINANCE_AUTHORIZED_EMAILS
+
+    assert AUDIT_ADMIN_EMAIL.lower() in [e.lower() for e in FINANCE_AUTHORIZED_EMAILS]
+
+
 def test_without_the_cookie_admin_redirects_to_login(monkeypatch):
     monkeypatch.setenv("TCSC_MIGRATION_ONLY", "1")
     app = create_app()
