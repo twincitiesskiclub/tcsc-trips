@@ -25,6 +25,72 @@
 
 ---
 
+## Codex Execution Model
+
+Tasks 9–13 (the five surface-group fix passes) are performed by **Codex agents, not by hand**. Each group is dispatched to its own `codex exec` run at `gpt-5.6-sol` / `model_reasoning_effort=max`.
+
+**Every Codex invocation in this plan uses exactly:**
+
+```
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="max"
+```
+
+The user's `~/.codex/config.toml` sets `approval_policy = "never"` and `sandbox_mode = "danger-full-access"`, so these runs edit files unattended with no prompts. Three rules follow from that:
+
+1. **Each agent gets its own git worktree.** The five groups touch disjoint file sets, but a runaway agent editing shared files would corrupt a sibling's work. Worktrees make that impossible rather than unlikely.
+2. **Each agent is told, in its prompt, exactly which files it may modify** and that `app/static/css/admin_ui.css` is read-only to it. Task 8 owns that file; agents consume the scale, they never extend it.
+3. **No agent commits or opens a PR.** Each leaves a dirty worktree. The diff is reviewed, re-captured, and committed by the orchestrator. A bad run is then discarded with `git checkout .` rather than reverted from history.
+
+**Parallelism:** all five can run concurrently once Task 8 has merged, since their file sets are disjoint and each has its own worktree. Task 8 is a hard barrier — every agent depends on the scale existing.
+
+**Worktree setup, run once before Task 9:**
+
+```bash
+cd /workspace/tcsc-trips
+for group in members payments slack practices catalog; do
+  git worktree add ".worktrees/ui-$group" admin-ui-spacing-polish
+done
+git worktree list
+```
+
+**Shared prompt preamble** — every agent prompt in Tasks 9–13 begins with this block verbatim:
+
+```
+You are polishing spacing and padding in the TCSC admin UI. This is a polish
+pass, NOT a redesign.
+
+HARD RULES:
+- Change ONLY spacing and padding: margin, padding, gap, and the spacing-related
+  Tailwind utilities (m-*, p-*, gap-*, space-*).
+- Do NOT change colors, font sizes, font weights, borders, or layout structure.
+- Do NOT move any element to a different position on the page.
+- Do NOT add features, refactor logic, or rename anything.
+- app/static/css/admin_ui.css is READ-ONLY to you. Use the variables it defines;
+  never add, edit, or remove one. If a fix seems to need a value not on the
+  scale, leave that finding unfixed and report it instead.
+- Do NOT run git commit, git add, or gh. Leave your changes uncommitted.
+
+The spacing scale available to you (defined in app/static/css/admin_ui.css):
+  --admin-space-1: 4px    --admin-space-4: 16px
+  --admin-space-2: 8px    --admin-space-5: 24px
+  --admin-space-3: 12px   --admin-space-6: 32px
+  --admin-field-gap (16px), --admin-row-gap (8px),
+  --admin-section-gap (24px), --admin-drawer-pad (24px)
+
+Shared component classes available to you (also defined there):
+  .admin-ui-form-row, .admin-ui-field-group, .admin-ui-section, .admin-ui-btn-row
+
+Prefer replacing hand-rolled inline spacing with these classes. Where a raw
+value is unavoidable, use a var(--admin-space-N) reference, never a bare pixel
+value.
+
+When done, output a plain list of every change: file, line, what changed, and
+which finding number it addresses. Then list any finding you could NOT fix
+within these rules, and why.
+```
+
+---
+
 ### Task 1: Outbound safety guard
 
 The guard blocks at the socket layer rather than per-library, so it holds for any client — `slack_sdk`, `stripe`, `smtplib`, `requests`, or anything added later. Library-specific patches are layered on top only to produce a clearer error message.
@@ -1578,40 +1644,95 @@ PR body must include the before/after gallery and call out the `dw-section` chan
 **Interfaces:**
 - Consumes: the scale and component classes from Task 8. Do not introduce new spacing values — if a finding needs a value not on the scale, that is a signal the scale is wrong; raise it rather than adding a one-off.
 
-- [ ] **Step 1: Filter the findings to this group**
-
-Extract every row where Group = `members` from `docs/superpowers/notes/2026-07-28-admin-ui-findings.md`. Work them in severity order.
-
-- [ ] **Step 2: Apply fixes**
-
-For each finding, replace the inline spacing with the shared class or scale variable. Where `admin_users.js` builds markup with template literals, the class replaces inline Tailwind spacing utilities:
-
-```javascript
-// before
-`<div class="flex gap-2 mb-1">`
-// after
-`<div class="admin-ui-form-row">`
-```
-
-For dense surfaces where the fix is unclear, consult Codex with the specific screenshot and file, as in Task 7 Step 4. Review its output before applying.
-
-- [ ] **Step 3: Re-capture this group and diff**
+- [ ] **Step 1: Extract this group's findings to a file the agent can read**
 
 ```bash
+cd /workspace/tcsc-trips
+grep -E "^\| *[0-9]+ *\| *members " docs/superpowers/notes/2026-07-28-admin-ui-findings.md \
+  > .worktrees/ui-members/FINDINGS.md
+wc -l .worktrees/ui-members/FINDINGS.md
+```
+Expected: one line per members finding. If zero, the findings table's Group column does not read `members` — check Task 7 Step 4's formatting.
+
+- [ ] **Step 2: Dispatch the Codex agent**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-members
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
+  -i /workspace/tcsc-trips/.ui-audit/before/users-list--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/users-list--row-drawer--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/user-edit--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/roles--base--desktop.png \
+  "$(cat <<'PROMPT'
+<SHARED PROMPT PREAMBLE — paste verbatim from the Codex Execution Model section>
+
+YOUR SCOPE: the members surfaces. You may modify ONLY these files:
+  app/static/admin_users.js
+  app/templates/admin/users.html
+  app/templates/admin/user_detail.html
+  app/templates/admin/user_edit.html
+  app/templates/admin/roles.html
+
+The attached screenshots are the current state of the users list, the user
+row drawer, the user edit form, and the roles/tags page at 1440px.
+
+The confirmed defects to fix are in ./FINDINGS.md — read it first. Fix them in
+severity order, high first. Also fix any spacing defect you can see in the
+screenshots that is not yet listed, and say so in your report.
+
+The most common defect class here: admin_users.js builds markup with template
+literals carrying inline Tailwind spacing that disagrees with the same
+component elsewhere. For example a row rendered as
+    `<div class="flex gap-2 mb-1">`
+should become
+    `<div class="admin-ui-form-row">`
+Apply that substitution wherever the pattern matches, but verify against the
+screenshot that the result is the intended spacing rather than assuming.
+PROMPT
+)"
+```
+
+- [ ] **Step 3: Review the agent's diff before trusting anything**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-members
+git diff --stat
+git diff
+```
+
+Reject and re-run if any of these appear — each violates a hard rule:
+- a file outside the five listed above
+- any change to `app/static/css/admin_ui.css`
+- a bare pixel value where a `var(--admin-space-N)` belongs
+- a color, `font-size`, `font-weight`, or `border` change
+- structural edits that move an element rather than respace it
+
+Discard a bad run with `git checkout .` and re-dispatch with the violation named explicitly in the prompt.
+
+- [ ] **Step 4: Re-capture this group and diff**
+
+Copy the agent's work back into the main checkout so the capture harness sees it, then capture:
+
+```bash
+cd /workspace/tcsc-trips
+git -C .worktrees/ui-members diff > /tmp/ui-members.patch
+git apply /tmp/ui-members.patch
 scripts/ui_audit/run.sh after-members
 ```
-Compare every `users-*`, `user-*`, and `roles-*` capture against `.ui-audit/before/`. Every `members` finding must be resolved; no new issue may appear at any of the three viewports.
+Compare every `users-*`, `user-*`, and `roles-*` capture against `.ui-audit/before/`. Every `members` finding must be resolved; no new issue may appear at any of the three viewports. If a fix looks wrong, revert with `git checkout .` and re-dispatch the agent naming the specific regression.
 
-- [ ] **Step 4: Run the test suites**
+- [ ] **Step 5: Run the test suites**
 
 ```bash
 npm run test:practice-reactions
 npm run test:events
 .venv-linux/bin/python -m pytest -q
 ```
-Expected: all pass.
+Expected: all pass. If a JS test fails, fix the cause — do not adjust the assertion to match the agent's output.
 
-- [ ] **Step 5: Commit and open PR 2**
+- [ ] **Step 6: Commit and open PR 2**
+
+The orchestrator commits, never the agent:
 
 ```bash
 git add app/static/admin_users.js app/templates/admin/users.html app/templates/admin/user_detail.html app/templates/admin/user_edit.html app/templates/admin/roles.html
@@ -1630,26 +1751,81 @@ gh pr create --title "Admin UI polish 2/6: members" --body "..."
 **Interfaces:**
 - Consumes: the scale and component classes from Task 8.
 
-- [ ] **Step 1: Filter the findings to Group = `payments`**
-
-- [ ] **Step 2: Apply fixes** — same method as Task 9 Step 2, against `admin_payments.js` (35KB, the largest generated-markup surface after Slack).
-
-- [ ] **Step 3: Re-capture and diff**
+- [ ] **Step 1: Extract this group's findings**
 
 ```bash
+cd /workspace/tcsc-trips
+grep -E "^\| *[0-9]+ *\| *payments " docs/superpowers/notes/2026-07-28-admin-ui-findings.md \
+  > .worktrees/ui-payments/FINDINGS.md
+wc -l .worktrees/ui-payments/FINDINGS.md
+```
+
+- [ ] **Step 2: Dispatch the Codex agent**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-payments
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
+  -i /workspace/tcsc-trips/.ui-audit/before/payments--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/payments--row-drawer--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/payments--base--tablet.png \
+  "$(cat <<'PROMPT'
+<SHARED PROMPT PREAMBLE — paste verbatim from the Codex Execution Model section>
+
+YOUR SCOPE: the payments surfaces. You may modify ONLY these files:
+  app/static/admin_payments.js
+  app/templates/admin/payments.html
+  app/templates/admin/event_registrations.html
+
+admin_payments.js is 35KB and is the second-largest generated-markup surface in
+this app. Start by listing every function in it that returns or assigns HTML,
+then work through them.
+
+The attached screenshots show the payments dashboard and its row drawer at
+1440px, plus the dashboard at 1024px where column crowding is worse.
+
+The confirmed defects to fix are in ./FINDINGS.md — read it first. Fix them in
+severity order, high first. Also fix any spacing defect visible in the
+screenshots that is not yet listed, and say so in your report.
+
+Pay particular attention to the drawer: it uses the .admin-ui-dw-* family, whose
+section spacing changed from 4px to 24px in the shared-primitives pass. Any
+place this file compensated for the old cramped spacing with its own extra
+margin will now be double-spaced. Remove those compensations rather than
+adding more.
+PROMPT
+)"
+```
+
+- [ ] **Step 3: Review the agent's diff**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-payments
+git diff --stat
+git diff
+```
+
+Reject and re-run if any appear: a file outside the three listed, any change to `app/static/css/admin_ui.css`, a bare pixel value where a scale variable belongs, a color/font/border change, or a structural edit that moves an element. Discard with `git checkout .` and re-dispatch naming the violation.
+
+- [ ] **Step 4: Re-capture and diff**
+
+```bash
+cd /workspace/tcsc-trips
+git -C .worktrees/ui-payments diff > /tmp/ui-payments.patch
+git apply /tmp/ui-payments.patch
 scripts/ui_audit/run.sh after-payments
 ```
-Compare every `payments-*` and `event-registrations-*` capture against the baseline.
+Compare every `payments-*` and `event-registrations-*` capture against the baseline at all three viewports.
 
-- [ ] **Step 4: Run the test suites**
+- [ ] **Step 5: Run the test suites**
 
 ```bash
 npm run test:practice-reactions
 npm run test:events
 .venv-linux/bin/python -m pytest -q
 ```
+Expected: all pass.
 
-- [ ] **Step 5: Commit and open PR 3**
+- [ ] **Step 6: Commit and open PR 3**
 
 ```bash
 git add app/static/admin_payments.js app/templates/admin/payments.html app/templates/admin/event_registrations.html
@@ -1668,33 +1844,87 @@ gh pr create --title "Admin UI polish 3/6: payments" --body "..."
 **Interfaces:**
 - Consumes: the scale and component classes from Task 8.
 
-- [ ] **Step 1: Filter the findings to Group = `slack`**
-
-- [ ] **Step 2: Apply fixes** — same method as Task 9 Step 2. `admin_slack.js` is large enough that Codex assistance is worthwhile for locating every markup-generating function:
+- [ ] **Step 1: Extract this group's findings**
 
 ```bash
-codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
-  "In app/static/admin_slack.js, list every function that returns or assigns HTML
-   markup, with line numbers, and for each one list the spacing-related Tailwind
-   utility classes it applies (gap-*, p-*, m-*, space-*). Output as a table. Do
-   not modify anything."
+cd /workspace/tcsc-trips
+grep -E "^\| *[0-9]+ *\| *slack " docs/superpowers/notes/2026-07-28-admin-ui-findings.md \
+  > .worktrees/ui-slack/FINDINGS.md
+wc -l .worktrees/ui-slack/FINDINGS.md
 ```
 
-- [ ] **Step 3: Re-capture and diff**
+- [ ] **Step 2: Dispatch the Codex agent**
+
+This is the largest group — `admin_slack.js` alone is 73KB, the biggest file in the project — so the prompt has the agent map the file before editing it.
 
 ```bash
+cd /workspace/tcsc-trips/.worktrees/ui-slack
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
+  -i /workspace/tcsc-trips/.ui-audit/before/slack-sync--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/channel-sync--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/scheduled-tasks--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/skipper--base--desktop.png \
+  "$(cat <<'PROMPT'
+<SHARED PROMPT PREAMBLE — paste verbatim from the Codex Execution Model section>
+
+YOUR SCOPE: the Slack ops surfaces. You may modify ONLY these files:
+  app/static/admin_slack.js
+  app/static/admin_skipper.js
+  app/templates/admin/slack_sync.html
+  app/templates/admin/channel_sync.html
+  app/templates/admin/scheduled_tasks.html
+  app/templates/admin/skipper.html
+
+app/static/admin_slack.js is 73KB, the largest file in this project. Before
+editing anything, produce a table of every function in it that returns or
+assigns HTML markup, with line numbers and the spacing-related Tailwind classes
+each applies (gap-*, p-*, m-*, space-*). Include that table in your report. Then
+work through the findings.
+
+The attached screenshots show slack sync, channel sync, scheduled tasks, and
+skipper at 1440px.
+
+The confirmed defects to fix are in ./FINDINGS.md — read it first. Fix them in
+severity order, high first. Also fix any spacing defect visible in the
+screenshots that is not yet listed, and say so in your report.
+
+These four pages accumulated independently and are the most likely place for
+the same conceptual component to be spaced three different ways. Where you find
+that, converge them on the shared classes rather than picking one file's
+version and copying it.
+PROMPT
+)"
+```
+
+- [ ] **Step 3: Review the agent's diff**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-slack
+git diff --stat
+git diff
+```
+
+Given the size of `admin_slack.js`, read the diff in full rather than skimming the stat. Reject and re-run if any appear: a file outside the six listed, any change to `app/static/css/admin_ui.css`, a bare pixel value where a scale variable belongs, a color/font/border change, or a structural edit that moves an element. Discard with `git checkout .` and re-dispatch naming the violation.
+
+- [ ] **Step 4: Re-capture and diff**
+
+```bash
+cd /workspace/tcsc-trips
+git -C .worktrees/ui-slack diff > /tmp/ui-slack.patch
+git apply /tmp/ui-slack.patch
 scripts/ui_audit/run.sh after-slack
 ```
 
-- [ ] **Step 4: Run the test suites**
+- [ ] **Step 5: Run the test suites**
 
 ```bash
 npm run test:practice-reactions
 npm run test:events
 .venv-linux/bin/python -m pytest -q
 ```
+Expected: all pass.
 
-- [ ] **Step 5: Commit and open PR 4**
+- [ ] **Step 6: Commit and open PR 4**
 
 ```bash
 git add app/static/admin_slack.js app/static/admin_skipper.js app/templates/admin/slack_sync.html app/templates/admin/channel_sync.html app/templates/admin/scheduled_tasks.html app/templates/admin/skipper.html
@@ -1713,17 +1943,76 @@ gh pr create --title "Admin UI polish 4/6: Slack ops" --body "..."
 **Interfaces:**
 - Consumes: the scale and component classes from Task 8.
 
-- [ ] **Step 1: Filter the findings to Group = `practices`**
-
-- [ ] **Step 2: Apply fixes** — same method as Task 9 Step 2. The availability poll cards and lead picker live in `admin_practices.js` and are among the densest editable surfaces in the app.
-
-- [ ] **Step 3: Re-capture and diff**
+- [ ] **Step 1: Extract this group's findings**
 
 ```bash
+cd /workspace/tcsc-trips
+grep -E "^\| *[0-9]+ *\| *practices " docs/superpowers/notes/2026-07-28-admin-ui-findings.md \
+  > .worktrees/ui-practices/FINDINGS.md
+wc -l .worktrees/ui-practices/FINDINGS.md
+```
+
+- [ ] **Step 2: Dispatch the Codex agent**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-practices
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
+  -i /workspace/tcsc-trips/.ui-audit/before/practices-list--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/practices-calendar--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/practices-config--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/availability--base--desktop.png \
+  "$(cat <<'PROMPT'
+<SHARED PROMPT PREAMBLE — paste verbatim from the Codex Execution Model section>
+
+YOUR SCOPE: the practices surfaces. You may modify ONLY these files:
+  app/static/admin_practices.js
+  app/templates/admin/practices/list.html
+  app/templates/admin/practices/detail.html
+  app/templates/admin/practices/calendar.html
+  app/templates/admin/practices/config.html
+
+The attached screenshots show the practices list, calendar, config page, and
+the lead-availability page at 1440px.
+
+The confirmed defects to fix are in ./FINDINGS.md — read it first. Fix them in
+severity order, high first. Also fix any spacing defect visible in the
+screenshots that is not yet listed, and say so in your report.
+
+The availability poll cards and the lead picker live in admin_practices.js and
+are among the densest editable surfaces in this app — they stack a heading,
+several rows of member names with toggles, and a button row inside a card. That
+is exactly the shape .admin-ui-section and .admin-ui-btn-row exist for.
+
+CRITICAL: this surface has the heaviest JS test coverage in the project —
+tests/js/lead_picker.test.js and tests/js/draft_publish.test.js assert on the
+generated markup. If you change a class attribute those tests read, they will
+fail. Run `npm run test:practice-reactions` yourself before reporting done, and
+if it fails, fix your change rather than the test.
+PROMPT
+)"
+```
+
+- [ ] **Step 3: Review the agent's diff**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-practices
+git diff --stat
+git diff
+git diff --stat -- tests/
+```
+
+The third command must print nothing — the agent was told to fix its own change rather than the tests, and a diff under `tests/` means it did the opposite. That is an automatic reject. Otherwise reject and re-run on the usual violations: a file outside the five listed, any change to `app/static/css/admin_ui.css`, a bare pixel value where a scale variable belongs, a color/font/border change, or a structural edit that moves an element.
+
+- [ ] **Step 4: Re-capture and diff**
+
+```bash
+cd /workspace/tcsc-trips
+git -C .worktrees/ui-practices diff > /tmp/ui-practices.patch
+git apply /tmp/ui-practices.patch
 scripts/ui_audit/run.sh after-practices
 ```
 
-- [ ] **Step 4: Run the test suites**
+- [ ] **Step 5: Run the test suites**
 
 Practices has the most JS test coverage of any surface, so this step is load-bearing:
 
@@ -1734,7 +2023,7 @@ npm run test:events
 ```
 Expected: all pass, including `tests/js/lead_picker.test.js` and `tests/js/draft_publish.test.js`.
 
-- [ ] **Step 5: Commit and open PR 5**
+- [ ] **Step 6: Commit and open PR 5**
 
 ```bash
 git add app/static/admin_practices.js app/templates/admin/practices/
@@ -1753,17 +2042,81 @@ gh pr create --title "Admin UI polish 5/6: practices" --body "..."
 **Interfaces:**
 - Consumes: the scale and component classes from Task 8.
 
-- [ ] **Step 1: Filter the findings to Group = `catalog`**
-
-- [ ] **Step 2: Apply fixes** — same method as Task 9 Step 2. `event_form.html` and `trip_form.html` are the densest editable forms in the app and are the most likely place for the field-crowding the user originally reported.
-
-- [ ] **Step 3: Re-capture and diff**
+- [ ] **Step 1: Extract this group's findings**
 
 ```bash
+cd /workspace/tcsc-trips
+grep -E "^\| *[0-9]+ *\| *catalog " docs/superpowers/notes/2026-07-28-admin-ui-findings.md \
+  > .worktrees/ui-catalog/FINDINGS.md
+wc -l .worktrees/ui-catalog/FINDINGS.md
+```
+
+- [ ] **Step 2: Dispatch the Codex agent**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-catalog
+codex exec -m gpt-5.6-sol -c model_reasoning_effort="max" \
+  -i /workspace/tcsc-trips/.ui-audit/before/trip-new--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/season-new--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/events--base--desktop.png \
+  -i /workspace/tcsc-trips/.ui-audit/before/newsletter-prompts--base--desktop.png \
+  "$(cat <<'PROMPT'
+<SHARED PROMPT PREAMBLE — paste verbatim from the Codex Execution Model section>
+
+YOUR SCOPE: the catalog surfaces. You may modify ONLY these files:
+  app/static/admin_trips.js
+  app/static/admin_seasons.js
+  app/static/admin_events.js
+  app/templates/admin/trips.html
+  app/templates/admin/trip_form.html
+  app/templates/admin/seasons.html
+  app/templates/admin/season_form.html
+  app/templates/admin/events.html
+  app/templates/admin/event_form.html
+  app/templates/admin/newsletter_prompts.html
+
+The attached screenshots show the new-trip form, the new-season form, the events
+list, and the newsletter prompts page at 1440px.
+
+The confirmed defects to fix are in ./FINDINGS.md — read it first. Fix them in
+severity order, high first. Also fix any spacing defect visible in the
+screenshots that is not yet listed, and say so in your report.
+
+event_form.html (196 lines) and trip_form.html (123 lines) are the densest
+editable forms in this app — long runs of label/input pairs, several of them
+side by side. This is the most likely location of the original complaint that
+"fields have a little bit of overlap or are weirdly close to each other." Give
+these two files the most attention. Each label/input pair should be an
+.admin-ui-field-group, and each horizontal run of them an .admin-ui-form-row.
+
+tests/js/admin_event_scopes.test.js asserts on markup generated by
+admin_events.js. Run `npm run test:events` yourself before reporting done, and
+if it fails, fix your change rather than the test.
+PROMPT
+)"
+```
+
+- [ ] **Step 3: Review the agent's diff**
+
+```bash
+cd /workspace/tcsc-trips/.worktrees/ui-catalog
+git diff --stat
+git diff
+git diff --stat -- tests/
+```
+
+The third command must print nothing; a diff under `tests/` is an automatic reject. Otherwise reject and re-run on the usual violations: a file outside the ten listed, any change to `app/static/css/admin_ui.css`, a bare pixel value where a scale variable belongs, a color/font/border change, or a structural edit that moves an element.
+
+- [ ] **Step 4: Re-capture and diff**
+
+```bash
+cd /workspace/tcsc-trips
+git -C .worktrees/ui-catalog diff > /tmp/ui-catalog.patch
+git apply /tmp/ui-catalog.patch
 scripts/ui_audit/run.sh after-catalog
 ```
 
-- [ ] **Step 4: Run the test suites**
+- [ ] **Step 5: Run the test suites**
 
 ```bash
 npm run test:practice-reactions
@@ -1772,7 +2125,7 @@ npm run test:events
 ```
 Expected: all pass, including `tests/js/admin_event_scopes.test.js`.
 
-- [ ] **Step 5: Commit and open PR 6**
+- [ ] **Step 6: Commit and open PR 6**
 
 ```bash
 git add app/static/admin_trips.js app/static/admin_seasons.js app/static/admin_events.js app/templates/admin/trips.html app/templates/admin/trip_form.html app/templates/admin/seasons.html app/templates/admin/season_form.html app/templates/admin/events.html app/templates/admin/event_form.html app/templates/admin/newsletter_prompts.html
@@ -1811,7 +2164,28 @@ grep -rn "BLOCKED\|OutboundBlocked" .ui-audit/*/  2>/dev/null | head
 ```
 Expected: no `BLOCKED` lines from any capture run. If any appear, identify which manifest selector triggered a mutating request and confirm from the app logs that it was aborted in-browser and never reached the server.
 
-- [ ] **Step 5: Commit the closed inventory**
+- [ ] **Step 5: Confirm no Codex agent escaped its scope**
+
+Each agent was restricted to its group's files. Verify across the whole branch that nothing outside the declared scopes changed:
+
+```bash
+git diff --stat main...admin-ui-spacing-polish -- . ':!docs' ':!scripts/ui_audit'
+```
+Expected: only `app/static/css/admin_ui.css`, `app/static/admin_*.js`, and `app/templates/admin/**`. Anything else was written by an agent that exceeded its scope and must be reviewed individually before it ships.
+
+- [ ] **Step 6: Tear down the agent worktrees**
+
+```bash
+cd /workspace/tcsc-trips
+for group in members payments slack practices catalog; do
+  git worktree remove --force ".worktrees/ui-$group"
+done
+git worktree prune
+git worktree list
+```
+Expected: only the main checkout remains.
+
+- [ ] **Step 7: Commit the closed inventory**
 
 ```bash
 git add docs/superpowers/notes/2026-07-28-admin-ui-findings.md
@@ -1822,9 +2196,11 @@ git commit -m "docs(ui-audit): close out the spacing polish findings"
 
 ## Self-Review
 
-**Spec coverage:** Phase 1 → Tasks 3–5. Phase 2 → Tasks 1, 2, 6. Phase 3 → Task 7. Phase 4 layer A → Task 8 Steps 2–3; layer B → Task 8 Step 4 plus Tasks 9–13. Phase 5 → per-task verify steps plus Task 14. All four outbound safety layers appear: worktree/env isolation and `TCSC_MIGRATION_ONLY` in Task 2, socket guard in Task 1, non-GET abort in Task 6.
+**Spec coverage:** Phase 1 → Tasks 3–5. Phase 2 → Tasks 1, 2, 6. Phase 3 → Task 7. Phase 4 layer A → Task 8 Steps 2–3; layer B → Task 8 Step 4 plus Tasks 9–13. Phase 5 → per-task verify steps plus Task 14. All four outbound safety layers appear: env isolation and `TCSC_MIGRATION_ONLY` in Task 2, socket guard in Task 1, non-GET abort in Task 6.
 
-**Deviation from spec:** the spec called for a separate `ui-polish` git worktree. This plan works on the `admin-ui-spacing-polish` branch in the main checkout instead — the isolation the worktree provided was to keep the real `.env` out of the process, which `.env.uiaudit` + `load_dotenv(override=True)` achieves directly. Adopt a worktree only if parallel work on `main` becomes necessary.
+**Division of labour:** Tasks 1–8 and 14 are done by the orchestrator directly — they are harness, safety, and the shared spacing scale, where a mistake corrupts everything downstream. Tasks 9–13, the five surface-group fix passes, are performed by Codex `gpt-5.6-sol` agents at max reasoning effort, one per group, running concurrently in isolated worktrees. Every agent diff is reviewed, re-captured, and committed by the orchestrator; no agent commits or opens a PR. See the Codex Execution Model section.
+
+**Deviation from spec:** the spec called for a single `ui-polish` git worktree for env isolation. That is achieved instead by `.env.uiaudit` + `load_dotenv(override=True)`, so the main checkout is used for Tasks 1–8. Worktrees reappear in Tasks 9–13 for a different reason — isolating five concurrent Codex agents from each other, since they run unattended with `approval_policy = "never"`.
 
 **Verified while writing:** `db` is defined at `app/models.py:8` and imported from there. Blueprint prefixes confirmed — `/admin/practices`, `/admin/skipper`, `/admin/newsletter`, `/admin/availability` carry `url_prefix`; `admin_events_bp` declares absolute paths. All manifest paths correspond to real GET routes. `admin_required` gates on email domain only, so the minted cookie is sufficient. Playwright 1.62 and Chromium are installed globally; the repo venv is `.venv-linux`.
 
