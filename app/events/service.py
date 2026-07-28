@@ -49,6 +49,47 @@ def compute_price(
     return option.price_cents, False
 
 
+def questions_for_option(
+    event: Event,
+    option: EventPriceOption | None,
+) -> list[dict]:
+    """Return the event's custom questions that apply to ``option``."""
+    questions = [
+        question
+        for question in (event.custom_questions or [])
+        if isinstance(question, dict)
+    ]
+    if option is None:
+        return questions
+
+    known_names = {existing.name for existing in event.price_options}
+    return [
+        question
+        for question in questions
+        if _question_in_scope(question, option, known_names)
+    ]
+
+
+def _question_in_scope(
+    question: dict,
+    option: EventPriceOption,
+    known_names: set[str],
+) -> bool:
+    scope = question.get("price_options")
+    names = (
+        [name for name in scope if isinstance(name, str)]
+        if isinstance(scope, list)
+        else []
+    )
+    if not names:
+        return True
+    if option.name in names:
+        return True
+    # A scope naming no surviving price option falls open to applying, so
+    # renaming an option cannot silently drop a required question.
+    return not any(name in known_names for name in names)
+
+
 def capacity_available(event: Event) -> bool:
     """Return whether the event has room for another registration."""
     if event.capacity is None:
@@ -110,12 +151,7 @@ def create_registration(
             "Select an active price option for this event."
         )
 
-    contact_email = _normalized_email(payload.get("contact_email"))
-    if not contact_email:
-        errors["contact_email"] = "Contact email is required."
-
     required_registration_fields = (
-        ("contact_phone", "Contact phone"),
         ("emergency_contact_name", "Emergency contact name"),
         ("emergency_contact_phone", "Emergency contact phone"),
     )
@@ -145,7 +181,7 @@ def create_registration(
             errors["team_name"] = "Team name is required for team options."
 
     stored_answers, answer_errors = _validate_answers(
-        event.custom_questions or [],
+        questions_for_option(event, option),
         payload.get("answers"),
     )
     errors.update(answer_errors)
@@ -161,11 +197,14 @@ def create_registration(
         event,
         payload.get("discount_code"),
     )
+    # Participant details are the only contact we collect; the first
+    # participant is who Stripe emails and who the roster lists.
+    primary_participant = validated_participants[0]
     registration = EventRegistration(
         event_id=event.id,
         price_option_id=option.id,
-        contact_email=contact_email,
-        contact_phone=payload["contact_phone"].strip(),
+        contact_email=primary_participant["email"],
+        contact_phone=primary_participant["phone"],
         team_name=_optional_text(team_name),
         emergency_contact_name=payload["emergency_contact_name"].strip(),
         emergency_contact_phone=payload["emergency_contact_phone"].strip(),

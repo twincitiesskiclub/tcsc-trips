@@ -15,6 +15,7 @@ from app.events.service import (
     compute_price,
     create_registration,
     expire_stale_pending,
+    questions_for_option,
 )
 
 
@@ -91,8 +92,6 @@ def _payload(option, participant_count=None):
     )
     return {
         "price_option_id": option.id,
-        "contact_email": "  CAPTAIN@Example.COM ",
-        "contact_phone": "555-0100",
         "team_name": "Nordic Rockets" if count > 1 else None,
         "emergency_contact_name": "Emergency Contact",
         "emergency_contact_phone": "555-0199",
@@ -184,7 +183,8 @@ def test_create_registration_happy_path_individual(
     assert saved.status == RegistrationStatus.PENDING_PAYMENT
     assert saved.amount_cents == 4500
     assert saved.discount_applied is True
-    assert saved.contact_email == "captain@example.com"
+    assert saved.contact_email == "person1@example.com"
+    assert saved.contact_phone == "555-0101"
     assert saved.team_name is None
     assert saved.answers == {"course": "Long", "club": "TCSC"}
     assert len(saved.participants) == 1
@@ -274,8 +274,6 @@ def test_create_registration_collects_required_field_errors(
     payload = _payload(individual)
     payload.update(
         {
-            "contact_email": " ",
-            "contact_phone": "",
             "emergency_contact_name": None,
             "emergency_contact_phone": " ",
         }
@@ -287,8 +285,6 @@ def test_create_registration_collects_required_field_errors(
         create_registration(event, payload)
 
     assert {
-        "contact_email",
-        "contact_phone",
         "emergency_contact_name",
         "emergency_contact_phone",
         "participants",
@@ -484,3 +480,175 @@ def test_create_registration_rejects_closed_signup_window(
         create_registration(event, _payload(individual))
 
     assert "event" in exc_info.value.errors
+
+
+def test_contact_details_come_from_the_first_participant(
+    db_session,
+    registration_setup,
+):
+    event, _individual, team = registration_setup
+    payload = _payload(team)
+    payload["contact_email"] = "spoofed@example.com"
+    payload["contact_phone"] = "555-9999"
+
+    registration = create_registration(event, payload)
+    registration_id = registration.id
+    db_session.session.expire_all()
+    saved = db_session.session.get(EventRegistration, registration_id)
+
+    assert saved.contact_email == "person1@example.com"
+    assert saved.contact_phone == "555-0101"
+    assert saved.participants[0].email == "person1@example.com"
+
+
+def test_question_scoped_to_other_options_is_neither_required_nor_stored(
+    registration_setup,
+):
+    event, individual, team = registration_setup
+    event.custom_questions = [
+        {
+            "key": "course",
+            "label": "Course",
+            "type": "choice",
+            "options": ["Long", "Short"],
+            "required": True,
+            "price_options": ["Team of 3"],
+        },
+    ]
+    payload = _payload(individual)
+    payload["answers"] = {"course": "Long"}
+
+    registration = create_registration(event, payload)
+
+    assert registration.answers == {}
+    assert questions_for_option(event, individual) == []
+    assert len(questions_for_option(event, team)) == 1
+
+
+def test_unscoped_question_applies_to_every_option(registration_setup):
+    event, individual, team = registration_setup
+    event.custom_questions = [
+        {
+            "key": "club",
+            "label": "Club",
+            "type": "text",
+            "required": True,
+        },
+    ]
+
+    for option in (individual, team):
+        assert len(questions_for_option(event, option)) == 1
+
+    payload = _payload(individual)
+    payload["answers"] = {}
+
+    with pytest.raises(RegistrationError) as exc_info:
+        create_registration(event, payload)
+
+    assert "answers.club" in exc_info.value.errors
+
+
+def test_scope_naming_no_surviving_option_falls_open_to_applying(
+    registration_setup,
+):
+    event, individual, _team = registration_setup
+    event.custom_questions = [
+        {
+            "key": "club",
+            "label": "Club",
+            "type": "text",
+            "required": True,
+            "price_options": ["Renamed Away"],
+        },
+    ]
+
+    assert len(questions_for_option(event, individual)) == 1
+
+
+def test_scope_is_honoured_when_any_named_option_still_exists(
+    registration_setup,
+):
+    event, individual, team = registration_setup
+    event.custom_questions = [
+        {
+            "key": "club",
+            "label": "Club",
+            "type": "text",
+            "required": True,
+            "price_options": ["Team of 3", "Renamed Away"],
+        },
+    ]
+
+    assert questions_for_option(event, individual) == []
+    assert len(questions_for_option(event, team)) == 1
+
+
+def test_disjoint_scoped_duplicate_keys_ask_one_question_per_option(
+    registration_setup,
+):
+    event, individual, team = registration_setup
+    event.custom_questions = [
+        {
+            "key": "competition_gender",
+            "label": "Competition gender",
+            "type": "choice",
+            "options": ["Men", "Women", "Non-binary"],
+            "required": True,
+            "price_options": ["Individual"],
+        },
+        {
+            "key": "competition_gender",
+            "label": "Competition gender",
+            "type": "choice",
+            "options": ["Men", "Women", "Mixed"],
+            "required": True,
+            "price_options": ["Team of 3"],
+        },
+    ]
+
+    individual_questions = questions_for_option(event, individual)
+    team_questions = questions_for_option(event, team)
+
+    assert [question["options"] for question in individual_questions] == [
+        ["Men", "Women", "Non-binary"]
+    ]
+    assert [question["options"] for question in team_questions] == [
+        ["Men", "Women", "Mixed"]
+    ]
+
+    payload = _payload(team)
+    payload["answers"] = {"competition_gender": "Mixed"}
+    registration = create_registration(event, payload)
+
+    assert registration.answers == {"competition_gender": "Mixed"}
+
+
+def test_individual_option_rejects_the_team_only_gender_answer(
+    registration_setup,
+):
+    event, individual, _team = registration_setup
+    event.custom_questions = [
+        {
+            "key": "competition_gender",
+            "label": "Competition gender",
+            "type": "choice",
+            "options": ["Men", "Women", "Non-binary"],
+            "required": True,
+            "price_options": ["Individual"],
+        },
+        {
+            "key": "competition_gender",
+            "label": "Competition gender",
+            "type": "choice",
+            "options": ["Men", "Women", "Mixed"],
+            "required": True,
+            "price_options": ["Team of 3"],
+        },
+    ]
+    payload = _payload(individual)
+    payload["answers"] = {"competition_gender": "Mixed"}
+
+    with pytest.raises(RegistrationError) as exc_info:
+        create_registration(event, payload)
+
+    assert "answers.competition_gender" in exc_info.value.errors

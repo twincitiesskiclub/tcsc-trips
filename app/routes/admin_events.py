@@ -225,9 +225,10 @@ def _replace_price_options(event, raw_value):
         option.active = row["active"]
 
 
-def _validated_questions(raw_value):
+def _validated_questions(raw_value, option_names=None):
     rows = _parse_json_rows(raw_value, "Custom questions")
-    seen_keys = set()
+    known_names = set(option_names or ())
+    scopes_by_key: dict[str, list[set[str]]] = {}
     validated = []
     for index, row in enumerate(rows):
         validate_question(row, index)
@@ -237,14 +238,49 @@ def _validated_questions(raw_value):
             raise ValueError(
                 f"Custom question {index + 1} must have a non-empty key."
             )
-        if key in seen_keys:
-            raise ValueError(f"Custom question key '{key}' is duplicated.")
-        seen_keys.add(key)
-        row["key"] = key.strip()
+        key = key.strip()
+        scope = _validated_question_scope(row, index, known_names)
+        _check_scope_is_disjoint(key, scope, scopes_by_key.get(key, []))
+        scopes_by_key.setdefault(key, []).append(scope)
+        row["key"] = key
         row["options"] = row.get("options", [])
         row["help_text"] = row.get("help_text") or ""
+        row["price_options"] = sorted(scope)
         validated.append(row)
     return validated
+
+
+def _validated_question_scope(row, index, known_names):
+    """Return the question's price-option scope as a set of known names."""
+    scope = row.get("price_options") or []
+    names = {name.strip() for name in scope if isinstance(name, str)}
+    names.discard("")
+    if known_names:
+        unknown = names - known_names
+        if unknown:
+            raise ValueError(
+                f"Custom question {index + 1} is limited to price option "
+                f"'{min(unknown)}', which does not exist on this event."
+            )
+    return names
+
+
+def _check_scope_is_disjoint(key, scope, existing_scopes):
+    """Allow a repeated key only when every scope sharing it is disjoint."""
+    if not existing_scopes:
+        return
+    if not scope or any(not other for other in existing_scopes):
+        raise ValueError(
+            f"Custom question key '{key}' is duplicated. Repeat a key only "
+            "when each copy is limited to different price options."
+        )
+    for other in existing_scopes:
+        overlap = scope & other
+        if overlap:
+            raise ValueError(
+                f"Custom question key '{key}' is used twice for price "
+                f"option '{min(overlap)}'."
+            )
 
 
 def _serialize_price_options(event):
@@ -343,10 +379,15 @@ def _registration_columns(event):
         (f"participant_{position}", f"Participant {position}")
         for position in range(1, max_participants + 1)
     ]
-    question_columns = [
-        (question["key"], question.get("label") or question["key"])
-        for question in (event.custom_questions or [])
-    ]
+    # A key may repeat across price-option scopes; it is still one column.
+    question_columns = []
+    seen_question_keys = set()
+    for question in event.custom_questions or []:
+        key = question["key"]
+        if key in seen_question_keys:
+            continue
+        seen_question_keys.add(key)
+        question_columns.append((key, question.get("label") or key))
     return (
         _REGISTRATION_BASE_COLUMNS
         + participant_columns
@@ -456,7 +497,10 @@ def new_event():
             _replace_price_options(event, price_rows)
         question_rows = request.form.get("custom_questions_json")
         if question_rows is not None:
-            event.custom_questions = _validated_questions(question_rows)
+            event.custom_questions = _validated_questions(
+                question_rows,
+                [option.name for option in event.price_options],
+            )
 
         db.session.add(event)
         db.session.commit()
@@ -492,7 +536,10 @@ def edit_event(event_id):
             _replace_price_options(event, price_rows)
         question_rows = request.form.get("custom_questions_json")
         if question_rows is not None:
-            event.custom_questions = _validated_questions(question_rows)
+            event.custom_questions = _validated_questions(
+                question_rows,
+                [option.name for option in event.price_options],
+            )
 
         db.session.commit()
         flash_success("Event updated successfully.")

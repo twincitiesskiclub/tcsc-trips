@@ -8,6 +8,8 @@ from app.models import db
 
 TEST_EVENT_SLUGS = (
     "admin-grid-test",
+    "admin-scope-test",
+    "admin-scope-roster-test",
     "admin-registration-test",
     "admin-duplicate-test",
     "admin-duplicate-test-copy",

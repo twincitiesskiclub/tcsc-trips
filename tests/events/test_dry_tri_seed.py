@@ -58,8 +58,9 @@ def test_dry_tri_2026_builder_copies_dry_tri_template():
     assert run_only["participant_roles"] == ["Participant"]
     assert all(option["member_price_cents"] is None for option in options)
 
-    assert len(questions) == 5
+    assert len(questions) == 6
     assert [question["required"] for question in questions] == [
+        True,
         True,
         False,
         True,
