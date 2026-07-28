@@ -436,10 +436,11 @@ if __name__ == "__main__":
 # Screenshot-audit environment. Contains NO real credentials by design --
 # every outbound value is a deliberate fake, and scripts/ui_audit/outbound_guard.py
 # blocks the network regardless.
-SECRET_KEY=ui-audit-local-only-not-a-secret
+FLASK_SECRET_KEY=ui-audit-local-only-not-a-secret
 DATABASE_URL=postgresql://tcsc:tcsc@localhost:5432/tcsc_trips
 TCSC_MIGRATION_ONLY=1
-SLACK_BOT_TOKEN=xoxb-FAKE-ui-audit
+SLACK_BOT_TOKEN=
+SLACK_APP_TOKEN=
 SLACK_ADMIN_TOKEN=xoxc-FAKE-ui-audit
 SLACK_SIGNING_SECRET=FAKE-ui-audit
 STRIPE_SECRET_KEY=sk_test_FAKE_ui_audit
@@ -447,7 +448,14 @@ STRIPE_PUBLISHABLE_KEY=pk_test_FAKE_ui_audit
 STRIPE_WEBHOOK_SECRET=whsec_FAKE_ui_audit
 GOOGLE_CLIENT_ID=fake-ui-audit
 GOOGLE_CLIENT_SECRET=fake-ui-audit
+# ...plus a fake value for every other key present in the real .env
 ```
+
+Three details found during implementation, each of which silently breaks the harness if got wrong:
+
+- **`FLASK_SECRET_KEY`, not `SECRET_KEY`.** `app/__init__.py:50` reads `FLASK_SECRET_KEY` and raises if unset. Signing with the wrong key name yields a cookie the server rejects, so every screenshot becomes a login page — a failure that looks like a successful run.
+- **Slack tokens must be blank, not fake.** `app/slack/bolt_app.py:100` constructs `slack_bolt.App()` whenever `_bot_token` is truthy, and Bolt calls `auth_test()` at import time. The outbound guard correctly blocks that, which crashes app boot. A blank token is the supported path — `bolt_app.py` already guards on truthiness for migrations.
+- **`find_dotenv` must be patched before importing the app.** `app/config.py:7` calls `load_dotenv(find_dotenv(), override=False)` inside `create_app()`, which would backfill any real secret not shadowed by `.env.uiaudit`. Patch *both* bindings — `dotenv.main.find_dotenv` as well as `dotenv.find_dotenv` — since a bare `load_dotenv()` resolves the former against `dotenv.main`'s own globals and ignores the package-level patch.
 
 - [ ] **Step 4: Add `.env.uiaudit` to gitignore, then run the test**
 
