@@ -23,8 +23,19 @@
 #roles-studio .rs-btn-danger:focus-visible{outline:2px solid #c53030;outline-offset:2px}
 #roles-studio .rs-btn-danger[aria-disabled="true"]{opacity:.45;cursor:not-allowed}
 
-/* --- Two-column body --- */
-#rs-body{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 220px);overflow:hidden}
+/* --- Two-column body ---
+   Height is 100vh minus 220px of page chrome, PLUS the editor-footer's own
+   height (63px = 2*var(--admin-space-3) vertical padding + 1px border-top
+   on .admin-ui-sticky-bar + 38px .rs-btn button height). #rs-editor-footer
+   is now a flex sibling of #rs-editor (findings #4/#5 restructure) rather
+   than a non-consuming sticky child, so without the +63px the flex column
+   would divide the same calc(100vh-220px) between editor and footer,
+   shortening the editor's visible area by the footer's height and clipping
+   the last field's label. Adding it back here restores #rs-editor's own
+   flex-computed height to what it was before the restructure. #rs-list
+   grows by the same amount as a side effect of sharing this grid row --
+   harmless, it already scrolls internally. */
+#rs-body{display:grid;grid-template-columns:280px 1fr;gap:0;height:calc(100vh - 220px + 63px);overflow:hidden}
 
 /* --- Left rail --- */
 #rs-list{overflow-y:auto;overflow-x:hidden;border-right:1px solid #e9edf3}
@@ -54,8 +65,16 @@
 #roles-studio .rs-chip{margin-left:auto;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;min-width:24px;height:22px;padding:0 8px;border-radius:9999px;font-size:11px;font-weight:600;background:#f1f5f9;color:#475569;white-space:nowrap}
 #roles-studio .rs-chip.has-users{background:#d1fae5;color:#065f46}
 
-/* --- Right panel --- */
-#rs-editor{overflow-y:auto;padding:20px 24px 72px}
+/* --- Right panel ---
+   #rs-editor-panel wraps the scrolling field pane (#rs-editor) and the
+   Save/Delete bar (#rs-editor-footer) as flex siblings, so the save bar
+   sits outside #rs-editor's scroll region instead of as its sticky last
+   child (findings #4/#5 -- see admin_ui.css .admin-ui-sticky-bar comment).
+   min-height:0 on both is required for the flex child to actually shrink
+   and scroll instead of growing to fit its content. */
+#rs-editor-panel{display:flex;flex-direction:column;min-height:0}
+#rs-editor{overflow-y:auto;padding:20px 24px;flex:1;min-height:0}
+#rs-editor-footer{padding:0 24px}
 
 /* Placeholder empty state */
 #roles-studio .rs-placeholder{margin-top:60px;text-align:center;color:#94a3b8}
@@ -106,7 +125,7 @@
 /* --- Mobile (<=767px) --- */
 @media (max-width:767px){
   #rs-body{grid-template-columns:1fr;height:auto}
-  #rs-editor{display:none}
+  #rs-editor-panel{display:none}
   #rs-list{border-right:none;height:auto;min-height:calc(100vh - 160px)}
   #roles-studio .rs-row{padding:12px 16px}
   #roles-studio .rs-row.is-active{padding-left:13px}
@@ -136,8 +155,13 @@
     </div>
 
     <!-- Right panel -->
-    <div id="rs-editor">
-      <!-- Placeholder rendered by JS -->
+    <div id="rs-editor-panel">
+      <div id="rs-editor">
+        <!-- Placeholder rendered by JS -->
+      </div>
+      <div id="rs-editor-footer">
+        <!-- Save/Delete bar rendered by JS, outside #rs-editor's scroll pane -->
+      </div>
     </div>
   </div>
 </div>
@@ -332,14 +356,23 @@
      document.getElementById('rs-editor'). Passing an explicit
      container is used by rsOpenEditorMobile so the mobile path
      never creates a duplicate #rs-editor element.
+
+     When rendering into the real #rs-editor (target omitted), the save
+     bar is appended to the sibling #rs-editor-footer instead of to
+     #rs-editor itself, so it lives outside #rs-editor's scrolling pane
+     (findings #4/#5 -- see admin_ui.css .admin-ui-sticky-bar comment).
+     The mobile drawer path (target passed explicitly) is unaffected and
+     keeps the save bar as the last child of its own container.
   ============================================================ */
   function rsRenderEditor(role, target) {
     var editor = target || document.getElementById('rs-editor');
     if (!editor) return;
+    var footer = target ? null : document.getElementById('rs-editor-footer');
 
     // null = placeholder
     if (!role) {
       editor.innerHTML = '';
+      if (footer) footer.innerHTML = '';
       editor.appendChild(
         el('div', { 'class': 'rs-placeholder' }, [
           el('span', { 'class': 'rs-placeholder-icon', 'aria-hidden': 'true' }, ['🏷']),
@@ -503,7 +536,12 @@
     editor.appendChild(ctxLabel);
     editor.appendChild(previewBlock);
     editor.appendChild(fields);
-    editor.appendChild(savebar);
+    if (footer) {
+      footer.innerHTML = '';
+      footer.appendChild(savebar);
+    } else {
+      editor.appendChild(savebar);
+    }
 
     // Autofocus display name after DOM settles
     requestAnimationFrame(function () {
@@ -613,7 +651,7 @@
      SAVE (reads from the editor DOM)
   ============================================================ */
   function rsReadFormValues(container) {
-    var c = container || document.getElementById('rs-editor');
+    var c = container || document.getElementById('rs-editor-panel');
     var dispInput = c.querySelector('#rs-f-display-name');
     var nameInput = c.querySelector('#rs-f-name');
     var emojiInput = c.querySelector('#rs-f-emoji');
@@ -629,7 +667,7 @@
   }
 
   function rsValidate(values, container) {
-    var c = container || document.getElementById('rs-editor');
+    var c = container || document.getElementById('rs-editor-panel');
     var valid = true;
 
     // Clear previous errors
@@ -685,7 +723,7 @@
   }
 
   function rsSave(roleRef) {
-    rsSaveFromContainer(roleRef, document.getElementById('rs-editor'), null);
+    rsSaveFromContainer(roleRef, document.getElementById('rs-editor-panel'), null);
   }
 
   function rsSaveFromContainer(roleRef, container, drawerApi) {
