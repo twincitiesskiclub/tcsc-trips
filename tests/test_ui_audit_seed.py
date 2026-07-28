@@ -321,6 +321,48 @@ def test_practices_span_past_and_future(db_session):
     assert any(d > today for d in dates)
 
 
+def test_in_progress_practice_is_always_dated_today(db_session, monkeypatch):
+    """Regression test for a bug the review caught: the original assignment
+    gave IN_PROGRESS to whichever practice was chronologically nearest in
+    the future, unconditionally -- on the 4 of 7 weekdays that aren't
+    Tue/Thu/Sat, that's a session 1-4 days out, not one happening today.
+    admin_practices.js renders date and status badge in the same row, so a
+    future-dated "In Progress" practice is a concrete impossible state in
+    the exact pane this project audits.
+
+    Forces "today" to a Wednesday via monkeypatch rather than asserting
+    against the real `date.today()` -- the bug is invisible on Tue/Thu/Sat
+    (the earliest future practice legitimately IS today on those days,
+    which is exactly why it shipped unnoticed the first time, on a Tuesday).
+    Asserting against the real wall-clock day would only catch this on 3 of
+    7 days; forcing a non-practice weekday catches it every time regardless
+    of which day the suite actually runs on."""
+    from datetime import date
+
+    from app.practices.interfaces import PracticeStatus
+    from app.practices.models import Practice
+    from scripts.ui_audit import seed_fixtures
+    from scripts.ui_audit.seed_fixtures import default_volumes, seed_all
+
+    forced_today = date(2026, 7, 29)  # a Wednesday -- not in PRACTICE_WEEKDAYS
+    assert forced_today.strftime("%A") == "Wednesday"
+    monkeypatch.setattr(seed_fixtures, "today_central", lambda: forced_today)
+
+    seed_all(default_volumes())
+
+    in_progress = Practice.query.filter_by(status=PracticeStatus.IN_PROGRESS.value).all()
+    assert in_progress, "no practice was assigned IN_PROGRESS at all"
+    assert all(p.date.date() == forced_today for p in in_progress), (
+        f"IN_PROGRESS practice(s) not dated today: "
+        f"{[p.date.date() for p in in_progress if p.date.date() != forced_today]}"
+    )
+
+    # Also guarantee the schedule itself always includes today, regardless
+    # of weekday -- otherwise IN_PROGRESS coverage would silently vanish
+    # rather than fail loudly.
+    assert any(p.date.date() == forced_today for p in Practice.query.all())
+
+
 def test_every_practice_status_is_represented(db_session):
     """practices/list.html's filter and detail.html's edit <select> both offer
     all five PracticeStatus values -- seed every one so none of those pills

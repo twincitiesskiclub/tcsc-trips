@@ -654,6 +654,17 @@ def _practice_dates():
             continue
         hour, minute = time_of_day
         dates.append(datetime(day.year, day.month, day.day, hour, minute))
+
+    # Guarantee one session lands exactly on "today", regardless of which
+    # weekday that is. _make_practices only ever assigns IN_PROGRESS to a
+    # practice whose date == today (a future-dated row can't be "in
+    # progress"), so without this, IN_PROGRESS coverage -- and the admin
+    # filter pill it backs -- would silently disappear on the 4 of 7 days
+    # that aren't Tue/Thu/Sat.
+    if not any(d.date() == anchor for d in dates):
+        dates.append(datetime(anchor.year, anchor.month, anchor.day, 17, 30))
+        dates.sort()
+
     return dates
 
 
@@ -665,14 +676,20 @@ def _make_practices(locations, socials, activities, types, rng):
 
     for index, practice_date in enumerate(dates):
         is_future = practice_date.date() >= today
-        if is_future:
-            # First future session covers "happening now", second covers a
-            # confirmed-but-not-yet-started lead -- both filter pills need a
-            # row without waiting on random luck. A sparse cancellation
-            # further out shows the pill can occur even before the block.
+        if practice_date.date() == today:
+            # IN_PROGRESS means "happening today" -- a date days in the
+            # future rendered next to that status is an impossible state in
+            # the exact admin row (admin_practices.js renders date and
+            # status badge together) this project's audit exists to catch.
+            # _practice_dates() guarantees a session lands on `today`, so
+            # this branch is always reachable regardless of weekday.
+            status = PracticeStatus.IN_PROGRESS.value
+        elif is_future:
+            # First real future session covers a confirmed-but-not-yet-
+            # started lead, so that filter pill has a row without waiting on
+            # random luck. A sparse cancellation further out shows the pill
+            # can occur even before the block.
             if future_count == 0:
-                status = PracticeStatus.IN_PROGRESS.value
-            elif future_count == 1:
                 status = PracticeStatus.CONFIRMED.value
             elif future_count % 7 == 0:
                 status = PracticeStatus.CANCELLED.value
