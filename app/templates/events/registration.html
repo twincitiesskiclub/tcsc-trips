@@ -33,7 +33,7 @@
             <span>{{ event.location }}</span>
           </div>
           {% if event.description %}
-            <p style="max-width: 62ch; margin: 20px auto 0; color: var(--text-secondary); line-height: 1.6;">{{ event.description }}</p>
+            <p style="max-width: 62ch; margin: 20px auto 0; color: var(--text-secondary); line-height: 1.6; white-space: pre-line; text-align: left;">{{ event.description }}</p>
           {% endif %}
           {% if event.details_url %}
             <p style="margin: 12px 0 0;"><a href="{{ event.details_url }}" target="_blank" rel="noopener noreferrer">View full event details</a></p>
@@ -72,29 +72,14 @@
             <section class="form-section" aria-labelledby="participants-title">
               <h2 class="form-section__title" id="participants-title">Participant details</h2>
               <p class="form-section__subtitle" id="option-description"></p>
-              <div id="participants-container"></div>
-            </section>
-
-            <hr class="form-divider">
-
-            <section class="form-section" aria-labelledby="contact-title">
-              <h2 class="form-section__title" id="contact-title">Registration contact</h2>
-              <p class="form-section__subtitle">We will use this contact if there is a question about the registration.</p>
-              <div class="form-row form-row--pair">
-                <div class="form-field">
-                  <label class="form-field__label" for="contact-email">Email address</label>
-                  <input type="email" id="contact-email" class="form-input" autocomplete="email" required>
-                </div>
-                <div class="form-field">
-                  <label class="form-field__label" for="contact-phone">Phone number</label>
-                  <input type="tel" id="contact-phone" class="form-input" autocomplete="tel" required>
-                </div>
-              </div>
               <div class="form-field hidden" id="team-name-field">
                 <label class="form-field__label" for="team-name">Team name</label>
                 <input type="text" id="team-name" class="form-input" autocomplete="organization">
               </div>
+              <div id="participants-container"></div>
             </section>
+
+            <hr class="form-divider">
 
             <section class="form-section" aria-labelledby="emergency-title">
               <h2 class="form-section__title" id="emergency-title">Emergency contact</h2>
@@ -112,17 +97,22 @@
             </section>
 
             {% if event.custom_questions %}
-              <section class="form-section" aria-labelledby="event-questions-title">
+              <section class="form-section" id="event-questions" aria-labelledby="event-questions-title">
                 <h2 class="form-section__title" id="event-questions-title">Event questions</h2>
                 <p class="form-section__subtitle">A few details for event organizers.</p>
                 {% for question in event.custom_questions %}
-                  <div class="form-field">
-                    <label class="form-field__label" for="question-{{ question.key }}">
+                  {# A key may repeat across price-option scopes, so ids are index-based. #}
+                  <div
+                    class="form-field"
+                    data-question-field="{{ loop.index0 }}"
+                    data-question-scope='{{ (question.price_options or [])|tojson }}'
+                  >
+                    <label class="form-field__label" for="question-{{ loop.index0 }}">
                       {{ question.label }}{% if question.required %} <span aria-hidden="true">*</span>{% endif %}
                     </label>
                     {% if question.type == 'choice' %}
                       <select
-                        id="question-{{ question.key }}"
+                        id="question-{{ loop.index0 }}"
                         class="form-input"
                         data-question-key="{{ question.key }}"
                         {% if question.required %}required{% endif %}
@@ -135,7 +125,7 @@
                     {% else %}
                       <input
                         type="text"
-                        id="question-{{ question.key }}"
+                        id="question-{{ loop.index0 }}"
                         class="form-input"
                         data-question-key="{{ question.key }}"
                         {% if question.required %}required{% endif %}

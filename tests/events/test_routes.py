@@ -99,8 +99,6 @@ def _payload(option, participant_count=None):
     )
     return {
         "price_option_id": option.id,
-        "contact_email": "captain@example.com",
-        "contact_phone": "555-0100",
         "team_name": "Nordic Rockets" if option.participant_count > 1 else "",
         "emergency_contact_name": "Emergency Contact",
         "emergency_contact_phone": "555-0199",
@@ -233,14 +231,14 @@ def test_post_valid_individual_creates_pending_registration_and_intent(
     assert kwargs["amount"] == 5500
     assert kwargs["currency"] == "usd"
     assert kwargs["capture_method"] == "automatic"
-    assert kwargs["receipt_email"] == "captain@example.com"
+    assert kwargs["receipt_email"] == "participant1@example.com"
     assert kwargs["statement_descriptor"].startswith("TCSC_EVENT_")
     assert kwargs["description"] == "TCSC Event - Dry Tri 2026"
     assert kwargs["metadata"] == {
         "payment_type": "event",
         "event_id": str(event.id),
         "registration_id": str(registration.id),
-        "email": "captain@example.com",
+        "email": "participant1@example.com",
         "name": "Participant 1",
     }
     assert kwargs["idempotency_key"] == "event-attempt-123"
@@ -366,3 +364,111 @@ def test_dry_tri_legacy_urls_redirect_to_generic_event_page(client, path):
 
     assert response.status_code == 302
     assert response.headers["Location"] == "/events/dry-tri-2026"
+
+
+def test_get_event_page_drops_the_registration_contact_section(
+    client,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    assert "Registration contact" not in page
+    assert 'id="contact-email"' not in page
+    assert 'id="contact-phone"' not in page
+    # Emergency contact and team name stay.
+    assert 'id="emergency-contact-name"' in page
+    assert 'id="team-name"' in page
+
+
+def test_get_event_page_puts_team_name_with_participant_details(
+    client,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    participants_heading = page.index("Participant details")
+    team_name_field = page.index('id="team-name"')
+    emergency_heading = page.index("Emergency contact")
+
+    assert participants_heading < team_name_field < emergency_heading
+
+
+def test_get_event_page_preserves_description_line_breaks(
+    client,
+    db_session,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+    event.description = "Roll. Ride. Run.\n\n- 7:30 AM Packet pickup"
+    db_session.session.commit()
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    assert "white-space: pre-line" in page
+    assert "Roll. Ride. Run.\n\n- 7:30 AM Packet pickup" in page
+
+
+def test_get_event_page_publishes_each_question_scope(
+    client,
+    db_session,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+    event.custom_questions = [
+        {
+            "key": "course",
+            "label": "Course",
+            "type": "choice",
+            "options": ["Long", "Short"],
+            "required": True,
+            "price_options": ["Individual", "Team of 3"],
+        },
+        {
+            "key": "club",
+            "label": "Club",
+            "type": "text",
+            "required": False,
+        },
+    ]
+    db_session.session.commit()
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    # tojson output is markup-safe, so the attribute is single-quoted.
+    assert 'data-question-scope=\'["Individual", "Team of 3"]\'' in page
+    assert "data-question-scope='[]'" in page
+    # Ids are index-based so a key repeated across scopes stays unique.
+    assert 'id="question-0"' in page
+    assert 'id="question-1"' in page
+    # The section wrapper is what the client hides when nothing is in scope.
+    assert 'id="event-questions"' in page
+
+
+def test_post_ignores_a_client_supplied_registration_contact(
+    db_session,
+    client,
+    public_event,
+):
+    event, individual, _team, _free = public_event
+    payload = _payload(individual)
+    payload["contact_email"] = "spoofed@example.com"
+    payload["contact_phone"] = "555-9999"
+
+    with patch("app.routes.events.stripe.PaymentIntent.create") as create:
+        create.return_value = _intent()
+        response = client.post(
+            f"/events/{event.slug}/register",
+            json=payload,
+        )
+
+    assert response.status_code == 200
+    registration = db_session.session.get(
+        EventRegistration,
+        response.get_json()["registrationId"],
+    )
+    assert registration.contact_email == "participant1@example.com"
+    assert registration.contact_phone == "555-0101"

@@ -411,6 +411,9 @@
     var templates = JSON.parse(templateDataNode.textContent || '{}');
     var priceRows = parseRows(priceHidden.value);
     var questionRows = parseRows(questionHidden.value);
+    var priorNames = priceRows.map(function (item) {
+      return (item.name || '').trim();
+    });
 
     function parseRows(rawValue) {
       try {
@@ -510,10 +513,83 @@
           ).checked,
           help_text: row.querySelector(
             '[data-field="help-text"]'
-          ).value.trim()
+          ).value.trim(),
+          price_options: Array.from(
+            row.querySelectorAll('[data-field="scope"]:checked')
+          ).map(function (box) {
+            return box.value;
+          })
         };
       });
       questionHidden.value = JSON.stringify(questionRows);
+    }
+
+    function rawNames() {
+      return priceRows.map(function (item) {
+        return (item.name || '').trim();
+      });
+    }
+
+    function optionNames() {
+      return rawNames().filter(Boolean);
+    }
+
+    // Renaming a price option must carry its question scopes along, or a
+    // rename would orphan them and the save would be rejected.
+    function renameQuestionScopes(before, after) {
+      before.forEach(function (oldName, index) {
+        var newName = after[index];
+        if (!oldName || newName === undefined || newName === oldName) return;
+        dropOrRenameScope(oldName, newName);
+      });
+    }
+
+    function dropOrRenameScope(oldName, newName) {
+      questionRows.forEach(function (question) {
+        var scope = question.price_options;
+        if (!Array.isArray(scope)) return;
+        var at = scope.indexOf(oldName);
+        if (at === -1) return;
+        if (newName) scope[at] = newName;
+        else scope.splice(at, 1);
+      });
+    }
+
+    function scopeControl(item, index) {
+      var names = optionNames();
+      var wrapper = el('div', {
+        class: 'aef-field aef-field-full aef-scope'
+      }, [
+        el('span', {class: 'aef-scope-label'}, ['Applies to options'])
+      ]);
+      if (!names.length) {
+        wrapper.appendChild(el('span', {class: 'aef-hint'}, [
+          'Add a price option first to limit this question.'
+        ]));
+        return wrapper;
+      }
+
+      var scope = Array.isArray(item.price_options)
+        ? item.price_options
+        : [];
+      wrapper.appendChild(el('span', {class: 'aef-hint'}, [
+        scope.length
+          ? 'Asked only for the checked options.'
+          : 'Nothing checked: asked for every option.'
+      ]));
+      var boxes = el('div', {class: 'aef-scope-boxes'});
+      names.forEach(function (name, nameIndex) {
+        var box = el('input', {
+          id: 'question-scope-' + index + '-' + nameIndex,
+          type: 'checkbox',
+          value: name
+        });
+        box.checked = scope.indexOf(name) !== -1;
+        box.dataset.field = 'scope';
+        boxes.appendChild(el('label', {class: 'aef-check'}, [box, name]));
+      });
+      wrapper.appendChild(boxes);
+      return wrapper;
     }
 
     function renderPrices() {
@@ -596,12 +672,24 @@
           type: 'button',
           class: 'aef-remove',
           onclick: function () {
+            var removed = (priceRows[index] || {}).name;
             priceRows.splice(index, 1);
+            if (removed) dropOrRenameScope(removed.trim(), '');
+            priorNames = rawNames();
             renderPrices();
+            renderQuestions();
           }
         }, ['Remove option']));
         row.addEventListener('input', syncPrices);
-        row.addEventListener('change', syncPrices);
+        // Scope checkboxes rebuild on blur, not on every keystroke, so
+        // renaming an option does not steal focus mid-typing.
+        row.addEventListener('change', function () {
+          syncPrices();
+          var current = rawNames();
+          renameQuestionScopes(priorNames, current);
+          priorNames = current;
+          renderQuestions();
+        });
         priceContainer.appendChild(row);
       });
       syncPrices();
@@ -680,6 +768,7 @@
           required,
           'Required'
         ]));
+        grid.appendChild(scopeControl(item, index));
         row.appendChild(grid);
         row.appendChild(el('button', {
           type: 'button',
@@ -706,7 +795,9 @@
           participant_roles: ['Participant'],
           active: true
         });
+        priorNames = rawNames();
         renderPrices();
+        renderQuestions();
       });
     document.getElementById('add-question')
       .addEventListener('click', function () {
@@ -721,13 +812,27 @@
         renderQuestions();
       });
     if (templateSelect) {
+      var templateKeyBefore = templateSelect.value;
       templateSelect.addEventListener('change', function () {
+        // Applying a template replaces price options wholesale, which would
+        // discard member prices an existing event depends on.
+        var replacesLiveData = priceRows.length || questionRows.length;
+        if (replacesLiveData && !window.confirm(
+          'Applying this template replaces all price options and custom '
+            + 'questions below, including any member prices. Continue?'
+        )) {
+          templateSelect.value = templateKeyBefore;
+          return;
+        }
+
         var selected = templates[templateSelect.value] || {
           price_options: [],
           custom_questions: []
         };
         priceRows = clone(selected.price_options || []);
         questionRows = clone(selected.custom_questions || []);
+        priorNames = rawNames();
+        templateKeyBefore = templateSelect.value;
         renderPrices();
         renderQuestions();
       });

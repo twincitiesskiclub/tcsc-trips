@@ -2,6 +2,7 @@
 
 import csv
 from datetime import date, datetime, timedelta
+import json
 from io import StringIO
 from unittest.mock import patch
 
@@ -172,8 +173,8 @@ def test_create_from_dry_tri_template_copies_three_price_options(
     event = Event.query.filter_by(slug="dry-tri-2026").one()
     assert event.template_key == "dry_tri"
     assert [option.name for option in event.price_options] == [
-        "Individual",
-        "Team of 3",
+        "Individual Triathlon",
+        "Relay Triathlon",
         "Run-only 6K",
     ]
 
@@ -488,3 +489,199 @@ def test_cancel_paid_registration_uses_shared_refund_helper(
     refund.assert_called_once_with(payment)
     db_session.session.refresh(registration)
     assert registration.status == RegistrationStatus.REFUNDED
+
+
+def _edit_form(event, price_options_json, custom_questions_json):
+    return {
+        "slug": event.slug,
+        "name": event.name,
+        "description": event.description,
+        "location": event.location,
+        "event_date": event.event_date.strftime("%Y-%m-%dT%H:%M"),
+        "signup_start": event.signup_start.strftime("%Y-%m-%dT%H:%M"),
+        "signup_end": event.signup_end.strftime("%Y-%m-%dT%H:%M"),
+        "capacity": str(event.capacity),
+        "status": event.status,
+        "audience": event.audience,
+        "details_url": "",
+        "discount_code": "",
+        "price_options_json": price_options_json,
+        "custom_questions_json": custom_questions_json,
+    }
+
+
+_TWO_OPTIONS_JSON = json.dumps(
+    [
+        {
+            "name": "Individual Triathlon",
+            "description": "",
+            "price_cents": 5500,
+            "member_price_cents": 3500,
+            "participant_roles": ["Participant"],
+            "active": True,
+        },
+        {
+            "name": "Relay Triathlon",
+            "description": "",
+            "price_cents": 10500,
+            "member_price_cents": 7500,
+            "participant_roles": [
+                "Rollerskier",
+                "Mountain Biker",
+                "Trail Runner",
+            ],
+            "active": True,
+        },
+    ]
+)
+
+
+def _gender_question(options, scope):
+    return {
+        "key": "competition_gender",
+        "label": "Competition gender",
+        "type": "choice",
+        "options": options,
+        "required": True,
+        "price_options": scope,
+    }
+
+
+def test_edit_saves_disjoint_scoped_duplicate_question_keys(
+    admin_client,
+    db_session,
+):
+    event = _event("admin-scope-test")
+    db_session.session.add(event)
+    db_session.session.commit()
+
+    response = admin_client.post(
+        f"/admin/events/{event.id}/edit",
+        data=_edit_form(
+            event,
+            _TWO_OPTIONS_JSON,
+            json.dumps(
+                [
+                    _gender_question(
+                        ["Men", "Women", "Non-binary"],
+                        ["Individual Triathlon"],
+                    ),
+                    _gender_question(
+                        ["Men", "Women", "Mixed"],
+                        ["Relay Triathlon"],
+                    ),
+                ]
+            ),
+        ),
+    )
+
+    assert response.status_code == 302
+    db_session.session.refresh(event)
+    assert [
+        question["price_options"] for question in event.custom_questions
+    ] == [["Individual Triathlon"], ["Relay Triathlon"]]
+
+
+@pytest.mark.parametrize(
+    ("first_scope", "second_scope", "message"),
+    [
+        (
+            ["Individual Triathlon"],
+            ["Individual Triathlon"],
+            "is used twice for price",
+        ),
+        (
+            [],
+            ["Relay Triathlon"],
+            "Repeat a key only when each copy is limited",
+        ),
+        (
+            ["Individual Triathlon"],
+            [],
+            "Repeat a key only when each copy is limited",
+        ),
+    ],
+)
+def test_edit_rejects_duplicate_keys_that_are_not_disjoint(
+    admin_client,
+    db_session,
+    first_scope,
+    second_scope,
+    message,
+):
+    event = _event("admin-scope-test")
+    db_session.session.add(event)
+    db_session.session.commit()
+
+    response = admin_client.post(
+        f"/admin/events/{event.id}/edit",
+        data=_edit_form(
+            event,
+            _TWO_OPTIONS_JSON,
+            json.dumps(
+                [
+                    _gender_question(["Men", "Women"], first_scope),
+                    _gender_question(["Men", "Women"], second_scope),
+                ]
+            ),
+        ),
+    )
+
+    assert response.status_code == 400
+    assert message in response.get_data(as_text=True)
+    db_session.session.refresh(event)
+    assert event.custom_questions == []
+
+
+def test_edit_rejects_a_scope_naming_an_unknown_price_option(
+    admin_client,
+    db_session,
+):
+    event = _event("admin-scope-test")
+    db_session.session.add(event)
+    db_session.session.commit()
+
+    response = admin_client.post(
+        f"/admin/events/{event.id}/edit",
+        data=_edit_form(
+            event,
+            _TWO_OPTIONS_JSON,
+            json.dumps(
+                [_gender_question(["Men", "Women"], ["Solo Triathlon"])]
+            ),
+        ),
+    )
+
+    assert response.status_code == 400
+    body = response.get_data(as_text=True)
+    assert "Solo Triathlon" in body
+    assert "which does not exist on this event" in body
+    db_session.session.refresh(event)
+    assert event.custom_questions == []
+
+
+def test_registrations_roster_lists_a_repeated_question_key_once(
+    admin_client,
+    db_session,
+):
+    event = _event(
+        "admin-scope-roster-test",
+        custom_questions=[
+            _gender_question(["Men", "Women", "Non-binary"], ["Individual"]),
+            _gender_question(["Men", "Women", "Mixed"], ["Team of 3"]),
+        ],
+    )
+    registration = _registration(event)
+    registration.answers = {"competition_gender": "Mixed"}
+    event.registrations.append(registration)
+    db_session.session.add(event)
+    db_session.session.commit()
+
+    response = admin_client.get(
+        f"/admin/events/{event.id}/registrations/data"
+    )
+
+    body = response.get_json()
+    keys = [column["key"] for column in body["columns"]]
+    assert keys.count("competition_gender") == 1
+    assert body["registrations"][0]["competition_gender"] == "Mixed"

@@ -40,6 +40,16 @@ def _validate_question(template_key, index, question):
     ):
         raise ValueError(f"{offender} must have an 'options' list")
 
+    if "price_options" in question and (
+        not isinstance(question["price_options"], list)
+        or not all(
+            isinstance(name, str) for name in question["price_options"]
+        )
+    ):
+        raise ValueError(
+            f"{offender} field 'price_options' must be a list of str"
+        )
+
 
 def _price_option_name(template_key, index, option):
     name = option.get("name") if isinstance(option, dict) else None

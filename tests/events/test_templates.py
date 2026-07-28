@@ -64,11 +64,11 @@ def test_apply_template_copies_questions_and_price_options(db_session):
     saved_event = db_session.session.get(Event, event_id)
 
     assert saved_event.template_key == "dry_tri"
-    assert len(saved_event.custom_questions) == 5
+    assert len(saved_event.custom_questions) == 6
     assert saved_event.custom_questions[0]["label"] == "Competition gender"
     assert [option.name for option in saved_event.price_options] == [
-        "Individual",
-        "Team of 3",
+        "Individual Triathlon",
+        "Relay Triathlon",
         "Run-only 6K",
     ]
     assert saved_event.price_options[1].participant_roles == [
@@ -181,3 +181,71 @@ templates:
 def test_apply_template_with_unknown_key_raises_value_error():
     with pytest.raises(ValueError, match=r"Unknown event template 'missing'"):
         event_templates.apply_template(_event(), "missing")
+
+
+def test_dry_tri_template_scopes_questions_by_price_option():
+    template = event_templates.get_template("dry_tri")
+    names = [option["name"] for option in template["price_options"]]
+
+    assert names == [
+        "Individual Triathlon",
+        "Relay Triathlon",
+        "Run-only 6K",
+    ]
+
+    scopes = {}
+    for question in template["custom_questions"]:
+        scopes.setdefault(question["key"], []).append(
+            (question.get("price_options") or [], question.get("options"))
+        )
+
+    # Individual entries can be non-binary; relay teams can be mixed.
+    assert scopes["competition_gender"] == [
+        (
+            ["Individual Triathlon", "Run-only 6K"],
+            ["Men", "Women", "Non-binary"],
+        ),
+        (["Relay Triathlon"], ["Men", "Women", "Mixed"]),
+    ]
+    # Run-only participants are asked neither course nor wave.
+    for key in ("course", "wave"):
+        assert scopes[key][0][0] == [
+            "Individual Triathlon",
+            "Relay Triathlon",
+        ]
+    # Club and city apply to everyone.
+    for key in ("club", "city_state"):
+        assert scopes[key][0][0] == []
+
+    # Every scope must name a real price option.
+    for question in template["custom_questions"]:
+        for name in question.get("price_options") or []:
+            assert name in names
+
+
+def test_question_price_options_must_be_a_list_of_strings(
+    tmp_path,
+    monkeypatch,
+):
+    config_path = tmp_path / "event_templates.yaml"
+    config_path.write_text(
+        """
+templates:
+  broken:
+    name: Broken
+    price_options: []
+    custom_questions:
+      - key: course
+        label: Course
+        type: text
+        required: false
+        price_options: "Individual"
+""",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(event_templates, "_CONFIG_PATH", config_path)
+
+    with pytest.raises(
+        ValueError, match=r"'course'.*'price_options' must be a list of str"
+    ):
+        event_templates.load_event_templates()

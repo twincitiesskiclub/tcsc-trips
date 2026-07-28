@@ -9,6 +9,18 @@
   const optionsById = new Map(
     eventData.priceOptions.map(option => [String(option.id), option])
   );
+  const knownOptionNames = new Set(
+    eventData.priceOptions.map(option => option.name)
+  );
+
+  // Mirrors questions_for_option() on the server: an empty scope applies to
+  // every option, and a scope naming no surviving option falls open to
+  // applying rather than silently dropping a required question.
+  function questionAppliesTo(scope, optionName) {
+    if (!Array.isArray(scope) || scope.length === 0) return true;
+    if (scope.includes(optionName)) return true;
+    return !scope.some(name => knownOptionNames.has(name));
+  }
 
   const stripeCardStyles = {
     style: {
@@ -106,6 +118,9 @@
       const isTeam = option.participantRoles.length > 1;
       teamNameField.classList.toggle('hidden', !isTeam);
       teamName.required = isTeam;
+      teamName.disabled = !isTeam;
+
+      this.applyQuestionScopes(option.name);
 
       const isFree = option.priceCents === 0;
       document.getElementById('card-field').classList.toggle('hidden', isFree);
@@ -120,6 +135,32 @@
           );
         });
       }
+    }
+
+    applyQuestionScopes(optionName) {
+      let visibleCount = 0;
+      form.querySelectorAll('[data-question-field]').forEach(field => {
+        let scope = [];
+        try {
+          scope = JSON.parse(field.dataset.questionScope || '[]');
+        } catch (error) {
+          scope = [];
+        }
+
+        const applies = questionAppliesTo(scope, optionName);
+        if (applies) visibleCount += 1;
+        field.classList.toggle('hidden', !applies);
+        // Disabling keeps out-of-scope answers out of validation and out of
+        // the payload while preserving what was typed if the option changes
+        // back.
+        field.querySelectorAll('[data-question-key]').forEach(input => {
+          input.disabled = !applies;
+        });
+      });
+
+      // Don't leave the heading stranded over an empty section.
+      const section = document.getElementById('event-questions');
+      if (section) section.classList.toggle('hidden', visibleCount === 0);
     }
 
     renderParticipants(roles) {
@@ -212,9 +253,11 @@
 
     collectPayload() {
       const answers = {};
-      form.querySelectorAll('[data-question-key]').forEach(input => {
-        answers[input.dataset.questionKey] = input.value;
-      });
+      form
+        .querySelectorAll('[data-question-key]:not([disabled])')
+        .forEach(input => {
+          answers[input.dataset.questionKey] = input.value;
+        });
 
       const participants = Array.from(
         form.querySelectorAll('[data-participant]')
@@ -226,11 +269,15 @@
         return participant;
       });
 
+      // Only teams have a team name; don't ship a stale one left behind by a
+      // registrant who switched away from a team option.
+      const isTeam = this.selectedOption.participantRoles.length > 1;
+
       return {
         price_option_id: this.selectedOption.id,
-        contact_email: document.getElementById('contact-email').value,
-        contact_phone: document.getElementById('contact-phone').value,
-        team_name: document.getElementById('team-name').value,
+        team_name: isTeam
+          ? document.getElementById('team-name').value
+          : null,
         emergency_contact_name: document.getElementById(
           'emergency-contact-name'
         ).value,
@@ -293,8 +340,8 @@
               card: this.card,
               billing_details: {
                 name: payload.participants[0].name,
-                email: payload.contact_email,
-                phone: payload.contact_phone
+                email: payload.participants[0].email,
+                phone: payload.participants[0].phone
               }
             }
           }
@@ -320,6 +367,16 @@
       }
     }
 
+    // A key can repeat across scopes, so match the one currently in play.
+    findQuestionInput(questionKey) {
+      const inputs = Array.from(
+        form.querySelectorAll('[data-question-key]:not([disabled])')
+      );
+      return (
+        inputs.find(input => input.dataset.questionKey === questionKey) || null
+      );
+    }
+
     showServerErrors(errors) {
       if (!errors || typeof errors !== 'object') {
         this.showError(errors || 'Registration failed. Please try again.');
@@ -329,8 +386,6 @@
       const messages = Object.values(errors);
       Object.keys(errors).forEach(key => {
         const fieldId = {
-          contact_email: 'contact-email',
-          contact_phone: 'contact-phone',
           team_name: 'team-name',
           emergency_contact_name: 'emergency-contact-name',
           emergency_contact_phone: 'emergency-contact-phone'
@@ -341,7 +396,7 @@
         const field = fieldId
           ? document.getElementById(fieldId)
           : questionKey
-            ? document.getElementById(`question-${questionKey}`)
+            ? this.findQuestionInput(questionKey)
             : null;
         if (field) field.classList.add('field-error');
       });

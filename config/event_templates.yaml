@@ -1,25 +1,39 @@
 templates:
   dry_tri:
     name: Dry Tri (race)
+    # Option names are referenced by the question scopes below, so renaming
+    # one here means updating every price_options list that mentions it.
     price_options:
-      - name: Individual
+      - name: Individual Triathlon
         description: Complete all three legs yourself
         price_cents: 5500
+        member_price_cents: 3500
         participant_roles: ["Participant"]
-      - name: Team of 3
+      - name: Relay Triathlon
         description: 'One registration covers your whole team. If the same participant will complete multiple legs, enter their information again.'
         price_cents: 10500
+        member_price_cents: 7500
         participant_roles: ["Rollerskier", "Mountain Biker", "Trail Runner"]
       - name: Run-only 6K
         description: Just the 6K trail run
         price_cents: 3000
+        member_price_cents: 1500
         participant_roles: ["Participant"]
     custom_questions:
+      # Two scoped copies of one key: individual entries can be non-binary,
+      # relay teams can be mixed. They share a single roster column.
       - key: competition_gender
         label: "Competition gender"
         type: choice
-        options: ["Men", "Women", "Mixed / non-binary"]
+        options: ["Men", "Women", "Non-binary"]
         required: true
+        price_options: ["Individual Triathlon", "Run-only 6K"]
+      - key: competition_gender
+        label: "Competition gender"
+        type: choice
+        options: ["Men", "Women", "Mixed"]
+        required: true
+        price_options: ["Relay Triathlon"]
       - key: club
         label: "Club(s) or team(s) you represent (e.g., TCSC, LNR)"
         type: text
@@ -35,6 +49,7 @@ templates:
           - "Long course (18K roll, 17K ride, 11K run)"
           - "Short course (9K roll, 9K ride, 6K run)"
         required: true
+        price_options: ["Individual Triathlon", "Relay Triathlon"]
       - key: wave
         label: "What is your preferred wave? (We may not be able to accommodate requested wave)"
         type: choice
@@ -43,6 +58,7 @@ templates:
           - "Wave 2 (strong finish)"
           - "Wave 3 (focused on completion)"
         required: false
+        price_options: ["Individual Triathlon", "Relay Triathlon"]
   social:
     name: Social event
     price_options:
