@@ -3,9 +3,27 @@
 # Usage: scripts/ui_audit/run.sh <label>
 #
 # Environment:
-#   TCSC_UI_AUDIT_ONLY  comma-separated surface and/or group names; capture only
-#                       those, leaving the rest of <label> as it was. A full run
-#                       is ~11 minutes, a single group is seconds.
+#   TCSC_UI_AUDIT_ONLY   comma-separated surface and/or group names; capture only
+#                        those, leaving the rest of <label> as it was. A full run
+#                        is ~11 minutes, a single surface about three.
+#   TCSC_UI_AUDIT_EMAIL  the admin identity the session cookie is minted for.
+#                        Defaults to a FINANCE_AUTHORIZED_EMAILS address so
+#                        payment amounts render. Only two addresses are on that
+#                        allowlist, so most real admins see a structurally
+#                        different payments page -- no bulk-bar sum element, and
+#                        narrower em-dash amount cells on mobile where
+#                        .pw-row-amount drops to min-width:0. Capture that
+#                        variant as its own labelled pass:
+#
+#   TCSC_UI_AUDIT_ONLY=payments \
+#     TCSC_UI_AUDIT_EMAIL=uiaudit@twincitiesskiclub.org \
+#     scripts/ui_audit/run.sh before-nonfinance
+#
+#                        A separate label rather than a suffixed state name: the
+#                        two passes are two different admin identities, not two
+#                        states of one, and keeping them in separate directories
+#                        means neither run's index.json can claim to describe
+#                        the other's captures.
 #
 # The database is seeded exactly once, by hand, via scripts/ui_audit/seed_fixtures.py.
 # This script deliberately has no --seed flag: seed_all() anchors practice, poll and
@@ -40,6 +58,16 @@ npm run tailwind:build
 # libraries are staged. No-op once the sysroot exists.
 SYSROOT="$(scripts/ui_audit/browser_deps.sh)"
 export LD_LIBRARY_PATH="$SYSROOT/usr/lib/x86_64-linux-gnu:$SYSROOT/lib/x86_64-linux-gnu:$SYSROOT/usr/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
+
+# The same sysroot holds the fonts. Without this, fontconfig only sees the
+# image's six DejaVu faces, none of which has emoji coverage, and every emoji in
+# the admin UI captures as a tofu box -- a box whose intrinsic width is not the
+# glyph's, so spacing triaged against it is triaged against the wrong pixels.
+export FONTCONFIG_FILE="$SYSROOT/fonts.conf"
+if ! FONTCONFIG_FILE="$FONTCONFIG_FILE" fc-list ':charset=1f3f7' family 2>/dev/null | grep -qi emoji; then
+  echo "no emoji-capable font visible to fontconfig; captures would show tofu boxes" >&2
+  exit 1
+fi
 
 rm -f .ui-audit/server.json
 # The request log goes to a file: at ~250 captures it is thousands of lines, and

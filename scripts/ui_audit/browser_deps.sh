@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Provision the shared libraries Playwright's Chromium needs, without root.
+# Provision the shared libraries and fonts Playwright's Chromium needs, without root.
 #
 # This box has no sudo and no `playwright install-deps`, so the browser binary
 # in ~/.cache/ms-playwright cannot start: `ldd` reports ~15 missing sonames
@@ -7,15 +7,32 @@
 # libraries into a private sysroot by downloading the Debian packages and
 # unpacking them as an unprivileged user, then point LD_LIBRARY_PATH at it.
 #
-# Idempotent: if the sysroot already resolves every soname, this exits without
-# touching the network. Prints the sysroot path on stdout; all progress noise
-# goes to stderr so callers can capture the path directly.
+# The same mechanism stages FONTS. The image ships six DejaVu faces and nothing
+# else, so every emoji in the admin UI rendered as a tofu box: role chips
+# (admin_users.js: `tag.emoji || DEFAULT_EMOJI`), the practices lead pills, and
+# the "is attendance" legend on practices-detail. A missing-glyph box has a
+# different intrinsic width from the real glyph, so a padding defect triaged
+# against it is not the gap production shows. Fonts are part of what makes a
+# capture faithful, not a nicety.
+#
+# Idempotent: if the sysroot already resolves every soname and holds the emoji
+# font, this exits without touching the network. Prints the sysroot path on
+# stdout; all progress noise goes to stderr so callers can capture the path
+# directly. run.sh reads $SYSROOT/fonts.conf out of the printed path and exports
+# it as FONTCONFIG_FILE.
 #
 # Usage:  SYSROOT="$(scripts/ui_audit/browser_deps.sh)"
 set -euo pipefail
 
 SYSROOT="${TCSC_UI_AUDIT_SYSROOT:-$HOME/.cache/tcsc-ui-audit/sysroot}"
 LIBDIR="$SYSROOT/usr/lib/x86_64-linux-gnu"
+# Presence probe for the font half of the staging. fontconfig will not look
+# inside the sysroot on its own -- /etc/fonts/fonts.conf lists /usr/share/fonts,
+# /usr/local/share/fonts, $XDG_DATA_HOME/fonts and ~/.fonts, none of which we
+# can write to meaningfully -- so we also emit a fonts.conf that includes the
+# system config and adds this directory.
+EMOJI_FONT="$SYSROOT/usr/share/fonts/truetype/noto/NotoColorEmoji.ttf"
+FONTCONF="$SYSROOT/fonts.conf"
 
 ld_path() {
   printf '%s:%s:%s' "$LIBDIR" "$SYSROOT/lib/x86_64-linux-gnu" "$SYSROOT/usr/lib"
@@ -39,12 +56,28 @@ missing_count() {
   LD_LIBRARY_PATH="$(ld_path)" ldd "$BROWSER" 2>/dev/null | grep -c 'not found' || true
 }
 
-if [[ "$(missing_count)" == "0" ]]; then
+write_fontconfig() {
+  mkdir -p "$SYSROOT" "$SYSROOT/fontcache"
+  cat > "$FONTCONF" <<XML
+<?xml version="1.0"?>
+<fontconfig>
+  <!-- Written by scripts/ui_audit/browser_deps.sh. Keeps the system
+       configuration (aliases, hinting, the DejaVu directory) and adds the
+       fonts staged into this sysroot, so Chromium can resolve emoji. -->
+  <include ignore_missing="yes">/etc/fonts/fonts.conf</include>
+  <dir>$SYSROOT/usr/share/fonts</dir>
+  <cachedir>$SYSROOT/fontcache</cachedir>
+</fontconfig>
+XML
+}
+
+if [[ "$(missing_count)" == "0" && -f "$EMOJI_FONT" ]]; then
+  write_fontconfig
   echo "$SYSROOT"
   exit 0
 fi
 
-echo "Staging Chromium's shared libraries into $SYSROOT ..." >&2
+echo "Staging Chromium's shared libraries and fonts into $SYSROOT ..." >&2
 
 # Pinned to Debian bookworm, matching this container's /etc/os-release. The
 # list is every transitive dependency of the sonames Chromium links against.
@@ -63,6 +96,12 @@ PACKAGES=(
   libxcb-xfixes0 libxcb1 libxcomposite1 libxcursor1 libxdamage1 libxdmcp6
   libxext6 libxfixes3 libxi6 libxinerama1 libxkbcommon0 libxrandr2 libxrender1
   libxshmfence1 libxtst6 libz3-4
+  # Fonts. fonts-noto-color-emoji is the one that matters -- without it every
+  # emoji in the admin UI is a tofu box, which is a silently wrong capture, not
+  # a cosmetic one. fonts-dejavu-core duplicates what the image already ships
+  # and is listed so the sysroot is self-sufficient rather than depending on the
+  # base image keeping its six faces.
+  fonts-noto-color-emoji fonts-dejavu-core
 )
 
 DEBDIR="$(dirname "$SYSROOT")/debs"
@@ -101,5 +140,18 @@ if [[ "$STILL_MISSING" != "0" ]]; then
   exit 1
 fi
 
-echo "Chromium dependencies staged." >&2
+if [[ ! -f "$EMOJI_FONT" ]]; then
+  echo "Sysroot built but the emoji font is missing at $EMOJI_FONT." >&2
+  echo "Captures would render every emoji as a tofu box; refusing to continue." >&2
+  exit 1
+fi
+
+write_fontconfig
+# Build the cache now rather than letting each Chromium process scan the
+# directory; also the first place a bad fonts.conf shows up.
+if command -v fc-cache >/dev/null 2>&1; then
+  FONTCONFIG_FILE="$FONTCONF" fc-cache -f >&2 || true
+fi
+
+echo "Chromium dependencies and fonts staged." >&2
 echo "$SYSROOT"

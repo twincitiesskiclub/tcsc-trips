@@ -12,6 +12,9 @@
 //                       Tasks 9-13 each re-shoot one group after their CSS
 //                       fixes, and a full run is ~11 minutes.
 //
+// The admin identity is chosen by scripts/ui_audit/serve.py (TCSC_UI_AUDIT_EMAIL)
+// and arrives in <serverJson> as admin_email, which is recorded in index.json.
+//
 // Prefer driving this through scripts/ui_audit/run.sh, which also builds
 // Tailwind, stages the browser's shared libraries, and starts/stops the server.
 
@@ -112,6 +115,15 @@ if (only.length) {
 // what this run will rewrite, and carry the rest of index.json forward.
 const selectedNames = new Set(selected.map((s) => s.name));
 let carried = [];
+// Problems are carried forward on exactly the same rule as captures. Without
+// this, a subset run wrote `problems` from its own 65 rows while `captured`
+// held all 302 -- so an index describing a full baseline could assert zero
+// SKIPs on the evidence of a fraction of it, and a genuinely unmatched selector
+// on an untouched surface would vanish the moment any other group was
+// re-shot. An entry with no `surface` (the pre-object format, or a failure
+// raised before any surface was entered) is kept rather than dropped: keeping a
+// stale problem is visible, silently discarding one is not.
+const carriedProblems = { blocked: [], skipped: [], failed: [], clipped: [] };
 if (only.length) {
   const existing = await readdir(OUT).catch(() => []);
   for (const file of existing) {
@@ -126,6 +138,17 @@ if (only.length) {
   if (prior && Array.isArray(prior.captured)) {
     carried = prior.captured.filter((c) => !selectedNames.has(c.surface));
     console.log(`carrying ${carried.length} prior captures forward in index.json`);
+  }
+  if (prior && prior.problems) {
+    let n = 0;
+    for (const kind of Object.keys(carriedProblems)) {
+      const list = Array.isArray(prior.problems[kind]) ? prior.problems[kind] : [];
+      carriedProblems[kind] = list.filter(
+        (p) => !(p && typeof p === 'object' && selectedNames.has(p.surface)),
+      );
+      n += carriedProblems[kind].length;
+    }
+    if (n) console.log(`carrying ${n} prior problems forward in index.json`);
   }
 }
 
@@ -248,9 +271,42 @@ const captured = [];
 
 // Every problem worth reporting to the caller, so a run that "worked" but
 // silently captured nothing useful cannot be mistaken for a clean one.
+//
+// Entries are objects carrying the surface they belong to, not bare strings,
+// so that a subset run can merge the previous run's problems the same way it
+// merges the previous run's captures. Writing `problems` from the current run
+// alone let a 302-row baseline assert zero problems on the evidence of a
+// 65-row subset -- an index that claims to describe 302 captures while its
+// problem list describes 65 is worse than no problem list.
 const problems = { blocked: [], skipped: [], failed: [], clipped: [] };
 
+// Set as the loops advance so a problem raised anywhere -- including inside the
+// request router, which sits outside the surface loop -- can be attributed.
+let currentSurface = null;
+let currentViewport = null;
+const addProblem = (kind, message) => {
+  problems[kind].push({ surface: currentSurface, viewport: currentViewport, message });
+  return message;
+};
+
+// The audit is only allowed to talk to the app under test. Everything else --
+// third-party hosts, CDNs, tile servers -- is aborted, so it fails identically
+// on every run instead of depending on this box's network.
+//
+// This is a determinism and evidence fix, not a safety one: the admin UI's
+// dangerous controls are non-GET and were already blocked. But
+// admin/practices/config.html loads a map from staticmap.openstreetmap.de, and
+// that request really did leave the box, really did fail, and rendered as alt
+// text -- which pushed practices-config--map-preview--mobile to a 461px
+// document at a 390px viewport. The only practices-config capture that
+// overflows was overflowing because of a fabricated broken image, and it went
+// to triage in the same table as genuine layout defects.
+const isAuditOrigin = (url) =>
+  url === BASE || url.startsWith(`${BASE}/`) || url.startsWith(`${BASE}?`);
+const external = new Set();
+
 for (const viewport of VIEWPORTS) {
+  currentViewport = viewport.name;
   const context = await browser.newContext({
     viewport: { width: viewport.width, height: viewport.height },
     deviceScaleFactor: 2,
@@ -261,11 +317,29 @@ for (const viewport of VIEWPORTS) {
   // payments; the manifest is supposed to contain openers only, and this is what
   // makes a manifest mistake harmless as well as visible.
   await context.route('**/*', (route) => {
-    const method = route.request().method();
+    const request = route.request();
+    const method = request.method();
+    const url = request.url();
+
+    // Inline payloads never leave the machine and are not fetched over the
+    // network, so there is nothing to seal.
+    if (url.startsWith('data:') || url.startsWith('blob:')) return route.continue();
+
+    if (!isAuditOrigin(url)) {
+      // Not a problem -- the manifest is allowed to contain pages that
+      // reference external assets. Recorded so index.json says which captures
+      // are missing a third-party resource by design.
+      try {
+        external.add(new URL(url).origin);
+      } catch {
+        external.add(url);
+      }
+      return route.abort();
+    }
+
     if (method === 'GET' || method === 'HEAD') return route.continue();
-    const line = `${method} ${route.request().url()}`;
+    const line = addProblem('blocked', `${method} ${url}`);
     console.warn(`  BLOCKED ${line}`);
-    problems.blocked.push(line);
     return route.abort();
   });
 
@@ -281,6 +355,7 @@ for (const viewport of VIEWPORTS) {
   const page = await context.newPage();
 
   for (const surface of selected) {
+    currentSurface = surface.name;
     // Writes one PNG and its index.json row. `extra` carries whatever the
     // caller already knows about this frame (part number, truncation, the
     // reveal it depicts).
@@ -339,7 +414,7 @@ for (const viewport of VIEWPORTS) {
           `content below the cap is unreviewable. Either add longList: true to ` +
           `surfaces.mjs with a reason, or raise SAFETY_CAP_CSS_PX.`;
         console.warn(`  CLIPPED ${line}`);
-        problems.clipped.push(line);
+        addProblem('clipped', line);
       }
 
       await write('base', options, {
@@ -352,12 +427,14 @@ for (const viewport of VIEWPORTS) {
         scrollWidth: doc.scrollWidth,
         viewportWidth: viewport.width,
         overflowX: doc.scrollWidth > viewport.width,
+        notProduction: surface.notProduction || null,
       });
     };
 
     // Viewport frame anchored on the opener, plus continuation shots when the
     // revealed overlay does not fit in one frame.
-    const shootState = async (stateName, anchor) => {
+    const shootState = async (state, anchor) => {
+      const stateName = state.name;
       await anchor
         .evaluate((el, offset) => {
           const top = el.getBoundingClientRect().top + window.scrollY;
@@ -379,6 +456,11 @@ for (const viewport of VIEWPORTS) {
         viewportWidth: viewport.width,
         overflowX: doc.scrollWidth > viewport.width,
         reveal: reveal.found ? reveal.describe : null,
+        // Set when the manifest says this state cannot be captured as
+        // production renders it -- today, only where the revealed UI depends on
+        // a third-party asset the harness aborts. Held out of the overflow list
+        // handed to triage; see the summary at the end of this file.
+        notProduction: state.notProduction || surface.notProduction || null,
       };
 
       // How much of the reveal is missing from this frame, and can we get it?
@@ -465,7 +547,7 @@ for (const viewport of VIEWPORTS) {
       if (response && response.status() >= 400) {
         const line = `${surface.path} -> HTTP ${response.status()}`;
         console.warn(`  FAIL ${line}`);
-        problems.failed.push(line);
+        addProblem('failed', line);
         continue;
       }
       if (page.url().includes('/login')) {
@@ -497,17 +579,17 @@ for (const viewport of VIEWPORTS) {
           if ((await target.count()) === 0) {
             const line = `${surface.name}/${state.name} -> no match for ${state.click}`;
             console.warn(`  SKIP ${line}`);
-            problems.skipped.push(line);
+            addProblem('skipped', line);
             continue;
           }
           await page.evaluate(TAG_PRE_STATE);
           await target.click({ timeout: 5000 });
           await page.waitForTimeout(700);
-          await shootState(state.name, target);
+          await shootState(state, target);
         } catch (err) {
           const line = `${surface.name}/${state.name} -> ${err.message}`;
           console.warn(`  SKIP ${line}`);
-          problems.skipped.push(line);
+          addProblem('skipped', line);
         } finally {
           // Reload rather than press Escape. Escape closes a modal but leaves
           // tab selection, filter pills, expanded rows and appended editor rows
@@ -529,7 +611,7 @@ for (const viewport of VIEWPORTS) {
     } catch (err) {
       const line = `${surface.path} -> ${err.message}`;
       console.warn(`  FAIL ${line}`);
-      problems.failed.push(line);
+      addProblem('failed', line);
     }
   }
 
@@ -539,10 +621,28 @@ for (const viewport of VIEWPORTS) {
 await browser.close();
 
 const all = [...carried, ...captured];
+// What index.json reports must describe every row it contains, not just the
+// rows this invocation produced.
+const mergedProblems = {};
+for (const kind of Object.keys(problems)) {
+  mergedProblems[kind] = [...carriedProblems[kind], ...problems[kind]];
+}
+
 await writeFile(
   `${OUT}/index.json`,
   JSON.stringify(
-    { label, only: only.length ? only : null, captured: all, problems },
+    {
+      label,
+      only: only.length ? only : null,
+      // Which admin took these screenshots is part of what they mean: the
+      // payments page renders a different DOM for a finance-authorised admin.
+      adminEmail: server.admin_email || null,
+      // Every third-party origin the pages referenced. All were aborted, so any
+      // capture depending on one shows the failed-asset form on every run.
+      externalOriginsBlocked: [...external].sort(),
+      captured: all,
+      problems: mergedProblems,
+    },
     null,
     2,
   ),
@@ -554,20 +654,51 @@ console.log(
   `BLOCKED ${problems.blocked.length}  SKIP ${problems.skipped.length}  ` +
     `FAIL ${problems.failed.length}  CLIPPED ${problems.clipped.length}`,
 );
-const stillTruncated = captured.filter((c) => c.truncated);
+if (carried.length) {
+  const totals = Object.keys(mergedProblems)
+    .map((k) => `${k} ${mergedProblems[k].length}`)
+    .join('  ');
+  console.log(`index.json totals across all ${all.length} rows: ${totals}`);
+}
+if (external.size) {
+  console.log(`\nexternal origins aborted: ${[...external].sort().join(', ')}`);
+}
+
+// Summaries are computed over the whole index, not this run's slice, for the
+// same reason problems are merged: a subset run's summary that omits the
+// carried rows reads as "these are the only ones".
+const stillTruncated = all.filter((c) => c.truncated);
 if (stillTruncated.length) {
   console.log(`\ntruncated captures (${stillTruncated.length}):`);
   for (const c of stillTruncated) console.log(`  ${c.file}  ${c.truncatedReason}`);
 }
-const overflowing = captured.filter((c) => c.overflowX);
+const overflowing = all.filter((c) => c.overflowX);
 if (overflowing.length) {
-  console.log(`\nhorizontal overflow (${overflowing.length} captures):`);
-  const seen = new Set();
-  for (const c of overflowing) {
-    const key = `${c.surface}--${c.viewport}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    console.log(`  ${key}: ${c.scrollWidth}px wide at a ${c.viewportWidth}px viewport`);
+  // Captures marked notProduction are held out of the headline list. Their
+  // width is a property of the harness (an aborted third-party asset), not of
+  // the stylesheet, and a triage table cannot tell the difference by looking.
+  const real = overflowing.filter((c) => !c.notProduction);
+  const synthetic = overflowing.filter((c) => c.notProduction);
+  const summarise = (rows) => {
+    const seen = new Set();
+    for (const c of rows) {
+      const key = `${c.surface}--${c.viewport}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      console.log(
+        `  ${key} (${c.state}): ${c.scrollWidth}px wide at a ${c.viewportWidth}px viewport` +
+          (c.notProduction ? `  -- NOT PRODUCTION: ${c.notProduction}` : ''),
+      );
+    }
+  };
+  console.log(`\nhorizontal overflow (${real.length} captures):`);
+  summarise(real);
+  if (synthetic.length) {
+    console.log(
+      `\nhorizontal overflow in captures that do not depict production ` +
+        `(${synthetic.length}) -- do NOT triage these as layout defects:`,
+    );
+    summarise(synthetic);
   }
 }
 
@@ -575,6 +706,11 @@ if (overflowing.length) {
 // unreachable surface, and no base shot clipped outside the long-list
 // allowlist. Exiting non-zero keeps run.sh from reporting success on a capture
 // set that is quietly missing states or missing the bottom of a page.
+//
+// Judged on THIS run's problems, not the merged set: the exit code is a verdict
+// on what this invocation did, and a subset run cannot fix -- or be blamed for
+// -- a problem on a surface it did not visit. The merged set is what index.json
+// records and what the totals line above prints.
 if (
   problems.blocked.length ||
   problems.skipped.length ||

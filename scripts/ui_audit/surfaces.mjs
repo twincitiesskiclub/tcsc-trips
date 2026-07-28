@@ -16,6 +16,12 @@
 //   click     -- the opener
 //   pre       -- clicks needed to reach the opener (e.g. open a drawer first)
 //   viewports -- restrict to some viewports; omit for all three
+//   notProduction -- a sentence saying why this capture does not depict what
+//                 production renders. Propagated into index.json and used to
+//                 hold the capture out of the horizontal-overflow list handed
+//                 to triage, because a measurement taken from a frame the
+//                 harness distorted is not evidence about the stylesheet. Also
+//                 valid on a surface, applying to all of its captures.
 //
 // Surface field `longList: true` is the ONLY licence capture.mjs gives a base
 // shot to lose content to a height cap. Set it only where everything past the
@@ -257,7 +263,24 @@ export const SURFACES = [
       // cfgAddDraft prepends an unsaved card. It focuses the name field, but a
       // create POST only fires on blur with a non-empty name, and nothing types.
       { name: 'location-draft', click: '#add-location-btn' },
-      { name: 'map-preview', click: '#cfg-locations-list .cfg-card:first-of-type .cfg-map-toggle' },
+      // Kept because the toggle and the .cfg-map-expansion container around it
+      // are real UI worth auditing -- but the preview itself is an <img> from
+      // staticmap.openstreetmap.de, which capture.mjs aborts along with every
+      // other non-audit origin. What lands in the screenshot is Chromium's
+      // broken-image box with alt text, and that box is not what production
+      // shows: .cfg-map-img is `width:100%; max-width:400px`, dropping to
+      // `max-width:100%` below 768px, so a loaded tile cannot exceed the
+      // column, while the alt-text box does -- which is where the reported
+      // 461px document at a 390px viewport came from. Real enough to keep,
+      // fake enough that its measurements must not be triaged as layout
+      // defects, so it is labelled rather than dropped.
+      {
+        name: 'map-preview',
+        click: '#cfg-locations-list .cfg-card:first-of-type .cfg-map-toggle',
+        notProduction:
+          'the map tile is a third-party image the harness aborts; the frame shows ' +
+          'a broken-image alt box, which is wider than the loaded tile would be',
+      },
       {
         name: 'day-defaults',
         pre: ['#tab-btn-settings'],

@@ -8,7 +8,12 @@ import pytest
 from dotenv import dotenv_values
 
 from app import create_app
-from scripts.ui_audit.session_cookie import AUDIT_ADMIN_EMAIL, mint_admin_cookie
+from scripts.ui_audit.session_cookie import (
+    AUDIT_EMAIL_ENV_VAR,
+    DEFAULT_AUDIT_ADMIN_EMAIL,
+    audit_admin_email,
+    mint_admin_cookie,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
@@ -31,24 +36,60 @@ def test_minted_cookie_grants_admin_access(monkeypatch):
     )
 
 
-def test_email_is_on_the_allowed_domain():
+def test_email_is_on_the_allowed_domain(monkeypatch):
     from app.constants import ALLOWED_EMAIL_DOMAIN
 
-    assert AUDIT_ADMIN_EMAIL.endswith(ALLOWED_EMAIL_DOMAIN)
+    monkeypatch.delenv(AUDIT_EMAIL_ENV_VAR, raising=False)
+    assert DEFAULT_AUDIT_ADMIN_EMAIL.endswith(ALLOWED_EMAIL_DOMAIN)
+    assert audit_admin_email() == DEFAULT_AUDIT_ADMIN_EMAIL
 
 
-def test_email_is_finance_authorized():
+def test_default_email_is_finance_authorized(monkeypatch):
     """Payment amounts are gated on an email allowlist, not on any DB state.
 
     With an address outside FINANCE_AUTHORIZED_EMAILS, /admin/payments/data
     returns amount: None for every row, and the UI audit's screenshots show an
     em dash in every currency cell and in the bulk-selection sum -- so the
     spacing of populated currency cells never gets reviewed, and nothing in the
-    screenshots says why. Keep the audit identity finance-authorized.
+    screenshots says why. Keep the *default* audit identity finance-authorized;
+    the non-finance variant is reached deliberately via the env override, as its
+    own labelled pass.
     """
     from app.routes.admin import FINANCE_AUTHORIZED_EMAILS
 
-    assert AUDIT_ADMIN_EMAIL.lower() in [e.lower() for e in FINANCE_AUTHORIZED_EMAILS]
+    monkeypatch.delenv(AUDIT_EMAIL_ENV_VAR, raising=False)
+    assert audit_admin_email().lower() in [e.lower() for e in FINANCE_AUTHORIZED_EMAILS]
+
+
+def test_env_override_reaches_the_non_finance_variant(monkeypatch):
+    """The override has to actually produce a non-finance admin, or the second
+    pass silently re-captures the first pass's page."""
+    from app.routes.admin import FINANCE_AUTHORIZED_EMAILS
+
+    monkeypatch.setenv(AUDIT_EMAIL_ENV_VAR, "uiaudit@twincitiesskiclub.org")
+    email = audit_admin_email()
+    assert email == "uiaudit@twincitiesskiclub.org"
+    assert email.lower() not in [e.lower() for e in FINANCE_AUTHORIZED_EMAILS]
+
+
+def test_override_off_the_allowed_domain_is_rejected(monkeypatch):
+    """An address outside ALLOWED_EMAIL_DOMAIN mints a cookie that bounces every
+    capture to /login. Fail at mint time with the reason, not 26 surfaces in."""
+    monkeypatch.setenv(AUDIT_EMAIL_ENV_VAR, "someone@example.com")
+    with pytest.raises(ValueError, match="not on @twincitiesskiclub.org"):
+        audit_admin_email()
+
+
+def test_non_finance_override_still_reaches_admin(monkeypatch):
+    monkeypatch.setenv("TCSC_MIGRATION_ONLY", "1")
+    monkeypatch.setenv(AUDIT_EMAIL_ENV_VAR, "uiaudit@twincitiesskiclub.org")
+    app = create_app()
+    app.config["SECRET_KEY"] = "ui-audit-test-key"
+
+    name, value = mint_admin_cookie(app)
+    client = app.test_client()
+    client.set_cookie(name, value, domain="localhost")
+    assert client.get("/admin", follow_redirects=False).status_code == 200
 
 
 def test_without_the_cookie_admin_redirects_to_login(monkeypatch):

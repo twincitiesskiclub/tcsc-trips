@@ -50,14 +50,31 @@ os.environ["TCSC_MIGRATION_ONLY"] = "1"  # no APScheduler, no Slack Socket Mode
 dotenv.main.find_dotenv = dotenv.find_dotenv = lambda *args, **kwargs: ""
 
 from app import create_app  # noqa: E402  (must follow the guard + env load + find_dotenv patch)
-from scripts.ui_audit.session_cookie import mint_admin_cookie  # noqa: E402
+from scripts.ui_audit.session_cookie import (  # noqa: E402
+    audit_admin_email,
+    mint_admin_cookie,
+)
 
 
 def main() -> None:
     port = int(sys.argv[1]) if len(sys.argv) > 1 else 5055
     app = create_app()
     name, value = mint_admin_cookie(app)
-    print(json.dumps({"cookie_name": name, "cookie_value": value, "port": port}), flush=True)
+    # The identity travels with the handshake so capture.mjs can record it in
+    # index.json. Which admin took a screenshot is part of what the screenshot
+    # means -- the payments page renders a different DOM for a finance-authorised
+    # admin than for anyone else.
+    print(
+        json.dumps(
+            {
+                "cookie_name": name,
+                "cookie_value": value,
+                "port": port,
+                "admin_email": audit_admin_email(),
+            }
+        ),
+        flush=True,
+    )
     app.run(host="127.0.0.1", port=port, debug=False, use_reloader=False, threaded=True)
 
 
