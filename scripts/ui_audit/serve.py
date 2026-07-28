@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import dotenv
+import dotenv.main
 from dotenv import load_dotenv
 
 from scripts.ui_audit.outbound_guard import install_outbound_guard
@@ -32,10 +33,21 @@ os.environ["TCSC_MIGRATION_ONLY"] = "1"  # no APScheduler, no Slack Socket Mode
 # process doesn't already have -- because .env.uiaudit's enumeration missed a
 # key the real .env later grew -- would otherwise be silently backfilled with
 # the real value. Enumerating every key defends against what the app needs to
-# boot today; this makes the guarantee structural instead of depending on that
-# enumeration staying exhaustive: find_dotenv() can never locate the real .env
-# at all, so there is nothing for the fallback load_dotenv() to discover.
-dotenv.find_dotenv = lambda *args, **kwargs: ""
+# boot today; this patch makes the specific two-step call pattern
+# load_dotenv(find_dotenv()) structurally unable to find the real .env,
+# instead of depending on that enumeration staying exhaustive.
+#
+# Two bindings must both be patched, not one: `dotenv.find_dotenv` is the
+# package-level re-export that code doing `from dotenv import find_dotenv`
+# (app/config.py's pattern) picks up. `dotenv.main.find_dotenv` is the
+# separate, original binding that dotenv.main.load_dotenv() resolves against
+# its own module globals internally -- when called bare, with no arguments,
+# it calls find_dotenv() itself to locate a path. Patching only the
+# package-level name leaves that bare-call path free to discover the real
+# .env. This covers both; it does not make every possible way to reach a .env
+# file safe (e.g. an explicit hardcoded path would still work) -- only calls
+# that go through find_dotenv() resolution.
+dotenv.main.find_dotenv = dotenv.find_dotenv = lambda *args, **kwargs: ""
 
 from app import create_app  # noqa: E402  (must follow the guard + env load + find_dotenv patch)
 from scripts.ui_audit.session_cookie import mint_admin_cookie  # noqa: E402
