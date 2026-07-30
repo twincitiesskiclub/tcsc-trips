@@ -120,8 +120,10 @@ const practice_seasons = defineCollection({
       date_range: z.string(),
       fee_cents: z.number().int(),
       summary: z.string(),
-      // Per-season registration status line (for example, exact opening dates).
-      // registration_open=true renders it in the accent color, false muted.
+      // FALLBACK ONLY. The live registration line comes from the app database
+      // (see src/components/SeasonsGrid.astro). These two fields are used when
+      // the season API is unreachable at build time, or when no database
+      // season carries a matching season_type.
       registration_note: z.string(),
       registration_open: z.boolean().default(false),
       // Parallel scannable facts, identical slots on every season card.
