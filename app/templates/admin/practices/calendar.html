@@ -13,6 +13,7 @@
     border: 1px solid #e4e7ec;
     border-radius: 8px;
     overflow: hidden;
+    overflow-x: auto;
 }
 
 /* Practice item status colors - dynamically generated via JS */
@@ -52,7 +53,7 @@
 {% endblock %}
 
 {% block content %}
-<div class="flex items-center justify-between mb-6">
+<div class="flex flex-wrap items-center justify-between gap-2 mb-6">
     <h1 class="text-2xl font-semibold text-tcsc-navy">Practice Calendar</h1>
     <div class="flex gap-2">
         <a href="{{ url_for('admin_practices.practices_list') }}" class="bg-tcsc-navy text-white px-4 py-2 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">List View</a>
@@ -60,14 +61,14 @@
     </div>
 </div>
 
-<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100">
-    <div class="flex justify-between items-center mb-4">
-        <div class="flex items-center gap-4">
-            <button id="prev-month" onclick="changeMonth(-1)" class="inline-flex items-center justify-center h-9 px-4 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50 hover:border-tcsc-navy">&larr; Previous</button>
-            <span class="month-label font-semibold text-base text-tcsc-navy min-w-[150px] text-center" id="current-month"></span>
-            <button id="next-month" onclick="changeMonth(1)" class="inline-flex items-center justify-center h-9 px-4 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50 hover:border-tcsc-navy">Next &rarr;</button>
+<div class="bg-white p-6 px-3 sm:px-6 rounded-tcsc border border-tcsc-gray-100">
+    <div class="flex flex-wrap justify-between items-center gap-2 mb-4">
+        <div class="flex w-full flex-wrap items-center gap-1 sm:w-auto sm:gap-4">
+            <button id="prev-month" onclick="changeMonth(-1)" class="inline-flex items-center justify-center h-9 px-2 sm:px-4 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50 hover:border-tcsc-navy">&larr; Previous</button>
+            <span class="month-label font-semibold text-base text-tcsc-navy sm:min-w-[150px] text-center" id="current-month"></span>
+            <button id="next-month" onclick="changeMonth(1)" class="inline-flex items-center justify-center h-9 px-2 sm:px-4 border border-gray-300 rounded-md bg-white text-sm font-medium text-gray-700 cursor-pointer transition-all hover:bg-gray-50 hover:border-tcsc-navy">Next &rarr;</button>
         </div>
-        <div class="flex gap-2">
+        <div class="ml-auto flex gap-2">
             <button class="bg-gray-200 text-gray-600 px-4 py-2 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all" onclick="goToToday()">Today</button>
         </div>
     </div>
@@ -84,7 +85,7 @@
         <!-- Days populated via JavaScript -->
     </div>
 
-    <div class="flex gap-5 mt-5 p-4 bg-gray-50 rounded-md">
+    <div class="flex flex-wrap gap-5 mt-5 p-4 bg-gray-50 rounded-md">
         <div class="flex items-center gap-2 text-sm text-gray-700">
             <div class="legend-color status-scheduled w-5 h-5 rounded"></div>
             <span>Scheduled</span>

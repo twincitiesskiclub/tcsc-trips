@@ -134,6 +134,9 @@
     outline: 2px solid #1c2c44;
     outline-offset: 1px;
 }
+.plan-reaction-defaults > .tbl-btn {
+    margin-right: auto;
+}
 .plan-reaction-defaults > .tbl-btn:focus-visible {
     outline: 2px solid #1c2c44;
     outline-offset: 1px;
@@ -1796,9 +1799,9 @@ function renderDefaultsEditor(index, defaults) {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Activities</label>
-                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-1">
                         ${activitiesData.map(a => `
-                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
+                            <label class="flex items-center gap-2 py-1 lg:py-0 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
                                 <input type="checkbox" ${(d.activity_ids || []).includes(a.id) ? 'checked' : ''}
                                     onchange="updateDefaultArray(${index}, 'activity_ids', ${a.id}, this.checked)"
                                     class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
@@ -1810,9 +1813,9 @@ function renderDefaultsEditor(index, defaults) {
                 </div>
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Practice Types</label>
-                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-1">
                         ${typesData.map(t => `
-                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
+                            <label class="flex items-center gap-2 py-1 lg:py-0 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
                                 <input type="checkbox" ${(d.type_ids || []).includes(t.id) ? 'checked' : ''}
                                     onchange="updateDefaultArray(${index}, 'type_ids', ${t.id}, this.checked)"
                                     class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
@@ -1824,9 +1827,9 @@ function renderDefaultsEditor(index, defaults) {
                 </div>
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Coaches</label>
-                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2">
+                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-1">
                         ${coachesData.map(c => `
-                            <label class="flex items-center gap-2 py-1 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
+                            <label class="flex items-center gap-2 py-1 lg:py-0 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
                                 <input type="checkbox" ${(d.coach_ids || []).includes(c.id) ? 'checked' : ''}
                                     onchange="updateDefaultArray(${index}, 'coach_ids', ${c.id}, this.checked)"
                                     class="w-[18px] h-[18px] cursor-pointer rounded border-tcsc-gray-100 text-tcsc-navy focus:ring-tcsc-navy/20">
