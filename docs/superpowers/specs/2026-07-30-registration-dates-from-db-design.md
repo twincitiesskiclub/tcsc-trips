@@ -138,10 +138,10 @@ sites. No member data.
 ### Selection rule
 
 One function, `select_season(seasons, now)`, in a new `app/seasons/` package (following the
-existing `app/conditions/`, `app/events/`, `app/practices/` layout). It is applied once per
-distinct `season_type` present in the database — including legacy values like `'winter'` and
-`'legacy'`, which simply go unmatched by the site — to build `by_type`. `primary` is whichever of
-those per-type results has the soonest span start. Candidates are seasons with at least one
+existing `app/conditions/`, `app/events/`, `app/practices/` layout). It is applied twice, never
+reimplemented: once per distinct `season_type` present in the database to build `by_type`
+(including legacy values like `'winter'` and `'legacy'`, which simply go unmatched by the site),
+and once across all seasons to produce `primary`. Candidates are seasons with at least one
 non-null start; a season with no windows at all is never selected.
 
 Given `span_start = min(non-null starts)` and `span_end = max(non-null ends)`:
