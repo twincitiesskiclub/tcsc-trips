@@ -43,6 +43,26 @@ test('a CTA renders the variant matching the baked state', () => {
   assert.equal(cta.textContent.trim(), cta.getAttribute(expected));
 });
 
+test('the hero shows the coming_soon dates line under the CTA, with all baked variants', () => {
+  // The fixture build (scripts/test-build.mjs) always lands on coming_soon
+  // with real windows, so the hero's dates line should be visible and read
+  // the same dates the CTA itself was baked with.
+  const dates = document.querySelector('[data-registration-dates]');
+  assert.ok(dates, 'expected a dates element in the hero section');
+  assert.equal(dates.hasAttribute('hidden'), false, 'dates line should be visible under coming_soon');
+  assert.match(dates.textContent, /Returning members .+ · New members .+/);
+
+  // Baked so registrationFlip.ts can hide it (open/closed) or restore it
+  // (coming_soon) without a rebuild, exactly like the CTA's own variants.
+  assert.equal(dates.getAttribute('data-open-dates'), '');
+  assert.equal(dates.getAttribute('data-closed-dates'), '');
+  assert.equal(dates.getAttribute('data-soon-dates'), dates.textContent);
+
+  const hero = dates.closest('section');
+  const cta = hero.querySelector('[data-registration]');
+  assert.equal(cta.getAttribute('data-state'), 'coming_soon');
+});
+
 test('the registration strip still never links to its own section', () => {
   // Guards the fix from earlier on this branch against the rewrite.
   const strip = document.querySelector('#registration');
