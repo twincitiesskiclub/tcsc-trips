@@ -519,7 +519,7 @@
     } else {
       tagChildren.push(el('span', { class: 'mr-no-roles-note' }, ['No roles assigned']));
     }
-    var rolesBodyEl = el('div', { style: 'display:flex;flex-wrap:wrap;gap:4px' }, tagChildren);
+    var rolesBodyEl = el('div', { style: 'display:flex;flex-wrap:wrap;gap:var(--admin-space-1)' }, tagChildren);
 
     var rolesBlk = el('section', { class: 'mr-dw-blk' }, [
       el('div', { class: 'mr-dw-blk-hrow' }, [
