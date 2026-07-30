@@ -24,6 +24,12 @@ const SUBHEAD_ATTR: Record<Variant, string> = {
   closed: 'data-closed-subhead',
 };
 
+const DATES_ATTR: Record<Variant, string> = {
+  open: 'data-open-dates',
+  coming_soon: 'data-soon-dates',
+  closed: 'data-closed-dates',
+};
+
 function orNull(value: string | null): string | null {
   return value ? value : null;
 }
@@ -63,5 +69,22 @@ for (const element of document.querySelectorAll<HTMLElement>('[data-registration
   if (subhead) {
     const nextSubhead = subhead.getAttribute(SUBHEAD_ATTR[actual]);
     if (nextSubhead) subhead.textContent = nextSubhead;
+  }
+
+  // The hero's dates line lives beside its CTA the same way the strip's
+  // subhead does. Unlike the subhead, it has content in exactly one state
+  // (coming_soon), so an empty baked value means "hide it" rather than
+  // "leave the previous text alone" -- otherwise dates baked under
+  // coming_soon would keep showing under an "open" CTA.
+  const dates = element.closest('section')?.querySelector<HTMLElement>('[data-registration-dates]');
+  if (dates) {
+    const nextDates = dates.getAttribute(DATES_ATTR[actual]);
+    if (nextDates) {
+      dates.textContent = nextDates;
+      dates.hidden = false;
+    } else {
+      dates.hidden = true;
+      dates.textContent = '';
+    }
   }
 }
