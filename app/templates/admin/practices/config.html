@@ -1799,7 +1799,7 @@ function renderDefaultsEditor(index, defaults) {
             <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Activities</label>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-1">
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 lg:gap-1">
                         ${activitiesData.map(a => `
                             <label class="flex items-center gap-2 py-1 lg:py-0 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
                                 <input type="checkbox" ${(d.activity_ids || []).includes(a.id) ? 'checked' : ''}
@@ -1813,7 +1813,7 @@ function renderDefaultsEditor(index, defaults) {
                 </div>
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Practice Types</label>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-1">
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 lg:gap-1">
                         ${typesData.map(t => `
                             <label class="flex items-center gap-2 py-1 lg:py-0 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
                                 <input type="checkbox" ${(d.type_ids || []).includes(t.id) ? 'checked' : ''}
@@ -1827,7 +1827,7 @@ function renderDefaultsEditor(index, defaults) {
                 </div>
                 <div>
                     <label class="block mb-1.5 font-medium text-sm text-gray-700">Coaches</label>
-                    <div class="grid grid-cols-1 lg:grid-cols-2 gap-2 lg:gap-1">
+                    <div class="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-2 lg:gap-1">
                         ${coachesData.map(c => `
                             <label class="flex items-center gap-2 py-1 lg:py-0 cursor-pointer hover:bg-gray-50 rounded px-1 transition-colors">
                                 <input type="checkbox" ${(d.coach_ids || []).includes(c.id) ? 'checked' : ''}

@@ -35,6 +35,7 @@
 #workout-editor input,#workout-editor select,#workout-editor textarea{border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;width:100%}
 #workout-editor input:focus,#workout-editor select:focus,#workout-editor textarea:focus{border-color:#1c2c44;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
 #workout-editor input:focus-visible,#workout-editor select:focus-visible,#workout-editor textarea:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#workout-editor .datetime-control-scroll{overflow-x:auto;padding:var(--admin-space-1);margin:calc(var(--admin-space-1) * -1)}
 #workout-editor textarea{resize:vertical;line-height:1.7;min-height:72px}
 #workout-editor .workout-main{min-height:104px}
 #workout-editor textarea:focus{box-shadow:inset 3px 0 0 #1c2c44,0 0 0 2px #fff,0 0 0 4px #1c2c44}
@@ -242,10 +243,12 @@
       <section class="card">
         <h2 class="section-label">When &amp; Where</h2>
         <div class="field-row">
-          <div class="field overflow-x-auto">
+          <div class="field min-w-0">
             <label for="date">Date &amp; Time</label>
-            <input type="datetime-local" id="date" name="date" required
-                   value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}">
+            <div class="datetime-control-scroll">
+              <input type="datetime-local" id="date" name="date" required
+                     value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}">
+            </div>
           </div>
           <div class="field">
             <label for="location_id">Location</label>
