@@ -13,7 +13,7 @@
 .mr-qf-chip:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 
 /* --- Toolbar --- */
-.mr-toolbar{display:flex;align-items:center;gap:9px;flex-wrap:wrap;margin-bottom:16px}
+.mr-toolbar{display:flex;align-items:center;gap:var(--admin-space-2);flex-wrap:wrap;margin-bottom:var(--admin-space-4)}
 .mr-toolbar-spacer{flex:1}
 
 /* View pills */
@@ -41,19 +41,19 @@
 .mr-select-toggle.is-active{border-color:#1c2c44;background:rgba(28,44,68,.08);color:#1c2c44}
 
 /* Role popover button */
-.mr-role-btn{height:38px;display:inline-flex;align-items:center;gap:6px;padding:0 12px;border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;text-align:left}
+.mr-role-btn{height:38px;display:inline-flex;align-items:center;gap:var(--admin-space-2);padding:0 var(--admin-space-3);border-radius:10px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:14px;font-weight:500;cursor:pointer;font-family:inherit;white-space:nowrap;text-align:left}
 .mr-role-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 .mr-role-btn.has-selection{border-color:#1c2c44;background:rgba(28,44,68,.04)}
 
 /* Role popover menu */
 .mr-role-dropdown{position:relative}
-.mr-role-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;padding:12px;width:320px}
+.mr-role-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;padding:12px;width:320px;overflow-x:clip}
 .mr-role-menu.show{display:block}
-.mr-role-menu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;padding-bottom:8px;border-bottom:1px solid #e4e7ec}
+.mr-role-menu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--admin-space-3);padding-bottom:var(--admin-space-2);border-bottom:1px solid #e4e7ec}
 .mr-role-menu-header span{font-weight:600;font-size:12px;color:#667085;text-transform:uppercase;letter-spacing:.5px}
 .mr-role-menu-header button{padding:4px 8px;border:none;background:none;font-weight:500;font-size:12px;color:#1c2c44;cursor:pointer;font-family:inherit}
 .mr-role-menu-header button:hover{text-decoration:underline}
-.mr-role-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:6px}
+.mr-role-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:var(--admin-space-2)}
 
 /* Role toggle buttons in the popover */
 .mr-role-toggle{display:flex;align-items:center;justify-content:center;width:42px;height:42px;border:2px solid #e4e7ec;border-radius:8px;background:#fff;font-size:20px;cursor:pointer;transition:all .15s;position:relative;font-family:inherit}
@@ -84,7 +84,8 @@
 .mr-retry{background:none;border:none;color:#1c2c44;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:14px}
 
 /* --- Member row --- */
-.mr-row{display:grid;grid-template-columns:40px 1fr auto auto;gap:0 12px;align-items:center;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:12px 15px;margin-bottom:7px;cursor:pointer;transition:border-color .12s,box-shadow .12s}
+#member-roster-list{overflow-x:clip}
+.mr-row{display:grid;grid-template-columns:40px 1fr auto auto;gap:0 var(--admin-space-3);align-items:center;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:var(--admin-space-3) var(--admin-space-4);margin-bottom:var(--admin-space-2);cursor:pointer;transition:border-color .12s,box-shadow .12s}
 .mr-row:hover{border-color:#cdd5e0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .mr-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
 .mr-row:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
@@ -107,7 +108,7 @@
 .mr-no-roles{font-size:13px;color:#d0d5dd}
 
 /* Status cell (member badge + season sub-line) */
-.mr-status-cell{display:flex;flex-direction:column;align-items:flex-end;gap:5px;flex-shrink:0}
+.mr-status-cell{display:flex;flex-direction:column;align-items:flex-end;gap:var(--admin-space-1);flex-shrink:0}
 .mr-status-sub{font-size:12px;color:#64748b;font-weight:500;text-align:right;white-space:nowrap}
 
 /* Actions zone */
@@ -131,22 +132,22 @@
 
 /* --- Drawer content --- */
 .mr-dw-content{display:flex;flex-direction:column;gap:0}
-.mr-dw-sep{border:none;border-top:1px solid #f1f5f9;margin:16px 0}
-.mr-dw-blk{margin-bottom:4px}
-.mr-dw-blk-hrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:10px}
+.mr-dw-sep{border:none;border-top:1px solid #f1f5f9;margin:var(--admin-space-4) 0}
+.mr-dw-blk{margin-bottom:var(--admin-space-1)}
+.mr-dw-blk-hrow{display:flex;align-items:center;justify-content:space-between;margin-bottom:var(--admin-space-3)}
 .mr-dw-blk-h{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b}
 .mr-drawer-action-sm{background:none;border:none;color:#1c2c44;font-size:12px;font-weight:600;cursor:pointer;text-decoration:underline;font-family:inherit;padding:0}
-.mr-kv{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.mr-kv{display:flex;align-items:baseline;gap:var(--admin-space-2);margin-bottom:var(--admin-row-gap)}
 .mr-k{width:90px;flex-shrink:0;color:#64748b;font-size:13.5px}
 .mr-v{color:#1c2c44;font-weight:500;font-size:13.5px}
 .mr-v--empty{color:#94a3b8;font-weight:400}
-.mr-email-row{display:flex;align-items:center;gap:6px}
+.mr-email-row{display:flex;align-items:center;gap:var(--admin-row-gap)}
 .mr-copy-btn{background:none;border:none;cursor:pointer;color:#64748b;font-size:12px;font-weight:500;padding:2px 6px;border-radius:4px;font-family:inherit;line-height:1.4}
 .mr-copy-btn:hover{color:#1c2c44;text-decoration:underline}
 .mr-copy-btn:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 .mr-tag-chip{display:inline-flex;align-items:center;gap:4px;font-size:12px;padding:3px 10px;border-radius:12px;font-weight:600;margin:2px 3px 2px 0;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.2)}
 .mr-no-roles-note{color:#94a3b8;font-size:13.5px}
-.mr-dw-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:13px 18px;display:flex;gap:9px}
+.mr-dw-footer{position:sticky;bottom:0;background:#fff;border-top:1px solid #eef1f5;padding:var(--admin-space-3) var(--admin-space-4);display:flex;gap:var(--admin-space-3)}
 .mr-act-primary{flex:1;height:40px;background:#1c2c44;color:#fff;border:none;border-radius:9px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit}
 .mr-act-primary:hover{background:#253c5e}
 .mr-act-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
@@ -167,11 +168,11 @@
 .mr-modal-footer{display:flex;justify-content:flex-end;gap:10px;padding:16px 20px;border-top:1px solid #e4e7ec;flex-shrink:0}
 
 /* Form fields */
-.mr-form-group{margin-bottom:14px}
-.mr-form-group label{display:block;font-size:13px;font-weight:600;color:#344054;margin-bottom:6px}
+.mr-form-group{margin-bottom:var(--admin-field-gap)}
+.mr-form-group label{display:block;font-size:13px;font-weight:600;color:#344054;margin-bottom:var(--admin-row-gap)}
 .mr-form-group input{width:100%;height:40px;border:1.5px solid #d0d5dd;border-radius:8px;padding:0 12px;font-size:14px;color:#1c2c44;font-family:inherit}
 .mr-form-group input:focus{outline:none;border-color:#1c2c44}
-.mr-status-note{font-size:12px;color:#667085;font-style:italic;margin-left:10px}
+.mr-status-note{font-size:12px;color:#667085;font-style:italic;margin-left:var(--admin-space-3)}
 .mr-status-row{display:flex;align-items:center;padding:8px 0}
 
 /* Inline tag checkboxes in edit modal */
@@ -182,10 +183,10 @@
 .mr-tag-badge-sm{display:inline-block;padding:3px 9px;border-radius:12px;font-size:12px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(0,0,0,.2)}
 
 /* Category-grouped tag checkboxes */
-.mr-tag-category{margin-bottom:16px}
+.mr-tag-category{margin-bottom:var(--admin-space-4)}
 .mr-tag-category:last-child{margin-bottom:0}
-.mr-tag-cat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#667085;margin-bottom:8px;padding-bottom:4px;border-bottom:1px solid #e4e7ec}
-.mr-tag-cat-items{display:flex;flex-wrap:wrap;gap:8px}
+.mr-tag-cat-label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:#667085;margin-bottom:var(--admin-space-2);padding-bottom:var(--admin-space-1);border-bottom:1px solid #e4e7ec}
+.mr-tag-cat-items{display:flex;flex-wrap:wrap;gap:var(--admin-space-2)}
 .mr-tag-cb-item{display:flex;align-items:center;gap:6px;cursor:pointer;padding:4px 6px;border-radius:6px;transition:background .12s}
 .mr-tag-cb-item:hover{background:rgba(0,0,0,.04)}
 .mr-tag-cb-item input[type="checkbox"]{width:16px;height:16px;margin:0;cursor:pointer;accent-color:#1c2c44}
@@ -194,7 +195,7 @@
 
 /* ===== Mobile breakpoints ===== */
 @media (max-width:767px){
-  .mr-toolbar{gap:8px}
+  .mr-toolbar{gap:var(--admin-space-2)}
   .mr-pills{flex-basis:100%;order:-1}
   .mr-pill{flex:1;justify-content:center}
   .mr-search{width:100%;flex-basis:100%}
@@ -202,12 +203,12 @@
   .mr-count,.mr-select-toggle{align-self:center}
 
   .mr-row{grid-template-columns:40px 1fr;grid-template-rows:auto auto}
-  .mr-status-cell,.mr-actions{grid-column:1/-1;flex-direction:row;align-items:center;gap:8px;flex-wrap:wrap;margin-top:6px}
+  .mr-status-cell,.mr-actions{grid-column:1/-1;flex-direction:row;align-items:center;gap:var(--admin-space-2);flex-wrap:wrap;margin-top:var(--admin-space-2)}
   .mr-edit-btn{height:36px;margin-left:auto}
 
   .mr-k{width:80px}
   .mr-bulk-bar{flex-direction:column;align-items:flex-start;gap:8px}
-  .mr-dw-footer{padding-bottom:calc(13px + env(safe-area-inset-bottom,0px))}
+  .mr-dw-footer{padding-bottom:calc(var(--admin-space-3) + env(safe-area-inset-bottom,0px))}
   .mr-modal-box{margin:12px;max-height:calc(100% - 24px)}
 
   .mr-role-toggle{width:42px;height:42px}
@@ -230,7 +231,7 @@
 {% block content %}
 <div class="bg-white rounded-tcsc p-5">
   <!-- Heading row -->
-  <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:16px">
+  <div style="display:flex;align-items:center;justify-content:space-between;gap:var(--admin-space-3);flex-wrap:wrap;margin-bottom:var(--admin-space-4)">
     <h1 id="view-title" class="text-xl font-semibold text-tcsc-navy">Members</h1>
   </div>
 
