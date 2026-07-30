@@ -425,7 +425,7 @@
 
     // Bulk import button at top (when not searching)
     if (!q && ssyncState.unmatchedSlack.length > 0) {
-      var bulkWrap = AdminUI.el('div', { style: 'margin-bottom:8px' }, []);
+      var bulkWrap = AdminUI.el('div', { style: 'margin-bottom:var(--admin-space-2)' }, []);
       var bulkBtn = AdminUI.el('button', {
         type: 'button',
         class: 'ss-bulk-import-btn'
@@ -1577,7 +1577,7 @@
       .sort(function (a, b) { return (a.full_name || '').localeCompare(b.full_name || ''); });
 
     if (linkedUsers.length === 0) {
-      container.appendChild(AdminUI.el('p', { style: 'margin:8px 0;color:#94a3b8;font-size:13px' }, [
+      container.appendChild(AdminUI.el('p', { style: 'margin:var(--admin-space-2) 0;color:#94a3b8;font-size:13px' }, [
         'No linked users - sync and link first.'
       ]));
       document.getElementById('ssync-send-btn').disabled = true;

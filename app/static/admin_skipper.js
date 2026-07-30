@@ -58,7 +58,7 @@ function renderPendingProposals() {
     var e = AdminUI.escapeHtml;
 
     html += '<div class="bg-white border border-gray-300 rounded-lg p-4 mb-3">' +
-      '<div class="flex justify-between items-start mb-3">' +
+      '<div class="flex justify-between items-start gap-2 mb-3">' +
         '<div>' +
           '<div class="font-semibold text-sm text-tcsc-navy">' + e(proposal.practice_location) + ' - ' + e(practiceDate) + '</div>' +
           '<div class="text-xs text-tcsc-gray-600">Proposed: ' + e(proposedDate) + '</div>' +
@@ -69,7 +69,7 @@ function renderPendingProposals() {
         '<div class="font-semibold text-[11px] uppercase text-amber-800 mb-1">' + e(proposal.reason_type.replace(/_/g, ' ')) + '</div>' +
         '<div class="text-sm text-amber-900">' + e(proposal.reason_summary) + '</div>' +
       '</div>' +
-      '<div class="tbl-actions justify-end">' +
+      '<div class="tbl-actions justify-end gap-3">' +
         '<button class="tbl-btn tbl-btn-secondary" onclick="rejectProposal(' + proposal.id + ')">Reject</button>' +
         '<button class="tbl-btn tbl-btn-primary" onclick="approveProposal(' + proposal.id + ')">Approve Cancellation</button>' +
       '</div>' +
@@ -557,7 +557,7 @@ function sk_openDrawer(p) {
     var titleEl = drawerHeader && drawerHeader.querySelector('.admin-ui-drawer__title');
     if (titleEl) {
       var badge = AdminUI.statusBadge(statusLabel, statusVariant);
-      badge.style.marginTop = '4px';
+      badge.style.marginTop = 'var(--admin-space-1)';
       badge.style.display = 'inline-flex';
       titleEl.style.flexDirection = 'column';
       titleEl.style.alignItems = 'flex-start';
