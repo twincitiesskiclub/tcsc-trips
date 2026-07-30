@@ -134,6 +134,8 @@
 /* Editor Actions */
 .editor-actions {
     display: flex;
+    flex-wrap: wrap;
+    max-width: 100%;
     gap: 12px;
     flex-shrink: 0;
 }
@@ -185,8 +187,10 @@
 /* Footer Status */
 .editor-footer {
     display: flex;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: center;
+    gap: var(--admin-space-2);
     margin-top: 16px;
     padding-top: 16px;
     border-top: 1px solid #e4e7ec;
