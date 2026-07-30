@@ -63,7 +63,14 @@ projects:
               - key: ANTHROPIC_API_KEY
                 sync: false
             region: oregon
-            buildCommand: pip install -r requirements.txt
+            # Tailwind must be built here, not committed. Production serves
+            # app/static/css/tailwind-output.css, and when that file was only
+            # ever generated locally, any new utility class in a template was a
+            # silent no-op in production -- the CSS rule simply did not exist.
+            # It also conflicted on every concurrent branch, and the only safe
+            # resolution was a rebuild, since taking either side dropped the
+            # other branch's classes.
+            buildCommand: pip install -r requirements.txt && npm ci && npm run tailwind:build
             startCommand: gunicorn "app:create_app()"
             preDeployCommand: ./scripts/release.sh
             domains:
