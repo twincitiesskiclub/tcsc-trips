@@ -22,7 +22,9 @@ test('a build against a dead API still succeeds and announces itself', () => {
   assert.equal(document.body.getAttribute('data-season-source'), 'fallback');
 
   // Never claims open registration without data to back it.
-  for (const cta of document.querySelectorAll('[data-registration]')) {
+  const ctas = document.querySelectorAll('[data-registration]');
+  assert.ok(ctas.length > 0, 'expected at least one registration CTA');
+  for (const cta of ctas) {
     assert.equal(cta.getAttribute('data-state'), 'closed');
   }
 

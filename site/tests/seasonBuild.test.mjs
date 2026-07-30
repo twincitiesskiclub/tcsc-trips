@@ -7,11 +7,12 @@ const html = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8'
 const { document } = new JSDOM(html).window;
 
 test('the page records where its season data came from', () => {
+  // The test-build fixture (scripts/test-build.mjs) always serves a healthy
+  // payload, so a real build against it must land on "api", not merely one of
+  // the two valid stamps -- accepting "fallback" here would also pass if the
+  // fixture harness died and every build silently fell back.
   const source = document.body.getAttribute('data-season-source');
-  assert.ok(
-    source === 'api' || source === 'fallback',
-    `expected an api/fallback stamp, got ${source}`,
-  );
+  assert.equal(source, 'api', `expected the fixture build to report "api", got ${source}`);
 });
 
 test('every registration CTA carries all three baked variants', () => {
