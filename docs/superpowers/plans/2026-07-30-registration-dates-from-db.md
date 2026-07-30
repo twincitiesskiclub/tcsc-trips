@@ -1000,15 +1000,16 @@ test('formats a day in US Central, not UTC', () => {
   assert.equal(formatDay('2026-08-28T17:00:00Z'), 'Aug 28');
 });
 
-test('formats across the UTC date boundary using the Central day', () => {
-  // 2026-09-02T05:00Z is 2026-09-01 at midnight CDT -- the Central day is
-  // the previous date, which is the one a member reads on the page.
-  assert.equal(formatDay('2026-09-02T05:00:00Z'), 'Sep 1');
+test('uses the Central day, not the UTC day, across the date boundary', () => {
+  // A 9pm Central deadline is stored as the NEXT day in UTC. Formatting in
+  // UTC would show members a date that is off by one, which is the exact bug
+  // this pins. Daylight time here (UTC-5).
+  assert.equal(formatDay('2026-09-03T02:00:00Z'), 'Sep 2');
 });
 
-test('formats a winter date in standard time', () => {
-  // 2026-12-15T18:00Z is 12:00 CST.
-  assert.equal(formatDay('2026-12-15T18:00:00Z'), 'Dec 15');
+test('uses the Central day across the boundary in standard time too', () => {
+  // The same trap in CST (UTC-6), so no offset is hardcoded anywhere.
+  assert.equal(formatDay('2026-12-16T03:00:00Z'), 'Dec 15');
 });
 
 test('returns null for missing or unparseable input', () => {
