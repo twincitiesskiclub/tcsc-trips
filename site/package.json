@@ -12,7 +12,8 @@
     "preview": "astro preview --port 4321",
     "check": "astro check",
     "test:refinement": "node scripts/test-build.mjs && node --test tests/conditionsDisplayMode.test.mjs tests/responsiveNav.test.mjs tests/contentRollback.test.mjs tests/contentRefinements.test.mjs tests/registrationCta.test.mjs tests/registrationState.test.mjs tests/registrationCopy.test.mjs tests/registrationFlip.test.mjs tests/seasonData.test.mjs tests/seasonBuild.test.mjs tests/seasonCards.test.mjs",
-    "test:sponsors": "node scripts/test-build.mjs && node --test tests/sponsorTiers.test.mjs tests/sponsorSchemaContracts.test.mjs tests/sponsorWallBuild.test.mjs tests/sponsors-page.test.mjs"
+    "test:sponsors": "node scripts/test-build.mjs && node --test tests/sponsorTiers.test.mjs tests/sponsorSchemaContracts.test.mjs tests/sponsorWallBuild.test.mjs tests/sponsors-page.test.mjs",
+    "test:fallback": "node --test tests/seasonFallback.test.mjs"
   },
   "dependencies": {
     "@astrojs/markdoc": "^2.0.3",
