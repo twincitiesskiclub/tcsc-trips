@@ -5,9 +5,10 @@ import logging
 import time
 from threading import Lock, Thread
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
 from app.conditions.service import build_conditions_response
+from app.routes.marketing_cors import apply_marketing_cors
 
 logger = logging.getLogger(__name__)
 
@@ -15,15 +16,6 @@ bp = Blueprint('conditions', __name__, url_prefix='/api')
 
 _CACHE_TTL_SECONDS = 300
 _RETRY_TTL_SECONDS = 60
-
-_ALLOWED_ORIGINS = {
-    'https://twincitiesskiclub.org',
-    'https://www.twincitiesskiclub.org',
-    # Staging origin (Render Static service for the marketing site). The
-    # conditions strip shows "Conditions unavailable" on staging until this
-    # Flask side deploys; with this origin allowlisted it then works there too.
-    'https://tcsc-marketing.onrender.com',
-}
 
 # Cached payload plus rebuild bookkeeping. Requests never block on a refresh:
 # an expired body is served as-is while a daemon thread rebuilds it (same
@@ -95,26 +87,10 @@ def _get_response_body() -> dict:
     return {'updated_at': None, 'locations': [], 'error': 'upstream unavailable'}
 
 
-def _origin_allowed(origin: str) -> bool:
-    if not origin:
-        return False
-    if origin in _ALLOWED_ORIGINS:
-        return True
-    # Astro dev server (e.g. http://localhost:4321), debug/development only
-    if current_app.debug and origin.startswith('http://localhost:'):
-        return True
-    return False
-
-
 @bp.route('/conditions', methods=['GET'])
 def get_conditions():
     body = _get_response_body()
     resp = jsonify(body)
-    # Always vary on Origin so shared caches never serve an ACAO-bearing
-    # response to a different origin.
-    resp.headers['Vary'] = 'Origin'
-    origin = request.headers.get('Origin', '')
-    if _origin_allowed(origin):
-        resp.headers['Access-Control-Allow-Origin'] = origin
+    apply_marketing_cors(resp, request.headers.get('Origin', ''))
     resp.headers['Cache-Control'] = f'public, max-age={_CACHE_TTL_SECONDS}'
     return resp
