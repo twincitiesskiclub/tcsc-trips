@@ -124,6 +124,18 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   // CTA's label and target legitimately differ between builds. Assert the
   // invariants that hold in EVERY state rather than pinning one state's copy,
   // or this suite fails whenever registration opens or the API is down.
+  //
+  // The suite builds against a deterministic fixture (scripts/test-build.mjs)
+  // whose windows are always in the future, so the built page is always in the
+  // coming_soon state. Assert the harness actually applied first: otherwise the
+  // guards below would skip silently instead of failing, which is exactly the
+  // bug this replaced.
+  assert.match(
+    html.home,
+    /data-season-source="api"/,
+    'test build must use the fixture API — run via npm run test:refinement',
+  );
+
   const outsideStrip = html.home.replace(registration, '');
   const anchorTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
     .map(([, attributes]) => attributes.match(/\bhref=(['"])(.*?)\1/i))
@@ -131,17 +143,17 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
     .map((href) => new URL(decodeHtml(href[2]), MARKETING_ORIGIN))
     .filter((url) => url.origin === MARKETING_ORIGIN && url.hash === '#registration');
 
-  // Vacuous in the closed state, which links to the app instead — that is the
-  // point. When such links DO exist, they must resolve to exactly one target.
-  if (anchorTargets.length > 0) {
-    for (const url of anchorTargets) assert.equal(url.pathname, '/');
-    assert.equal(
-      (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
-        .length,
-      1,
-      'registration CTA hash must resolve to exactly one target in the built home page',
-    );
-  }
+  assert.ok(
+    anchorTargets.length > 0,
+    'hero/nav/mobile CTAs must target #registration while registration is coming_soon',
+  );
+  for (const url of anchorTargets) assert.equal(url.pathname, '/');
+  assert.equal(
+    (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
+      .length,
+    1,
+    'registration CTA hash must resolve to exactly one target in the built home page',
+  );
 
   // The strip is where that anchor lands, so its own button must go elsewhere.
   const stripCta = registration.match(/<a\b([^>]*)>/i);
