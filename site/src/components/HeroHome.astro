@@ -2,6 +2,7 @@
 import { Picture } from 'astro:assets';
 import CtaForState from '@/components/CtaForState.astro';
 import { FULL_BLEED } from '@/components/imageWidths';
+import type { RegistrationWindows } from '@/lib/registrationState';
 
 interface Props {
   headline: string;
@@ -12,6 +13,7 @@ interface Props {
   image?: ImageMetadata;
   imageAlt: string;
   state: 'open' | 'coming_soon' | 'closed';
+  windows?: RegistrationWindows;
   cta_open_label: string; cta_open_url?: string;
   cta_coming_soon_label: string; cta_coming_soon_url?: string;
   cta_closed_label: string; cta_closed_url?: string;
@@ -48,6 +50,7 @@ const props = Astro.props;
       <div class="mt-8">
         <CtaForState
           state={props.state}
+          windows={props.windows}
           label_open={props.cta_open_label} url_open={props.cta_open_url}
           label_coming_soon={props.cta_coming_soon_label} url_coming_soon={props.cta_coming_soon_url}
           label_closed={props.cta_closed_label} url_closed={props.cta_closed_url}

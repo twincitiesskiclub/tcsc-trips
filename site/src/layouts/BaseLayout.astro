@@ -2,6 +2,12 @@
 import '@/styles/global.css';
 import FontPreload from '@/components/FontPreload.astro';
 import Lightbox from '@/components/Lightbox.astro';
+import { fetchSeasonData } from '@/lib/seasonData';
+
+// Stamped on every page so a fallback build is one curl away from being
+// detected. Deploys are deliberately never blocked by an unreachable API, so
+// this is what stops a stale build from shipping invisibly.
+const season = await fetchSeasonData();
 
 interface Props {
   title: string;
@@ -92,7 +98,11 @@ const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
       sameAs: orgSameAs,
     })} />
   </head>
-  <body class={`site-shell flex flex-col ${isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}`}>
+  <body
+    class={`site-shell flex flex-col ${isHome ? 'bg-navy text-mint' : 'bg-paper text-ink'}`}
+    data-season-source={season.source}
+    data-season-generated-at={season.generated_at ?? ''}
+  >
     {/* Skip link: every page gives its <main> id="main" (the home page and
         InnerPageLayout both do). Visually hidden until keyboard-focused. */}
     <a
@@ -101,5 +111,8 @@ const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
     >Skip to content</a>
     <slot />
     <Lightbox />
+    <script>
+      import '@/components/registrationFlip';
+    </script>
   </body>
 </html>

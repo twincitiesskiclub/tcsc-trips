@@ -66,6 +66,27 @@ Channel sync runs dry-run by default and **preserves manually-joined channels fo
 
 Returning and new members get separate registration windows. Exactly one `Season.is_current` at a time. The "Activate Season" admin action syncs every user's status — it's a bulk write, not a display toggle.
 
+## Marketing Site Registration Data
+
+The marketing site's registration dates and open/coming_soon/closed state are
+**derived from the database**, never authored. `GET /api/season` returns the
+registration windows for one season per `season_type` — whichever is taking
+registrations now, else the soonest ahead, else the most recently ended (see
+`app/seasons/selection.py`). A window counts only when both its start and end
+are set, matching `Season.is_open_for`. The Astro build bakes those timestamps
+plus every state's copy into the HTML, and
+`registrationFlip.ts` re-derives the state in the browser so the site flips at
+the exact opening minute without a rebuild.
+
+The state rule lives in exactly one place, `site/src/lib/registrationState.ts`.
+Do not add a Python twin — the endpoint deliberately returns no computed state,
+because a state decided server-side is stale the moment a window boundary
+passes.
+
+A build that cannot reach the API **falls back rather than failing**, so it
+stamps `data-season-source="fallback"` on `<body>`. If the live site shows
+wrong dates, check that attribute first.
+
 ## Skipper AI (practice safety evaluation)
 
 Thresholds live in `config/skipper.yaml`; read them there rather than hardcoding.

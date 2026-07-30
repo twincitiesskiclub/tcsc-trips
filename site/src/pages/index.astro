@@ -20,7 +20,9 @@ import SponsorWall from '@/components/SponsorWall.astro';
 import CTAStrip from '@/components/CTAStrip.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
+import { isSamePageAnchor } from '@/lib/samePageAnchor';
 import { metaDescription } from '@/lib/metaDescription';
+import { stripSubhead } from '@/lib/registrationCopy';
 
 const home = await getEntry('home', 'home');
 if (!home) throw new Error('home singleton missing (src/content/pages/home.yaml)');
@@ -31,27 +33,49 @@ const description = meta?.data.description
   ? metaDescription(meta.data.description)
   : undefined;
 
-// CTA strip label + target follow registration state together. Never '#':
-// with no url at all, point at registration on tcsc.ski so the button
-// always goes somewhere real. The public site never links the club Slack.
+// CTA strip label + target follow registration state together. The button
+// always goes somewhere real: with no url at all — or with one that points
+// back at this strip's own #registration anchor, which is what `coming_soon`
+// carries so the hero and nav can scroll down to here — it falls through to
+// tcsc.ski, where the season card shows the actual opening date. The public
+// site never links the club Slack.
+//
+// The label falls through WITH the url, to the SAME closed variant: a
+// self-anchor url means the strip's own click destination is dishonest, so
+// the label has to stop promising "scroll down to the dates below" too, and
+// pairing them with closed's label+url (rather than just tcsc.ski) keeps them
+// honest together. Computed once here and reused for both the initially-baked
+// coming_soon variant and the strip's own baked data-soon-* attributes below,
+// so the flipped state stays consistent with what the build shipped.
+const stripComingSoonUrlPreferred = cta.url_coming_soon ?? cta.url_closed;
+const stripComingSoonIsSelfAnchor = isSamePageAnchor(stripComingSoonUrlPreferred, Astro.url.href);
+const stripUrlComingSoon = stripComingSoonIsSelfAnchor ? cta.url_closed : stripComingSoonUrlPreferred;
+const stripLabelComingSoon = stripComingSoonIsSelfAnchor ? cta.label_closed : cta.label_coming_soon;
+
 const ctaStripUrl =
   (cta.state === 'open'
     ? cta.url_open
     : cta.state === 'coming_soon'
-      ? (cta.url_coming_soon ?? cta.url_closed)
+      ? stripUrlComingSoon
       : cta.url_closed) ?? 'https://tcsc.ski/';
 const ctaStripLabel =
   cta.state === 'open'
     ? cta.label_open
     : cta.state === 'coming_soon'
-      ? cta.label_coming_soon
+      ? stripLabelComingSoon
       : cta.label_closed;
-const ctaStripSubhead =
-  cta.state === 'open'
-    ? 'Intermediate ability and up. No racing required.'
-    : cta.state === 'coming_soon'
-      ? 'Returning members Aug 28; new members Sep 3. Intermediate ability and up, no racing required.'
-      : 'Registration is closed. Intermediate ability and up, no racing required.';
+
+// One baked variant per possible flip target, matching what CtaForState bakes
+// for the hero/nav/mobile CTAs -- so registrationFlip.ts treats the strip the
+// same way it treats every other `[data-registration]` element.
+const ctaStripOpenSubhead = stripSubhead('open', cta.windows);
+const ctaStripSoonSubhead = stripSubhead('coming_soon', cta.windows);
+const ctaStripClosedSubhead = stripSubhead('closed', cta.windows);
+const ctaStripSubhead = {
+  open: ctaStripOpenSubhead,
+  coming_soon: ctaStripSoonSubhead,
+  closed: ctaStripClosedSubhead,
+}[cta.state];
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -70,7 +94,8 @@ const ctaStripSubhead =
     subline="Year-round cross-country ski training for adults 21-35."
     image={h.hero_image}
     imageAlt={h.hero_image_alt}
-    state={h.registration_state}
+    state={cta.state}
+    windows={cta.windows}
     cta_open_label={cta.label_open} cta_open_url={cta.url_open}
     cta_coming_soon_label={cta.label_coming_soon} cta_coming_soon_url={cta.url_coming_soon}
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
@@ -102,6 +127,14 @@ const ctaStripSubhead =
     subhead={ctaStripSubhead}
     cta_label={ctaStripLabel}
     cta_url={ctaStripUrl}
+    state={cta.state}
+    windows={cta.windows}
+    label_open={cta.label_open} url_open={cta.url_open}
+    label_coming_soon={stripLabelComingSoon} url_coming_soon={stripUrlComingSoon}
+    label_closed={cta.label_closed} url_closed={cta.url_closed}
+    open_subhead={ctaStripOpenSubhead}
+    soon_subhead={ctaStripSoonSubhead}
+    closed_subhead={ctaStripClosedSubhead}
   />
   </main>
   <Footer />

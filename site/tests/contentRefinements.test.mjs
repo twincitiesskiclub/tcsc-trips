@@ -34,7 +34,9 @@ const html = {
 const MISSION =
   'Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a supportive community for young adults (ages 21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.';
 const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
-const REGISTRATION_SUBHEAD = 'Returning members Aug 28; new members Sep 3.';
+// The dates now come from the database, so only the ability line is a
+// fixed string worth pinning here.
+const ABILITY_LINE = 'Intermediate ability and up, no racing required.';
 const DRY_TRI_2026 =
   'Planning for 2026 is underway. The date and registration details will be posted here when confirmed.';
 const DRY_TRI_RESULTS = 'https://my.raceresult.com/361087/results';
@@ -104,34 +106,71 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   assert.equal(yamlScalar(source.home, 'mission_paragraph'), MISSION);
 
   assert.match(source.ctaStrip, /\bid\?: string;/);
-  assert.match(source.ctaStrip, /const \{ heading, subhead, cta_label, cta_url, id \} = Astro\.props;/);
+  assert.match(source.ctaStrip, /heading, subhead, cta_label, cta_url, id,/);
+  // The strip also accepts optional baked-variant props so its CTA and
+  // subhead can join the client-side registration flip (Fix 1).
+  assert.match(source.ctaStrip, /state\?: RegistrationState;/);
+  assert.match(source.ctaStrip, /label_coming_soon\?: string; url_coming_soon\?: string;/);
+  assert.match(source.ctaStrip, /data-registration-subhead/);
   assert.match(
     source.ctaStrip,
     /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper">/,
   );
   assert.match(source.homePage, /<CTAStrip\s+id="registration"/);
-  assert.ok(source.homePage.includes(REGISTRATION_SUBHEAD));
+  assert.match(source.homePage, /stripSubhead\('open', cta\.windows\)/);
+  assert.match(source.homePage, /stripSubhead\('coming_soon', cta\.windows\)/);
+  assert.match(source.homePage, /stripSubhead\('closed', cta\.windows\)/);
 
   const registration = sectionById(html.home, 'registration');
   const registrationText = toText(registration);
-  assert.ok(registrationText.includes(REGISTRATION_SUBHEAD));
-  const cta = registration.match(
-    /<a\b([^>]*)>Fall registration dates<\/a>/i,
+  assert.ok(registrationText.includes(ABILITY_LINE));
+  // The CTAs that scroll TO registration live above the strip (hero, nav,
+  // mobile menu). The strip's own button is excluded on purpose: the strip IS
+  // #registration, so aiming it at that anchor is a dead click.
+  // Registration state is derived from the database at build time, so the
+  // CTA's label and target legitimately differ between builds. Assert the
+  // invariants that hold in EVERY state rather than pinning one state's copy,
+  // or this suite fails whenever registration opens or the API is down.
+  //
+  // The suite builds against a deterministic fixture (scripts/test-build.mjs)
+  // whose windows are always in the future, so the built page is always in the
+  // coming_soon state. Assert the harness actually applied first: otherwise the
+  // guards below would skip silently instead of failing, which is exactly the
+  // bug this replaced.
+  assert.match(
+    html.home,
+    /data-season-source="api"/,
+    'test build must use the fixture API — run via npm run test:refinement',
   );
-  assert.ok(cta, 'registration CTA must render as a title-bearing anchor');
-  const href = cta[1].match(/\bhref=(['"])(.*?)\1/i);
-  assert.ok(href, 'registration CTA must include an href');
 
-  const target = new URL(decodeHtml(href[2]), MARKETING_ORIGIN);
-  assert.equal(target.origin, MARKETING_ORIGIN);
-  assert.equal(target.pathname, '/');
-  assert.equal(target.hash, '#registration');
-  const targetId = target.hash.slice(1);
+  const outsideStrip = html.home.replace(registration, '');
+  const anchorTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
+    .map(([, attributes]) => attributes.match(/\bhref=(['"])(.*?)\1/i))
+    .filter(Boolean)
+    .map((href) => new URL(decodeHtml(href[2]), MARKETING_ORIGIN))
+    .filter((url) => url.origin === MARKETING_ORIGIN && url.hash === '#registration');
+
+  assert.ok(
+    anchorTargets.length > 0,
+    'hero/nav/mobile CTAs must target #registration while registration is coming_soon',
+  );
+  for (const url of anchorTargets) assert.equal(url.pathname, '/');
   assert.equal(
-    (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp(targetId)}['"]`, 'gi')) ?? [])
+    (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
       .length,
     1,
     'registration CTA hash must resolve to exactly one target in the built home page',
+  );
+
+  // The strip is where that anchor lands, so its own button must go elsewhere.
+  const stripCta = registration.match(/<a\b([^>]*)>/i);
+  assert.ok(stripCta, 'registration strip must still offer a link');
+  const stripHref = stripCta[1].match(/\bhref=(['"])(.*?)\1/i);
+  assert.ok(stripHref, 'registration strip link must include an href');
+  assert.notEqual(
+    new URL(decodeHtml(stripHref[2]), MARKETING_ORIGIN).hash,
+    '#registration',
+    'registration strip button must not link to its own section',
   );
   assert.ok(toText(html.home).includes(MISSION));
 });
