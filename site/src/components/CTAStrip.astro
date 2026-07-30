@@ -1,22 +1,70 @@
 ---
+import type { RegistrationState, RegistrationWindows } from '@/lib/registrationState';
+
 interface Props {
   heading: string;
   subhead?: string;
   cta_label: string;
   cta_url: string;
   id?: string;
+  // Optional baked-variant props so the strip's CTA can join the client-side
+  // registration flip (registrationFlip.ts) like every other CtaForState
+  // consumer. Omitted entirely by callers with no season data (e.g.
+  // /sponsors), which leaves the strip exactly as it rendered before -- a
+  // plain link that never gets picked up by `[data-registration]`.
+  state?: RegistrationState;
+  windows?: RegistrationWindows;
+  label_open?: string; url_open?: string;
+  label_coming_soon?: string; url_coming_soon?: string;
+  label_closed?: string; url_closed?: string;
+  open_subhead?: string;
+  soon_subhead?: string;
+  closed_subhead?: string;
 }
-const { heading, subhead, cta_label, cta_url, id } = Astro.props;
+const {
+  heading, subhead, cta_label, cta_url, id,
+  state, windows = {},
+  label_open, url_open,
+  label_coming_soon, url_coming_soon,
+  label_closed, url_closed,
+  open_subhead, soon_subhead, closed_subhead,
+} = Astro.props;
+
+// Same attribute vocabulary as CtaForState.astro's `baked` object -- one
+// dispatcher (registrationFlip.ts) reads both, so it must not learn a second
+// shape.
+const ctaBaked = state ? {
+  'data-registration': '',
+  'data-state': state,
+  'data-returning-start': windows.returning_start ?? '',
+  'data-returning-end': windows.returning_end ?? '',
+  'data-new-start': windows.new_start ?? '',
+  'data-new-end': windows.new_end ?? '',
+  'data-open-label': label_open ?? '',
+  'data-open-url': url_open ?? '',
+  'data-soon-label': label_coming_soon ?? '',
+  'data-soon-url': url_coming_soon ?? '',
+  'data-closed-label': label_closed ?? '',
+  'data-closed-url': url_closed ?? '',
+} : {};
+
+const subheadBaked = state ? {
+  'data-registration-subhead': '',
+  'data-open-subhead': open_subhead ?? '',
+  'data-soon-subhead': soon_subhead ?? '',
+  'data-closed-subhead': closed_subhead ?? '',
+} : {};
 ---
 <section id={id} class="bg-navy border-t-[3px] border-coral text-paper">
   <div class="safe-inline-6 mx-auto max-w-7xl px-6 py-16 md:py-20 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
     <div>
       <h2 class="font-display font-semibold text-3xl md:text-4xl text-mint leading-tight">{heading}</h2>
-      {subhead && <p class="mt-2 text-paper/75 text-sm md:text-base max-w-xl text-balance">{subhead}</p>}
+      {subhead && <p class="mt-2 text-paper/75 text-sm md:text-base max-w-xl text-balance" {...subheadBaked}>{subhead}</p>}
     </div>
     <a
       href={cta_url}
       class="inline-flex items-center px-6 py-3 bg-mint text-navy font-semibold rounded-md"
+      {...ctaBaked}
     >{cta_label}</a>
   </div>
 </section>

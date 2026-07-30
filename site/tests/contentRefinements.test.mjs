@@ -106,13 +106,20 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   assert.equal(yamlScalar(source.home, 'mission_paragraph'), MISSION);
 
   assert.match(source.ctaStrip, /\bid\?: string;/);
-  assert.match(source.ctaStrip, /const \{ heading, subhead, cta_label, cta_url, id \} = Astro\.props;/);
+  assert.match(source.ctaStrip, /heading, subhead, cta_label, cta_url, id,/);
+  // The strip also accepts optional baked-variant props so its CTA and
+  // subhead can join the client-side registration flip (Fix 1).
+  assert.match(source.ctaStrip, /state\?: RegistrationState;/);
+  assert.match(source.ctaStrip, /label_coming_soon\?: string; url_coming_soon\?: string;/);
+  assert.match(source.ctaStrip, /data-registration-subhead/);
   assert.match(
     source.ctaStrip,
     /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper">/,
   );
   assert.match(source.homePage, /<CTAStrip\s+id="registration"/);
-  assert.match(source.homePage, /stripSubhead\(cta\.state, cta\.windows\)/);
+  assert.match(source.homePage, /stripSubhead\('open', cta\.windows\)/);
+  assert.match(source.homePage, /stripSubhead\('coming_soon', cta\.windows\)/);
+  assert.match(source.homePage, /stripSubhead\('closed', cta\.windows\)/);
 
   const registration = sectionById(html.home, 'registration');
   const registrationText = toText(registration);

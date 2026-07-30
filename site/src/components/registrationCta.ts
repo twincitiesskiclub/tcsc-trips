@@ -44,7 +44,10 @@ export async function getRegistrationCta(): Promise<RegistrationCta> {
     label_open: d?.cta_open_label ?? 'Register for the season',
     url_open: d?.cta_open_url ?? 'https://tcsc.ski/',
     label_coming_soon: d?.cta_coming_soon_label ?? 'Get on the list',
-    url_coming_soon: d?.cta_coming_soon_url,
+    // Falls back like every other variant: a url-less coming_soon means
+    // CtaForState renders a dead <span> and, before this fix, the flip could
+    // not restore a clickable <a> once the state changed away from it.
+    url_coming_soon: d?.cta_coming_soon_url ?? d?.cta_closed_url ?? 'https://tcsc.ski/',
     label_closed: d?.cta_closed_label ?? 'Register',
     url_closed: d?.cta_closed_url ?? 'https://tcsc.ski/',
   };

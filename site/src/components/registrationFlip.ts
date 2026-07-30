@@ -18,6 +18,12 @@ const ATTR: Record<Variant, { label: string; url: string }> = {
   closed: { label: 'data-closed-label', url: 'data-closed-url' },
 };
 
+const SUBHEAD_ATTR: Record<Variant, string> = {
+  open: 'data-open-subhead',
+  coming_soon: 'data-soon-subhead',
+  closed: 'data-closed-subhead',
+};
+
 function orNull(value: string | null): string | null {
   return value ? value : null;
 }
@@ -48,4 +54,14 @@ for (const element of document.querySelectorAll<HTMLElement>('[data-registration
     else element.removeAttribute('href');
   }
   element.setAttribute('data-state', actual);
+
+  // The CTA strip's subhead lives beside its CTA, not inside it, so it can't
+  // be found by descending from `element` -- climb to the shared section and
+  // look there. Other `[data-registration]` elements (hero, nav, mobile menu)
+  // have no such sibling, so this is a no-op for them.
+  const subhead = element.closest('section')?.querySelector<HTMLElement>('[data-registration-subhead]');
+  if (subhead) {
+    const nextSubhead = subhead.getAttribute(SUBHEAD_ATTR[actual]);
+    if (nextSubhead) subhead.textContent = nextSubhead;
+  }
 }
