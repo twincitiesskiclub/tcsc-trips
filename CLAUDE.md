@@ -70,8 +70,11 @@ Returning and new members get separate registration windows. Exactly one `Season
 
 The marketing site's registration dates and open/coming_soon/closed state are
 **derived from the database**, never authored. `GET /api/season` returns the
-registration windows for the soonest-upcoming season per `season_type`; the
-Astro build bakes those timestamps plus every state's copy into the HTML, and
+registration windows for one season per `season_type` — whichever is taking
+registrations now, else the soonest ahead, else the most recently ended (see
+`app/seasons/selection.py`). A window counts only when both its start and end
+are set, matching `Season.is_open_for`. The Astro build bakes those timestamps
+plus every state's copy into the HTML, and
 `registrationFlip.ts` re-derives the state in the browser so the site flips at
 the exact opening minute without a rebuild.
 
