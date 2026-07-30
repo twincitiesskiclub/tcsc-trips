@@ -13,7 +13,7 @@
 #slack-sync .ss-head-actions{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 
 /* header buttons -- 38px / radius 10px matching sibling geometry */
-#slack-sync .ss-btn{height:38px;display:inline-flex;align-items:center;gap:6px;border-radius:10px;padding:0 16px;font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border:none;text-decoration:none;white-space:nowrap}
+#slack-sync .ss-btn{height:38px;display:inline-flex;align-items:center;gap:var(--admin-space-2);border-radius:10px;padding:0 var(--admin-space-4);font-size:14px;font-weight:600;cursor:pointer;font-family:inherit;border:none;text-decoration:none;white-space:nowrap}
 #slack-sync .ss-btn-primary{background:#1c2c44;color:#fff}
 #slack-sync .ss-btn-primary:hover{opacity:.9}
 #slack-sync .ss-btn-primary:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
@@ -35,7 +35,7 @@
 
 /* view pills -- radius 9999px matching .mr-pill / .admin-ui-pill */
 #slack-sync .ss-pills{display:flex;gap:4px}
-#slack-sync .ss-pill{display:inline-flex;align-items:center;padding:6px 13px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
+#slack-sync .ss-pill{display:inline-flex;align-items:center;gap:var(--admin-space-1);padding:6px 13px;border-radius:9999px;border:1.5px solid #e5e7eb;background:#fff;color:#475569;font-size:13px;font-weight:500;cursor:pointer;font-family:inherit;transition:all .12s;white-space:nowrap}
 #slack-sync .ss-pill:hover{border-color:#1c2c44;color:#1c2c44}
 #slack-sync .ss-pill.is-active{border-color:#1c2c44;background:rgba(28,44,68,.08);color:#1c2c44;font-weight:600}
 #slack-sync .ss-pill:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}

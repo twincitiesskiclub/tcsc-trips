@@ -51,10 +51,10 @@
 #skipper-decisions .sk-card-list {
     list-style: none;
     padding: 0;
-    margin: 0 0 4px;
+    margin: 0 0 var(--admin-space-1);
     display: flex;
     flex-direction: column;
-    gap: 6px;
+    gap: var(--admin-space-2);
 }
 
 /* --- Decision card --- */
@@ -85,13 +85,13 @@
     align-items: center;
     justify-content: space-between;
     flex-wrap: wrap;
-    gap: 4px;
-    margin-bottom: 6px;
+    gap: var(--admin-space-1);
+    margin-bottom: var(--admin-space-2);
 }
 #skipper-decisions .sk-card__loc-date {
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: var(--admin-space-2);
     min-width: 0;
     flex: 1;
 }
@@ -148,8 +148,8 @@
 #skipper-decisions .sk-card__body {
     display: flex;
     align-items: flex-start;
-    gap: 6px;
-    margin-bottom: 6px;
+    gap: var(--admin-space-2);
+    margin-bottom: var(--admin-space-2);
 }
 #skipper-decisions .sk-card__summary {
     font-size: 13px;
@@ -364,7 +364,7 @@
     <h1 class="m-0 mb-5 text-xl text-tcsc-navy font-semibold">Skipper Dashboard</h1>
 
     <!-- Pending Proposals Section -->
-    <div class="mb-8">
+    <div class="admin-ui-section">
         <div class="flex justify-between items-center mb-3 pb-2 border-b-2 border-tcsc-navy">
             <h2 class="m-0 text-base text-tcsc-navy font-semibold">Pending Cancellation Proposals</h2>
         </div>
@@ -374,7 +374,7 @@
     </div>
 
     <!-- Recent Decisions Section -->
-    <div class="mb-8">
+    <div class="admin-ui-section">
         <div class="flex justify-between items-center mb-3 pb-2 border-b-2 border-tcsc-navy">
             <h2 class="m-0 text-base text-tcsc-navy font-semibold">Recent Decisions</h2>
         </div>
@@ -392,7 +392,7 @@
     </div>
 
     <!-- Configuration Section -->
-    <div class="mb-8">
+    <div class="admin-ui-section">
         <div class="flex justify-between items-center mb-3 pb-2 border-b-2 border-tcsc-navy">
             <h2 class="m-0 text-base text-tcsc-navy font-semibold">Skipper Configuration</h2>
             <button class="toolbar-btn toolbar-btn-secondary" onclick="refreshConfig()">Refresh</button>
