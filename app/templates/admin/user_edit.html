@@ -36,17 +36,17 @@
         <div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
             <h3 class="text-base font-semibold text-tcsc-navy m-0 mb-4 pb-2 border-b border-tcsc-gray-100">Contact Information</h3>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Email</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Email</label>
                 <input type="email" name="email" value="{{ user.email }}" required
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Phone</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Phone</label>
                 <input type="tel" name="phone" value="{{ user.phone or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div>
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Slack UID</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Slack UID</label>
                 <input type="text" name="slack_uid" value="{{ user.slack_user.slack_uid if user.slack_user else '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
@@ -56,29 +56,29 @@
         <div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
             <h3 class="text-base font-semibold text-tcsc-navy m-0 mb-4 pb-2 border-b border-tcsc-gray-100">Profile</h3>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">First Name</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">First Name</label>
                 <input type="text" name="first_name" value="{{ user.first_name or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Last Name</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Last Name</label>
                 <input type="text" name="last_name" value="{{ user.last_name or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Status</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Status</label>
                 <div class="flex items-center gap-3 py-2">
                     {{ user_status_badge(user.status) }}
                     <span class="text-xs text-tcsc-gray-600 italic">Derived from season registration</span>
                 </div>
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Pronouns</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Pronouns</label>
                 <input type="text" name="pronouns" value="{{ user.pronouns or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div>
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Date of Birth</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Date of Birth</label>
                 <input type="date" name="date_of_birth" value="{{ user.date_of_birth.strftime('%Y-%m-%d') if user.date_of_birth else '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
@@ -88,7 +88,7 @@
         <div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
             <h3 class="text-base font-semibold text-tcsc-navy m-0 mb-4 pb-2 border-b border-tcsc-gray-100">Skiing Info</h3>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Preferred Technique</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Preferred Technique</label>
                 <select name="preferred_technique"
                         class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
                     <option value="">--</option>
@@ -98,12 +98,12 @@
                 </select>
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Experience (Years)</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Experience (Years)</label>
                 <input type="text" name="ski_experience" value="{{ user.ski_experience or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div>
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">T-Shirt Size</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">T-Shirt Size</label>
                 <select name="tshirt_size"
                         class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
                     <option value="">--</option>
@@ -121,22 +121,22 @@
         <div class="bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
             <h3 class="text-base font-semibold text-tcsc-navy m-0 mb-4 pb-2 border-b border-tcsc-gray-100">Emergency Contact</h3>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Name</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Name</label>
                 <input type="text" name="emergency_contact_name" value="{{ user.emergency_contact_name or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Relation</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Relation</label>
                 <input type="text" name="emergency_contact_relation" value="{{ user.emergency_contact_relation or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div class="mb-4">
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Phone</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Phone</label>
                 <input type="tel" name="emergency_contact_phone" value="{{ user.emergency_contact_phone or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
             <div>
-                <label class="block text-sm font-medium text-tcsc-gray-600 mb-1.5">Email</label>
+                <label class="block text-sm font-medium text-tcsc-gray-600 mb-2">Email</label>
                 <input type="email" name="emergency_contact_email" value="{{ user.emergency_contact_email or '' }}"
                        class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
             </div>
@@ -156,38 +156,40 @@
     <div class="mt-8 bg-white p-5 rounded-tcsc border border-tcsc-gray-100">
         <h2 class="text-lg font-semibold text-tcsc-navy m-0 mb-4">Season History</h2>
         {% if user_seasons and user_seasons|length > 0 %}
-        <table class="min-w-full text-left text-sm">
-            <thead>
-                <tr class="border-b border-tcsc-gray-100">
-                    <th class="px-4 py-2 font-medium text-tcsc-gray-600">Season</th>
-                    <th class="px-4 py-2 font-medium text-tcsc-gray-600">Year</th>
-                    <th class="px-4 py-2 font-medium text-tcsc-gray-600">Type</th>
-                    <th class="px-4 py-2 font-medium text-tcsc-gray-600">Status</th>
-                    <th class="px-4 py-2 font-medium text-tcsc-gray-600">Registration Date</th>
-                    <th class="px-4 py-2 font-medium text-tcsc-gray-600">Payment Date</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for us, season in user_seasons %}
-                <tr class="border-b border-tcsc-gray-100/50 hover:bg-zinc-50">
-                    <td class="px-4 py-3">{{ season.name }}</td>
-                    <td class="px-4 py-3">{{ season.year }}</td>
-                    <td class="px-4 py-3">{{ us.registration_type|capitalize if us.registration_type else '-' }}</td>
-                    <td class="px-4 py-3">
-                        <select name="user_season_status_{{ us.season_id }}" class="season-status-select px-2.5 py-1.5 text-sm border border-tcsc-gray-100 rounded-tcsc bg-white min-w-40 focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy" data-original="{{ us.status }}">
-                            <option value="PENDING_LOTTERY" {% if us.status == 'PENDING_LOTTERY' %}selected{% endif %}>Pending Lottery</option>
-                            <option value="ACTIVE" {% if us.status == 'ACTIVE' %}selected{% endif %}>Active</option>
-                            <option value="DROPPED_LOTTERY" {% if us.status == 'DROPPED_LOTTERY' %}selected{% endif %}>Dropped (Lottery)</option>
-                            <option value="DROPPED_VOLUNTARY" {% if us.status == 'DROPPED_VOLUNTARY' %}selected{% endif %}>Dropped (Voluntary)</option>
-                            <option value="DROPPED_CAUSE" {% if us.status == 'DROPPED_CAUSE' %}selected{% endif %}>Dropped (Cause)</option>
-                        </select>
-                    </td>
-                    <td class="px-4 py-3">{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
-                    <td class="px-4 py-3">{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
+        <div class="overflow-x-auto">
+            <table class="min-w-full text-left text-sm">
+                <thead>
+                    <tr class="border-b border-tcsc-gray-100">
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Season</th>
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Year</th>
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Type</th>
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Status</th>
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Registration Date</th>
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Payment Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for us, season in user_seasons %}
+                    <tr class="border-b border-tcsc-gray-100/50 hover:bg-zinc-50">
+                        <td class="px-4 py-3">{{ season.name }}</td>
+                        <td class="px-4 py-3">{{ season.year }}</td>
+                        <td class="px-4 py-3">{{ us.registration_type|capitalize if us.registration_type else '-' }}</td>
+                        <td class="px-4 py-3">
+                            <select name="user_season_status_{{ us.season_id }}" class="season-status-select px-2.5 py-1.5 text-sm border border-tcsc-gray-100 rounded-tcsc bg-white min-w-40 focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy" data-original="{{ us.status }}">
+                                <option value="PENDING_LOTTERY" {% if us.status == 'PENDING_LOTTERY' %}selected{% endif %}>Pending Lottery</option>
+                                <option value="ACTIVE" {% if us.status == 'ACTIVE' %}selected{% endif %}>Active</option>
+                                <option value="DROPPED_LOTTERY" {% if us.status == 'DROPPED_LOTTERY' %}selected{% endif %}>Dropped (Lottery)</option>
+                                <option value="DROPPED_VOLUNTARY" {% if us.status == 'DROPPED_VOLUNTARY' %}selected{% endif %}>Dropped (Voluntary)</option>
+                                <option value="DROPPED_CAUSE" {% if us.status == 'DROPPED_CAUSE' %}selected{% endif %}>Dropped (Cause)</option>
+                            </select>
+                        </td>
+                        <td class="px-4 py-3">{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
+                        <td class="px-4 py-3">{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
         {% else %}
         <p class="text-tcsc-gray-600 text-center py-6">No season registrations found.</p>
         {% endif %}
