@@ -47,7 +47,7 @@
 
 /* Role popover menu */
 .mr-role-dropdown{position:relative}
-.mr-role-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;padding:12px;width:320px;overflow-x:clip}
+.mr-role-menu{display:none;position:absolute;top:calc(100% + 4px);left:0;background:#fff;border:1px solid #d0d5dd;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,.12);z-index:200;padding:12px;width:320px}
 .mr-role-menu.show{display:block}
 .mr-role-menu-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:var(--admin-space-3);padding-bottom:var(--admin-space-2);border-bottom:1px solid #e4e7ec}
 .mr-role-menu-header span{font-weight:600;font-size:12px;color:#667085;text-transform:uppercase;letter-spacing:.5px}
@@ -60,7 +60,8 @@
 .mr-role-toggle:hover{border-color:#98a2b3;background:#f9fafb;transform:scale(1.05)}
 .mr-role-toggle[aria-pressed="true"]{border-color:#1c2c44;background:rgba(28,44,68,.08);box-shadow:0 0 0 2px rgba(28,44,68,.1)}
 .mr-role-toggle:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-.mr-role-toggle::after{content:attr(data-tooltip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%) translateY(-6px);padding:5px 8px;background:#1c2c44;color:#fff;font-size:11px;font-weight:500;white-space:nowrap;border-radius:4px;opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s;pointer-events:none;z-index:10}
+.mr-role-toggle::after{content:attr(data-tooltip);position:absolute;bottom:100%;left:0;transform:translateY(-6px);padding:5px 8px;background:#1c2c44;color:#fff;font-size:11px;font-weight:500;white-space:nowrap;border-radius:4px;opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s;pointer-events:none;z-index:10}
+.mr-role-toggle:nth-child(6n+4)::after,.mr-role-toggle:nth-child(6n+5)::after,.mr-role-toggle:nth-child(6n)::after{left:auto;right:0}
 .mr-role-toggle:hover::after{opacity:1;visibility:visible}
 .mr-role-count{background:#1c2c44;color:#fff;font-size:11px;font-weight:600;padding:2px 6px;border-radius:10px}
 
@@ -84,7 +85,6 @@
 .mr-retry{background:none;border:none;color:#1c2c44;text-decoration:underline;cursor:pointer;font-family:inherit;font-size:14px}
 
 /* --- Member row --- */
-#member-roster-list{overflow-x:clip}
 .mr-row{display:grid;grid-template-columns:40px 1fr auto auto;gap:0 var(--admin-space-3);align-items:center;background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:var(--admin-space-3) var(--admin-space-4);margin-bottom:var(--admin-space-2);cursor:pointer;transition:border-color .12s,box-shadow .12s}
 .mr-row:hover{border-color:#cdd5e0;box-shadow:0 1px 4px rgba(0,0,0,.06)}
 .mr-row.is-active{border-color:#1c2c44;box-shadow:inset 3px 0 0 #1c2c44}
@@ -99,11 +99,12 @@
 .mr-name{font-size:15px;font-weight:600;color:#1c2c44;text-decoration:none}
 .mr-name:hover{text-decoration:underline}
 .mr-name:focus-visible{outline:2px solid #1c2c44;outline-offset:2px;border-radius:3px}
-.mr-email{font-size:13px;color:#64748b}
+.mr-email{font-size:13px;color:#64748b;max-width:100%;overflow-x:auto}
 .mr-roles{display:flex;gap:4px;flex-wrap:wrap;align-items:center}
 .mr-role-emoji{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;font-size:18px;cursor:default;position:relative;transition:transform .12s}
 .mr-role-emoji:hover{transform:scale(1.1)}
-.mr-role-emoji::after{content:attr(data-tooltip);position:absolute;bottom:100%;left:50%;transform:translateX(-50%) translateY(-4px);padding:5px 8px;background:#1c2c44;color:#fff;font-size:11px;font-weight:500;white-space:nowrap;border-radius:4px;opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s;pointer-events:none;z-index:100}
+.mr-role-emoji::after{content:attr(data-tooltip);position:absolute;bottom:100%;left:0;transform:translateY(-4px);padding:5px 8px;background:#1c2c44;color:#fff;font-size:11px;font-weight:500;white-space:nowrap;border-radius:4px;opacity:0;visibility:hidden;transition:opacity .15s,visibility .15s;pointer-events:none;z-index:100}
+.mr-role-emoji:nth-child(n+3)::after{left:auto;right:0}
 .mr-role-emoji:hover::after{opacity:1;visibility:visible}
 .mr-no-roles{font-size:13px;color:#d0d5dd}
 
@@ -195,7 +196,6 @@
 
 /* ===== Mobile breakpoints ===== */
 @media (max-width:767px){
-  .mr-toolbar{gap:var(--admin-space-2)}
   .mr-pills{flex-basis:100%;order:-1}
   .mr-pill{flex:1;justify-content:center}
   .mr-search{width:100%;flex-basis:100%}
@@ -214,9 +214,10 @@
   .mr-role-toggle{width:42px;height:42px}
   .mr-edit-btn{min-height:44px}
   .mr-pill{min-height:42px}
+  .mr-role-menu{max-width:calc(100vw - var(--admin-space-6) - var(--admin-space-6));padding:var(--admin-space-2)}
 }
 @media (max-width:479px){
-  .mr-row{padding:10px 12px}
+  .mr-row{padding:var(--admin-space-3)}
   .mr-select{min-width:0;width:100%;flex-basis:100%}
 }
 
