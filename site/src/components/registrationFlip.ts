@@ -39,9 +39,13 @@ for (const element of document.querySelectorAll<HTMLElement>('[data-registration
   const nextLabel = element.getAttribute(label);
   const nextUrl = element.getAttribute(url);
   if (nextLabel) element.textContent = nextLabel;
-  // hasAttribute rather than `instanceof HTMLAnchorElement`: the disabled
-  // variant renders a <span> with no href, and an instanceof check would also
-  // drag a DOM global into the jsdom test harness for no benefit.
-  if (nextUrl && element.hasAttribute('href')) element.setAttribute('href', nextUrl);
+  // A variant with no url must not inherit the previous state's href: that
+  // would leave the CTA showing one state's label while linking to another
+  // state's destination. Dropping the attribute matches how the build renders
+  // a url-less variant (CtaForState emits a plain <span>).
+  if (element.hasAttribute('href')) {
+    if (nextUrl) element.setAttribute('href', nextUrl);
+    else element.removeAttribute('href');
+  }
   element.setAttribute('data-state', actual);
 }
