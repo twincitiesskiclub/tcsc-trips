@@ -96,3 +96,13 @@ test('falls back on a malformed body', async () => {
     },
   );
 });
+
+test('the fallback cannot be corrupted by a consumer', async () => {
+  // One frozen singleton is handed to every fallback caller in a build, so a
+  // stray write here would poison every other component's data.
+  const data = await fetchSeasonData('http://127.0.0.1:1/api/season');
+  assert.throws(() => {
+    data.by_type['fall/winter'] = { season_type: 'fall/winter' };
+  }, TypeError);
+  assert.deepEqual(data.by_type, {});
+});

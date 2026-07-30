@@ -1310,11 +1310,15 @@ export interface SeasonData {
 
 const FETCH_TIMEOUT_MS = 10_000;
 
+// Deep-frozen, not just Object.freeze'd: this is a single module-level
+// singleton handed by reference to every fallback caller in a build, so a
+// consumer writing `data.by_type[key] = ...` would silently corrupt it for
+// everyone else. Object.freeze alone is shallow and would leave by_type open.
 const FALLBACK: SeasonData = Object.freeze({
   source: 'fallback',
   generated_at: null,
   primary: null,
-  by_type: {},
+  by_type: Object.freeze({}),
 });
 
 export function seasonApiUrl(): string {
@@ -1347,6 +1351,9 @@ async function load(url: string): Promise<SeasonData> {
   }
 }
 
+// Callers share one instance per url, by design -- that is what makes a build
+// issue a single request. Treat the result as READ-ONLY: mutating it would be
+// visible to every other component in the same build.
 export function fetchSeasonData(url: string = seasonApiUrl()): Promise<SeasonData> {
   let pending = inFlight.get(url);
   if (!pending) {
