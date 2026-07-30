@@ -80,3 +80,19 @@ def test_ties_break_on_id_so_the_result_is_deterministic():
     b = _season(3, r_start=datetime(2026, 8, 28), r_end=datetime(2026, 9, 2))
     assert select_season([a, b], NOW) is b
     assert select_season([b, a], NOW) is b
+
+
+def test_a_half_set_window_is_not_a_window():
+    # The admin form leaves all four fields optional, and Season.is_open_for
+    # (app/models.py:279) requires both ends before it will call a window open.
+    season = _season(1, r_start=datetime(2026, 8, 28))
+    assert span_start(season) is None
+    assert span_end(season) is None
+
+
+def test_a_half_set_season_never_outranks_one_that_is_genuinely_open():
+    # Regression: treating a missing end as "open forever" made this stale,
+    # half-configured season sort first and win permanently.
+    half_set = _season(1, r_start=datetime(2024, 8, 1))
+    open_now = _season(2, r_start=datetime(2026, 7, 1), r_end=datetime(2026, 8, 1))
+    assert select_season([half_set, open_now], NOW) is open_now
