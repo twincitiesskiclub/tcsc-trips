@@ -85,6 +85,8 @@ projects:
             envVars:
               - key: PUBLIC_CONDITIONS_API_URL
                 value: https://tcsc.ski/api/conditions
+              - key: PUBLIC_SEASON_API_URL
+                value: https://tcsc.ski/api/season
               # Astro 7 requires Node >=22.12. Keep the production builder on
               # the same Node release used for clean-install verification.
               - key: NODE_VERSION
