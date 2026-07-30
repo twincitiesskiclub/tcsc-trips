@@ -1629,18 +1629,48 @@ and pass it down by adding one attribute to the `<CtaForState ... />` invocation
           windows={props.windows}
 ```
 
-- [ ] **Step 7: Remove the manual toggle**
+- [ ] **Step 7: Retire the hardcoded-subhead assertions**
+
+`site/tests/contentRefinements.test.mjs` pins the literal subhead this task is deleting. It will fail otherwise — this is expected, not a regression.
+
+Delete line 37:
+
+```javascript
+const REGISTRATION_SUBHEAD = 'Returning members Aug 28; new members Sep 3.';
+```
+
+Replace it with the part of the copy that is still static:
+
+```javascript
+// The dates now come from the database, so only the ability line is a
+// fixed string worth pinning here.
+const ABILITY_LINE = 'Intermediate ability and up, no racing required.';
+```
+
+Then change the two assertions that used it. Line ~113 becomes:
+
+```javascript
+  assert.match(source.homePage, /stripSubhead\(cta\.state, cta\.windows\)/);
+```
+
+and line ~117 becomes:
+
+```javascript
+  assert.ok(registrationText.includes(ABILITY_LINE));
+```
+
+- [ ] **Step 8: Remove the manual toggle**
 
 - Delete the `registration_state: coming_soon` line from `site/src/content/pages/home.yaml`.
 - Delete the `registration_state:` line from `site/src/content.config.ts` (line ~208).
 - Delete the `registration_state: fields.select({...})` block from `site/keystatic.config.ts` (starting line ~69, through its closing `}),`).
 
-- [ ] **Step 8: Run the tests**
+- [ ] **Step 9: Run the tests**
 
 Run (from `site/`): `npm run build && node --test tests/seasonBuild.test.mjs && npm run check`
 Expected: PASS — 5 passed, and `astro check` reports 0 errors.
 
-- [ ] **Step 9: Add to the suite and commit**
+- [ ] **Step 10: Add to the suite and commit**
 
 Append ` tests/seasonBuild.test.mjs` to `test:refinement` in `site/package.json`.
 
@@ -1937,6 +1967,9 @@ function registrationLine(entry) {
     open: deriveRegistrationState(record, now) === 'open',
   };
 }
+
+// Resolved once per card, not once per attribute that reads it.
+const cardLines = new Map(seasons.map((s) => [s.id, registrationLine(s)]));
 ```
 
 Then replace exactly this block (`site/src/components/SeasonsGrid.astro:59-61`):
@@ -1952,9 +1985,9 @@ with this, which keeps the identical class logic and only changes where the two 
 ```astro
             <p
               data-season-card-note
-              class:list={['text-[13px]', registrationLine(s).open ? `font-semibold ${accent}` : muted]}
+              class:list={['text-[13px]', cardLines.get(s.id).open ? `font-semibold ${accent}` : muted]}
             >
-              {registrationLine(s).note}
+              {cardLines.get(s.id).note}
             </p>
 ```
 
