@@ -22,6 +22,7 @@ import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
 import { isSamePageAnchor } from '@/lib/samePageAnchor';
 import { metaDescription } from '@/lib/metaDescription';
+import { stripSubhead } from '@/lib/registrationCopy';
 
 const home = await getEntry('home', 'home');
 if (!home) throw new Error('home singleton missing (src/content/pages/home.yaml)');
@@ -53,12 +54,7 @@ const ctaStripLabel =
     : cta.state === 'coming_soon'
       ? cta.label_coming_soon
       : cta.label_closed;
-const ctaStripSubhead =
-  cta.state === 'open'
-    ? 'Intermediate ability and up. No racing required.'
-    : cta.state === 'coming_soon'
-      ? 'Returning members Aug 28; new members Sep 3. Intermediate ability and up, no racing required.'
-      : 'Registration is closed. Intermediate ability and up, no racing required.';
+const ctaStripSubhead = stripSubhead(cta.state, cta.windows);
 ---
 <BaseLayout
   title={meta?.data.title ?? 'Twin Cities Ski Club'}
@@ -77,7 +73,8 @@ const ctaStripSubhead =
     subline="Year-round cross-country ski training for adults 21-35."
     image={h.hero_image}
     imageAlt={h.hero_image_alt}
-    state={h.registration_state}
+    state={cta.state}
+    windows={cta.windows}
     cta_open_label={cta.label_open} cta_open_url={cta.url_open}
     cta_coming_soon_label={cta.label_coming_soon} cta_coming_soon_url={cta.url_coming_soon}
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}

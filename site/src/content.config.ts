@@ -205,7 +205,6 @@ const home = defineCollection({
         hero_headline: z.string(),
         hero_image: image(),
         hero_image_alt: z.string(),
-        registration_state: z.enum(['open', 'coming_soon', 'closed']).default('closed'),
         cta_open_label: z.string().default('Register for the season'),
         cta_open_url: z.url().optional(),
         cta_coming_soon_label: z.string().default('Get on the list'),

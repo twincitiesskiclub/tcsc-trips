@@ -66,15 +66,6 @@ export default config({
         hero_headline: fields.text({ label: 'Hero headline', validation: { isRequired: true } }),
         hero_image: contentImage('Hero photograph', 'uploads'),
         hero_image_alt: fields.text({ label: 'Hero image alt text', validation: { isRequired: true } }),
-        registration_state: fields.select({
-          label: 'Registration state',
-          options: [
-            { label: 'Open', value: 'open' },
-            { label: 'Coming soon', value: 'coming_soon' },
-            { label: 'Closed (in-season)', value: 'closed' },
-          ],
-          defaultValue: 'closed',
-        }),
         cta_open_label: fields.text({ label: 'CTA label when open', defaultValue: 'Register for the season' }),
         cta_open_url: fields.url({ label: 'CTA URL when open' }),
         cta_coming_soon_label: fields.text({ label: 'CTA label when coming soon', defaultValue: 'Get on the list' }),

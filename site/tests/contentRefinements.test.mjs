@@ -34,7 +34,9 @@ const html = {
 const MISSION =
   'Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a supportive community for young adults (ages 21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.';
 const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
-const REGISTRATION_SUBHEAD = 'Returning members Aug 28; new members Sep 3.';
+// The dates now come from the database, so only the ability line is a
+// fixed string worth pinning here.
+const ABILITY_LINE = 'Intermediate ability and up, no racing required.';
 const DRY_TRI_2026 =
   'Planning for 2026 is underway. The date and registration details will be posted here when confirmed.';
 const DRY_TRI_RESULTS = 'https://my.raceresult.com/361087/results';
@@ -110,11 +112,11 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
     /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper">/,
   );
   assert.match(source.homePage, /<CTAStrip\s+id="registration"/);
-  assert.ok(source.homePage.includes(REGISTRATION_SUBHEAD));
+  assert.match(source.homePage, /stripSubhead\(cta\.state, cta\.windows\)/);
 
   const registration = sectionById(html.home, 'registration');
   const registrationText = toText(registration);
-  assert.ok(registrationText.includes(REGISTRATION_SUBHEAD));
+  assert.ok(registrationText.includes(ABILITY_LINE));
   // The CTAs that scroll TO registration live above the strip (hero, nav,
   // mobile menu). The strip's own button is excluded on purpose: the strip IS
   // #registration, so aiming it at that anchor is a dead click.
