@@ -1697,6 +1697,37 @@ and line ~117 becomes:
   assert.ok(registrationText.includes(ABILITY_LINE));
 ```
 
+**Then make the CTA assertions state-agnostic.** This is the subtle part. Once state comes from the database, the CTA's label and target legitimately differ between builds — `closed` renders "How to register" pointing at `tcsc.ski`, not "Fall registration dates" pointing at `#registration`. A test that requires the `coming_soon` copy to exist makes this suite depend on an external service being up *and* on today's date, and it will fail the moment registration opens.
+
+Replace the `scrollCtas` block with assertions that hold in **every** state:
+
+```javascript
+  // Registration state is derived from the database at build time, so the
+  // CTA's label and target legitimately differ between builds. Assert the
+  // invariants that hold in EVERY state rather than pinning one state's copy,
+  // or this suite fails whenever registration opens or the API is down.
+  const outsideStrip = html.home.replace(registration, '');
+  const anchorTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
+    .map(([, attributes]) => attributes.match(/\bhref=(['"])(.*?)\1/i))
+    .filter(Boolean)
+    .map((href) => new URL(decodeHtml(href[2]), MARKETING_ORIGIN))
+    .filter((url) => url.origin === MARKETING_ORIGIN && url.hash === '#registration');
+
+  // Vacuous in the closed state, which links to the app instead — that is the
+  // point. When such links DO exist, they must resolve to exactly one target.
+  if (anchorTargets.length > 0) {
+    for (const url of anchorTargets) assert.equal(url.pathname, '/');
+    assert.equal(
+      (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
+        .length,
+      1,
+      'registration CTA hash must resolve to exactly one target in the built home page',
+    );
+  }
+```
+
+The strip's own self-link assertion below it stays exactly as is: that invariant holds in every state and is the regression guard for the dead-CTA fix.
+
 - [ ] **Step 8: Remove the manual toggle**
 
 - Delete the `registration_state: coming_soon` line from `site/src/content/pages/home.yaml`.
