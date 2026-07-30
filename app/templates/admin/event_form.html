@@ -4,25 +4,25 @@
 
 {% block extra_css %}
 <style>
-#admin-event-form .aef-section{border-top:1px solid #e4e4e7;padding-top:24px;margin-top:28px}
-#admin-event-form .aef-editor-list{display:flex;flex-direction:column;gap:10px}
-#admin-event-form .aef-editor-row{border:1px solid #e4e4e7;border-radius:10px;padding:14px;background:#fcfefd}
-#admin-event-form .aef-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:12px}
-#admin-event-form .aef-field{grid-column:span 4;display:flex;flex-direction:column;gap:5px}
+#admin-event-form .aef-section{border-top:1px solid #e4e4e7;padding-top:var(--admin-section-gap);margin-top:var(--admin-section-gap)}
+#admin-event-form .aef-editor-list{display:flex;flex-direction:column;gap:var(--admin-space-3)}
+#admin-event-form .aef-editor-row{border:1px solid #e4e4e7;border-radius:10px;padding:var(--admin-space-3);background:#fcfefd}
+#admin-event-form .aef-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--admin-space-3)}
+#admin-event-form .aef-field{grid-column:span 4;display:flex;flex-direction:column;gap:var(--admin-space-1)}
 #admin-event-form .aef-field-wide{grid-column:span 8}
 #admin-event-form .aef-field-full{grid-column:1/-1}
 #admin-event-form .aef-field label{font-size:12px;font-weight:650;color:#475569}
-#admin-event-form .aef-field input,#admin-event-form .aef-field select,#admin-event-form .aef-field textarea{width:100%;min-height:40px;border:1px solid #d4d4d8;border-radius:7px;padding:8px 10px;color:#1c2c44;font:inherit;font-size:13px;background:#fcfefd;box-sizing:border-box}
+#admin-event-form .aef-field input,#admin-event-form .aef-field select,#admin-event-form .aef-field textarea{width:100%;min-height:40px;border:1px solid #d4d4d8;border-radius:7px;padding:var(--admin-space-2) var(--admin-space-3);color:#1c2c44;font:inherit;font-size:13px;background:#fcfefd;box-sizing:border-box}
 #admin-event-form .aef-field textarea{resize:vertical}
 #admin-event-form .aef-check{display:flex;align-items:center;gap:8px;min-height:40px;font-size:13px;color:#475569}
 #admin-event-form .aef-check input{width:16px;height:16px;min-height:0}
-#admin-event-form .aef-remove{margin-top:12px;min-height:36px;border:1px solid #fecaca;border-radius:7px;background:#fcfefd;color:#991b1b;padding:0 11px;font-size:12px;font-weight:650;cursor:pointer}
-#admin-event-form .aef-add{min-height:40px;border:1px solid #cbd5e1;border-radius:8px;background:#fcfefd;color:#1c2c44;padding:0 13px;font-size:13px;font-weight:650;cursor:pointer}
+#admin-event-form .aef-remove{margin-top:var(--admin-space-3);min-height:36px;border:1px solid #fecaca;border-radius:7px;background:#fcfefd;color:#991b1b;padding:0 var(--admin-space-3);font-size:12px;font-weight:650;cursor:pointer}
+#admin-event-form .aef-add{min-height:40px;border:1px solid #cbd5e1;border-radius:8px;background:#fcfefd;color:#1c2c44;padding:0 var(--admin-space-3);font-size:13px;font-weight:650;cursor:pointer}
 #admin-event-form .aef-add:focus-visible,#admin-event-form .aef-remove:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #admin-event-form .aef-scope-label{font-size:12px;font-weight:650;color:#475569}
-#admin-event-form .aef-scope-boxes{display:flex;flex-wrap:wrap;gap:6px 18px}
+#admin-event-form .aef-scope-boxes{display:flex;flex-wrap:wrap;gap:var(--admin-space-2) var(--admin-space-4)}
 #admin-event-form .aef-hint{font-size:12px;color:#64748b}
-#admin-event-form .aef-empty{border:1px dashed #cbd5e1;border-radius:10px;padding:18px;color:#64748b;font-size:13px;text-align:center}
+#admin-event-form .aef-empty{border:1px dashed #cbd5e1;border-radius:10px;padding:var(--admin-space-4);color:#64748b;font-size:13px;text-align:center}
 @media(max-width:780px){
   #admin-event-form .aef-field,#admin-event-form .aef-field-wide{grid-column:1/-1}
 }

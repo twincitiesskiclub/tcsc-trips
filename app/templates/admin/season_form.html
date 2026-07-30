@@ -10,9 +10,9 @@
 
 <form class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100" method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div class="mb-5">
-            <label for="year" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Year</label>
+    <div class="admin-ui-form-row">
+        <div class="admin-ui-field-group">
+            <label for="year" class="block text-sm font-medium text-tcsc-gray-800">Year</label>
             {% set year_val = season.year if season and season.__class__.__name__ != 'dict' else season.get('year') if season else None %}
             <select id="year" name="year" required
                     class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
@@ -21,8 +21,8 @@
                 {% endfor %}
             </select>
         </div>
-        <div class="mb-5">
-            <label for="season_type" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Type</label>
+        <div class="admin-ui-field-group">
+            <label for="season_type" class="block text-sm font-medium text-tcsc-gray-800">Type</label>
             {% set season_type_val = season.season_type if season and season.__class__.__name__ != 'dict' else season.get('season_type') if season else None %}
             <select id="season_type" name="season_type" required
                     class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
@@ -32,15 +32,15 @@
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div class="mb-5">
-            <label for="start_date" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Start Date</label>
+    <div class="admin-ui-form-row">
+        <div class="admin-ui-field-group">
+            <label for="start_date" class="block text-sm font-medium text-tcsc-gray-800">Start Date</label>
             {% set start_date_val = season.start_date if season and season.__class__.__name__ != 'dict' else season.get('start_date') if season else None %}
             <input type="date" id="start_date" name="start_date" value="{% if start_date_val %}{% if start_date_val is string %}{{ start_date_val }}{% else %}{{ start_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required
                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="mb-5">
-            <label for="end_date" class="block text-sm font-medium text-tcsc-gray-800 mb-2">End Date</label>
+        <div class="admin-ui-field-group">
+            <label for="end_date" class="block text-sm font-medium text-tcsc-gray-800">End Date</label>
             {% set end_date_val = season.end_date if season and season.__class__.__name__ != 'dict' else season.get('end_date') if season else None %}
             <input type="date" id="end_date" name="end_date" value="{% if end_date_val %}{% if end_date_val is string %}{{ end_date_val }}{% else %}{{ end_date_val.strftime('%Y-%m-%d') }}{% endif %}{% endif %}" required
                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
@@ -54,30 +54,30 @@
                class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div class="mb-5">
-            <label for="returning_start" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Returning Registration Start (CT)</label>
+    <div class="admin-ui-form-row">
+        <div class="admin-ui-field-group">
+            <label for="returning_start" class="block text-sm font-medium text-tcsc-gray-800">Returning Registration Start (CT)</label>
             {% set returning_start_val = season.returning_start if season and season.__class__.__name__ != 'dict' else season.get('returning_start') if season else None %}
             <input type="datetime-local" id="returning_start" name="returning_start" value="{% if returning_start_val %}{% if returning_start_val is string %}{{ returning_start_val }}{% else %}{{ returning_start_val|central_time('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="mb-5">
-            <label for="returning_end" class="block text-sm font-medium text-tcsc-gray-800 mb-2">Returning Registration End (CT)</label>
+        <div class="admin-ui-field-group">
+            <label for="returning_end" class="block text-sm font-medium text-tcsc-gray-800">Returning Registration End (CT)</label>
             {% set returning_end_val = season.returning_end if season and season.__class__.__name__ != 'dict' else season.get('returning_end') if season else None %}
             <input type="datetime-local" id="returning_end" name="returning_end" value="{% if returning_end_val %}{% if returning_end_val is string %}{{ returning_end_val }}{% else %}{{ returning_end_val|central_time('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-5">
-        <div class="mb-5">
-            <label for="new_start" class="block text-sm font-medium text-tcsc-gray-800 mb-2">New Registration Start (CT)</label>
+    <div class="admin-ui-form-row">
+        <div class="admin-ui-field-group">
+            <label for="new_start" class="block text-sm font-medium text-tcsc-gray-800">New Registration Start (CT)</label>
             {% set new_start_val = season.new_start if season and season.__class__.__name__ != 'dict' else season.get('new_start') if season else None %}
             <input type="datetime-local" id="new_start" name="new_start" value="{% if new_start_val %}{% if new_start_val is string %}{{ new_start_val }}{% else %}{{ new_start_val|central_time('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
         </div>
-        <div class="mb-5">
-            <label for="new_end" class="block text-sm font-medium text-tcsc-gray-800 mb-2">New Registration End (CT)</label>
+        <div class="admin-ui-field-group">
+            <label for="new_end" class="block text-sm font-medium text-tcsc-gray-800">New Registration End (CT)</label>
             {% set new_end_val = season.new_end if season and season.__class__.__name__ != 'dict' else season.get('new_end') if season else None %}
             <input type="datetime-local" id="new_end" name="new_end" value="{% if new_end_val %}{% if new_end_val is string %}{{ new_end_val }}{% else %}{{ new_end_val|central_time('%Y-%m-%dT%H:%M') }}{% endif %}{% endif %}"
                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
