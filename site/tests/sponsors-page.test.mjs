@@ -2,7 +2,23 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
-const sponsorsHtml = readFileSync(new URL('../dist/sponsors/index.html', import.meta.url), 'utf8');
+// Astro emits dist/<slug>/index.html with build.format 'directory' and
+// dist/<slug>.html with 'file'. Production sets TCSC_EDGE_CONFIG=true, which
+// selects 'file', and the test build now matches it -- so resolve either.
+function page(slug) {
+  const base = new URL('../dist/', import.meta.url);
+  for (const candidate of [`${slug}/index.html`, `${slug}.html`]) {
+    try {
+      return readFileSync(new URL(candidate, base), 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  throw new Error(`no built page for ${slug} (tried both build formats)`);
+}
+
+
+const sponsorsHtml = page('sponsors');
 const homeHtml = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
 
 const decodeHtml = (text) =>

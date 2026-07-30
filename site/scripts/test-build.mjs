@@ -40,7 +40,17 @@ const { port } = server.address();
 
 const build = spawn('npx', ['astro', 'build', '--force'], {
   stdio: 'inherit',
-  env: { ...process.env, PUBLIC_SEASON_API_URL: `http://127.0.0.1:${port}/api/season` },
+  // TCSC_EDGE_CONFIG mirrors render.yaml's setting for tcsc-team-site. It
+  // switches Astro to build.format 'file' and trailingSlash 'never', which
+  // changes each page's own url -- and therefore anything comparing against
+  // it. Building without it once let a same-page-anchor guard pass every
+  // local check and still regress in production, so the test build uses the
+  // production configuration.
+  env: {
+    ...process.env,
+    TCSC_EDGE_CONFIG: 'true',
+    PUBLIC_SEASON_API_URL: `http://127.0.0.1:${port}/api/season`,
+  },
 });
 
 build.on('exit', (code) => {

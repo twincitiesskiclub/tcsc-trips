@@ -32,6 +32,12 @@ export function isSamePageAnchor(
   if (!link.hash) return false;
   if (link.origin !== page.origin) return false;
 
-  const path = (url: URL) => url.pathname.replace(/\/+$/, '');
+  // Normalise an explicit index file away before comparing. Production builds
+  // with TCSC_EDGE_CONFIG=true, which sets Astro's build.format to 'file' and
+  // trailingSlash to 'never', so the home page's own url is /index.html while
+  // the authored anchor is /#registration. Comparing those raw made this
+  // return false in production only -- the guard silently stopped firing and
+  // the CTA strip went back to linking at its own section.
+  const path = (url: URL) => url.pathname.replace(/\/index\.html?$/i, '').replace(/\/+$/, '');
   return path(link) === path(page);
 }

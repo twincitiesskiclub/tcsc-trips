@@ -4,6 +4,22 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import test from 'node:test';
 
+// Astro emits dist/<slug>/index.html with build.format 'directory' and
+// dist/<slug>.html with 'file'. Production sets TCSC_EDGE_CONFIG=true, which
+// selects 'file', and the test build now matches it -- so resolve either.
+function page(slug) {
+  const base = new URL('../dist/', import.meta.url);
+  for (const candidate of [`${slug}/index.html`, `${slug}.html`]) {
+    try {
+      return readFileSync(new URL(candidate, base), 'utf8');
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
+  throw new Error(`no built page for ${slug} (tried both build formats)`);
+}
+
+
 const title = 'Stone Grind or Hotbox? When Skis Need a Second Wind';
 const route = '/wax-room/stone-grind-or-hotbox';
 const sourceUrl = new URL(
@@ -31,6 +47,6 @@ test('keeps the withdrawn Wax Room article unpublished', () => {
     'home page must hide the Wax Room section while it has no published entries',
   );
 
-  const indexHtml = readFileSync(new URL('../dist/wax-room/index.html', import.meta.url), 'utf8');
+  const indexHtml = page('wax-room');
   assert.ok(indexHtml.includes('No entries yet.'), 'Wax Room index must retain its empty state');
 });

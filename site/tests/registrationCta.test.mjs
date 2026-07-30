@@ -67,6 +67,23 @@ test('does not treat off-page destinations as same-page anchors', () => {
   assert.equal(isSamePageAnchor('not a url', HOME), false);
 });
 
+test('matches when the page url is an explicit index file', () => {
+  // Production builds with TCSC_EDGE_CONFIG=true, so Astro's build.format is
+  // 'file' and the home page's own url is /index.html rather than /. Before
+  // this normalisation the guard returned false in production only, and the
+  // CTA strip went back to linking at its own section.
+  assert.equal(
+    isSamePageAnchor('https://twincitiesskiclub.org/#registration',
+      'https://twincitiesskiclub.org/index.html'),
+    true,
+  );
+  assert.equal(
+    isSamePageAnchor('/trips#registration',
+      'https://twincitiesskiclub.org/index.html'),
+    false,
+  );
+});
+
 test('ignores a trailing-slash mismatch between link and page', () => {
   assert.equal(
     isSamePageAnchor('https://twincitiesskiclub.org#registration', HOME),
