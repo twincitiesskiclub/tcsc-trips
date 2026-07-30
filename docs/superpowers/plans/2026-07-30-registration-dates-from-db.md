@@ -22,6 +22,8 @@
 - **Any `.ts` module imported directly by a `node --test` file must have no runtime relative imports.** Node's type stripping erases `import type` but cannot resolve extensionless relative specifiers. `registrationState.ts`, `registrationCopy.ts`, `seasonData.ts`, and `seasonSlug.ts` are all imported by tests, so their cross-imports must stay `import type`. Value imports between them will pass `astro check` and fail `node --test`.
 - Astro names a script bundle after the `.astro` file that declares the `<script>`, not after the module it imports. Never locate a bundle in `dist/_astro/` by the module's name — find it by content.
 - Run the Python suite with `./run-tests.sh`; run site tests from `site/` with `npm run test:refinement`.
+- **The site test suite builds against a deterministic fixture API** (`site/scripts/test-build.mjs`), not the live one. Registration state is derived from an API at build time, so an unqualified `astro build` yields different HTML depending on whether `tcsc.ski` is reachable and what today's date is — which makes build-output assertions skip silently instead of failing. The fixture computes its windows relative to now, so the built page is always in the `coming_soon` state. Any test asserting on `dist/` may rely on that, and must assert `data-season-source="api"` first so a harness failure is loud rather than silent.
+- The fallback build (Task 11) deliberately produces different HTML, so it runs as its own npm script and must never share a run with the fixture-built suite.
 - Never push to `main`. All work lands on the branch `registration-dates-from-db`.
 
 ## File Structure
@@ -2192,9 +2194,29 @@ cd site && npm run test:refinement && npm run test:sponsors && npm run check
 ```
 Expected: the Python suite passes, all site suites pass, 0 type errors.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Give the fallback build its own script**
 
-Append ` tests/seasonFallback.test.mjs` to `test:refinement` in `site/package.json`.
+This test deliberately builds the site into a state the rest of the suite must not inherit: a fallback build leaves `dist/` in the `closed` state, and the fixture-built assertions in `contentRefinements` and `seasonBuild` would then fail. So it does NOT join `test:refinement`. Add its own entry in `site/package.json`:
+
+```json
+    "test:fallback": "node --test tests/seasonFallback.test.mjs",
+```
+
+and have the test restore the fixture build when it finishes, so a later suite run in the same session is not left looking at fallback output:
+
+```javascript
+import { execFileSync } from 'node:child_process';
+
+test.after(() => {
+  // Leave dist/ the way the rest of the suite expects to find it.
+  execFileSync('node', ['scripts/test-build.mjs'], {
+    cwd: new URL('..', import.meta.url).pathname,
+    stdio: 'pipe',
+  });
+});
+```
+
+- [ ] **Step 7: Commit**
 
 ```bash
 git add site CLAUDE.md
