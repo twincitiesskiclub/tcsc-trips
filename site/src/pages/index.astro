@@ -20,6 +20,7 @@ import SponsorWall from '@/components/SponsorWall.astro';
 import CTAStrip from '@/components/CTAStrip.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
+import { isSamePageAnchor } from '@/lib/samePageAnchor';
 import { metaDescription } from '@/lib/metaDescription';
 
 const home = await getEntry('home', 'home');
@@ -31,15 +32,21 @@ const description = meta?.data.description
   ? metaDescription(meta.data.description)
   : undefined;
 
-// CTA strip label + target follow registration state together. Never '#':
-// with no url at all, point at registration on tcsc.ski so the button
-// always goes somewhere real. The public site never links the club Slack.
-const ctaStripUrl =
-  (cta.state === 'open'
+// CTA strip label + target follow registration state together. The button
+// always goes somewhere real: with no url at all — or with one that points
+// back at this strip's own #registration anchor, which is what `coming_soon`
+// carries so the hero and nav can scroll down to here — it falls through to
+// tcsc.ski, where the season card shows the actual opening date. The public
+// site never links the club Slack.
+const preferredStripUrl =
+  cta.state === 'open'
     ? cta.url_open
     : cta.state === 'coming_soon'
       ? (cta.url_coming_soon ?? cta.url_closed)
-      : cta.url_closed) ?? 'https://tcsc.ski/';
+      : cta.url_closed;
+const ctaStripUrl =
+  (isSamePageAnchor(preferredStripUrl, Astro.url.href) ? undefined : preferredStripUrl) ??
+  'https://tcsc.ski/';
 const ctaStripLabel =
   cta.state === 'open'
     ? cta.label_open

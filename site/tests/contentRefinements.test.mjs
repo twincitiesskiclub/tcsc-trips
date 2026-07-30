@@ -115,23 +115,42 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   const registration = sectionById(html.home, 'registration');
   const registrationText = toText(registration);
   assert.ok(registrationText.includes(REGISTRATION_SUBHEAD));
-  const cta = registration.match(
-    /<a\b([^>]*)>Fall registration dates<\/a>/i,
-  );
-  assert.ok(cta, 'registration CTA must render as a title-bearing anchor');
-  const href = cta[1].match(/\bhref=(['"])(.*?)\1/i);
-  assert.ok(href, 'registration CTA must include an href');
+  // The CTAs that scroll TO registration live above the strip (hero, nav,
+  // mobile menu). The strip's own button is excluded on purpose: the strip IS
+  // #registration, so aiming it at that anchor is a dead click.
+  const outsideStrip = html.home.replace(registration, '');
+  const scrollCtas = [
+    ...outsideStrip.matchAll(/<a\b([^>]*)>Fall registration dates<\/a>/gi),
+  ];
+  assert.ok(scrollCtas.length > 0, 'registration CTA must render as a title-bearing anchor');
 
-  const target = new URL(decodeHtml(href[2]), MARKETING_ORIGIN);
-  assert.equal(target.origin, MARKETING_ORIGIN);
-  assert.equal(target.pathname, '/');
-  assert.equal(target.hash, '#registration');
-  const targetId = target.hash.slice(1);
+  let targetId;
+  for (const [, attributes] of scrollCtas) {
+    const href = attributes.match(/\bhref=(['"])(.*?)\1/i);
+    assert.ok(href, 'registration CTA must include an href');
+
+    const target = new URL(decodeHtml(href[2]), MARKETING_ORIGIN);
+    assert.equal(target.origin, MARKETING_ORIGIN);
+    assert.equal(target.pathname, '/');
+    assert.equal(target.hash, '#registration');
+    targetId = target.hash.slice(1);
+  }
   assert.equal(
     (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp(targetId)}['"]`, 'gi')) ?? [])
       .length,
     1,
     'registration CTA hash must resolve to exactly one target in the built home page',
+  );
+
+  // The strip is where that anchor lands, so its own button must go elsewhere.
+  const stripCta = registration.match(/<a\b([^>]*)>/i);
+  assert.ok(stripCta, 'registration strip must still offer a link');
+  const stripHref = stripCta[1].match(/\bhref=(['"])(.*?)\1/i);
+  assert.ok(stripHref, 'registration strip link must include an href');
+  assert.notEqual(
+    new URL(decodeHtml(stripHref[2]), MARKETING_ORIGIN).hash,
+    '#registration',
+    'registration strip button must not link to its own section',
   );
   assert.ok(toText(html.home).includes(MISSION));
 });

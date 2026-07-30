@@ -77,6 +77,7 @@ const pathname = Astro.url.pathname;
 
 <script>
   import { lockPageScroll, unlockPageScroll } from '@/lib/pageScrollLock';
+  import { isSamePageAnchor } from '@/lib/samePageAnchor';
 
   // Lifecycle assumptions: (1) no ClientRouter / view transitions, so this
   // runs once per full page load; (2) exactly one panel + toggle per page.
@@ -107,6 +108,18 @@ const pathname = Astro.url.pathname;
     };
     toggle.addEventListener('click', open);
     closeBtn.addEventListener('click', close);
+    // Every other link here leaves the page, and the load tears the panel
+    // down for us. A same-page anchor — the registration CTA while
+    // registration is `coming_soon` — does not: it only scrolls, so without
+    // this the overlay stays up over a scroll-locked body and the tap reads
+    // as dead. Close first; the browser's own fragment scroll then lands on
+    // a page that can actually move.
+    panel.addEventListener('click', (e) => {
+      const link = (e.target as Element | null)?.closest?.('a[href]');
+      if (!link) return;
+      if (!isSamePageAnchor(link.getAttribute('href'), window.location.href)) return;
+      close();
+    });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && !panel.classList.contains('hidden')) close();
     });

@@ -1,10 +1,11 @@
 # Registration Dates From the Database — Design
 
 **Date:** 2026-07-30
-**Driver:** Fall registration dates on the marketing site are hand-typed in three places and had
-already drifted out of sync with the `registration_state` toggle that governs them.
-**Scope:** New public Flask season API; marketing-site build-time consumption plus a client-side
-state flip. No schema migration — every field this needs already exists on `Season`.
+**Driver:** Two "Fall registration dates" buttons on the marketing site were dead clicks, and the
+dates behind them are hand-typed in three places, already drifted out of sync with the
+`registration_state` toggle that governs them.
+**Scope:** Fix the dead CTAs; add a public Flask season API; consume it at build time and flip
+state client-side. No schema migration — every field this needs already exists on `Season`.
 
 ## Background
 
@@ -22,9 +23,30 @@ All four are already implied by `Season.returning_start`, `returning_end`, `new_
 `new_end` in the app database. Nothing derives them; a human retypes them each season and flips
 the state by hand on the morning registration opens.
 
-This work follows directly from a defect found the same day: the `coming_soon` CTA target is a
-same-page anchor, which made the bottom CTA strip and the mobile menu CTA dead clicks
-(fixed separately). That fix is orthogonal to this design but touches the same components.
+### The dead-CTA defect (included in this change)
+
+Found the same day and shipping in this same branch, because it touches the same components
+(`CtaForState.astro`, `index.astro`) and sequencing it separately would only create a conflict.
+
+While `registration_state` is `coming_soon`, the CTA destination is a same-page anchor,
+`https://twincitiesskiclub.org/#registration`. Three consumers use that correctly to scroll down
+to the CTA strip. Two did not:
+
+1. The **bottom CTA strip** *is* `<section id="registration">`, so its own button linked to the
+   section it already occupies — a dead click. The existing guard in `index.astro` checked only
+   for a missing or literal `'#'` url, not for a resolved same-page anchor.
+2. The **mobile menu** is a `fixed inset-0` overlay over a scroll-locked body. A same-document
+   fragment click never reloads, and nothing else closed the panel, so the overlay stayed up over
+   a page that could not scroll. The tap read as completely dead.
+
+Both are fixed by `site/src/lib/samePageAnchor.ts`, which resolves an href against the current
+page — necessary because Keystatic authors urls as absolute, so a self-link never appears as a
+bare `#registration`. The strip falls through to `tcsc.ski`; the mobile panel closes itself before
+letting the browser scroll.
+
+This matters to the design below beyond mere co-location: once state is derived from the database,
+`coming_soon` will begin and end on its own schedule, so the CTA wiring for that state has to be
+correct without anyone watching it.
 
 ### Deployment constraint
 
@@ -248,8 +270,9 @@ whole design exists to remove.
 **Browser (jsdom, driving the real built bundle)**
 - With timestamps baked before an opening moment and a clock set after it, the flip script swaps
   the CTA to the open variant; with a clock before it, the DOM is untouched.
-- This is the harness used to verify the mobile-menu fix on 2026-07-30, which caught a defect that
-  static assertions alone missed.
+- The mobile menu closes and releases the body scroll lock when its CTA is a same-page anchor.
+  This harness is what proved that fix: against the pre-fix bundle the panel stays open with the
+  body still `position: fixed`, a defect the static assertions alone missed.
 
 ## Risks
 
