@@ -47,3 +47,9 @@ build.on('exit', (code) => {
   server.close();
   process.exit(code ?? 1);
 });
+
+build.on('error', (error) => {
+  server.close();
+  console.error(error);
+  process.exit(1);
+});

@@ -11,7 +11,9 @@ from flask import current_app
 ALLOWED_ORIGINS = {
     'https://twincitiesskiclub.org',
     'https://www.twincitiesskiclub.org',
-    # Staging origin (Render Static service for the marketing site).
+    # Staging origin (Render Static service for the marketing site). The
+    # conditions strip shows "Conditions unavailable" on staging until this
+    # Flask side deploys; with this origin allowlisted it then works there too.
     'https://tcsc-marketing.onrender.com',
 }
 

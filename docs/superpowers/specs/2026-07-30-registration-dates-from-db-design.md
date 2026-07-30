@@ -206,12 +206,19 @@ that renders the home page and both season cards issues one request, and uses
 Dates render in US Central via `Intl.DateTimeFormat` with `timeZone: 'America/Chicago'`, matching
 the repo's UTC-stored / Central-displayed convention.
 
-Consumers: `CtaForState.astro` (hero, nav, mobile menu, CTA strip) and `SeasonsGrid.astro` (both
-cards, matched `'fall/winter'` → `fall-winter.yaml`, `'spring/summer'` → `spring-summer.yaml`).
+Consumers: `CtaForState.astro` (hero, nav, mobile menu) and `SeasonsGrid.astro` (both cards, matched
+`'fall/winter'` → `fall-winter.yaml`, `'spring/summer'` → `spring-summer.yaml`). The bottom CTA
+strip (`CTAStrip.astro`) is not a `CtaForState.astro` consumer — it renders its own `<a>` directly
+— but bakes the identical `data-*` attribute vocabulary onto that `<a>`, plus a matching
+`data-registration-subhead` marker with three baked subhead variants on its subhead `<p>`, so it
+participates in the same flip as every other CTA.
 
-`registrationFlip.ts` runs once per page load, re-derives state from the baked timestamps, and if
-it differs from the baked state updates the label, href, and subhead on every `[data-registration]`
-element. When it matches — the overwhelmingly common case — it does nothing.
+`registrationFlip.ts` runs once per page load and, for each `[data-registration]` element, re-derives
+state from the baked timestamps. When it differs from the baked state, it updates that element's
+label and href, then climbs to the nearest `<section>` and updates a `[data-registration-subhead]`
+found there (currently only the CTA strip carries one; the hero/nav/mobile CTAs have no paired
+subhead and this is a no-op for them). When the derived state matches the baked state — the
+overwhelmingly common case — it does nothing.
 
 ## Failure behavior
 
@@ -269,10 +276,18 @@ whole design exists to remove.
 
 **Browser (jsdom, driving the real built bundle)**
 - With timestamps baked before an opening moment and a clock set after it, the flip script swaps
-  the CTA to the open variant; with a clock before it, the DOM is untouched.
-- The mobile menu closes and releases the body scroll lock when its CTA is a same-page anchor.
-  This harness is what proved that fix: against the pre-fix bundle the panel stays open with the
-  body still `position: fixed`, a defect the static assertions alone missed.
+  the CTA to the open variant; with a clock before it, the DOM is untouched (`registrationFlip.test.mjs`).
+- The mobile menu closes and releases the body scroll lock when a same-page anchor inside it is
+  clicked (`registrationCta.test.mjs`). Added in a later review pass to replace an earlier version
+  of this test that only grepped the `.astro` source for `isSamePageAnchor` and
+  `panel.addEventListener('click'` — assertions that keep passing even if the handler's `close()`
+  call is deleted. The current version instead locates the built `MobileNavPanel` script (by
+  content, external-or-inlined, the same way `registrationFlip.test.mjs` locates its bundle — Astro
+  minifies away the `isSamePageAnchor` identifier, so the search key is a CSS-selector string
+  literal that survives minification), runs it under jsdom against a DOM shaped like the real
+  panel markup, opens the panel, clicks a same-page-anchor link inside it, and asserts the panel
+  closed and `document.body.style.position` was released from `fixed`. Deliberately removing the
+  `close()` call and rerunning was used to confirm the test fails without it.
 
 ## Risks
 
