@@ -122,6 +122,22 @@ def test_span_ignores_null_windows():
     assert span_end(season) == datetime(2026, 9, 20)
 
 
+def test_a_half_set_window_is_not_a_window():
+    # The admin form leaves all four fields optional, and Season.is_open_for
+    # (app/models.py:279) requires both ends before it will call a window open.
+    season = _season(1, r_start=datetime(2026, 8, 28))
+    assert span_start(season) is None
+    assert span_end(season) is None
+
+
+def test_a_half_set_season_never_outranks_one_that_is_genuinely_open():
+    # Regression: treating a missing end as "open forever" made this stale,
+    # half-configured season sort first and win permanently.
+    half_set = _season(1, r_start=datetime(2024, 8, 1))
+    open_now = _season(2, r_start=datetime(2026, 7, 1), r_end=datetime(2026, 8, 1))
+    assert select_season([half_set, open_now], NOW) is open_now
+
+
 def test_span_is_none_when_no_windows_exist():
     assert span_start(_season(1)) is None
     assert span_end(_season(1)) is None
@@ -188,21 +204,38 @@ from __future__ import annotations
 from datetime import datetime
 
 
+def _windows(season):
+    """The season's COMPLETE registration windows.
+
+    A half-set window (a start with no end, or vice versa) is not a window at
+    all. ``Season.is_open_for`` takes exactly this position -- see
+    ``app/models.py:279``, ``if self.new_start and self.new_end`` -- and the
+    admin form leaves all four fields optional, so half-set windows are
+    reachable. Treating a missing end as "open indefinitely" would let one
+    half-configured season outrank a season that is genuinely open today.
+    """
+    pairs = (
+        (season.returning_start, season.returning_end),
+        (season.new_start, season.new_end),
+    )
+    return [(start, end) for start, end in pairs if start and end]
+
+
 def span_start(season) -> datetime | None:
-    """Earliest moment any registration window for this season opens."""
-    starts = [s for s in (season.returning_start, season.new_start) if s]
-    return min(starts) if starts else None
+    """Earliest moment any complete registration window opens."""
+    windows = _windows(season)
+    return min(start for start, _ in windows) if windows else None
 
 
 def span_end(season) -> datetime | None:
-    """Latest moment any registration window for this season closes."""
-    ends = [e for e in (season.returning_end, season.new_end) if e]
-    return max(ends) if ends else None
+    """Latest moment any complete registration window closes."""
+    windows = _windows(season)
+    return max(end for _, end in windows) if windows else None
 
 
 def select_season(seasons, now: datetime):
     """The season taking registrations now, else the soonest one ahead, else
-    the most recently ended. ``None`` when no season has a window at all.
+    the most recently ended. ``None`` when no season has a complete window.
 
     Ties break on ``id`` so a given database state always yields the same
     answer regardless of query ordering.
@@ -214,25 +247,22 @@ def select_season(seasons, now: datetime):
     if not candidates:
         return None
 
+    # Every candidate has a complete window, so both bounds are non-null here.
     for season in candidates:
-        end = span_end(season)
-        if span_start(season) <= now and (end is None or now <= end):
+        if span_start(season) <= now <= span_end(season):
             return season
 
     for season in candidates:
         if span_start(season) > now:
             return season
 
-    ended = [s for s in candidates if span_end(s) is not None]
-    if ended:
-        return max(ended, key=lambda s: (span_end(s), -(s.id or 0)))
-    return None
+    return max(candidates, key=lambda s: (span_end(s), -(s.id or 0)))
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `./run-tests.sh tests/seasons/test_selection.py`
-Expected: PASS — 10 passed
+Expected: PASS — 12 passed
 
 - [ ] **Step 5: Commit**
 
