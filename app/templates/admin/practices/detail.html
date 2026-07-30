@@ -24,8 +24,9 @@
 #workout-editor .section-head .section-label{margin-bottom:0}
 
 /* ── form layout ── */
-#workout-editor .field-row{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
-#workout-editor .field{display:flex;flex-direction:column;gap:6px;margin-bottom:16px}
+#workout-editor .field-row{display:grid;grid-template-columns:1fr 1fr;gap:var(--admin-field-gap);margin-bottom:var(--admin-field-gap)}
+#workout-editor .field{display:flex;flex-direction:column;gap:var(--admin-row-gap);margin-bottom:var(--admin-field-gap)}
+#workout-editor .field-row>.field{margin-bottom:0}
 #workout-editor .field:last-child{margin-bottom:0}
 #workout-editor .field>label,#workout-editor .field>.label-text{font-size:12px;font-weight:600;color:#1c2c44}
 #workout-editor .field-hint{font-size:12px;color:#475569;line-height:1.4;margin-top:2px}
@@ -34,6 +35,7 @@
 #workout-editor input,#workout-editor select,#workout-editor textarea{border:1.5px solid #e5e7eb;border-radius:10px;padding:10px 12px;font-size:14px;color:#1c2c44;background:#fff;font-family:inherit;outline:none;transition:border-color .15s,box-shadow .15s;width:100%}
 #workout-editor input:focus,#workout-editor select:focus,#workout-editor textarea:focus{border-color:#1c2c44;box-shadow:0 0 0 2px #fff,0 0 0 4px #1c2c44}
 #workout-editor input:focus-visible,#workout-editor select:focus-visible,#workout-editor textarea:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#workout-editor .datetime-control-scroll{overflow-x:auto;padding:var(--admin-space-1);margin:calc(var(--admin-space-1) * -1)}
 #workout-editor textarea{resize:vertical;line-height:1.7;min-height:72px}
 #workout-editor .workout-main{min-height:104px}
 #workout-editor textarea:focus{box-shadow:inset 3px 0 0 #1c2c44,0 0 0 2px #fff,0 0 0 4px #1c2c44}
@@ -105,6 +107,7 @@
   font-size:13px;color:#475569;
   border:1.5px solid #e5e7eb;background:#fff;cursor:pointer;
 }
+#workout-editor .lead-option>input[type="checkbox"]{width:var(--admin-space-4);height:var(--admin-space-4);padding:0}
 #workout-editor .lead-option.available{border-color:#86efac;background:#f0fdf4;color:#166534}
 #workout-editor .lead-option.unavailable{border-color:#fca5a5;background:#fef2f2;color:#991b1b}
 #workout-editor .lead-option.no-response{border-style:dotted;color:#94a3b8}
@@ -155,6 +158,7 @@
 #workout-editor .practice-reaction-action:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #workout-editor .practice-reaction-error{color:#c53030;font-size:12px}
 #workout-editor #plan-reaction-empty,#workout-editor #plan-reaction-unconfigured{font-size:12px;color:#64748b}
+#workout-editor #plan-reaction-catalog{width:auto;max-width:100%;margin-top:var(--admin-row-gap)}
 #workout-editor #plan-reaction-status{display:block;min-height:18px;font-size:12px;color:#64748b}
 #workout-editor #plan-reaction-status.field-error{color:#c53030}
 
@@ -239,10 +243,12 @@
       <section class="card">
         <h2 class="section-label">When &amp; Where</h2>
         <div class="field-row">
-          <div class="field">
+          <div class="field min-w-0">
             <label for="date">Date &amp; Time</label>
-            <input type="datetime-local" id="date" name="date" required
-                   value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}">
+            <div class="datetime-control-scroll">
+              <input type="datetime-local" id="date" name="date" required
+                     value="{{ practice.date.strftime('%Y-%m-%dT%H:%M') if practice else '' }}">
+            </div>
           </div>
           <div class="field">
             <label for="location_id">Location</label>
