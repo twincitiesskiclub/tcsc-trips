@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ trip.name }} — Registration — Twin Cities Ski Club</title>
+  {{ csrf_meta_tag() }}
+  <script id="trip-registration-data" type="application/json">{{ registration_data|tojson }}</script>
+</head>
+<body>
+  <h1>{{ trip.name }}</h1>
+  {% if not registration_open %}<p>{{ registration_message }}</p>{% endif %}
+</body>
+</html>
