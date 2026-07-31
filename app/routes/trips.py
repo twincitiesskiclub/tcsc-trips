@@ -39,17 +39,13 @@ def _registration_state(trip):
 @trips.route('/<slug>')
 def get_trip_page(slug):
     series = _resolve_series(slug)
-    trip = (
-        series.current_edition()
-        if series
-        else Trip.query.filter_by(slug=slug).first()
-    )
+    trip = series.current_edition() if series else None
     if trip is None:
         from flask import abort
         abort(404)
     registration_open, registration_message = _registration_state(trip)
     return render_template(
-        f'trips/{series.slug if series else trip.slug}.html',
+        f'trips/{series.slug}.html',
         trip=trip,
         series=series,
         registration_open=registration_open,
