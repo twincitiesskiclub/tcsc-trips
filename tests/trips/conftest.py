@@ -1,7 +1,7 @@
 import pytest
 
 from app import create_app
-from app.models import db, Payment, Trip, User
+from app.models import db, Payment, SlackUser, Trip, User
 from app.trips.models import TripProfile, TripRegistration, TripSeries
 
 TEST_TRIP_SLUGS = (
@@ -17,6 +17,8 @@ TEST_TRIP_SLUGS = (
     "test-trip-admin-2100",
     "test-trip-webhook",
     "test-trip-webhook-2027",
+    "test-trip-slack",
+    "test-trip-slack-2027",
 )
 TEST_USER_EMAILS = (
     "trip-member@example.com",
@@ -86,6 +88,9 @@ def _delete_test_trips():
         User.query.filter(User.id.in_(user_ids)).delete(
             synchronize_session=False
         )
+    SlackUser.query.filter(
+        SlackUser.slack_uid == "U_TEST_TRIP"
+    ).delete(synchronize_session=False)
     db.session.commit()
     db.session.expire_all()
 
