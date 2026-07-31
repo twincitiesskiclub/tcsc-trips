@@ -11,10 +11,15 @@ from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
 from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email
+from ..trips.models import TripSeries
+from ..trips.questions import (
+    apply_template, get_template, load_trip_templates, validate_questions,
+)
 from .. import late_link
 from datetime import datetime, timedelta
 import pytz
 import csv
+import json
 from io import StringIO
 
 admin = Blueprint('admin', __name__)
@@ -119,14 +124,13 @@ def get_season_form_data(form):
     return form_data
 
 
-def parse_trip_form(form):
+def parse_trip_form(form, include_slug=True):
     """Parse and validate trip form data.
 
     Returns:
         dict: Parsed trip data ready for model creation/update
     """
-    return {
-        'slug': form['slug'],
+    parsed = {
         'name': form['name'],
         'destination': form['destination'],
         'max_participants_standard': int(form['max_participants_standard']),
@@ -140,6 +144,75 @@ def parse_trip_form(form):
         'description': form['description'],
         'status': form['status'],
     }
+    if include_slug:
+        parsed['slug'] = form['slug']
+    return parsed
+
+
+def _parse_trip_questions(raw_value):
+    if raw_value is None:
+        return None
+    import json as _json
+    try:
+        rows = _json.loads(raw_value)
+    except ValueError:
+        raise ValueError("Custom questions must contain valid JSON.")
+    validate_questions(rows)
+    return rows
+
+
+def _trip_editor_template_data(templates):
+    from copy import deepcopy
+    return {
+        key: {"custom_questions": deepcopy(template["custom_questions"])}
+        for key, template in templates.items()
+    }
+
+
+def _render_trip_form(trip=None, error=None, status_code=200):
+    templates = load_trip_templates()
+    submitted_questions = request.form.get('custom_questions_json')
+    questions_json = (
+        submitted_questions
+        if submitted_questions is not None
+        else json.dumps(trip.custom_questions if trip else [])
+    )
+    return (
+        render_template(
+            'admin/trip_form.html',
+            trip=trip,
+            error=error,
+            templates=templates,
+            template_editor_data=_trip_editor_template_data(templates),
+            questions_json=questions_json,
+            series_options=TripSeries.query.order_by(TripSeries.name).all(),
+        ),
+        status_code,
+    )
+
+
+def _series_for_new_trip(form, fields):
+    series_id = (form.get('series_id') or '').strip()
+    if series_id:
+        try:
+            series = db.session.get(TripSeries, int(series_id))
+        except ValueError as exc:
+            raise ValueError('Trip series must be valid.') from exc
+        if series is None:
+            raise ValueError('Trip series not found.')
+        return series
+
+    series_slug = (form.get('series_slug') or fields['slug']).strip()
+    if TripSeries.query.filter_by(slug=series_slug).first():
+        raise ValueError(f"A trip series with slug '{series_slug}' already exists.")
+    return TripSeries(
+        slug=series_slug,
+        name=(form.get('series_name') or fields['name']).strip(),
+        destination=(
+            form.get('series_destination') or fields['destination']
+        ).strip(),
+        slack_channel_name=(form.get('slack_channel_name') or '').strip() or None,
+    )
 
 
 @admin.route('/admin')
@@ -212,16 +285,33 @@ def get_admin_trips():
 def new_trip():
     if request.method == 'POST':
         try:
-            trip = Trip(**parse_trip_form(request.form))
+            fields = parse_trip_form(request.form)
+            trip = Trip(**fields)
+            template_key = request.form.get('template_key', 'blank')
+            apply_template(trip, template_key)
+            try:
+                parsed = _parse_trip_questions(
+                    request.form.get('custom_questions_json')
+                )
+            except ValueError as exc:
+                db.session.rollback()
+                return _render_trip_form(
+                    error=str(exc),
+                    status_code=400,
+                )
+            if parsed is not None:
+                trip.custom_questions = parsed
+            trip.series = _series_for_new_trip(request.form, fields)
             db.session.add(trip)
             db.session.commit()
             flash_success('Trip created successfully!')
             return redirect(url_for('admin.get_admin_page'))
         except Exception as e:
+            db.session.rollback()
             flash_error(f'Error creating trip: {str(e)}')
             return redirect(url_for('admin.new_trip'))
 
-    return render_template('admin/trip_form.html', trip=None)
+    return _render_trip_form()
 
 @admin.route('/admin/trips/<int:trip_id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -230,19 +320,30 @@ def edit_trip(trip_id):
 
     if request.method == 'POST':
         try:
-            parsed_data = parse_trip_form(request.form)
-            # Skip slug on edit - it's set only during creation
-            parsed_data.pop('slug', None)
+            parsed_data = parse_trip_form(request.form, include_slug=False)
             for key, value in parsed_data.items():
                 setattr(trip, key, value)
+            submitted_questions = request.form.get('custom_questions_json')
+            try:
+                parsed = _parse_trip_questions(submitted_questions)
+            except ValueError as exc:
+                db.session.rollback()
+                return _render_trip_form(
+                    trip=trip,
+                    error=str(exc),
+                    status_code=400,
+                )
+            if parsed is not None:
+                trip.custom_questions = parsed
             db.session.commit()
             flash_success('Trip updated successfully!')
             return redirect(url_for('admin.get_admin_trips'))
         except Exception as e:
+            db.session.rollback()
             flash_error(f'Error updating trip: {str(e)}')
             return redirect(url_for('admin.edit_trip', trip_id=trip_id))
 
-    return render_template('admin/trip_form.html', trip=trip)
+    return _render_trip_form(trip=trip)
 
 @admin.route('/admin/trips/data')
 @admin_required
@@ -263,7 +364,13 @@ def trips_data():
             'capacity_extra': t.max_participants_extra,
             'price_low': t.price_low,
             'price_high': t.price_high,
-            'status': t.status
+            'status': t.status,
+            'series_slug': t.series.slug if t.series else None,
+            'series_id': t.series_id,
+            'registration_count': len([
+                r for r in t.registrations
+                if r.status in ('pending', 'confirmed')
+            ]),
         } for t in trips]
     })
 
@@ -280,6 +387,38 @@ def delete_trip_json(trip_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin.route('/admin/trips/<int:trip_id>/new-edition', methods=['POST'])
+@admin_required
+def new_trip_edition(trip_id):
+    from copy import deepcopy
+    from datetime import timedelta
+    trip = db.session.get(Trip, trip_id)
+    if trip is None or trip.series_id is None:
+        return {'success': False, 'error': 'Trip not found'}, 404
+    new_start = trip.start_date + timedelta(days=364)
+    slug = f"{trip.series.slug}-{new_start.year}"
+    suffix = 2
+    while Trip.query.filter_by(slug=slug).first():
+        slug = f"{trip.series.slug}-{new_start.year}-{suffix}"
+        suffix += 1
+    clone = Trip(
+        slug=slug, name=trip.name, destination=trip.destination,
+        series_id=trip.series_id,
+        max_participants_standard=trip.max_participants_standard,
+        max_participants_extra=trip.max_participants_extra,
+        start_date=new_start,
+        end_date=trip.end_date + timedelta(days=364),
+        signup_start=trip.signup_start + timedelta(days=364),
+        signup_end=trip.signup_end + timedelta(days=364),
+        price_low=trip.price_low, price_high=trip.price_high,
+        description=trip.description, status='draft',
+        custom_questions=deepcopy(trip.custom_questions or []),
+    )
+    db.session.add(clone)
+    db.session.commit()
+    return {'success': True, 'id': clone.id}
 
 @admin.route('/admin/seasons')
 @admin_required
