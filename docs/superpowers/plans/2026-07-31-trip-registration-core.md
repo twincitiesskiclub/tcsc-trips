@@ -2490,6 +2490,12 @@ mobile-first single page; topic-grouped sections with a visible step count; emai
   }
 ```
 
+**Amendments round 2 (post-review):**
+
+4. Give the three profile radio fieldsets ids — `profile-can-drive-group`, `profile-hitch-group`, `profile-tent-group` — and extend `PROFILE_ERROR_FIELDS` with `'profile.can_drive': 'profile-can-drive-group'`, `'profile.hitch_size': 'profile-hitch-group'`, `'profile.has_tent': 'profile-tent-group'` so every server profile error key highlights a field.
+5. Stripe failure feedback: the load-time call becomes `ensureStripe().catch(function () { showError('The payment form failed to load. Refresh the page to try again.'); });` and the submit handler's `try { ... } finally { ... }` gains a `catch (err) { showError('Something went wrong placing the hold — you have not been charged. Please try again.'); }` before the `finally`.
+6. Driver-details parity with the custom-question pattern: `applyVisibility` disables all inputs inside `#driver-details` whenever it is hidden, and `collectPayload` sends `''` for `seat_capacity`/`bike_capacity`/`hitch_size` when their inputs are disabled — so flipping "can you drive" back to No cannot submit stale driver data.
+
 - [ ] **Step 3: Add the register endpoint to the payment CSP list**
 
 In `app/security.py`, find `_PAYMENT_PAGE_ENDPOINTS` and add `'trips.get_trip_register_page'` to it (existing entries show the exact format — match them).
