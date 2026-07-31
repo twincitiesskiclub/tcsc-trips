@@ -157,9 +157,40 @@
     document.getElementById('form-errors').textContent = message || '';
   }
 
+  var PROFILE_ERROR_FIELDS = {
+    'profile.seat_capacity': 'profile-seats',
+    'profile.bike_capacity': 'profile-bikes',
+    'profile.region_code': 'profile-region',
+    'profile.dietary_restrictions': 'dietary-options',
+    'email': 'member-email',
+  };
+
+  function findErrorField(key) {
+    if (key.indexOf('answers.') === 0) {
+      return form.querySelector(
+        '[data-question-key="' + key.slice(8) + '"]');
+    }
+    var id = PROFILE_ERROR_FIELDS[key];
+    return id ? document.getElementById(id) : null;
+  }
+
   function showServerErrors(errors) {
+    form.querySelectorAll('.field-error').forEach(function (node) {
+      node.classList.remove('field-error', 'ring-2', 'ring-red-500');
+    });
     if (typeof errors === 'string') { showError(errors); return; }
+    var firstField = null;
+    Object.keys(errors).forEach(function (key) {
+      var field = findErrorField(key);
+      if (field) {
+        field.classList.add('field-error', 'ring-2', 'ring-red-500');
+        if (!firstField) firstField = field;
+      }
+    });
     showError(Object.values(errors).join(' '));
+    if (firstField) {
+      firstField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
   }
 
   let isSubmitting = false;

@@ -115,6 +115,8 @@ def test_register_validation_error_returns_field_errors(
 def test_register_page_renders_questions_and_gate(client, public_trip):
     response = client.get("/test-trip-routes/register")
     html = response.get_data(as_text=True)
+    assert "css/tailwind-output.css" in html
+    assert "1.</span> Member check" in html
     assert "member-email" in html
     assert "Which task?" in html
     assert "trip-registration-data" in html
