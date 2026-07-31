@@ -112,6 +112,7 @@ def _trip_registration_from_metadata(metadata):
 
 
 def _transition_trip_registration(payment_intent, new_status):
+    """Legacy trip intents without registration_id are silently skipped; repeats of the same status are no-ops (no re-DM)."""
     from app.trips.models import TripRegistrationStatus
     metadata = _stripe_object_value(payment_intent, 'metadata', {}) or {}
     registration = _trip_registration_from_metadata(metadata)

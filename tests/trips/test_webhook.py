@@ -109,6 +109,8 @@ def test_capturable_sends_registration_dm(trip_slack, client, db_session,
                                pending_registration.trip_id)
     _post_development_webhook(client, payload)
     trip_slack.send_registration_dm.assert_called_once()
+    (called_registration,) = trip_slack.send_registration_dm.call_args.args
+    assert called_registration.id == pending_registration.id
 
 
 @patch("app.routes.payments.send_payment_notification")
@@ -124,7 +126,11 @@ def test_succeeded_sends_confirmation_and_invite(trip_slack, notify, client,
                                pending_registration.trip_id)
     _post_development_webhook(client, payload)
     trip_slack.send_confirmation_dm.assert_called_once()
+    (called_registration,) = trip_slack.send_confirmation_dm.call_args.args
+    assert called_registration.id == pending_registration.id
     trip_slack.invite_to_trip_channel.assert_called_once()
+    (called_registration,) = trip_slack.invite_to_trip_channel.call_args.args
+    assert called_registration.id == pending_registration.id
 
 
 @patch("app.routes.payments.send_payment_notification")
