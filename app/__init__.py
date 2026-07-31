@@ -12,6 +12,7 @@ from .events.models import (
     EventPriceOption,
     EventRegistration,
 )
+from .trips import models as trips_models  # noqa: F401  (register tables with SQLAlchemy)
 from .security import csrf, init_security
 from .newsletter.models import (
     Newsletter,

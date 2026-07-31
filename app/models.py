@@ -44,6 +44,8 @@ class Trip(db.Model):
     
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(255), unique=True, nullable=False)  # e.g., 'training-trip'
+    series_id = db.Column(db.Integer, db.ForeignKey('trip_series.id'), nullable=True)
+    custom_questions = db.Column(JSON, nullable=False, default=list)
     name = db.Column(db.String(255), nullable=False)
     destination = db.Column(db.String(255), nullable=False)
     slack_channel_name = db.Column(db.String(255), nullable=True)
