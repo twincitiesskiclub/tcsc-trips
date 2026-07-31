@@ -127,3 +127,30 @@ def test_trip_page_links_to_register_flow(client, public_trip):
     html = response.get_data(as_text=True)
     assert "/test-trip-routes/register" in html
     assert "sr-payment-form" not in html
+
+
+def test_trip_page_renders_closed_registration_notice(client, db_session):
+    now = datetime.utcnow()
+    series = TripSeries(slug="test-trip-routes", name="TEST Trip",
+                        destination="Testville")
+    db.session.add(series)
+    db.session.flush()
+    trip = Trip(
+        slug="test-trip-routes-2027", name="TEST Trip 2027",
+        destination="Testville", series_id=series.id,
+        max_participants_standard=20, max_participants_extra=5,
+        start_date=now + timedelta(days=30),
+        end_date=now + timedelta(days=32),
+        signup_start=now - timedelta(days=30),
+        signup_end=now - timedelta(days=1),
+        price_low=10000, price_high=15000, status="active",
+        custom_questions=QUESTIONS,
+    )
+    db.session.add(trip)
+    db.session.commit()
+
+    response = client.get("/test-trip-routes")
+    html = response.get_data(as_text=True)
+    assert "Trip registration has closed." in html
+    assert 'class="notice notice--info"' in html
+    assert 'role="status"' in html

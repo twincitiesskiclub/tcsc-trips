@@ -53,7 +53,9 @@
 
         <a class="btn btn--full" href="/{{ series.slug }}/register">Sign up for {{ trip.name }}</a>
         {% else %}
-          <p class="registration-status-message">{{ registration_message }}</p>
+          <div class="notice notice--info" role="status">
+            {{ registration_message }}
+          </div>
         {% endif %}
       </div>
     </div>
