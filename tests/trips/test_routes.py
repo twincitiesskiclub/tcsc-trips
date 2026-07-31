@@ -120,3 +120,10 @@ def test_register_page_renders_questions_and_gate(client, public_trip):
     assert "member-email" in html
     assert "Which task?" in html
     assert "trip-registration-data" in html
+
+
+def test_trip_page_links_to_register_flow(client, public_trip):
+    response = client.get("/test-trip-routes")
+    html = response.get_data(as_text=True)
+    assert "/test-trip-routes/register" in html
+    assert "sr-payment-form" not in html
