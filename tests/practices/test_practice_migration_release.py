@@ -26,7 +26,7 @@ LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
 # Head as of the done-emoji snapshot migration (down_revision is
 # READINESS_DIGEST_REVISION above) — bump whenever a new migration lands.
-HEAD_REVISION = "539ad532aeb3"
+HEAD_REVISION = "a7c1e5f2b9d3"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -82,6 +82,21 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
         # tables (added after 1b29976741b6) FK to it, so it must exist in this
         # synthetic baseline for the upgrade to head to succeed.
         "CREATE TABLE users (id INTEGER PRIMARY KEY)"
+    )
+    connection.exec_driver_sql(
+        # Bare stub: real `trips` predates e36bbec59bde; the trip series
+        # migration (a7c1e5f2b9d3) FKs to it and reads slug/name/destination/
+        # slack_channel_name in its backfill, so it must exist in this
+        # synthetic baseline.
+        """
+        CREATE TABLE trips (
+            id INTEGER PRIMARY KEY,
+            slug VARCHAR(255),
+            name VARCHAR(255),
+            destination VARCHAR(255),
+            slack_channel_name VARCHAR(255)
+        )
+        """
     )
     connection.exec_driver_sql("""
         CREATE TABLE practice_types (
