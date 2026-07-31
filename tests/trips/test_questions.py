@@ -66,7 +66,16 @@ def test_templates_load_and_validate():
         tq.validate_questions(template["custom_questions"])
 
 
-def test_apply_template_deep_copies(db_session=None):
+def test_visible_if_happy_path_validates():
+    qs = [
+        _q(key="can_stop", type="yes_no", options=[]),
+        _q(key="stop_where", type="text", options=[],
+           visible_if={"question": "can_stop", "equals": "yes"}),
+    ]
+    tq.validate_questions(qs)  # must not raise
+
+
+def test_apply_template_deep_copies():
     tq._reset_cache()
     template = tq.get_template("gbc")
     class FakeTrip:
