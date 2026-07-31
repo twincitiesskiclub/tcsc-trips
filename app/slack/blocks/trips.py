@@ -41,11 +41,16 @@ def trip_announcement_fallback(trip):
         surface="trip_announcement")
 
 
-def _answer_fields(registration):
+def _answer_fields(registration, trip):
+    question_labels = {
+        question["key"]: question["label"]
+        for question in (trip.custom_questions or [])
+    }
     fields = []
     for key, value in (registration.answers or {}).items():
         rendered = ", ".join(value) if isinstance(value, list) else str(value)
-        fields.append({"type": "mrkdwn", "text": f"*{key}:* {rendered}"})
+        label = question_labels.get(key, key)
+        fields.append({"type": "mrkdwn", "text": f"*{label}:* {rendered}"})
     return fields[:10]  # Slack caps section fields
 
 
@@ -56,12 +61,11 @@ def build_registration_dm_blocks(registration, trip, series):
             f"A hold of {_money(registration.amount_cents)} is on your card. "
             "You'll only be charged when the roster is confirmed.")}},
     ]
-    fields = _answer_fields(registration)
+    fields = _answer_fields(registration, trip)
     if fields:
         blocks.append({"type": "section", "fields": fields})
     blocks.append({"type": "context", "elements": [{"type": "mrkdwn", "text": (
-        "We'll DM you when you're confirmed. Questions? Ask in the trip "
-        "channel.")}]})
+        "We'll DM you when the roster is confirmed.")}]})
     return guard_slack_blocks(blocks, surface="trip_registration_dm")
 
 
@@ -72,12 +76,14 @@ def registration_dm_fallback(registration, trip):
 
 
 def build_confirmation_dm_blocks(registration, trip, series):
-    channel_note = (f"You've been added to #{series.slack_channel_name}."
-                    if series.slack_channel_name else "")
+    channel_note = (
+        f" You've been added to #{series.slack_channel_name}."
+        if series and series.slack_channel_name else ""
+    )
     blocks = [
         {"type": "section", "text": {"type": "mrkdwn", "text": (
             f":tada: *You're confirmed for {trip.name}!*\n"
-            f"Your card was charged {_money(registration.amount_cents)}. "
+            f"Your card was charged {_money(registration.amount_cents)}."
             f"{channel_note}")}},
     ]
     return guard_slack_blocks(blocks, surface="trip_confirmation_dm")

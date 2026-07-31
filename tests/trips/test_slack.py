@@ -30,7 +30,9 @@ def linked_registration(db_session):
         signup_start=datetime.utcnow() - timedelta(days=1),
         signup_end=datetime.utcnow() + timedelta(days=30),
         price_low=10000, price_high=15000, status="active",
-        custom_questions=[],
+        custom_questions=[{
+            "key": "chore_preference", "label": "Chore preference",
+        }],
     )
     slack_user = SlackUser(slack_uid="U_TEST_TRIP", email="trip-member@example.com")
     db.session.add_all([trip, slack_user])
@@ -68,6 +70,39 @@ def test_registration_dm_includes_answers(linked_registration):
         linked_registration.trip.series)
     flat = str(blocks)
     assert "Cooking" in flat
+    assert "Chore preference" in flat
+    assert "chore_preference" not in flat
+    assert "We'll DM you when the roster is confirmed." in flat
+
+
+def test_send_confirmation_dm_with_seriesless_trip_returns_bool(
+        db_session, linked_registration):
+    trip = Trip(
+        slug="test-trip-slack-seriesless", name="TEST Seriesless Trip",
+        destination="Testville", series_id=None,
+        max_participants_standard=20, max_participants_extra=0,
+        start_date=datetime(2099, 2, 10), end_date=datetime(2099, 2, 12),
+        signup_start=datetime.utcnow() - timedelta(days=1),
+        signup_end=datetime.utcnow() + timedelta(days=30),
+        price_low=10000, price_high=15000, status="active",
+        custom_questions=[],
+    )
+    registration = TripRegistration(
+        trip=trip, user=linked_registration.user,
+        status=TripRegistrationStatus.CONFIRMED,
+        answers={}, price_tier="low", amount_cents=10000,
+        payment_intent_id="pi_trip_slack_seriesless",
+    )
+    db.session.add_all([trip, registration])
+    db.session.flush()
+
+    client = MagicMock()
+    with patch("app.slack.trips.get_slack_client", return_value=client):
+        result = slack_trips.send_confirmation_dm(registration)
+
+    assert isinstance(result, bool)
+    sent_text = client.chat_postMessage.call_args.kwargs["blocks"][0]["text"]["text"]
+    assert sent_text.endswith("$100.00.")
 
 
 def test_send_registration_dm_posts_to_slack_uid(linked_registration):

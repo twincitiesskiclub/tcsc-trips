@@ -43,28 +43,46 @@ def _send_dm(registration, blocks, fallback):
 
 
 def send_registration_dm(registration):
-    trip = registration.trip
-    return _send_dm(
-        registration,
-        build_registration_dm_blocks(registration, trip, trip.series),
-        registration_dm_fallback(registration, trip))
+    try:
+        trip = registration.trip
+        return _send_dm(
+            registration,
+            build_registration_dm_blocks(registration, trip, trip.series),
+            registration_dm_fallback(registration, trip))
+    except Exception as exc:
+        current_app.logger.warning(
+            "trip slack: registration DM failed for registration %s: %s",
+            registration.id, exc)
+        return False
 
 
 def send_confirmation_dm(registration):
-    trip = registration.trip
-    return _send_dm(
-        registration,
-        build_confirmation_dm_blocks(registration, trip, trip.series),
-        confirmation_dm_fallback(registration, trip))
+    try:
+        trip = registration.trip
+        return _send_dm(
+            registration,
+            build_confirmation_dm_blocks(registration, trip, trip.series),
+            confirmation_dm_fallback(registration, trip))
+    except Exception as exc:
+        current_app.logger.warning(
+            "trip slack: confirmation DM failed for registration %s: %s",
+            registration.id, exc)
+        return False
 
 
 def invite_to_trip_channel(registration):
     trip = registration.trip
     channel_name = trip.series.slack_channel_name if trip.series else None
     if not channel_name:
+        current_app.logger.info(
+            "trip slack: no channel configured for registration %s",
+            registration.id)
         return False
     slack_uid = _slack_uid(registration)
     if not slack_uid:
+        current_app.logger.info(
+            "trip slack: no linked SlackUser for registration %s",
+            registration.id)
         return False
     try:
         channel_id = get_channel_id_by_name(channel_name)
