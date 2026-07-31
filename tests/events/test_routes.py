@@ -472,3 +472,113 @@ def test_post_ignores_a_client_supplied_registration_contact(
     )
     assert registration.contact_email == "participant1@example.com"
     assert registration.contact_phone == "555-0101"
+
+
+def test_get_event_page_withholds_member_pricing(client, public_event):
+    event, _individual, _team, _free = public_event
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    # Neither the rendered hint nor the JSON blob may carry the member rate.
+    assert "memberPriceCents" not in page
+    assert "$45.00" not in page
+    assert "$90.00" not in page
+    # The public prices still render, alongside the control that reveals the
+    # member rate.
+    assert "$55.00" in page
+    assert "$105.00" in page
+    assert 'id="discount-apply"' in page
+
+
+def test_discount_check_returns_member_prices_for_a_valid_code(
+    client,
+    public_event,
+):
+    event, individual, team, free = public_event
+
+    response = client.post(
+        f"/events/{event.slug}/discount",
+        json={"code": " tcsc member "},
+    )
+
+    assert response.status_code == 200
+    body = response.get_json()
+    assert body["valid"] is True
+    prices = {option["id"]: option["priceCents"] for option in body["options"]}
+    assert prices[individual.id] == 4500
+    assert prices[team.id] == 9000
+    # An option with no member rate stays at its public price.
+    assert prices[free.id] == 0
+
+
+def test_discount_check_rejects_an_unknown_code(client, public_event):
+    event, _individual, _team, _free = public_event
+
+    response = client.post(
+        f"/events/{event.slug}/discount",
+        json={"code": "not-the-code"},
+    )
+
+    assert response.status_code == 200
+    assert response.get_json() == {"valid": False}
+
+
+def test_discount_check_rejects_everything_when_no_code_is_configured(
+    client,
+    db_session,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+    event.discount_code = None
+    db_session.session.commit()
+
+    for code in ("", "TCSC MEMBER"):
+        response = client.post(
+            f"/events/{event.slug}/discount",
+            json={"code": code},
+        )
+        assert response.get_json() == {"valid": False}
+
+
+def test_discount_check_throttles_repeated_guessing(client, public_event):
+    from app.routes.events import DISCOUNT_ATTEMPT_LIMIT, _discount_attempts
+
+    event, _individual, _team, _free = public_event
+    _discount_attempts.clear()
+
+    for _ in range(DISCOUNT_ATTEMPT_LIMIT):
+        client.post(f"/events/{event.slug}/discount", json={"code": "guess"})
+
+    # A correct code past the limit is refused along with the wrong ones.
+    response = client.post(
+        f"/events/{event.slug}/discount",
+        json={"code": "TCSC MEMBER"},
+    )
+    assert response.get_json() == {"valid": False}
+    _discount_attempts.clear()
+
+
+def test_discount_check_on_draft_is_404_for_anonymous_and_open_for_admin(
+    client,
+    db_session,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+    event.status = EventStatus.DRAFT
+    db_session.session.commit()
+
+    anonymous = client.post(
+        f"/events/{event.slug}/discount",
+        json={"code": "TCSC MEMBER"},
+    )
+    assert anonymous.status_code == 404
+
+    with client.session_transaction() as session:
+        session["user"] = {"email": "admin@twincitiesskiclub.org"}
+
+    response = client.post(
+        f"/events/{event.slug}/discount",
+        json={"code": "TCSC MEMBER"},
+    )
+    assert response.status_code == 200
+    assert response.get_json()["valid"] is True

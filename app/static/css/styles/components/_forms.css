@@ -200,6 +200,48 @@ select.form-input {
   color: #fff;
 }
 
+.price-option__original {
+  display: block;
+  margin-top: 4px;
+  font: 12px var(--font-stack);
+  color: var(--text-faint);
+  text-decoration: line-through;
+}
+
+.price-option-container--selected .price-option__original,
+.price-option-container:has(input[type="radio"]:checked)
+  .price-option__original {
+  color: rgba(255, 255, 255, 0.6);
+}
+
+/* Discount code entry */
+.discount-code-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.discount-code-row .form-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.discount-code-row .btn {
+  flex: 0 0 auto;
+}
+
+.discount-message {
+  display: block;
+  margin-top: 8px;
+  font: 13px/1.5 var(--font-stack);
+  color: var(--text-muted);
+}
+
+/* Matches the error tone used by .card-error. */
+.discount-message--error {
+  color: #e44;
+}
+
 /* Single price summary bar */
 .price-summary {
   background: var(--bg-page);

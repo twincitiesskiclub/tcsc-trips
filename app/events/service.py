@@ -24,12 +24,8 @@ class RegistrationError(Exception):
         super().__init__("Event registration validation failed")
 
 
-def compute_price(
-    option: EventPriceOption,
-    event: Event,
-    discount_code: str | None,
-) -> tuple[int, bool]:
-    """Return the server-computed price and whether a discount was applied."""
+def discount_code_matches(event: Event, discount_code: str | None) -> bool:
+    """Return whether ``discount_code`` is the event's configured code."""
     configured_code = (
         event.discount_code.strip().casefold()
         if isinstance(event.discount_code, str)
@@ -40,11 +36,19 @@ def compute_price(
         if isinstance(discount_code, str)
         else ""
     )
-    discount_matches = (
-        bool(configured_code)
-        and configured_code == submitted_code
-    )
-    if discount_matches and option.member_price_cents is not None:
+    return bool(configured_code) and configured_code == submitted_code
+
+
+def compute_price(
+    option: EventPriceOption,
+    event: Event,
+    discount_code: str | None,
+) -> tuple[int, bool]:
+    """Return the server-computed price and whether a discount was applied."""
+    if (
+        discount_code_matches(event, discount_code)
+        and option.member_price_cents is not None
+    ):
         return option.member_price_cents, True
     return option.price_cents, False
 
