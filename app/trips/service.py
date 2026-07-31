@@ -98,6 +98,9 @@ def validate_answers(questions, submitted):
 def _parse_optional_int(value, field, errors, *, maximum=99):
     if value in (None, ""):
         return None
+    if isinstance(value, bool):  # bool is an int subclass; True would store 1
+        errors[field] = "Enter a whole number."
+        return None
     try:
         number = int(value)
     except (TypeError, ValueError):
@@ -203,6 +206,9 @@ def expire_stale_pending(trip):
 
 
 def create_registration(trip, payload):
+    if not isinstance(payload, dict):
+        raise TripRegistrationError(
+            {"payload": "Registration data must be an object."})
     errors = {}
     now = datetime.utcnow()
     if trip.status != "active" or not (

@@ -166,6 +166,26 @@ def test_expire_stale_pending(db_session):
     assert registration.status == TripRegistrationStatus.CANCELLED
 
 
+def test_bool_capacity_rejected(db_session):
+    series = _series()
+    trip = _edition(series)
+    _member()
+    db.session.commit()
+    payload = _payload()
+    payload["profile"]["seat_capacity"] = True
+    with pytest.raises(service.TripRegistrationError) as excinfo:
+        service.create_registration(trip, payload)
+    assert "profile.seat_capacity" in excinfo.value.errors
+
+
+def test_non_dict_payload_raises_registration_error(db_session):
+    series = _series()
+    trip = _edition(series)
+    db.session.commit()
+    with pytest.raises(service.TripRegistrationError):
+        service.create_registration(trip, None)
+
+
 def test_window_closed_rejected(db_session):
     series = _series()
     trip = _edition(series,
