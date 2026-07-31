@@ -124,7 +124,11 @@
       row.appendChild(grid);
       row.appendChild(remove);
       row.addEventListener('input', sync);
-      row.addEventListener('change', sync);
+      row.addEventListener('change', function (event) {
+        sync();
+        if (event.target.dataset.field === 'key'
+            || event.target.dataset.field === 'type') render();
+      });
       container.appendChild(row);
     });
     sync();
@@ -144,7 +148,7 @@
           required: row.querySelector('[data-field="required"]').checked,
           help_text: row.querySelector('[data-field="help-text"]').value.trim(),
         };
-        if (capValue) item.max_selections = Number(capValue);
+        if (capValue && item.type === 'multi_choice') item.max_selections = Number(capValue);
         if (visible) {
           var parts = visible.split('=');
           item.visible_if = { question: parts[0], equals: parts[1] };

@@ -293,6 +293,7 @@ def new_trip():
                 parsed = _parse_trip_questions(
                     request.form.get('custom_questions_json')
                 )
+                trip.series = _series_for_new_trip(request.form, fields)
             except ValueError as exc:
                 db.session.rollback()
                 return _render_trip_form(
@@ -301,7 +302,6 @@ def new_trip():
                 )
             if parsed is not None:
                 trip.custom_questions = parsed
-            trip.series = _series_for_new_trip(request.form, fields)
             db.session.add(trip)
             db.session.commit()
             flash_success('Trip created successfully!')

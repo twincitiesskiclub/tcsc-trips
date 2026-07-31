@@ -52,6 +52,38 @@ def test_new_edition_clones_questions_and_prices(admin_client, db_session):
     assert clone.start_date == trip.start_date + timedelta(days=364)
 
 
+def test_new_trip_duplicate_series_keeps_submitted_questions(
+        admin_client, db_session):
+    series, _ = _series_with_edition(db_session)
+    questions = [{"key": "survivor", "label": "Submitted survivor label",
+                  "type": "text", "options": [], "required": False}]
+    trip_count = Trip.query.count()
+    series_count = TripSeries.query.count()
+    form = {
+        "series_slug": series.slug,
+        "name": "TEST Trip 2028", "slug": "test-trip-admin-2028",
+        "destination": "Testville",
+        "max_participants_standard": "20", "max_participants_extra": "5",
+        "start_date": "2100-01-09", "end_date": "2100-01-11",
+        "signup_start": "2099-11-01T00:00",
+        "signup_end": "2099-12-31T00:00",
+        "price_low": "100", "price_high": "150",
+        "description": "Duplicate-series test", "status": "draft",
+        "template_key": "blank",
+        "custom_questions_json": json.dumps(questions),
+    }
+
+    response = admin_client.post("/admin/trips/new", data=form)
+
+    assert response.status_code == 400
+    body = response.get_data(as_text=True)
+    assert "Submitted survivor label" in body
+    assert series.slug in body
+    assert "already exists" in body
+    assert Trip.query.count() == trip_count
+    assert TripSeries.query.count() == series_count
+
+
 def test_edit_saves_custom_questions_json(admin_client, db_session):
     series, trip = _series_with_edition(db_session)
     questions = [{"key": "vibe", "label": "Vibe?", "type": "choice",
