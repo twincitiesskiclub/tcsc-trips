@@ -99,3 +99,44 @@ def test_missing_registration_id_does_not_error(client, db_session,
     del payload["data"]["object"]["metadata"]["registration_id"]
     response = _post_development_webhook(client, payload)
     assert response.status_code == 200  # legacy trip intents lack the key
+
+
+@patch("app.routes.payments.trip_slack")
+def test_capturable_sends_registration_dm(trip_slack, client, db_session,
+                                          pending_registration):
+    payload = _webhook_payload("payment_intent.amount_capturable_updated",
+                               pending_registration.id,
+                               pending_registration.trip_id)
+    _post_development_webhook(client, payload)
+    trip_slack.send_registration_dm.assert_called_once()
+
+
+@patch("app.routes.payments.send_payment_notification")
+@patch("app.routes.payments.trip_slack")
+def test_succeeded_sends_confirmation_and_invite(trip_slack, notify, client,
+                                                 db_session,
+                                                 pending_registration):
+    from app.trips.models import TripRegistrationStatus
+    pending_registration.status = TripRegistrationStatus.PENDING
+    db_session.session.commit()
+    payload = _webhook_payload("payment_intent.succeeded",
+                               pending_registration.id,
+                               pending_registration.trip_id)
+    _post_development_webhook(client, payload)
+    trip_slack.send_confirmation_dm.assert_called_once()
+    trip_slack.invite_to_trip_channel.assert_called_once()
+
+
+@patch("app.routes.payments.send_payment_notification")
+@patch("app.routes.payments.trip_slack")
+def test_repeat_succeeded_webhook_does_not_re_dm(trip_slack, notify, client,
+                                                 db_session,
+                                                 pending_registration):
+    from app.trips.models import TripRegistrationStatus
+    pending_registration.status = TripRegistrationStatus.CONFIRMED
+    db_session.session.commit()
+    payload = _webhook_payload("payment_intent.succeeded",
+                               pending_registration.id,
+                               pending_registration.trip_id)
+    _post_development_webhook(client, payload)
+    trip_slack.send_confirmation_dm.assert_not_called()

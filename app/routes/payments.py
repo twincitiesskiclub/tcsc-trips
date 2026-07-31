@@ -10,6 +10,7 @@ from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, P
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
 from ..notifications.slack import send_payment_notification
+from app.slack import trips as trip_slack
 from ..security import csrf
 from .. import late_link
 
@@ -111,18 +112,23 @@ def _trip_registration_from_metadata(metadata):
 
 
 def _transition_trip_registration(payment_intent, new_status):
-    """Move a TripRegistration along hold->capture/cancel. Legacy trip
-    intents (no registration_id in metadata) are silently skipped."""
     from app.trips.models import TripRegistrationStatus
     metadata = _stripe_object_value(payment_intent, 'metadata', {}) or {}
     registration = _trip_registration_from_metadata(metadata)
     if registration is None:
         return
+    if registration.status == new_status:
+        return  # idempotent webhook redelivery - no re-DM
     if (new_status == TripRegistrationStatus.CANCELLED
             and registration.status == TripRegistrationStatus.CONFIRMED):
-        return  # never un-confirm from a stray cancel event
+        return
     registration.status = new_status
     db.session.commit()
+    if new_status == TripRegistrationStatus.PENDING:
+        trip_slack.send_registration_dm(registration)
+    elif new_status == TripRegistrationStatus.CONFIRMED:
+        trip_slack.send_confirmation_dm(registration)
+        trip_slack.invite_to_trip_channel(registration)
 
 
 def build_statement_descriptor(payment_type, identifier):
