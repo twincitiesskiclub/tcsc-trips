@@ -87,14 +87,19 @@ def db_session(app):
 
 
 def _delete_test_trips():
-    series_rows = TripSeries.query.filter(
-        TripSeries.slug.in_(TEST_TRIP_SLUGS)
-    ).all()
-    edition_ids = []
-    for series in series_rows:
-        edition_ids.extend(e.id for e in series.editions)
-    orphan_editions = Trip.query.filter(Trip.slug.in_(TEST_TRIP_SLUGS)).all()
-    edition_ids.extend(e.id for e in orphan_editions)
+    # Scalar-ID queries only: loading ORM instances (e.g. series.editions)
+    # and then bulk-deleting the children makes the later parent delete
+    # raise StaleDataError. Mirrors the events fixture pattern.
+    series_ids = [
+        sid for (sid,) in db.session.query(TripSeries.id).filter(
+            TripSeries.slug.in_(TEST_TRIP_SLUGS))
+    ]
+    edition_filter = Trip.slug.in_(TEST_TRIP_SLUGS)
+    if series_ids:
+        edition_filter = db.or_(edition_filter, Trip.series_id.in_(series_ids))
+    edition_ids = [
+        tid for (tid,) in db.session.query(Trip.id).filter(edition_filter)
+    ]
     if edition_ids:
         Payment.query.filter(Payment.trip_id.in_(edition_ids)).delete(
             synchronize_session=False
@@ -105,15 +110,23 @@ def _delete_test_trips():
         Trip.query.filter(Trip.id.in_(edition_ids)).delete(
             synchronize_session=False
         )
-    for series in series_rows:
-        db.session.delete(series)
-    users = User.query.filter(User.email.in_(TEST_USER_EMAILS)).all()
-    for user in users:
-        TripProfile.query.filter_by(user_id=user.id).delete(
+    if series_ids:
+        TripSeries.query.filter(TripSeries.id.in_(series_ids)).delete(
             synchronize_session=False
         )
-        db.session.delete(user)
+    user_ids = [
+        uid for (uid,) in db.session.query(User.id).filter(
+            User.email.in_(TEST_USER_EMAILS))
+    ]
+    if user_ids:
+        TripProfile.query.filter(
+            TripProfile.user_id.in_(user_ids)
+        ).delete(synchronize_session=False)
+        User.query.filter(User.id.in_(user_ids)).delete(
+            synchronize_session=False
+        )
     db.session.commit()
+    db.session.expire_all()
 
 
 @pytest.fixture(autouse=True)
