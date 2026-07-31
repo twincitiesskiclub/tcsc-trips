@@ -1,9 +1,14 @@
 import json
+import csv
 from datetime import datetime, timedelta
+from io import StringIO
 
 import pytest
 
+from app.constants import UserStatus
 from app.models import db, Trip
+from app.models import Payment, User
+from app.trips.models import TripProfile, TripRegistration, TripRegistrationStatus
 from app.trips.models import TripSeries
 
 
@@ -118,3 +123,55 @@ def test_edit_rejects_invalid_question_json(admin_client, db_session):
     assert response.status_code == 400
     db_session.session.expire_all()
     assert trip.custom_questions[0]["key"] == "chore_preference"
+
+
+def _registered_member(db_session, trip, email="trip-member@example.com"):
+    user = User(first_name="Test", last_name="Member", email=email,
+                status=UserStatus.ACTIVE)
+    db.session.add(user)
+    db.session.flush()
+    db.session.add(TripProfile(user_id=user.id, can_drive=True,
+                               seat_capacity=3, region_code="4",
+                               dietary_restrictions=["Vegetarian"],
+                               dietary_other="", has_tent=None))
+    registration = TripRegistration(
+        trip_id=trip.id, user_id=user.id,
+        status=TripRegistrationStatus.PENDING,
+        answers={"chore_preference": "Cooking"},
+        price_tier="low", amount_cents=10000,
+        payment_intent_id="pi_trip_admin",
+    )
+    db.session.add(registration)
+    db.session.add(Payment(payment_intent_id="pi_trip_admin",
+                           email=email, name="Test Member", amount=10000,
+                           status="requires_capture", payment_type="trip",
+                           trip_id=trip.id, user_id=user.id))
+    db.session.commit()
+    return user, registration
+
+
+def test_roster_data_has_profile_and_question_columns(admin_client, db_session):
+    series, trip = _series_with_edition(db_session)
+    _registered_member(db_session, trip)
+    response = admin_client.get(f"/admin/trips/{trip.id}/registrations/data")
+    body = response.get_json()
+    keys = [c["key"] for c in body["columns"]]
+    assert "region_code" in keys
+    assert "chore_preference" in keys
+    row = body["registrations"][0]
+    assert row["member"] == "Test Member"
+    assert row["chore_preference"] == "Cooking"
+    assert row["region_code"] == "4"
+    assert row["payment_status"] == "requires_capture"
+    assert row["payment_id"] is not None
+
+
+def test_roster_csv_export(admin_client, db_session):
+    series, trip = _series_with_edition(db_session)
+    _registered_member(db_session, trip)
+    response = admin_client.get(
+        f"/admin/trips/{trip.id}/registrations/export.csv")
+    reader = csv.DictReader(StringIO(response.get_data(as_text=True)))
+    rows = list(reader)
+    assert rows[0]["Member"] == "Test Member"
+    assert rows[0]["Region"] == "4"

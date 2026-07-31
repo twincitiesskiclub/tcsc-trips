@@ -274,6 +274,135 @@ def get_payments_data():
 
     return jsonify({'payments': payments_data, 'can_view_amounts': can_view_amounts})
 
+_TRIP_REG_BASE_COLUMNS = [
+    ("id", "ID"), ("member", "Member"), ("email", "Email"),
+    ("status", "Status"), ("price_tier", "Tier"),
+]
+_TRIP_REG_PROFILE_COLUMNS = [
+    ("can_drive", "Can drive"), ("seat_capacity", "Seats"),
+    ("bike_capacity", "Bikes"), ("hitch_size", "Hitch"),
+    ("region_code", "Region"), ("dietary", "Dietary"),
+    ("has_tent", "Tent"),
+]
+_TRIP_REG_TRAILING_COLUMNS = [
+    ("amount_cents", "Amount"), ("payment_status", "Payment"),
+    ("payment_id", "PaymentId"), ("created_at", "Created at"),
+]
+
+
+def _trip_registration_columns(trip):
+    question_columns = []
+    seen = set()
+    for question in trip.custom_questions or []:
+        key = question["key"]
+        if key in seen:
+            continue
+        seen.add(key)
+        question_columns.append((key, question.get("label") or key))
+    return (_TRIP_REG_BASE_COLUMNS + _TRIP_REG_PROFILE_COLUMNS
+            + question_columns + _TRIP_REG_TRAILING_COLUMNS)
+
+
+def _display_trip_answer(value):
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    return value
+
+
+def _trip_registration_rows(trip):
+    columns = _trip_registration_columns(trip)
+    column_keys = [key for key, _ in columns]
+    rows = []
+    registrations = sorted(trip.registrations,
+                           key=lambda r: r.created_at, reverse=True)
+    for registration in registrations:
+        profile = registration.user.trip_profile
+        payment = (Payment.get_by_payment_intent(registration.payment_intent_id)
+                   if registration.payment_intent_id else None)
+        row = {
+            "id": registration.id,
+            "member": registration.user.full_name,
+            "email": registration.user.email,
+            "status": registration.status,
+            "price_tier": registration.price_tier,
+            "amount_cents": registration.amount_cents,
+            "payment_status": payment.status if payment else "",
+            "payment_id": payment.id if payment else None,
+            "created_at": registration.created_at.isoformat(),
+        }
+        if profile:
+            dietary = list(profile.dietary_restrictions or [])
+            if profile.dietary_other:
+                dietary.append(profile.dietary_other)
+            row.update({
+                "can_drive": {True: "yes", False: "no"}.get(profile.can_drive, ""),
+                "seat_capacity": profile.seat_capacity,
+                "bike_capacity": profile.bike_capacity,
+                "hitch_size": profile.hitch_size or "",
+                "region_code": profile.region_code or "",
+                "dietary": ", ".join(dietary),
+                "has_tent": {True: "yes", False: "no"}.get(profile.has_tent, ""),
+            })
+        for key, value in (registration.answers or {}).items():
+            row[key] = _display_trip_answer(value)
+        rows.append({key: row.get(key, "") for key in column_keys})
+    return columns, rows
+
+
+@admin.route('/admin/trips/<int:trip_id>/registrations')
+@admin_required
+def trip_registrations_page(trip_id):
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        from flask import abort
+        abort(404)
+    return render_template('admin/trip_registrations.html', trip=trip)
+
+
+@admin.route('/admin/trips/<int:trip_id>/registrations/data')
+@admin_required
+def trip_registrations_data(trip_id):
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        return {'error': 'Trip not found'}, 404
+    columns, rows = _trip_registration_rows(trip)
+    return {'columns': [{'key': k, 'label': l} for k, l in columns],
+            'registrations': rows}
+
+
+@admin.route('/admin/trips/<int:trip_id>/registrations/export.csv')
+@admin_required
+def export_trip_registrations(trip_id):
+    import csv as _csv
+    from io import StringIO
+    from flask import Response
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        from flask import abort
+        abort(404)
+    columns, rows = _trip_registration_rows(trip)
+    buffer = StringIO()
+    writer = _csv.DictWriter(
+        buffer, fieldnames=[label for _, label in columns])
+    writer.writeheader()
+    key_to_label = dict(columns)
+    for row in rows:
+        writer.writerow({key_to_label[k]: _sanitize_trip_csv(v)
+                         for k, v in row.items()})
+    return Response(
+        buffer.getvalue(), mimetype='text/csv',
+        headers={'Content-Disposition':
+                 f'attachment; filename="registrations-{trip.slug}.csv"'})
+
+
+def _sanitize_trip_csv(value):
+    if isinstance(value, str) and value.startswith(('=', '+', '-', '@')):
+        return "'" + value
+    return value
+
+
 @admin.route('/admin/trips')
 @admin_required
 def get_admin_trips():

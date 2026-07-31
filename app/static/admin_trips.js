@@ -382,6 +382,10 @@
     var extV = (trip.capacity_extra === null || trip.capacity_extra === undefined) ? 'not set' : trip.capacity_extra;
     kvRows.push({ k: 'Std seats', v: String(stdV) });
     kvRows.push({ k: 'Extra seats', v: String(extV) });
+    kvRows.push({
+      k: 'Registrations',
+      v: String(trip.registration_count || 0)
+    });
 
     var contentDiv = AdminUI.el('div', { class: 'admin-ui-dw' }, []);
     contentDiv.appendChild(subLine);
@@ -411,6 +415,10 @@
       class: 'admin-ui-dw-btn-primary',
       href: '/admin/trips/' + trip.id + '/edit'
     }, ['Edit']);
+    var rosterA = AdminUI.el('a', {
+      class: 'admin-ui-dw-btn-ghost',
+      href: '/admin/trips/' + trip.id + '/registrations'
+    }, ['Roster (' + String(trip.registration_count || 0) + ')']);
     var editionB = AdminUI.el('button', {
       type: 'button',
       class: 'admin-ui-dw-btn-ghost',
@@ -421,7 +429,7 @@
       class: 'admin-ui-dw-btn-danger',
       onclick: function () { tripsDelete(trip.id, trip.name); }
     }, ['Delete']);
-    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, editionB, deleteB]);
+    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, rosterA, editionB, deleteB]);
     contentDiv.appendChild(footer);
 
     var drawer = AdminUI.drawer({ title: trip.name || 'Trip', content: contentDiv });
