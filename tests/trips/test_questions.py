@@ -22,6 +22,11 @@ def test_missing_field_raises():
         tq.validate_trip_question(q)
 
 
+def test_reserved_key_raises():
+    with pytest.raises(ValueError, match="reserved"):
+        tq.validate_trip_question(_q(key="status"))
+
+
 def test_invalid_type_raises():
     with pytest.raises(ValueError, match="invalid type"):
         tq.validate_trip_question(_q(type="dropdown"))

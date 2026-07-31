@@ -15,6 +15,12 @@ _template_cache = None
 
 QUESTION_TYPES = {"text", "choice", "multi_choice", "yes_no"}
 _KEY_PATTERN = re.compile(r"^[a-z0-9_]+$")
+RESERVED_QUESTION_KEYS = frozenset({
+    "id", "member", "email", "status", "price_tier",
+    "can_drive", "seat_capacity", "bike_capacity", "hitch_size",
+    "region_code", "dietary", "dietary_restrictions", "dietary_other",
+    "has_tent", "amount_cents", "payment_status", "payment_id", "created_at",
+})  # roster/system column keys; keep in sync with admin.py's _TRIP_REG_* constants
 
 
 def _offender(index, question):
@@ -32,6 +38,9 @@ def validate_trip_question(question, index=0):
     if not isinstance(question["key"], str) or not _KEY_PATTERN.match(question["key"]):
         raise ValueError(
             f"{name} key must match [a-z0-9_]+ (got {question['key']!r})")
+    if question["key"] in RESERVED_QUESTION_KEYS:
+        raise ValueError(
+            f"{name} key '{question['key']}' is reserved for system columns")
     qtype = question["type"]
     if qtype not in QUESTION_TYPES:
         raise ValueError(f"{name} has invalid type '{qtype}'")

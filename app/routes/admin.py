@@ -293,12 +293,21 @@ _TRIP_REG_TRAILING_COLUMNS = [
 def _trip_registration_columns(trip):
     question_columns = []
     seen = set()
+    used_labels = {
+        label for _, label in (_TRIP_REG_BASE_COLUMNS
+                               + _TRIP_REG_PROFILE_COLUMNS
+                               + _TRIP_REG_TRAILING_COLUMNS)
+    }
     for question in trip.custom_questions or []:
         key = question["key"]
         if key in seen:
             continue
         seen.add(key)
-        question_columns.append((key, question.get("label") or key))
+        label = question.get("label") or key
+        if label in used_labels:
+            label = f"{label} ({key})"
+        used_labels.add(label)
+        question_columns.append((key, label))
     return (_TRIP_REG_BASE_COLUMNS + _TRIP_REG_PROFILE_COLUMNS
             + question_columns + _TRIP_REG_TRAILING_COLUMNS)
 

@@ -166,6 +166,35 @@ def test_roster_data_has_profile_and_question_columns(admin_client, db_session):
     assert row["payment_id"] is not None
 
 
+def test_roster_disambiguates_duplicate_question_labels(admin_client,
+                                                        db_session):
+    series, trip = _series_with_edition(db_session)
+    trip.custom_questions = [
+        {"key": "first_choice", "label": "Choice", "type": "text",
+         "required": False},
+        {"key": "second_choice", "label": "Choice", "type": "text",
+         "required": False},
+    ]
+    _, registration = _registered_member(db_session, trip)
+    registration.answers = {
+        "first_choice": "First value",
+        "second_choice": "Second value",
+    }
+    db.session.commit()
+
+    response = admin_client.get(f"/admin/trips/{trip.id}/registrations/data")
+    columns = {column["key"]: column["label"]
+               for column in response.get_json()["columns"]}
+    assert columns["first_choice"] == "Choice"
+    assert columns["second_choice"] == "Choice (second_choice)"
+
+    response = admin_client.get(
+        f"/admin/trips/{trip.id}/registrations/export.csv")
+    row = next(csv.DictReader(StringIO(response.get_data(as_text=True))))
+    assert row["Choice"] == "First value"
+    assert row["Choice (second_choice)"] == "Second value"
+
+
 def test_roster_csv_export(admin_client, db_session):
     series, trip = _series_with_edition(db_session)
     _registered_member(db_session, trip)
