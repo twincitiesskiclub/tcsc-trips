@@ -110,3 +110,11 @@ def test_register_validation_error_returns_field_errors(
     response = client.post("/test-trip-routes/register", json=payload)
     assert response.status_code == 400
     assert "answers.chore_preference" in response.get_json()["error"]
+
+
+def test_register_page_renders_questions_and_gate(client, public_trip):
+    response = client.get("/test-trip-routes/register")
+    html = response.get_data(as_text=True)
+    assert "member-email" in html
+    assert "Which task?" in html
+    assert "trip-registration-data" in html

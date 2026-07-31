@@ -64,6 +64,7 @@ _PAYMENT_PAGE_ENDPOINTS = {
     "registration.season_register",
     "socials.redirect_social",
     "trips.get_trip_page",
+    "trips.get_trip_register_page",
 }
 
 
