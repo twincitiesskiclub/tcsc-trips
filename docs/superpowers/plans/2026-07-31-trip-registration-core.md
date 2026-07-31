@@ -2089,7 +2089,7 @@ mobile-first single page; topic-grouped sections with a visible step count; emai
   <title>{{ trip.name }} — Registration — Twin Cities Ski Club</title>
   {{ csrf_meta_tag() }}
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
-  <link rel="stylesheet" href="{{ url_for('static', filename='tailwind-output.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
   <script src="{{ url_for('static', filename='csrf.js') }}"></script>
   <script src="https://js.stripe.com/v3/"></script>
   <script id="trip-registration-data" type="application/json">{{ registration_data|tojson }}</script>
@@ -2436,6 +2436,58 @@ mobile-first single page; topic-grouped sections with a visible step count; emai
     }
   });
 })();
+```
+
+**Amendments (post-review, authoritative over the code blocks above):**
+
+1. Stylesheet path is `css/tailwind-output.css` (the build writes `app/static/css/tailwind-output.css`; the admin base template confirms the convention).
+2. **Step indicator:** number the section headings with a Jinja counter so conditional sections stay correctly numbered. At the top of the form add `{% set steps = namespace(n=0) %}`; each section `<h2>` becomes:
+
+```html
+{% set steps.n = steps.n + 1 %}
+<h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Getting there</h2>
+```
+
+(same pattern for Member check, Food &amp; sleeping, This trip, Payment). Wrap the "This trip" section in `{% if trip.custom_questions %}` so empty trips skip it and the numbering stays contiguous.
+
+3. **Per-field server errors** in `trip_registration.js` — replace `showServerErrors` with:
+
+```javascript
+  var PROFILE_ERROR_FIELDS = {
+    'profile.seat_capacity': 'profile-seats',
+    'profile.bike_capacity': 'profile-bikes',
+    'profile.region_code': 'profile-region',
+    'profile.dietary_restrictions': 'dietary-options',
+    'email': 'member-email',
+  };
+
+  function findErrorField(key) {
+    if (key.indexOf('answers.') === 0) {
+      return form.querySelector(
+        '[data-question-key="' + key.slice(8) + '"]');
+    }
+    var id = PROFILE_ERROR_FIELDS[key];
+    return id ? document.getElementById(id) : null;
+  }
+
+  function showServerErrors(errors) {
+    form.querySelectorAll('.field-error').forEach(function (node) {
+      node.classList.remove('field-error', 'ring-2', 'ring-red-500');
+    });
+    if (typeof errors === 'string') { showError(errors); return; }
+    var firstField = null;
+    Object.keys(errors).forEach(function (key) {
+      var field = findErrorField(key);
+      if (field) {
+        field.classList.add('field-error', 'ring-2', 'ring-red-500');
+        if (!firstField) firstField = field;
+      }
+    });
+    showError(Object.values(errors).join(' '));
+    if (firstField) {
+      firstField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  }
 ```
 
 - [ ] **Step 3: Add the register endpoint to the payment CSP list**
