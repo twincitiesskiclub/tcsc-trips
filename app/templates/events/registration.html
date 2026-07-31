@@ -61,9 +61,8 @@
                     >
                     <span class="price-option__label">{{ option.name }}</span>
                     <span class="price-option__amount">{{ option.price_cents|format_price }}</span>
-                    {% if option.member_price_cents is not none %}
-                      <span class="form-field__hint" style="display: block; margin-top: 4px;">Member {{ option.member_price_cents|format_price }}</span>
-                    {% endif %}
+                    {# Filled in by the client only once a code is verified. #}
+                    <span class="price-option__original hidden"></span>
                   </label>
                 {% endfor %}
               </div>
@@ -144,7 +143,11 @@
               <p class="form-section__subtitle">The server will verify your option and any discount before charging.</p>
               <div class="form-field">
                 <label class="form-field__label" for="discount-code">Discount code <span class="form-field__hint">(optional)</span></label>
-                <input type="text" id="discount-code" class="form-input" autocomplete="off">
+                <div class="discount-code-row">
+                  <input type="text" id="discount-code" class="form-input" autocomplete="off">
+                  <button type="button" class="btn btn--secondary" id="discount-apply">Apply</button>
+                </div>
+                <span class="discount-message" id="discount-message" role="status" aria-live="polite"></span>
               </div>
               <div id="card-field" class="form-field">
                 <label class="form-field__label" for="card-element">Card details</label>

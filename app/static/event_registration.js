@@ -67,6 +67,9 @@
       this.stripePromise = null;
       this.isSubmitting = false;
       this.participantValues = [];
+      // Member prices are never sent to the page up front; they arrive only
+      // after the server verifies a code.
+      this.discountPrices = null;
       this.attachEventListeners();
       this.renderSelectedOption();
     }
@@ -83,6 +86,131 @@
       form.querySelectorAll('input[name="price_option_id"]').forEach(input => {
         input.addEventListener('change', () => this.renderSelectedOption());
       });
+
+      const discountCode = document.getElementById('discount-code');
+      document
+        .getElementById('discount-apply')
+        .addEventListener('click', () => this.applyDiscount());
+      // Enter in the code field should check the code, not submit the form.
+      discountCode.addEventListener('keydown', event => {
+        if (event.key !== 'Enter') return;
+        event.preventDefault();
+        this.applyDiscount();
+      });
+      // A discounted price on screen must never outlive the code that earned
+      // it, or we would show one amount and submit another.
+      discountCode.addEventListener('input', () => {
+        this.setDiscountMessage('');
+        if (!this.discountPrices) return;
+        this.discountPrices = null;
+        this.renderPrices();
+      });
+    }
+
+    priceFor(option) {
+      const discounted =
+        this.discountPrices && this.discountPrices.get(String(option.id));
+      return discounted === undefined || discounted === null
+        ? option.priceCents
+        : discounted;
+    }
+
+    async applyDiscount() {
+      const input = document.getElementById('discount-code');
+      const code = input.value.trim();
+      if (!code) {
+        this.setDiscountMessage('');
+        return;
+      }
+
+      const button = document.getElementById('discount-apply');
+      button.disabled = true;
+      try {
+        const response = await fetch(
+          `/events/${encodeURIComponent(eventData.slug)}/discount`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code })
+          }
+        );
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok || !result.valid) {
+          this.discountPrices = null;
+          this.setDiscountMessage("That code isn't recognized.", true);
+          this.renderPrices();
+          return;
+        }
+
+        this.discountPrices = new Map(
+          (result.options || []).map(option => [
+            String(option.id),
+            option.priceCents
+          ])
+        );
+        this.setDiscountMessage('Member rate applied.');
+        this.renderPrices();
+      } catch (error) {
+        this.discountPrices = null;
+        this.setDiscountMessage(
+          'The code could not be checked. Try again.',
+          true
+        );
+        this.renderPrices();
+      } finally {
+        button.disabled = false;
+      }
+    }
+
+    setDiscountMessage(message, isError = false) {
+      const node = document.getElementById('discount-message');
+      node.textContent = message || '';
+      node.classList.toggle(
+        'discount-message--error',
+        Boolean(message) && isError
+      );
+    }
+
+    // Repaint amounts without rebuilding the participant fields, so typing in
+    // the code box doesn't disturb the rest of the form.
+    renderPrices() {
+      form.querySelectorAll('.price-option-container').forEach(card => {
+        const radio = card.querySelector('input[type="radio"]');
+        const option = optionsById.get(radio.value);
+        if (!option) return;
+
+        const price = this.priceFor(option);
+        card.querySelector('.price-option__amount').textContent =
+          this.formatCurrency(price);
+
+        const original = card.querySelector('.price-option__original');
+        const isDiscounted = price < option.priceCents;
+        original.textContent = isDiscounted
+          ? `Regular ${this.formatCurrency(option.priceCents)}`
+          : '';
+        original.classList.toggle('hidden', !isDiscounted);
+      });
+      this.renderPayButton();
+    }
+
+    renderPayButton() {
+      const option = this.selectedOption;
+      if (!option) return;
+
+      const isFree = this.priceFor(option) === 0;
+      document.getElementById('card-field').classList.toggle('hidden', isFree);
+      document.getElementById('button-text').textContent = isFree
+        ? 'Complete registration'
+        : `Pay ${this.formatCurrency(this.priceFor(option))}`;
+
+      if (!isFree) {
+        this.ensureStripe().catch(() => {
+          this.showError(
+            'The payment form could not be initialized. Refresh and try again.'
+          );
+        });
+      }
     }
 
     snapshotParticipants() {
@@ -121,20 +249,7 @@
       teamName.disabled = !isTeam;
 
       this.applyQuestionScopes(option.name);
-
-      const isFree = option.priceCents === 0;
-      document.getElementById('card-field').classList.toggle('hidden', isFree);
-      document.getElementById('button-text').textContent = isFree
-        ? 'Complete registration'
-        : `Pay ${this.formatCurrency(option.priceCents)}`;
-
-      if (!isFree) {
-        this.ensureStripe().catch(() => {
-          this.showError(
-            'The payment form could not be initialized. Refresh and try again.'
-          );
-        });
-      }
+      this.renderPayButton();
     }
 
     applyQuestionScopes(optionName) {
@@ -304,7 +419,7 @@
       this.toggleLoading(true);
 
       try {
-        if (this.selectedOption.priceCents > 0) {
+        if (this.priceFor(this.selectedOption) > 0) {
           await this.ensureStripe();
         }
 
