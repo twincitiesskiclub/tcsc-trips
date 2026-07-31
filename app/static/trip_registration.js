@@ -79,8 +79,12 @@
       });
     });
     const driver = form.querySelector('input[name="profile-can-drive"]:checked');
-    document.getElementById('driver-details')
-      .classList.toggle('hidden', !driver || driver.value !== 'yes');
+    const driverDetails = document.getElementById('driver-details');
+    const driverDetailsHidden = !driver || driver.value !== 'yes';
+    driverDetails.classList.toggle('hidden', driverDetailsHidden);
+    driverDetails.querySelectorAll('input').forEach(function (input) {
+      input.disabled = driverDetailsHidden;
+    });
   }
   form.addEventListener('change', applyVisibility);
   applyVisibility();
@@ -111,13 +115,17 @@
       showError(event.error ? event.error.message : '');
     });
   }
-  ensureStripe();
+  ensureStripe().catch(function () {
+    showError('The payment form failed to load. Refresh the page to try again.');
+  });
 
   // --- submit -----------------------------------------------------------
   function collectPayload() {
     const drive = form.querySelector('input[name="profile-can-drive"]:checked');
     const tent = form.querySelector('input[name="profile-tent"]:checked');
     const hitch = form.querySelector('input[name="profile-hitch"]:checked');
+    const seats = document.getElementById('profile-seats');
+    const bikes = document.getElementById('profile-bikes');
     const tier = form.querySelector('input[name="price-tier"]:checked');
     const answers = {};
     form.querySelectorAll('[data-question-key]').forEach(function (node) {
@@ -140,9 +148,9 @@
       price_tier: tier ? tier.value : 'low',
       profile: {
         can_drive: drive ? drive.value : '',
-        seat_capacity: document.getElementById('profile-seats').value,
-        bike_capacity: document.getElementById('profile-bikes').value,
-        hitch_size: hitch ? hitch.value : '',
+        seat_capacity: seats.disabled ? '' : seats.value,
+        bike_capacity: bikes.disabled ? '' : bikes.value,
+        hitch_size: hitch && !hitch.disabled ? hitch.value : '',
         region_code: document.getElementById('profile-region').value,
         dietary_restrictions: Array.from(
           form.querySelectorAll('[data-dietary]:checked')).map(function (i) { return i.value; }),
@@ -158,10 +166,13 @@
   }
 
   var PROFILE_ERROR_FIELDS = {
+    'profile.can_drive': 'profile-can-drive-group',
     'profile.seat_capacity': 'profile-seats',
     'profile.bike_capacity': 'profile-bikes',
+    'profile.hitch_size': 'profile-hitch-group',
     'profile.region_code': 'profile-region',
     'profile.dietary_restrictions': 'dietary-options',
+    'profile.has_tent': 'profile-tent-group',
     'email': 'member-email',
   };
 
@@ -229,6 +240,8 @@
         'Your card hold of $' + (result.amountCents / 100).toFixed(2)
         + ' is placed. You will be charged when the roster is confirmed.';
       completed.classList.remove('hidden');
+    } catch (err) {
+      showError('Something went wrong placing the hold — you have not been charged. Please try again.');
     } finally {
       isSubmitting = false;
       button.disabled = false;
