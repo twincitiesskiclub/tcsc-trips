@@ -80,21 +80,6 @@
 
             <hr class="form-divider">
 
-            <section class="form-section" aria-labelledby="emergency-title">
-              <h2 class="form-section__title" id="emergency-title">Emergency contact</h2>
-              <p class="form-section__subtitle">Please list someone who is not participating with you.</p>
-              <div class="form-row form-row--pair">
-                <div class="form-field">
-                  <label class="form-field__label" for="emergency-contact-name">Contact name</label>
-                  <input type="text" id="emergency-contact-name" class="form-input" autocomplete="off" required>
-                </div>
-                <div class="form-field">
-                  <label class="form-field__label" for="emergency-contact-phone">Phone number</label>
-                  <input type="tel" id="emergency-contact-phone" class="form-input" autocomplete="off" required>
-                </div>
-              </div>
-            </section>
-
             {% if event.custom_questions %}
               <section class="form-section" id="event-questions" aria-labelledby="event-questions-title">
                 <h2 class="form-section__title" id="event-questions-title">Event questions</h2>

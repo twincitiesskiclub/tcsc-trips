@@ -81,6 +81,8 @@ def _participant(position):
         "date_of_birth": f"199{position}-01-0{position}",
         "email": f"  PERSON{position}@Example.COM ",
         "phone": f"555-010{position}",
+        "emergency_contact_name": f" Emergency {position} ",
+        "emergency_contact_phone": f"555-099{position}",
     }
 
 
@@ -93,8 +95,6 @@ def _payload(option, participant_count=None):
     return {
         "price_option_id": option.id,
         "team_name": "Nordic Rockets" if count > 1 else None,
-        "emergency_contact_name": "Emergency Contact",
-        "emergency_contact_phone": "555-0199",
         "participants": [
             _participant(position) for position in range(1, count + 1)
         ],
@@ -119,8 +119,6 @@ def _existing_registration(
         price_option_id=option.id,
         contact_email="existing@example.com",
         contact_phone="555-0100",
-        emergency_contact_name="Emergency Contact",
-        emergency_contact_phone="555-0199",
         answers={},
         amount_cents=option.price_cents,
         status=status,
@@ -272,23 +270,51 @@ def test_create_registration_collects_required_field_errors(
 ):
     event, individual, _team = registration_setup
     payload = _payload(individual)
-    payload.update(
-        {
-            "emergency_contact_name": None,
-            "emergency_contact_phone": " ",
-        }
-    )
     payload["participants"][0]["name"] = ""
     payload["participants"][0]["email"] = " "
 
     with pytest.raises(RegistrationError) as exc_info:
         create_registration(event, payload)
 
-    assert {
-        "emergency_contact_name",
-        "emergency_contact_phone",
-        "participants",
-    } <= exc_info.value.errors.keys()
+    assert "participants" in exc_info.value.errors
+
+
+def test_each_participant_requires_emergency_contact(registration_setup):
+    event, individual, _team = registration_setup
+    payload = _payload(individual)
+    del payload["participants"][0]["emergency_contact_name"]
+    payload["participants"][0]["emergency_contact_phone"] = "  "
+
+    with pytest.raises(RegistrationError) as exc_info:
+        create_registration(event, payload)
+
+    message = exc_info.value.errors["participants"]
+    assert "Participant 1 requires" in message
+    assert "emergency contact name" in message
+    assert "emergency contact phone" in message
+
+
+def test_participants_store_their_own_emergency_contact(registration_setup):
+    event, _individual, team = registration_setup
+
+    registration = create_registration(event, _payload(team))
+
+    for position, participant in enumerate(
+        registration.participants, start=1
+    ):
+        assert participant.emergency_contact_name == f"Emergency {position}"
+        assert participant.emergency_contact_phone == f"555-099{position}"
+
+
+def test_registration_level_emergency_contact_is_ignored(registration_setup):
+    event, individual, _team = registration_setup
+    payload = _payload(individual)
+    payload["emergency_contact_name"] = "Legacy Top Level"
+    payload["emergency_contact_phone"] = "555-0000"
+
+    registration = create_registration(event, payload)
+
+    assert not hasattr(registration, "emergency_contact_name")
 
 
 def test_create_registration_rejects_unparseable_participant_dob(

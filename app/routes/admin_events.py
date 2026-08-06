@@ -49,7 +49,6 @@ _REGISTRATION_BASE_COLUMNS = [
     ("team_name", "Team name"),
     ("contact_email", "Contact email"),
     ("contact_phone", "Contact phone"),
-    ("emergency_contact", "Emergency contact"),
 ]
 _REGISTRATION_TRAILING_COLUMNS = [
     ("amount_cents", "Amount"),
@@ -422,13 +421,6 @@ def _registration_rows(event):
         reverse=True,
     )
     for registration in registrations:
-        emergency_contact = registration.emergency_contact_name or ""
-        if registration.emergency_contact_phone:
-            emergency_contact = (
-                f"{emergency_contact} "
-                f"({registration.emergency_contact_phone})"
-            ).strip()
-
         row = {
             "id": registration.id,
             "status": registration.status,
@@ -440,7 +432,6 @@ def _registration_rows(event):
             "team_name": registration.team_name or "",
             "contact_email": registration.contact_email,
             "contact_phone": registration.contact_phone,
-            "emergency_contact": emergency_contact,
             "amount_cents": registration.amount_cents,
             "discount_applied": registration.discount_applied,
             "created_at": registration.created_at.isoformat(),
@@ -449,10 +440,18 @@ def _registration_rows(event):
             registration.participants,
             start=1,
         ):
+            details = (
+                f"{participant.date_of_birth.isoformat()}, "
+                f"{participant.email}, {participant.phone}"
+            )
+            emergency = (
+                f"{participant.emergency_contact_name} "
+                f"{participant.emergency_contact_phone}"
+            ).strip()
+            if emergency:
+                details = f"{details}; emergency: {emergency}"
             row[f"participant_{position}"] = (
-                f"{participant.role_label}: {participant.name} "
-                f"({participant.date_of_birth.isoformat()}, "
-                f"{participant.email}, {participant.phone})"
+                f"{participant.role_label}: {participant.name} ({details})"
             )
         for question in event.custom_questions or []:
             key = question["key"]

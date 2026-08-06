@@ -332,7 +332,37 @@
           )
         );
 
-        group.append(title, identityRow, contactRow);
+        const emergencyRow = document.createElement('div');
+        emergencyRow.className = 'form-row form-row--pair';
+        emergencyRow.append(
+          createInputField(
+            'Emergency contact name',
+            'text',
+            `participant-${participantNumber}-emergency_contact_name`,
+            saved.emergency_contact_name,
+            'off'
+          ),
+          createInputField(
+            'Emergency contact phone',
+            'tel',
+            `participant-${participantNumber}-emergency_contact_phone`,
+            saved.emergency_contact_phone,
+            'off'
+          )
+        );
+
+        const emergencyHint = document.createElement('p');
+        emergencyHint.className = 'form-field__hint';
+        emergencyHint.textContent =
+          'Emergency contact: someone who is not participating with you.';
+
+        group.append(
+          title,
+          identityRow,
+          contactRow,
+          emergencyRow,
+          emergencyHint
+        );
         container.append(group);
       });
     }
@@ -393,12 +423,6 @@
         team_name: isTeam
           ? document.getElementById('team-name').value
           : null,
-        emergency_contact_name: document.getElementById(
-          'emergency-contact-name'
-        ).value,
-        emergency_contact_phone: document.getElementById(
-          'emergency-contact-phone'
-        ).value,
         participants,
         answers,
         discount_code: document.getElementById('discount-code').value
@@ -501,9 +525,7 @@
       const messages = Object.values(errors);
       Object.keys(errors).forEach(key => {
         const fieldId = {
-          team_name: 'team-name',
-          emergency_contact_name: 'emergency-contact-name',
-          emergency_contact_phone: 'emergency-contact-phone'
+          team_name: 'team-name'
         }[key];
         const questionKey = key.startsWith('answers.')
           ? key.slice('answers.'.length)

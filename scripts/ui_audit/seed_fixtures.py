@@ -991,8 +991,6 @@ def _make_event_registrations(price_options, users, rng):
                 event_id=event.id, price_option_id=option.id,
                 contact_email=user.email, contact_phone=user.phone or "612-555-0100",
                 team_name=f"Team {user.last_name}" if len(option.participant_roles) > 1 else None,
-                emergency_contact_name=user.emergency_contact_name or f"{user.first_name} Contact",
-                emergency_contact_phone=user.emergency_contact_phone or "612-555-0199",
                 amount_cents=option.member_price_cents or option.price_cents,
                 discount_applied=counter % 5 == 0,
                 status=status,
@@ -1013,6 +1011,14 @@ def _make_event_registrations(price_options, users, rng):
                         date_of_birth=participant_user.date_of_birth or date(1990, 1, 1),
                         email=participant_user.email,
                         phone=participant_user.phone or "612-555-0100",
+                        emergency_contact_name=(
+                            participant_user.emergency_contact_name
+                            or f"{participant_user.first_name} Contact"
+                        ),
+                        emergency_contact_phone=(
+                            participant_user.emergency_contact_phone
+                            or "612-555-0199"
+                        ),
                     )
                 )
             counter += 1

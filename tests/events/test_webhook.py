@@ -50,8 +50,6 @@ def pending_registration(db_session):
         price_option_id=option.id,
         contact_email="event-guest@example.com",
         contact_phone="555-0100",
-        emergency_contact_name="Emergency Contact",
-        emergency_contact_phone="555-0199",
         answers={},
         amount_cents=5500,
         status=RegistrationStatus.PENDING_PAYMENT,

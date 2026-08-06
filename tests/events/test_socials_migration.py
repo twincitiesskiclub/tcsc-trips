@@ -109,8 +109,6 @@ def test_migrated_registration_shape_renders_in_admin_data(
         contact_email="migrated@example.com",
         contact_phone="",
         team_name=None,
-        emergency_contact_name="",
-        emergency_contact_phone="",
         answers={},
         amount_cents=2500,
         discount_applied=False,
@@ -127,6 +125,8 @@ def test_migrated_registration_shape_renders_in_admin_data(
             date_of_birth=date(1900, 1, 1),
             email="migrated@example.com",
             phone="",
+            emergency_contact_name="",
+            emergency_contact_phone="",
         )
     )
     db_session.session.add(event)
@@ -144,7 +144,9 @@ def test_migrated_registration_shape_renders_in_admin_data(
     assert row["status"] == "confirmed"
     assert row["contact_email"] == "migrated@example.com"
     assert row["contact_phone"] == ""
-    assert row["emergency_contact"] == ""
+    assert "emergency_contact" not in row
+    # Migrated socials never collected an emergency contact, so the cell
+    # renders without the emergency clause.
     assert row["participant_1"] == (
         "Participant: Migrated Skier "
         "(1900-01-01, migrated@example.com, )"
