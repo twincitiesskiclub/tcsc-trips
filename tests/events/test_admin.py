@@ -66,8 +66,6 @@ def _registration(event, status=RegistrationStatus.CONFIRMED):
         contact_email="captain@example.com",
         contact_phone="612-555-0100",
         team_name="Nordic Rockets",
-        emergency_contact_name="Casey Contact",
-        emergency_contact_phone="612-555-0199",
         answers={"course": "Long course"},
         amount_cents=10500,
         discount_applied=True,
@@ -83,6 +81,8 @@ def _registration(event, status=RegistrationStatus.CONFIRMED):
                 date_of_birth=date(1990, 1, 2),
                 email="ada@example.com",
                 phone="612-555-0101",
+                emergency_contact_name="Casey Contact",
+                emergency_contact_phone="612-555-0199",
             ),
             EventParticipant(
                 position=2,
@@ -91,6 +91,8 @@ def _registration(event, status=RegistrationStatus.CONFIRMED):
                 date_of_birth=date(1991, 2, 3),
                 email="ben@example.com",
                 phone="612-555-0102",
+                emergency_contact_name="Dana Contact",
+                emergency_contact_phone="612-555-0299",
             ),
             EventParticipant(
                 position=3,
@@ -99,6 +101,8 @@ def _registration(event, status=RegistrationStatus.CONFIRMED):
                 date_of_birth=date(1992, 3, 4),
                 email="cam@example.com",
                 phone="612-555-0103",
+                emergency_contact_name="Eli Contact",
+                emergency_contact_phone="612-555-0399",
             ),
         ]
     )
@@ -279,14 +283,30 @@ def test_registrations_data_flattens_participants_and_answers(
     assert row["price_option_name"] == "Team of 3"
     assert row["participant_1"] == (
         "Rollerskier: Ada Skier "
-        "(1990-01-02, ada@example.com, 612-555-0101)"
+        "(1990-01-02, ada@example.com, 612-555-0101; "
+        "emergency: Casey Contact 612-555-0199)"
     )
     assert row["participant_3"] == (
         "Trail Runner: Cam Runner "
-        "(1992-03-04, cam@example.com, 612-555-0103)"
+        "(1992-03-04, cam@example.com, 612-555-0103; "
+        "emergency: Eli Contact 612-555-0399)"
     )
     assert row["course"] == "Long course"
     assert row["amount_cents"] == 10500
+
+
+def test_registrations_data_drops_registration_level_emergency_column(
+    admin_client,
+    registration_event,
+):
+    event, _registration = registration_event
+
+    response = admin_client.get(
+        f"/admin/events/{event.id}/registrations/data"
+    )
+
+    row = response.get_json()["registrations"][0]
+    assert "emergency_contact" not in row
 
 
 def test_registration_csv_contains_flattened_headers_and_values(
