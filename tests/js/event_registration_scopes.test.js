@@ -76,13 +76,13 @@ function load(questions, priceOptions = OPTIONS) {
         <input type="text" id="team-name" class="form-input">
       </div>
       <div id="participants-container"></div>
-      <input type="text" id="emergency-contact-name">
-      <input type="tel" id="emergency-contact-phone">
       <section class="form-section" id="event-questions">
         <h2 id="event-questions-title">Event questions</h2>
         ${questionMarkup(questions)}
       </section>
       <input type="text" id="discount-code">
+      <button type="button" id="discount-apply">Apply</button>
+      <span id="discount-message"></span>
       <div id="card-field"><div id="card-element"></div></div>
       <div class="card-error" id="form-errors" role="alert"></div>
       <button id="submit" type="submit">
@@ -246,4 +246,36 @@ test('the questions section hides when nothing is in scope', () => {
 
   select(dom, 2);
   assert.equal(section.classList.contains('hidden'), false);
+});
+
+test('every participant card collects its own emergency contact', () => {
+  const dom = load([]);
+  select(dom, 2);  // Relay Triathlon renders three cards
+
+  const groups = dom.window.document.querySelectorAll('[data-participant]');
+  assert.equal(groups.length, 3);
+  groups.forEach(group => {
+    assert.ok(group.querySelector(
+      '[data-participant-field="emergency_contact_name"]'));
+    assert.ok(group.querySelector(
+      '[data-participant-field="emergency_contact_phone"]'));
+  });
+});
+
+test('emergency contact values survive switching options', () => {
+  const dom = load([]);
+  const document = dom.window.document;
+  document.querySelector(
+    '[data-participant="0"] [data-participant-field="emergency_contact_name"]'
+  ).value = 'Pat Contact';
+
+  select(dom, 2);
+  select(dom, 1);
+
+  assert.equal(
+    document.querySelector(
+      '[data-participant="0"] ' +
+      '[data-participant-field="emergency_contact_name"]'
+    ).value,
+    'Pat Contact');
 });

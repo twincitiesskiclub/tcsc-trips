@@ -88,6 +88,8 @@ def _participant(position):
         "date_of_birth": f"199{position}-01-0{position}",
         "email": f"participant{position}@example.com",
         "phone": f"555-010{position}",
+        "emergency_contact_name": f"Emergency {position}",
+        "emergency_contact_phone": f"555-099{position}",
     }
 
 
@@ -100,8 +102,6 @@ def _payload(option, participant_count=None):
     return {
         "price_option_id": option.id,
         "team_name": "Nordic Rockets" if option.participant_count > 1 else "",
-        "emergency_contact_name": "Emergency Contact",
-        "emergency_contact_phone": "555-0199",
         "participants": [
             _participant(position) for position in range(1, count + 1)
         ],
@@ -182,8 +182,6 @@ def test_get_event_expires_stale_pending_registration(
         price_option_id=individual.id,
         contact_email="stale@example.com",
         contact_phone="555-0100",
-        emergency_contact_name="Emergency Contact",
-        emergency_contact_phone="555-0199",
         answers={},
         amount_cents=individual.price_cents,
         status=RegistrationStatus.PENDING_PAYMENT,
@@ -377,8 +375,10 @@ def test_get_event_page_drops_the_registration_contact_section(
     assert "Registration contact" not in page
     assert 'id="contact-email"' not in page
     assert 'id="contact-phone"' not in page
-    # Emergency contact and team name stay.
-    assert 'id="emergency-contact-name"' in page
+    # The standalone emergency contact section is gone too; the fields now
+    # render client-side inside each participant card. Team name stays.
+    assert 'id="emergency-contact-name"' not in page
+    assert "Emergency contact" not in page
     assert 'id="team-name"' in page
 
 
@@ -392,9 +392,8 @@ def test_get_event_page_puts_team_name_with_participant_details(
 
     participants_heading = page.index("Participant details")
     team_name_field = page.index('id="team-name"')
-    emergency_heading = page.index("Emergency contact")
 
-    assert participants_heading < team_name_field < emergency_heading
+    assert participants_heading < team_name_field
 
 
 def test_get_event_page_preserves_description_line_breaks(
