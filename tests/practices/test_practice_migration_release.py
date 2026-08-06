@@ -24,9 +24,9 @@ E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
-# Head as of the done-emoji snapshot migration (down_revision is
-# READINESS_DIGEST_REVISION above) — bump whenever a new migration lands.
-HEAD_REVISION = "539ad532aeb3"
+# Head as of the per-participant emergency contact migration - bump
+# whenever a new migration lands.
+HEAD_REVISION = "b9c8d7e6f5a4"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
