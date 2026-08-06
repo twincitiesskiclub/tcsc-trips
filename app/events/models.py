@@ -155,8 +155,6 @@ class EventRegistration(db.Model):
     contact_email = db.Column(db.String(255), nullable=False)
     contact_phone = db.Column(db.String(50), nullable=False)
     team_name = db.Column(db.String(255))
-    emergency_contact_name = db.Column(db.String(255), nullable=False)
-    emergency_contact_phone = db.Column(db.String(50), nullable=False)
     answers = db.Column(db.JSON, nullable=False, default=dict)
     amount_cents = db.Column(db.Integer, nullable=False)
     discount_applied = db.Column(
@@ -219,6 +217,8 @@ class EventParticipant(db.Model):
     date_of_birth = db.Column(db.Date, nullable=False)
     email = db.Column(db.String(255), nullable=False)
     phone = db.Column(db.String(50), nullable=False)
+    emergency_contact_name = db.Column(db.String(255), nullable=False)
+    emergency_contact_phone = db.Column(db.String(50), nullable=False)
 
     def __repr__(self):
         return f"<EventParticipant {self.name}>"

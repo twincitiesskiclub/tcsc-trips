@@ -63,8 +63,6 @@ def test_event_with_options_and_registration(db_session):
         price_option_id=opt.id,
         contact_email="cap@x.com",
         contact_phone="555",
-        emergency_contact_name="EC",
-        emergency_contact_phone="911",
         amount_cents=10500,
         status="pending_payment",
         answers={"course": "Long"},
@@ -76,6 +74,8 @@ def test_event_with_options_and_registration(db_session):
         date_of_birth=date(1990, 1, 1),
         email="a@x.com",
         phone="1",
+        emergency_contact_name="EC",
+        emergency_contact_phone="911",
     )
     reg.participants.append(participant)
     db_session.session.add(reg)
@@ -106,8 +106,6 @@ def test_payment_links_to_event_registration(db_session):
         price_option_id=option.id,
         contact_email="skier@example.com",
         contact_phone="555-0100",
-        emergency_contact_name="Emergency Contact",
-        emergency_contact_phone="555-0199",
         amount_cents=5500,
         status=RegistrationStatus.CONFIRMED,
     )

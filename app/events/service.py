@@ -155,14 +155,6 @@ def create_registration(
             "Select an active price option for this event."
         )
 
-    required_registration_fields = (
-        ("emergency_contact_name", "Emergency contact name"),
-        ("emergency_contact_phone", "Emergency contact phone"),
-    )
-    for field, label in required_registration_fields:
-        if _is_blank(payload.get(field)):
-            errors[field] = f"{label} is required."
-
     participants = payload.get("participants")
     if not isinstance(participants, list):
         errors["participants"] = "Participants must be provided as a list."
@@ -210,8 +202,6 @@ def create_registration(
         contact_email=primary_participant["email"],
         contact_phone=primary_participant["phone"],
         team_name=_optional_text(team_name),
-        emergency_contact_name=payload["emergency_contact_name"].strip(),
-        emergency_contact_phone=payload["emergency_contact_phone"].strip(),
         answers=stored_answers,
         amount_cents=amount_cents,
         discount_applied=discount_applied,
@@ -228,6 +218,10 @@ def create_registration(
                 date_of_birth=participant["date_of_birth"],
                 email=participant["email"],
                 phone=participant["phone"],
+                emergency_contact_name=participant["emergency_contact_name"],
+                emergency_contact_phone=participant[
+                    "emergency_contact_phone"
+                ],
             )
         )
 
@@ -266,7 +260,14 @@ def _validate_participants(
 
         missing_fields = [
             field
-            for field in ("name", "date_of_birth", "email", "phone")
+            for field in (
+                "name",
+                "date_of_birth",
+                "email",
+                "phone",
+                "emergency_contact_name",
+                "emergency_contact_phone",
+            )
             if _is_blank(participant.get(field))
         ]
         if missing_fields:
@@ -296,6 +297,12 @@ def _validate_participants(
                 "date_of_birth": date_of_birth,
                 "email": email,
                 "phone": participant["phone"].strip(),
+                "emergency_contact_name": participant[
+                    "emergency_contact_name"
+                ].strip(),
+                "emergency_contact_phone": participant[
+                    "emergency_contact_phone"
+                ].strip(),
             }
         )
 
