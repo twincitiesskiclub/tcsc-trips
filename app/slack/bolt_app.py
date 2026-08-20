@@ -149,6 +149,15 @@ if _bot_token:
         socket_mode_handler = SocketModeHandler(bolt_app, _app_token)
         logger.info("Socket Mode handler ready (will start when start_socket_mode() is called)")
 
+    @bolt_app.middleware
+    def log_incoming_event(body, next, logger):
+        # Events arrive over Socket Mode with no access-log trail, so this is
+        # the only record that Slack delivered anything at all.
+        event = body.get("event") if isinstance(body, dict) else None
+        if isinstance(event, dict):
+            logger.info("slack event received: %s", event.get("type"))
+        next()
+
     # =========================================================================
     # Global error handler — surfaces unhandled listener exceptions in the logs.
     #
@@ -1207,12 +1216,16 @@ if _bot_token:
     @bolt_app.event("link_shared")
     def handle_link_shared(event, client, logger):
         with get_app_context():
-            unfurls = build_trip_unfurls(event.get("links", []))
+            links = event.get("links", [])
+            unfurls = build_trip_unfurls(links)
             if not unfurls:
+                logger.info("link_shared: no trip match for %s",
+                            [l.get("url") for l in links])
                 return
             try:
                 client.chat_unfurl(channel=event["channel"],
                                    ts=event["message_ts"], unfurls=unfurls)
+                logger.info("trip unfurl sent for %s", list(unfurls))
             except Exception as exc:
                 logger.warning("trip unfurl failed: %s", exc)
 
