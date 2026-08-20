@@ -2,6 +2,7 @@ import json
 import csv
 from datetime import datetime, timedelta
 from io import StringIO
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -40,6 +41,30 @@ def _series_with_edition(db_session, slug="test-trip-admin",
     db.session.add(trip)
     db.session.commit()
     return series, trip
+
+
+def test_announce_posts_blocks_to_channel(admin_client, db_session):
+    series, trip = _series_with_edition(db_session)
+    client_mock = MagicMock()
+    with patch("app.routes.admin.get_slack_client",
+               return_value=client_mock), \
+         patch("app.routes.admin.get_channel_id_by_name",
+               return_value="C_ANNOUNCE"):
+        response = admin_client.post(f"/admin/trips/{trip.id}/announce",
+                                     json={"channel": ""})
+    assert response.get_json()["success"] is True
+    kwargs = client_mock.chat_postMessage.call_args.kwargs
+    assert kwargs["channel"] == "C_ANNOUNCE"
+    assert any(b["type"] == "actions" for b in kwargs["blocks"])
+
+
+def test_announce_without_channel_errors(admin_client, db_session):
+    series, trip = _series_with_edition(db_session)
+    series.slack_channel_name = None
+    db.session.commit()
+    response = admin_client.post(f"/admin/trips/{trip.id}/announce",
+                                 json={"channel": ""})
+    assert response.status_code == 400
 
 
 def test_new_edition_clones_questions_and_prices(admin_client, db_session):

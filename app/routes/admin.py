@@ -5,6 +5,10 @@ from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, Tag
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
+from ..slack.client import get_channel_id_by_name, get_slack_client
+from ..slack.blocks.trips import (
+    build_trip_announcement_blocks, trip_announcement_fallback,
+)
 from ..slack.channel_sync import run_channel_sync, load_channel_config
 from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
@@ -557,6 +561,42 @@ def new_trip_edition(trip_id):
     db.session.add(clone)
     db.session.commit()
     return {'success': True, 'id': clone.id}
+
+
+@admin.route('/admin/trips/<int:trip_id>/announce', methods=['POST'])
+@admin_required
+def announce_trip(trip_id):
+    from app.slack.trips import base_url
+    from app.trips.service import _active_count
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        return {'success': False, 'error': 'Trip not found'}, 404
+    data = request.get_json(silent=True) or {}
+    channel_name = (data.get('channel') or '').strip() or (
+        trip.series.slack_channel_name if trip.series else None)
+    if not channel_name:
+        return {'success': False,
+                'error': 'No channel configured for this trip.'}, 400
+    capacity = (trip.max_participants_standard or 0) + (
+        trip.max_participants_extra or 0)
+    spots_left = max(0, capacity - _active_count(trip)) if capacity else None
+    try:
+        channel_id = get_channel_id_by_name(channel_name)
+        if not channel_id:
+            return {'success': False,
+                    'error': f'Channel #{channel_name} not found.'}, 400
+        get_slack_client().chat_postMessage(
+            channel=channel_id,
+            blocks=build_trip_announcement_blocks(
+                trip, trip.series, spots_left=spots_left,
+                base_url=base_url()),
+            text=trip_announcement_fallback(trip),
+            unfurl_links=False, unfurl_media=False,
+        )
+    except Exception as exc:
+        return {'success': False, 'error': str(exc)}, 502
+    return {'success': True}
+
 
 @admin.route('/admin/seasons')
 @admin_required

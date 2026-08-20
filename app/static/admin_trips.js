@@ -419,6 +419,11 @@
       class: 'admin-ui-dw-btn-ghost',
       href: '/admin/trips/' + trip.id + '/registrations'
     }, ['Roster (' + String(trip.registration_count || 0) + ')']);
+    var announceB = AdminUI.el('button', {
+      type: 'button',
+      class: 'admin-ui-dw-btn-ghost',
+      onclick: function () { tripsAnnounce(trip.id); }
+    }, ['Post announcement']);
     var editionB = AdminUI.el('button', {
       type: 'button',
       class: 'admin-ui-dw-btn-ghost',
@@ -429,7 +434,7 @@
       class: 'admin-ui-dw-btn-danger',
       onclick: function () { tripsDelete(trip.id, trip.name); }
     }, ['Delete']);
-    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, rosterA, editionB, deleteB]);
+    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, rosterA, announceB, editionB, deleteB]);
     contentDiv.appendChild(footer);
 
     var drawer = AdminUI.drawer({ title: trip.name || 'Trip', content: contentDiv });
@@ -489,6 +494,18 @@
       tripsData = data.trips || [];
       tripsRender();
     });
+  }
+
+  /* ---- Slack announcement handler ---- */
+  function tripsAnnounce(id) {
+    var channel = window.prompt('Channel (blank = trip channel):', '');
+    if (channel === null) return;
+    AdminUI.mutate('/admin/trips/' + id + '/announce', { channel: channel })
+      .then(function () {
+        if (window.showToast) showToast('Announcement posted to Slack', 'success');
+      }).catch(function () {
+        // AdminUI.mutate already toasts mutation errors.
+      });
   }
 
   /* ---- new-edition handler ---- */
