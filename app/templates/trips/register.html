@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{{ trip.name }} — Registration — Twin Cities Ski Club</title>
+  {{ csrf_meta_tag() }}
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
+  <script src="{{ url_for('static', filename='csrf.js') }}"></script>
+  <script src="https://js.stripe.com/v3/"></script>
+  <script id="trip-registration-data" type="application/json">{{ registration_data|tojson }}</script>
+  <script src="{{ url_for('static', filename='trip_registration.js') }}" defer></script>
+</head>
+<body class="bg-tcsc-gray-50 text-tcsc-navy">
+<div class="mx-auto max-w-form-lg px-4 py-8">
+  <header class="mb-6">
+    <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="Twin Cities Ski Club" class="h-10 mb-4">
+    <h1 class="text-2xl font-bold">{{ trip.name }}</h1>
+    <p class="text-tcsc-gray-600">{{ trip.destination }} · {{ trip.formatted_date_range }}</p>
+  </header>
+
+  {% if not registration_open %}
+    <div class="rounded-tcsc bg-tcsc-gray-100 p-4">{{ registration_message }}</div>
+  {% else %}
+  <form id="trip-registration-form" class="payment-view space-y-8" novalidate
+        data-trip-slug="{{ series.slug }}">
+    {% set steps = namespace(n=0) %}
+
+    <section class="rounded-tcsc bg-white p-5 shadow-sm" id="gate-section">
+      {% set steps.n = steps.n + 1 %}
+      <h2 class="font-semibold mb-1"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Member check</h2>
+      <p class="text-sm text-tcsc-gray-600 mb-3">Trips are for current members. Enter the email you registered with.</p>
+      <label class="block text-sm font-medium" for="member-email">Email</label>
+      <input id="member-email" type="email" required autocomplete="email"
+             class="mt-1 w-full rounded-tcsc border-tcsc-gray-400">
+      <p id="gate-message" class="mt-2 text-sm hidden"></p>
+      <button type="button" id="gate-check"
+              class="mt-3 rounded-tcsc bg-tcsc-navy px-4 py-2 text-tcsc-white">Continue</button>
+    </section>
+
+    <div id="form-body" class="hidden space-y-8">
+
+      <section class="rounded-tcsc bg-white p-5 shadow-sm">
+        {% set steps.n = steps.n + 1 %}
+        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Getting there</h2>
+        <fieldset id="profile-can-drive-group">
+          <legend class="text-sm font-medium">Can you drive a carpool? *</legend>
+          <div class="mt-1 flex gap-4">
+            <label><input type="radio" name="profile-can-drive" value="yes"> Yes</label>
+            <label><input type="radio" name="profile-can-drive" value="no"> No</label>
+          </div>
+        </fieldset>
+        <div id="driver-details" class="hidden mt-3 space-y-3 border-l-2 border-tcsc-mint pl-4">
+          <div><label class="block text-sm font-medium" for="profile-seats">How many people can you accommodate (besides yourself)?</label>
+            <input id="profile-seats" type="number" min="0" max="99" class="mt-1 w-24 rounded-tcsc border-tcsc-gray-400"></div>
+          <div><label class="block text-sm font-medium" for="profile-bikes">How many bikes can you accommodate?</label>
+            <input id="profile-bikes" type="number" min="0" max="99" class="mt-1 w-24 rounded-tcsc border-tcsc-gray-400"></div>
+          <fieldset id="profile-hitch-group"><legend class="text-sm font-medium">Do you have a trailer hitch?</legend>
+            <div class="mt-1 flex gap-4">
+              <label><input type="radio" name="profile-hitch" value="" checked> No</label>
+              <label><input type="radio" name="profile-hitch" value="1.25"> 1.25&Prime;</label>
+              <label><input type="radio" name="profile-hitch" value="2"> 2&Prime;</label>
+            </div></fieldset>
+        </div>
+        <div class="mt-3"><label class="block text-sm font-medium" for="profile-region">What is your region code? *</label>
+          <input id="profile-region" type="text" maxlength="10" class="mt-1 w-24 rounded-tcsc border-tcsc-gray-400">
+          <p class="text-sm text-tcsc-gray-600 mt-1">See the map: <a class="underline" href="https://bit.ly/TCSCmap" target="_blank" rel="noopener">bit.ly/TCSCmap</a></p></div>
+      </section>
+
+      <section class="rounded-tcsc bg-white p-5 shadow-sm">
+        {% set steps.n = steps.n + 1 %}
+        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Food &amp; sleeping</h2>
+        <fieldset><legend class="text-sm font-medium">Dietary restrictions</legend>
+          <div id="dietary-options" class="mt-1 grid grid-cols-2 gap-1 text-sm"></div></fieldset>
+        <div class="mt-3"><label class="block text-sm font-medium" for="profile-dietary-other">Other dietary restriction(s)?</label>
+          <input id="profile-dietary-other" type="text" maxlength="255" class="mt-1 w-full rounded-tcsc border-tcsc-gray-400"></div>
+        <fieldset id="profile-tent-group" class="mt-3"><legend class="text-sm font-medium">Do you have a 2+ person tent?</legend>
+          <div class="mt-1 flex gap-4">
+            <label><input type="radio" name="profile-tent" value="yes"> Yes</label>
+            <label><input type="radio" name="profile-tent" value="no"> No</label>
+          </div></fieldset>
+      </section>
+
+      {% if trip.custom_questions %}
+      <section class="rounded-tcsc bg-white p-5 shadow-sm" id="trip-questions">
+        {% set steps.n = steps.n + 1 %}
+        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> This trip</h2>
+        {% for question in trip.custom_questions %}
+        <div class="form-field mt-3" data-question-field="{{ loop.index0 }}"
+             {% if question.visible_if %}data-visible-if='{{ question.visible_if|tojson }}'{% endif %}>
+          <label class="block text-sm font-medium" for="question-{{ loop.index0 }}">
+            {{ question.label }}{% if question.required %} *{% endif %}</label>
+          {% if question.type == 'choice' %}
+            <select id="question-{{ loop.index0 }}" class="mt-1 w-full rounded-tcsc border-tcsc-gray-400"
+                    data-question-key="{{ question.key }}" data-question-type="choice"
+                    {% if question.required %}required{% endif %}>
+              <option value="">Select an option</option>
+              {% for option in question.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
+            </select>
+          {% elif question.type == 'multi_choice' %}
+            <div class="mt-1 space-y-1" data-question-key="{{ question.key }}" data-question-type="multi_choice"
+                 {% if question.max_selections %}data-max-selections="{{ question.max_selections }}"{% endif %}
+                 {% if question.required %}data-required="true"{% endif %}>
+              {% for option in question.options %}
+              <label class="block text-sm"><input type="checkbox" value="{{ option }}"> {{ option }}</label>
+              {% endfor %}
+            </div>
+          {% elif question.type == 'yes_no' %}
+            <div class="mt-1 flex gap-4" data-question-key="{{ question.key }}" data-question-type="yes_no"
+                 {% if question.required %}data-required="true"{% endif %}>
+              <label><input type="radio" name="question-{{ loop.index0 }}-yn" value="yes"> Yes</label>
+              <label><input type="radio" name="question-{{ loop.index0 }}-yn" value="no"> No</label>
+            </div>
+          {% else %}
+            <input id="question-{{ loop.index0 }}" type="text" class="mt-1 w-full rounded-tcsc border-tcsc-gray-400"
+                   data-question-key="{{ question.key }}" data-question-type="text"
+                   {% if question.required %}required{% endif %}>
+          {% endif %}
+          {% if question.help_text %}<p class="text-sm text-tcsc-gray-600 mt-1">{{ question.help_text }}</p>{% endif %}
+        </div>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      <section class="rounded-tcsc bg-white p-5 shadow-sm">
+        {% set steps.n = steps.n + 1 %}
+        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Payment</h2>
+        <div id="price-tiers" class="space-y-2 {% if trip.price_low == trip.price_high %}hidden{% endif %}">
+          <label class="flex items-center gap-2"><input type="radio" name="price-tier" value="low" checked>
+            Standard — <span>{{ trip.price_low|format_price }}</span></label>
+          <label class="flex items-center gap-2"><input type="radio" name="price-tier" value="high">
+            Supporter — <span>{{ trip.price_high|format_price }}</span></label>
+        </div>
+        <p class="text-sm text-tcsc-gray-600 my-3">Your card is <strong>authorized now and only charged when the roster is confirmed</strong>.</p>
+        <div id="card-element" class="rounded-tcsc border border-tcsc-gray-400 p-3 bg-white"></div>
+        <p id="form-errors" class="mt-3 text-sm text-red-700"></p>
+        <button type="submit" id="submit"
+                class="mt-4 w-full rounded-tcsc bg-tcsc-navy px-4 py-3 font-semibold text-tcsc-white">
+          <span id="button-text">Register &amp; place hold</span></button>
+      </section>
+    </div>
+  </form>
+
+  <div class="completed-view hidden rounded-tcsc bg-tcsc-mint p-6">
+    <h2 class="font-bold text-lg">You're signed up! 🎿</h2>
+    <p id="confirmation-message" class="mt-2"></p>
+  </div>
+  {% endif %}
+</div>
+</body>
+</html>

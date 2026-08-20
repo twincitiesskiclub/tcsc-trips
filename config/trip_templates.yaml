@@ -1,0 +1,172 @@
+# Trip question templates, seeded from the 2025-26 Slack Workflow Builder
+# forms so trip admins start from done. Profile facts (driving, region,
+# dietary, tent) are NOT here - the registration form asks them in a fixed
+# section that writes to TripProfile.
+shared:
+  race_departure: &race_departure
+    key: departure_time
+    label: Approximately what time would you like to leave the Twin Cities?
+    type: multi_choice
+    max_selections: 8
+    required: true
+    help_text: Select every window that could work for you.
+    options:
+      - Wednesday afternoon
+      - Wednesday evening
+      - Thursday morning
+      - Thursday afternoon
+      - Thursday evening
+      - Friday morning
+      - Friday afternoon
+      - Friday evening
+  chore: &chore
+    key: chore_preference
+    label: Everyone needs to pitch in for things to run smoothly. Which task do you prefer to help with?
+    type: choice
+    required: true
+    options: [Cooking, Cleaning, "I'm indifferent"]
+  bed_share: &bed_share
+    key: bed_share
+    label: Who are you willing to share a bed with?
+    type: text
+    required: true
+    help_text: Specific names are helpful.
+  room_share: &room_share
+    key: room_share
+    label: Who are you willing to share a room with?
+    type: choice
+    required: true
+    options:
+      - Only people with my own gender identity
+      - People with any gender identity
+  vibe: &vibe
+    key: vibe
+    label: What is your preferred vibe?
+    type: choice
+    required: true
+    options:
+      - Early bird cabin (expect noise in the morning)
+      - Night owl cabin (expect noise in the evening)
+      - "I'm indifferent"
+
+templates:
+  blank:
+    name: Blank
+    custom_questions: []
+
+  race_weekend:
+    name: Race weekend (generic base)
+    custom_questions:
+      - *race_departure
+      - *chore
+      - *bed_share
+      - *room_share
+
+  gbc:
+    name: Great Bear Chase
+    custom_questions:
+      - <<: *race_departure
+        help_text: If you select a Wednesday time, W dinner, Thu breakfast, and Thu lunch are on your own.
+      - *chore
+      - *bed_share
+      - *room_share
+
+  pre_birkie:
+    name: Pre-Birkie
+    custom_questions:
+      - *race_departure
+      - *chore
+      - *bed_share
+      - *room_share
+      - key: event_choice
+        label: Which event are you participating in?
+        type: choice
+        required: true
+        options:
+          - Pre-Birkie 42K (Saturday)
+          - Pre-Birkie 26K (Saturday)
+          - North End Classic (Sunday)
+          - Techno corner baby!
+
+  sisu:
+    name: Sisu Ski Fest
+    custom_questions:
+      - <<: *race_departure
+        max_selections: 12
+        help_text: If you select a Wednesday time, W dinner, Thu breakfast, and Thu lunch are on your own.
+      - *chore
+      - *bed_share
+      - *room_share
+      - *vibe
+      - key: event_choice
+        label: Which event are you participating in?
+        type: choice
+        required: true
+        options:
+          - Sisu 42K Freestyle
+          - Sisu 21K Freestyle
+          - Sisu 21K Classic
+          - Sisu 10K
+          - Not racing / cheering
+
+  birkie:
+    name: Birkie
+    custom_questions:
+      - *race_departure
+      - *chore
+      - *bed_share
+      - *room_share
+      - key: event_choice
+        label: Which of the following events will you participate in?
+        type: choice
+        required: false
+        options:
+          - Birkie Skate 50K
+          - Birkie Classic 55K
+          - Kortelopet 29K
+          - Prince Haakon 15K
+          - Not racing / cheering
+
+  hayward:
+    name: Hayward training weekend
+    custom_questions:
+      - *race_departure
+      - *chore
+      - *bed_share
+      - *room_share
+      - *vibe
+
+  cuyuna_camping:
+    name: Cuyuna camping
+    custom_questions:
+      - key: departure_time
+        label: Approximately what time would you like to leave the Twin Cities?
+        type: choice
+        required: true
+        options:
+          - Friday morning
+          - Friday around noon
+          - Friday mid-afternoon
+          - Friday evening
+          - Saturday morning
+      - key: tent_share
+        label: Who are you willing to share a tent with (specific names please)?
+        type: text
+        required: true
+      - key: borrow_gear
+        label: Do you need to borrow either or both of the following?
+        type: multi_choice
+        required: false
+        options: [Sleeping bag, Sleeping pad]
+      - key: activities
+        label: Which of the following activities do you hope to partake in during the weekend?
+        type: multi_choice
+        required: true
+        options:
+          - Mountain biking
+          - Roller skiing
+          - Trail running
+          - Swimming
+          - Canoe / Kayak
+          - Sauna
+          - Exploring town

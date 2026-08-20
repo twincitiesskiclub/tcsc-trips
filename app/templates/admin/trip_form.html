@@ -7,6 +7,23 @@
 #price-high-group[style*="display: block"] > label {
     margin-bottom: var(--admin-row-gap);
 }
+#trip-editor-form .trip-builder-section{border-top:1px solid #e4e4e7;padding-top:var(--admin-section-gap);margin-top:var(--admin-section-gap)}
+#trip-editor-form #trip-question-rows{display:flex;flex-direction:column;gap:var(--admin-space-3);margin-bottom:var(--admin-space-3)}
+#trip-editor-form .aef-editor-row{border:1px solid #e4e4e7;border-radius:10px;padding:var(--admin-space-3);background:#fcfefd}
+#trip-editor-form .aef-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--admin-space-3)}
+#trip-editor-form .aef-field{grid-column:span 4;display:flex;flex-direction:column;gap:var(--admin-space-1)}
+#trip-editor-form .aef-field label{font-size:12px;font-weight:650;color:#475569}
+#trip-editor-form .aef-field input:not([type="checkbox"]),#trip-editor-form .aef-field select,#trip-editor-form .aef-field textarea{width:100%;min-height:40px;border:1px solid #d4d4d8;border-radius:7px;padding:var(--admin-space-2) var(--admin-space-3);color:#1c2c44;font:inherit;font-size:13px;background:#fcfefd;box-sizing:border-box}
+#trip-editor-form .aef-field textarea{resize:vertical}
+#trip-editor-form .aef-remove{margin-top:var(--admin-space-3);min-height:36px;border:1px solid #fecaca;border-radius:7px;background:#fcfefd;color:#991b1b;padding:0 var(--admin-space-3);font-size:12px;font-weight:650;cursor:pointer}
+#trip-editor-form .aef-add{min-height:40px;border:1px solid #cbd5e1;border-radius:8px;background:#fcfefd;color:#1c2c44;padding:0 var(--admin-space-3);font-size:13px;font-weight:650;cursor:pointer}
+#trip-editor-form .aef-add:focus-visible,#trip-editor-form .aef-remove:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#trip-editor-form .form-field{display:flex;flex-direction:column;gap:var(--admin-space-2);margin-bottom:var(--admin-space-4)}
+#trip-editor-form .form-field label{font-size:14px;font-weight:600;color:#475569}
+#trip-editor-form .form-field select{width:100%;min-height:44px;border:1px solid #d4d4d8;border-radius:7px;padding:var(--admin-space-2) var(--admin-space-3);background:#fff;color:#1c2c44}
+@media(max-width:780px){
+  #trip-editor-form .aef-field{grid-column:1/-1}
+}
 </style>
 {% endblock %}
 
@@ -16,8 +33,53 @@
     <a href="{{ url_for('admin.get_admin_trips') }}" class="bg-gray-200 text-gray-600 px-4 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Trips</a>
 </div>
 
-<form class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100" method="POST">
+{% if error %}
+<div class="mb-5 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800"
+     role="alert">{{ error }}</div>
+{% endif %}
+
+<form id="trip-editor-form" class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100" method="POST">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    {% if not trip %}
+    <div class="admin-ui-form-row">
+        <div class="admin-ui-field-group">
+            <label for="series_id" class="block text-sm font-medium text-tcsc-gray-800">Trip Series</label>
+            <select id="series_id" name="series_id"
+                    class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
+                <option value="">Create a new series</option>
+                {% for series in series_options %}
+                <option value="{{ series.id }}">{{ series.name }} ({{ series.slug }})</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="admin-ui-field-group">
+            <label for="series_slug" class="block text-sm font-medium text-tcsc-gray-800">New Series Slug</label>
+            <input type="text" id="series_slug" name="series_slug"
+                   pattern="[a-z0-9-]+" title="Only lowercase letters, numbers, and hyphens allowed"
+                   placeholder="Defaults to the trip slug"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
+        </div>
+    </div>
+    <div class="admin-ui-form-row">
+        <div class="admin-ui-field-group">
+            <label for="series_name" class="block text-sm font-medium text-tcsc-gray-800">New Series Name</label>
+            <input type="text" id="series_name" name="series_name"
+                   placeholder="Defaults to the trip name"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
+        </div>
+        <div class="admin-ui-field-group">
+            <label for="slack_channel_name" class="block text-sm font-medium text-tcsc-gray-800">Series Slack Channel</label>
+            <input type="text" id="slack_channel_name" name="slack_channel_name"
+                   placeholder="Optional channel name"
+                   class="w-full px-3 py-2 border border-tcsc-gray-100 rounded-tcsc text-sm focus:outline-none focus:ring-2 focus:ring-tcsc-navy/20 focus:border-tcsc-navy">
+        </div>
+    </div>
+    {% elif trip.series %}
+    <p class="mb-5 text-sm text-tcsc-gray-600">
+        Series: <strong class="text-tcsc-navy">{{ trip.series.name }}</strong>
+        ({{ trip.series.slug }})
+    </p>
+    {% endif %}
     <div class="admin-ui-form-row">
         <div class="admin-ui-field-group">
             <label for="name" class="block text-sm font-medium text-tcsc-gray-800">Trip Name</label>
@@ -122,6 +184,23 @@
             <option value="canceled" {% if trip and trip.status == 'canceled' %}selected{% endif %}>Cancelled</option>
         </select>
     </div>
+
+    <section class="trip-builder-section" aria-labelledby="trip-questions-heading">
+        {% if not trip %}
+        <div class="form-field"><label for="template_key">Start from template</label>
+          <select id="template_key" name="template_key">
+            {% for key, template in templates.items() %}
+            <option value="{{ key }}">{{ template.name }}</option>
+            {% endfor %}
+          </select></div>
+        {% endif %}
+        <h3 id="trip-questions-heading">Trip questions</h3>
+        <div id="trip-question-rows"></div>
+        <button type="button" id="add-trip-question" class="aef-add">Add question</button>
+        <textarea name="custom_questions_json" id="custom_questions_json" hidden>{{ questions_json }}</textarea>
+        <script type="application/json" id="trip-template-data">{{ template_editor_data|tojson }}</script>
+        <script src="{{ url_for('static', filename='admin_trip_questions.js') }}" defer></script>
+    </section>
 
     <div class="flex gap-3 mt-6">
         <button type="submit" class="bg-tcsc-navy text-white px-6 py-3 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Trip</button>

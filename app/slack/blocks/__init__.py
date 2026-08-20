@@ -54,6 +54,14 @@ from app.slack.blocks.dispatch import (
 from app.slack.blocks.practice_drafts import (
     build_readiness_digest_blocks,
 )
+from app.slack.blocks.trips import (
+    build_confirmation_dm_blocks,
+    build_registration_dm_blocks,
+    build_trip_announcement_blocks,
+    confirmation_dm_fallback,
+    registration_dm_fallback,
+    trip_announcement_fallback,
+)
 from app.slack.blocks.text import (
     BLOCKS_MAX,
     CONTEXT_TEXT_MAX,
@@ -105,6 +113,13 @@ __all__ = [
     "build_dispatch_submission_section",
     # practice_drafts
     "build_readiness_digest_blocks",
+    # trips
+    "build_confirmation_dm_blocks",
+    "build_registration_dm_blocks",
+    "build_trip_announcement_blocks",
+    "confirmation_dm_fallback",
+    "registration_dm_fallback",
+    "trip_announcement_fallback",
     # text
     "BLOCKS_MAX",
     "CONTEXT_TEXT_MAX",

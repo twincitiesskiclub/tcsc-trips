@@ -167,6 +167,16 @@
       onclick: function (e) { e.stopPropagation(); }
     }, ['Edit']);
 
+    var editionBtn = el('button', {
+      type: 'button',
+      class: 'tl-edit',
+      'aria-label': 'Create a new edition of ' + esc(trip.name),
+      onclick: function (e) {
+        e.stopPropagation();
+        tripsNewEdition(trip.id, trip.name);
+      }
+    }, ['New edition']);
+
     var deleteBtn = el('button', {
       type: 'button',
       class: 'tl-delete',
@@ -197,7 +207,7 @@
       ]),
       el('div', { class: 'tl-card-aside' }, [
         badge,
-        el('div', { class: 'tl-actions' }, [editBtn, deleteBtn])
+        el('div', { class: 'tl-actions' }, [editBtn, editionBtn, deleteBtn])
       ])
     ]);
 
@@ -372,6 +382,10 @@
     var extV = (trip.capacity_extra === null || trip.capacity_extra === undefined) ? 'not set' : trip.capacity_extra;
     kvRows.push({ k: 'Std seats', v: String(stdV) });
     kvRows.push({ k: 'Extra seats', v: String(extV) });
+    kvRows.push({
+      k: 'Registrations',
+      v: String(trip.registration_count || 0)
+    });
 
     var contentDiv = AdminUI.el('div', { class: 'admin-ui-dw' }, []);
     contentDiv.appendChild(subLine);
@@ -401,12 +415,26 @@
       class: 'admin-ui-dw-btn-primary',
       href: '/admin/trips/' + trip.id + '/edit'
     }, ['Edit']);
+    var rosterA = AdminUI.el('a', {
+      class: 'admin-ui-dw-btn-ghost',
+      href: '/admin/trips/' + trip.id + '/registrations'
+    }, ['Roster (' + String(trip.registration_count || 0) + ')']);
+    var announceB = AdminUI.el('button', {
+      type: 'button',
+      class: 'admin-ui-dw-btn-ghost',
+      onclick: function () { tripsAnnounce(trip.id); }
+    }, ['Post announcement']);
+    var editionB = AdminUI.el('button', {
+      type: 'button',
+      class: 'admin-ui-dw-btn-ghost',
+      onclick: function () { tripsNewEdition(trip.id, trip.name); }
+    }, ['New edition']);
     var deleteB = AdminUI.el('button', {
       type: 'button',
       class: 'admin-ui-dw-btn-danger',
       onclick: function () { tripsDelete(trip.id, trip.name); }
     }, ['Delete']);
-    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, deleteB]);
+    var footer = AdminUI.el('div', { class: 'admin-ui-dw-footer' }, [editA, rosterA, announceB, editionB, deleteB]);
     contentDiv.appendChild(footer);
 
     var drawer = AdminUI.drawer({ title: trip.name || 'Trip', content: contentDiv });
@@ -461,6 +489,38 @@
     }
   }
 
+  function tripsReload() {
+    return AdminUI.fetchJSON('/admin/trips/data').then(function (data) {
+      tripsData = data.trips || [];
+      tripsRender();
+    });
+  }
+
+  /* ---- Slack announcement handler ---- */
+  function tripsAnnounce(id) {
+    var channel = window.prompt('Channel (blank = trip channel):', '');
+    if (channel === null) return;
+    AdminUI.mutate('/admin/trips/' + id + '/announce', { channel: channel })
+      .then(function () {
+        if (window.showToast) showToast('Announcement posted to Slack', 'success');
+      }).catch(function () {
+        // AdminUI.mutate already toasts mutation errors.
+      });
+  }
+
+  /* ---- new-edition handler ---- */
+  function tripsNewEdition(id, name) {
+    AdminUI.mutate('/admin/trips/' + id + '/new-edition').then(function () {
+      if (window.showToast) showToast('New trip edition created', 'success');
+      if (tripsCurrentDrawer && tripsCurrentDrawer.id === id) {
+        tripsCurrentDrawer.close();
+      }
+      return tripsReload();
+    }).catch(function () {
+      // AdminUI.mutate already toasts mutation errors.
+    });
+  }
+
   /* ---- delete handler ---- */
   function tripsDelete(id, name) {
     if (!confirm('Delete trip "' + (name || '') + '"?\n\nThis cannot be undone.')) return;
@@ -503,10 +563,7 @@
   /* ---- init ---- */
   AdminUI.onReady(function () {
     tripsAttachListeners();
-    AdminUI.fetchJSON('/admin/trips/data').then(function (data) {
-      tripsData = data.trips || [];
-      tripsRender();
-    }).catch(function () {
+    tripsReload().catch(function () {
       if (window.showToast) showToast('Failed to load trips. Reload the page to retry.', 'error');
       var root = document.getElementById('trips-rows');
       if (root) {

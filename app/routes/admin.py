@@ -5,16 +5,25 @@ from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, Tag
 from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
+from ..slack.client import get_channel_id_by_name, get_slack_client
+from ..slack.blocks.trips import (
+    build_trip_announcement_blocks, trip_announcement_fallback,
+)
 from ..slack.channel_sync import run_channel_sync, load_channel_config
 from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
 from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email
+from ..trips.models import TripSeries
+from ..trips.questions import (
+    apply_template, get_template, load_trip_templates, validate_questions,
+)
 from .. import late_link
 from datetime import datetime, timedelta
 import pytz
 import csv
+import json
 from io import StringIO
 
 admin = Blueprint('admin', __name__)
@@ -119,14 +128,13 @@ def get_season_form_data(form):
     return form_data
 
 
-def parse_trip_form(form):
+def parse_trip_form(form, include_slug=True):
     """Parse and validate trip form data.
 
     Returns:
         dict: Parsed trip data ready for model creation/update
     """
-    return {
-        'slug': form['slug'],
+    parsed = {
         'name': form['name'],
         'destination': form['destination'],
         'max_participants_standard': int(form['max_participants_standard']),
@@ -140,6 +148,75 @@ def parse_trip_form(form):
         'description': form['description'],
         'status': form['status'],
     }
+    if include_slug:
+        parsed['slug'] = form['slug']
+    return parsed
+
+
+def _parse_trip_questions(raw_value):
+    if raw_value is None:
+        return None
+    import json as _json
+    try:
+        rows = _json.loads(raw_value)
+    except ValueError:
+        raise ValueError("Custom questions must contain valid JSON.")
+    validate_questions(rows)
+    return rows
+
+
+def _trip_editor_template_data(templates):
+    from copy import deepcopy
+    return {
+        key: {"custom_questions": deepcopy(template["custom_questions"])}
+        for key, template in templates.items()
+    }
+
+
+def _render_trip_form(trip=None, error=None, status_code=200):
+    templates = load_trip_templates()
+    submitted_questions = request.form.get('custom_questions_json')
+    questions_json = (
+        submitted_questions
+        if submitted_questions is not None
+        else json.dumps(trip.custom_questions if trip else [])
+    )
+    return (
+        render_template(
+            'admin/trip_form.html',
+            trip=trip,
+            error=error,
+            templates=templates,
+            template_editor_data=_trip_editor_template_data(templates),
+            questions_json=questions_json,
+            series_options=TripSeries.query.order_by(TripSeries.name).all(),
+        ),
+        status_code,
+    )
+
+
+def _series_for_new_trip(form, fields):
+    series_id = (form.get('series_id') or '').strip()
+    if series_id:
+        try:
+            series = db.session.get(TripSeries, int(series_id))
+        except ValueError as exc:
+            raise ValueError('Trip series must be valid.') from exc
+        if series is None:
+            raise ValueError('Trip series not found.')
+        return series
+
+    series_slug = (form.get('series_slug') or fields['slug']).strip()
+    if TripSeries.query.filter_by(slug=series_slug).first():
+        raise ValueError(f"A trip series with slug '{series_slug}' already exists.")
+    return TripSeries(
+        slug=series_slug,
+        name=(form.get('series_name') or fields['name']).strip(),
+        destination=(
+            form.get('series_destination') or fields['destination']
+        ).strip(),
+        slack_channel_name=(form.get('slack_channel_name') or '').strip() or None,
+    )
 
 
 @admin.route('/admin')
@@ -201,6 +278,144 @@ def get_payments_data():
 
     return jsonify({'payments': payments_data, 'can_view_amounts': can_view_amounts})
 
+_TRIP_REG_BASE_COLUMNS = [
+    ("id", "ID"), ("member", "Member"), ("email", "Email"),
+    ("status", "Status"), ("price_tier", "Tier"),
+]
+_TRIP_REG_PROFILE_COLUMNS = [
+    ("can_drive", "Can drive"), ("seat_capacity", "Seats"),
+    ("bike_capacity", "Bikes"), ("hitch_size", "Hitch"),
+    ("region_code", "Region"), ("dietary", "Dietary"),
+    ("has_tent", "Tent"),
+]
+_TRIP_REG_TRAILING_COLUMNS = [
+    ("amount_cents", "Amount"), ("payment_status", "Payment"),
+    ("payment_id", "PaymentId"), ("created_at", "Created at"),
+]
+
+
+def _trip_registration_columns(trip):
+    question_columns = []
+    seen = set()
+    used_labels = {
+        label for _, label in (_TRIP_REG_BASE_COLUMNS
+                               + _TRIP_REG_PROFILE_COLUMNS
+                               + _TRIP_REG_TRAILING_COLUMNS)
+    }
+    for question in trip.custom_questions or []:
+        key = question["key"]
+        if key in seen:
+            continue
+        seen.add(key)
+        label = question.get("label") or key
+        if label in used_labels:
+            label = f"{label} ({key})"
+        used_labels.add(label)
+        question_columns.append((key, label))
+    return (_TRIP_REG_BASE_COLUMNS + _TRIP_REG_PROFILE_COLUMNS
+            + question_columns + _TRIP_REG_TRAILING_COLUMNS)
+
+
+def _display_trip_answer(value):
+    if value is None:
+        return ""
+    if isinstance(value, list):
+        return ", ".join(str(v) for v in value)
+    return value
+
+
+def _trip_registration_rows(trip):
+    columns = _trip_registration_columns(trip)
+    column_keys = [key for key, _ in columns]
+    rows = []
+    registrations = sorted(trip.registrations,
+                           key=lambda r: r.created_at, reverse=True)
+    for registration in registrations:
+        profile = registration.user.trip_profile
+        payment = (Payment.get_by_payment_intent(registration.payment_intent_id)
+                   if registration.payment_intent_id else None)
+        row = {
+            "id": registration.id,
+            "member": registration.user.full_name,
+            "email": registration.user.email,
+            "status": registration.status,
+            "price_tier": registration.price_tier,
+            "amount_cents": registration.amount_cents,
+            "payment_status": payment.status if payment else "",
+            "payment_id": payment.id if payment else None,
+            "created_at": registration.created_at.isoformat(),
+        }
+        if profile:
+            dietary = list(profile.dietary_restrictions or [])
+            if profile.dietary_other:
+                dietary.append(profile.dietary_other)
+            row.update({
+                "can_drive": {True: "yes", False: "no"}.get(profile.can_drive, ""),
+                "seat_capacity": profile.seat_capacity,
+                "bike_capacity": profile.bike_capacity,
+                "hitch_size": profile.hitch_size or "",
+                "region_code": profile.region_code or "",
+                "dietary": ", ".join(dietary),
+                "has_tent": {True: "yes", False: "no"}.get(profile.has_tent, ""),
+            })
+        for key, value in (registration.answers or {}).items():
+            row[key] = _display_trip_answer(value)
+        rows.append({key: row.get(key, "") for key in column_keys})
+    return columns, rows
+
+
+@admin.route('/admin/trips/<int:trip_id>/registrations')
+@admin_required
+def trip_registrations_page(trip_id):
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        from flask import abort
+        abort(404)
+    return render_template('admin/trip_registrations.html', trip=trip)
+
+
+@admin.route('/admin/trips/<int:trip_id>/registrations/data')
+@admin_required
+def trip_registrations_data(trip_id):
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        return {'error': 'Trip not found'}, 404
+    columns, rows = _trip_registration_rows(trip)
+    return {'columns': [{'key': k, 'label': l} for k, l in columns],
+            'registrations': rows}
+
+
+@admin.route('/admin/trips/<int:trip_id>/registrations/export.csv')
+@admin_required
+def export_trip_registrations(trip_id):
+    import csv as _csv
+    from io import StringIO
+    from flask import Response
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        from flask import abort
+        abort(404)
+    columns, rows = _trip_registration_rows(trip)
+    buffer = StringIO()
+    writer = _csv.DictWriter(
+        buffer, fieldnames=[label for _, label in columns])
+    writer.writeheader()
+    key_to_label = dict(columns)
+    for row in rows:
+        writer.writerow({key_to_label[k]: _sanitize_trip_csv(v)
+                         for k, v in row.items()})
+    return Response(
+        buffer.getvalue(), mimetype='text/csv',
+        headers={'Content-Disposition':
+                 f'attachment; filename="registrations-{trip.slug}.csv"'})
+
+
+def _sanitize_trip_csv(value):
+    if isinstance(value, str) and value.startswith(('=', '+', '-', '@')):
+        return "'" + value
+    return value
+
+
 @admin.route('/admin/trips')
 @admin_required
 def get_admin_trips():
@@ -212,16 +427,33 @@ def get_admin_trips():
 def new_trip():
     if request.method == 'POST':
         try:
-            trip = Trip(**parse_trip_form(request.form))
+            fields = parse_trip_form(request.form)
+            trip = Trip(**fields)
+            template_key = request.form.get('template_key', 'blank')
+            apply_template(trip, template_key)
+            try:
+                parsed = _parse_trip_questions(
+                    request.form.get('custom_questions_json')
+                )
+                trip.series = _series_for_new_trip(request.form, fields)
+            except ValueError as exc:
+                db.session.rollback()
+                return _render_trip_form(
+                    error=str(exc),
+                    status_code=400,
+                )
+            if parsed is not None:
+                trip.custom_questions = parsed
             db.session.add(trip)
             db.session.commit()
             flash_success('Trip created successfully!')
             return redirect(url_for('admin.get_admin_page'))
         except Exception as e:
+            db.session.rollback()
             flash_error(f'Error creating trip: {str(e)}')
             return redirect(url_for('admin.new_trip'))
 
-    return render_template('admin/trip_form.html', trip=None)
+    return _render_trip_form()
 
 @admin.route('/admin/trips/<int:trip_id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -230,19 +462,30 @@ def edit_trip(trip_id):
 
     if request.method == 'POST':
         try:
-            parsed_data = parse_trip_form(request.form)
-            # Skip slug on edit - it's set only during creation
-            parsed_data.pop('slug', None)
+            parsed_data = parse_trip_form(request.form, include_slug=False)
             for key, value in parsed_data.items():
                 setattr(trip, key, value)
+            submitted_questions = request.form.get('custom_questions_json')
+            try:
+                parsed = _parse_trip_questions(submitted_questions)
+            except ValueError as exc:
+                db.session.rollback()
+                return _render_trip_form(
+                    trip=trip,
+                    error=str(exc),
+                    status_code=400,
+                )
+            if parsed is not None:
+                trip.custom_questions = parsed
             db.session.commit()
             flash_success('Trip updated successfully!')
             return redirect(url_for('admin.get_admin_trips'))
         except Exception as e:
+            db.session.rollback()
             flash_error(f'Error updating trip: {str(e)}')
             return redirect(url_for('admin.edit_trip', trip_id=trip_id))
 
-    return render_template('admin/trip_form.html', trip=trip)
+    return _render_trip_form(trip=trip)
 
 @admin.route('/admin/trips/data')
 @admin_required
@@ -263,7 +506,13 @@ def trips_data():
             'capacity_extra': t.max_participants_extra,
             'price_low': t.price_low,
             'price_high': t.price_high,
-            'status': t.status
+            'status': t.status,
+            'series_slug': t.series.slug if t.series else None,
+            'series_id': t.series_id,
+            'registration_count': len([
+                r for r in t.registrations
+                if r.status in ('pending', 'confirmed')
+            ]),
         } for t in trips]
     })
 
@@ -280,6 +529,74 @@ def delete_trip_json(trip_id):
     except Exception as e:
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@admin.route('/admin/trips/<int:trip_id>/new-edition', methods=['POST'])
+@admin_required
+def new_trip_edition(trip_id):
+    from copy import deepcopy
+    from datetime import timedelta
+    trip = db.session.get(Trip, trip_id)
+    if trip is None or trip.series_id is None:
+        return {'success': False, 'error': 'Trip not found'}, 404
+    new_start = trip.start_date + timedelta(days=364)
+    slug = f"{trip.series.slug}-{new_start.year}"
+    suffix = 2
+    while Trip.query.filter_by(slug=slug).first():
+        slug = f"{trip.series.slug}-{new_start.year}-{suffix}"
+        suffix += 1
+    clone = Trip(
+        slug=slug, name=trip.name, destination=trip.destination,
+        series_id=trip.series_id,
+        max_participants_standard=trip.max_participants_standard,
+        max_participants_extra=trip.max_participants_extra,
+        start_date=new_start,
+        end_date=trip.end_date + timedelta(days=364),
+        signup_start=trip.signup_start + timedelta(days=364),
+        signup_end=trip.signup_end + timedelta(days=364),
+        price_low=trip.price_low, price_high=trip.price_high,
+        description=trip.description, status='draft',
+        custom_questions=deepcopy(trip.custom_questions or []),
+    )
+    db.session.add(clone)
+    db.session.commit()
+    return {'success': True, 'id': clone.id}
+
+
+@admin.route('/admin/trips/<int:trip_id>/announce', methods=['POST'])
+@admin_required
+def announce_trip(trip_id):
+    from app.slack.trips import base_url
+    from app.trips.service import _active_count
+    trip = db.session.get(Trip, trip_id)
+    if trip is None:
+        return {'success': False, 'error': 'Trip not found'}, 404
+    data = request.get_json(silent=True) or {}
+    channel_name = (data.get('channel') or '').strip() or (
+        trip.series.slack_channel_name if trip.series else None)
+    if not channel_name:
+        return {'success': False,
+                'error': 'No channel configured for this trip.'}, 400
+    capacity = (trip.max_participants_standard or 0) + (
+        trip.max_participants_extra or 0)
+    spots_left = max(0, capacity - _active_count(trip)) if capacity else None
+    try:
+        channel_id = get_channel_id_by_name(channel_name)
+        if not channel_id:
+            return {'success': False,
+                    'error': f'Channel #{channel_name} not found.'}, 400
+        get_slack_client().chat_postMessage(
+            channel=channel_id,
+            blocks=build_trip_announcement_blocks(
+                trip, trip.series, spots_left=spots_left,
+                base_url=base_url()),
+            text=trip_announcement_fallback(trip),
+            unfurl_links=False, unfurl_media=False,
+        )
+    except Exception as exc:
+        return {'success': False, 'error': str(exc)}, 502
+    return {'success': True}
+
 
 @admin.route('/admin/seasons')
 @admin_required

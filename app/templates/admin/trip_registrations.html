@@ -1,0 +1,86 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}{{ trip.name }} Roster{% endblock %}
+
+{% block extra_css %}
+<style>
+#trip-reg-root .atr-toolbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px}
+#trip-reg-root .atr-filter{min-height:44px;border:1px solid #d4d4d8;border-radius:8px;padding:0 12px;font-size:14px;background:#fff}
+#trip-reg-root #trip-reg-filter{flex:1;min-width:240px}
+#trip-reg-root .atr-export{display:inline-flex;min-height:44px;align-items:center;border-radius:8px;background:#1c2c44;padding:0 16px;color:#fff;font-size:14px;font-weight:650;text-decoration:none}
+#trip-reg-root .atr-bulk{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px;padding:10px 12px;border:1px solid #e4e4e7;border-radius:9px;background:#f8fafc}
+#trip-reg-root .atr-bulk-count{margin-right:auto;color:#64748b;font-size:13px;font-weight:600}
+#trip-reg-root .atr-button{min-height:36px;padding:0 11px;border:1px solid #cbd5e1;border-radius:7px;background:#fff;color:#1c2c44;font-size:12px;font-weight:650;cursor:pointer}
+#trip-reg-root .atr-button-danger{border-color:#fecaca;color:#991b1b}
+#trip-reg-root .atr-button:disabled{cursor:not-allowed;opacity:.5}
+#trip-reg-root .atr-table-wrap{overflow-x:auto;border:1px solid #e4e4e7;border-radius:10px;background:#fcfefd}
+#trip-reg-root table{width:100%;border-collapse:collapse;font-size:13px;white-space:nowrap}
+#trip-reg-root th,#trip-reg-root td{padding:10px 12px;border-bottom:1px solid #eceef1;text-align:left;vertical-align:top}
+#trip-reg-root th{position:sticky;top:0;background:#f4f5f7;color:#475569;font-size:12px;font-weight:700}
+#trip-reg-root tbody tr:hover{background:#f8fafc}
+#trip-reg-root tbody tr:last-child td{border-bottom:0}
+#trip-reg-root .atr-sort{border:0;background:transparent;color:inherit;font:inherit;font-weight:inherit;cursor:pointer;padding:4px 0}
+#trip-reg-root .atr-actions{display:flex;gap:6px}
+#trip-reg-root .atr-empty{padding:36px 16px;text-align:center;color:#64748b}
+#trip-reg-root :focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+@media(max-width:640px){
+  #trip-reg-root .atr-button{min-height:44px}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="trip-reg-root"
+     data-trip-id="{{ trip.id }}"
+     data-page="trip-registrations">
+  <header class="mb-6 flex flex-wrap items-start justify-between gap-4">
+    <div>
+      <a href="{{ url_for('admin.get_admin_trips') }}"
+         class="text-sm font-semibold text-zinc-500 hover:text-tcsc-navy">Trips</a>
+      <h1 class="mb-0 mt-2 text-2xl font-semibold text-tcsc-navy">{{ trip.name }}</h1>
+      <p class="mb-0 mt-1 text-sm text-zinc-500">Registration roster and payments</p>
+    </div>
+    <a class="atr-export"
+       href="{{ url_for('admin.export_trip_registrations', trip_id=trip.id) }}">Export CSV</a>
+  </header>
+
+  <div class="atr-toolbar" aria-label="Filter registrations">
+    <input id="trip-reg-filter" class="atr-filter" type="search"
+           placeholder="Search roster" aria-label="Search registrations">
+    <select id="trip-reg-status" class="atr-filter"
+            aria-label="Filter registrations by status">
+      <option value="">All statuses</option>
+      <option value="pending_payment">Pending payment</option>
+      <option value="pending">Pending</option>
+      <option value="confirmed">Confirmed</option>
+      <option value="cancelled">Cancelled</option>
+    </select>
+    <span id="trip-reg-count" class="text-sm font-medium text-zinc-500"
+          aria-live="polite"></span>
+  </div>
+
+  <div class="atr-bulk" aria-label="Bulk payment actions">
+    <span id="trip-reg-selected-count" class="atr-bulk-count">0 selected</span>
+    <button id="trip-reg-bulk-capture" class="atr-button" type="button" disabled>
+      Capture selected
+    </button>
+    <button id="trip-reg-bulk-refund" class="atr-button atr-button-danger"
+            type="button" disabled>
+      Release selected
+    </button>
+  </div>
+
+  <div class="atr-table-wrap" tabindex="0" aria-label="Trip registrations">
+    <table id="trip-reg-table">
+      <thead></thead>
+      <tbody>
+        <tr><td class="atr-empty">Loading registrations…</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_trip_registrations.js') }}?v={{ range(1000000) | random }}"></script>
+{% endblock %}

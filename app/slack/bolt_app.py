@@ -95,6 +95,32 @@ def _register_practice_reaction_action_listeners(app, *, worker=None) -> None:
             lazy=[lazy_worker],
         )
 
+
+def build_trip_unfurls(links):
+    """Map shared tcsc.ski trip URLs to unfurl cards. Pure; safe without
+    Slack credentials. Called from the link_shared handler."""
+    from urllib.parse import urlparse
+    from app.slack.blocks.trips import build_trip_announcement_blocks
+    from app.slack.trips import base_url
+    from app.trips.models import TripSeries
+    unfurls = {}
+    for link in links or []:
+        url = link.get("url", "")
+        path = urlparse(url).path.strip("/")
+        slug = path[:-len("/register")] if path.endswith("/register") else path
+        slug = slug.strip("/")
+        if not slug or "/" in slug:
+            continue
+        series = TripSeries.query.filter_by(slug=slug).first()
+        if series is None:
+            continue
+        trip = series.current_edition()
+        if trip is None or trip.status != "active":
+            continue
+        unfurls[url] = {"blocks": build_trip_announcement_blocks(
+            trip, series, base_url=base_url())}
+    return unfurls
+
 # Only initialize Bolt if we have the required token
 # This allows the app to start without Slack credentials (e.g., for migrations)
 if _bot_token:
@@ -1177,6 +1203,18 @@ if _bot_token:
                 publish_app_home(user_id)
         except Exception as e:
             logger.error(f"Error publishing app home: {e}")
+
+    @bolt_app.event("link_shared")
+    def handle_link_shared(event, client, logger):
+        with get_app_context():
+            unfurls = build_trip_unfurls(event.get("links", []))
+            if not unfurls:
+                return
+            try:
+                client.chat_unfurl(channel=event["channel"],
+                                   ts=event["message_ts"], unfurls=unfurls)
+            except Exception as exc:
+                logger.warning("trip unfurl failed: %s", exc)
 
     @bolt_app.event("reaction_added")
     def handle_reaction_added(event, logger):

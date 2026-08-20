@@ -9,6 +9,7 @@ from flask import Response
 
 from app import create_app
 from app.models import db, Season, Trip
+from app.trips.models import TripSeries
 
 
 @pytest.fixture
@@ -123,13 +124,23 @@ def active_trip(app, db_session):
             price_high=19500,
             status="active",
         )
+        series = TripSeries(
+            slug=trip.slug,
+            name="Security Test Trip",
+            destination="Test Trails",
+        )
+        db.session.add(series)
+        db.session.flush()
+        trip.series_id = series.id
         db.session.add(trip)
         db.session.commit()
         trip_id = trip.id
         trip_slug = trip.slug
+        series_id = series.id
     yield {"id": trip_id, "slug": trip_slug}
     with app.app_context():
         Trip.query.filter_by(id=trip_id).delete()
+        TripSeries.query.filter_by(id=series_id).delete()
         db.session.commit()
 
 

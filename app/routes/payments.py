@@ -10,6 +10,7 @@ from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, P
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
 from ..notifications.slack import send_payment_notification
+from app.slack import trips as trip_slack
 from ..security import csrf
 from .. import late_link
 
@@ -96,6 +97,39 @@ def _cancel_event_registration(payment_intent):
         payment.status = 'canceled'
 
     db.session.commit()
+
+
+def _trip_registration_from_metadata(metadata):
+    from app.trips.models import TripRegistration
+    registration_id = metadata.get('registration_id')
+    payment_type = metadata.get('payment_type')
+    if payment_type != PaymentType.TRIP or not registration_id:
+        return None
+    try:
+        return db.session.get(TripRegistration, int(registration_id))
+    except (TypeError, ValueError):
+        return None
+
+
+def _transition_trip_registration(payment_intent, new_status):
+    """Legacy trip intents without registration_id are silently skipped; repeats of the same status are no-ops (no re-DM)."""
+    from app.trips.models import TripRegistrationStatus
+    metadata = _stripe_object_value(payment_intent, 'metadata', {}) or {}
+    registration = _trip_registration_from_metadata(metadata)
+    if registration is None:
+        return
+    if registration.status == new_status:
+        return  # idempotent webhook redelivery - no re-DM
+    if (new_status == TripRegistrationStatus.CANCELLED
+            and registration.status == TripRegistrationStatus.CONFIRMED):
+        return
+    registration.status = new_status
+    db.session.commit()
+    if new_status == TripRegistrationStatus.PENDING:
+        trip_slack.send_registration_dm(registration)
+    elif new_status == TripRegistrationStatus.CONFIRMED:
+        trip_slack.send_confirmation_dm(registration)
+        trip_slack.invite_to_trip_channel(registration)
 
 
 def build_statement_descriptor(payment_type, identifier):
@@ -302,6 +336,11 @@ def webhook_received():
                 db.session.add(payment)
                 db.session.commit()
 
+            if payment_type == PaymentType.TRIP:
+                from app.trips.models import TripRegistrationStatus
+                _transition_trip_registration(
+                    payment_intent, TripRegistrationStatus.PENDING)
+
         elif event_type == StripeEvent.PAYMENT_SUCCEEDED:
             # Payment captured (returning members auto-capture, or manual capture completed)
             payment_intent = data_object
@@ -379,13 +418,19 @@ def webhook_received():
                 payment_intent_id=payment.payment_intent_id
             )
 
+            if payment_type == PaymentType.TRIP:
+                from app.trips.models import TripRegistrationStatus
+                _transition_trip_registration(
+                    payment_intent, TripRegistrationStatus.CONFIRMED)
+
         elif event_type == StripeEvent.PAYMENT_CANCELED:
             metadata = _stripe_object_value(data_object, 'metadata', {}) or {}
             if metadata.get('payment_type') == PaymentType.EVENT:
                 _cancel_event_registration(data_object)
                 return json_success()
 
-            payment = Payment.get_by_payment_intent(data_object.id)
+            payment_intent_id = _stripe_object_value(data_object, 'id')
+            payment = Payment.get_by_payment_intent(payment_intent_id)
             if payment:
                 payment.status = 'canceled'
                 if payment.payment_type == PaymentType.SEASON and payment.season_id:
@@ -396,6 +441,11 @@ def webhook_received():
                             user_season.status = UserSeasonStatus.DROPPED_VOLUNTARY
                             user.sync_status()
                 db.session.commit()
+
+            if metadata.get('payment_type') == PaymentType.TRIP:
+                from app.trips.models import TripRegistrationStatus
+                _transition_trip_registration(
+                    data_object, TripRegistrationStatus.CANCELLED)
 
         return json_success()
 
