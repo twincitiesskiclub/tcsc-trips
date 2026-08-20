@@ -140,3 +140,16 @@ def test_invite_without_channel_configured_returns_false(db_session,
     linked_registration.trip.series.slack_channel_name = None
     db.session.commit()
     assert slack_trips.invite_to_trip_channel(linked_registration) is False
+
+
+def test_unfurl_payload_for_trip_link(linked_registration):
+    from app.slack.bolt_app import build_trip_unfurls
+    trip = linked_registration.trip
+    unfurls = build_trip_unfurls([
+        {"url": "https://tcsc.ski/test-trip-slack/register"},
+        {"url": "https://tcsc.ski/not-a-trip"},
+    ])
+    assert "https://tcsc.ski/test-trip-slack/register" in unfurls
+    assert "https://tcsc.ski/not-a-trip" not in unfurls
+    card = unfurls["https://tcsc.ski/test-trip-slack/register"]
+    assert card["blocks"]
