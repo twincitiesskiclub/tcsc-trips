@@ -24,6 +24,25 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+
+def _build_bolt_base_logger():
+    """Base logger handed to Bolt so listener logs actually emit.
+
+    Gunicorn configures no root handlers and leaves root at WARNING; Bolt
+    copies the base logger's level and handlers onto every listener logger
+    it creates, so without this the INFO event instrumentation never
+    reaches stdout in production.
+    """
+    base = logging.getLogger("tcsc.slack.bolt")
+    base.setLevel(logging.INFO)
+    if not base.handlers:
+        handler = logging.StreamHandler()
+        handler.setFormatter(
+            logging.Formatter("%(asctime)s %(levelname)s %(name)s %(message)s")
+        )
+        base.addHandler(handler)
+    return base
+
 # Initialize Bolt app with signing secret for request verification
 _bot_token = os.environ.get("SLACK_BOT_TOKEN")
 _app_token = os.environ.get("SLACK_APP_TOKEN")  # For Socket Mode (xapp-...)
@@ -138,7 +157,8 @@ if _bot_token:
         signing_secret=_signing_secret,
         # Process events synchronously before returning response
         # This ensures we're still in Flask's request context
-        process_before_response=True
+        process_before_response=True,
+        logger=_build_bolt_base_logger(),
     )
     handler = SlackRequestHandler(bolt_app)
     logger.info("Slack Bolt app initialized (HTTP mode)")
