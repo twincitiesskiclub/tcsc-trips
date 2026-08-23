@@ -10,6 +10,7 @@ from app.verify.providers import ProviderError
 
 EMAIL = "verify-svc@test.com"
 PHONE = "+16125550142"
+EMAIL_CASE_VARIANT = "svc-case@test.com"  # Used in normalization test
 
 
 @pytest.fixture
@@ -28,8 +29,9 @@ def ctx(app):
         yield
         db.session.rollback()
         VerificationCode.query.filter_by(email=EMAIL).delete()
+        VerificationCode.query.filter_by(email=EMAIL_CASE_VARIANT).delete()
         VerificationAttempt.query.filter(
-            VerificationAttempt.target.in_([EMAIL, PHONE])).delete(
+            VerificationAttempt.target.in_([EMAIL, PHONE, EMAIL_CASE_VARIANT])).delete(
             synchronize_session=False)
         db.session.commit()
 
@@ -92,3 +94,27 @@ def test_identity_ttl(app):
         session["verified_identity"]["ts"] = (
             datetime.utcnow() - timedelta(hours=3)).isoformat()
         assert service.get_verified_identity() is None
+
+
+@patch("app.verify.service.providers.resend_send_code")
+def test_email_normalization_closes_rate_limit_bypass(mock_send, ctx):
+    """Verify email normalization prevents rate-limit bypass via case/whitespace variants."""
+    # Start with mixed-case email with trailing space
+    ok1, _ = service.start_email_verification("Svc-Case@Test.COM ", "Rob", ip="1.2.3.4")
+    assert ok1
+
+    # Second start with lowercased form should count against same rate limit
+    ok2, _ = service.start_email_verification("svc-case@test.com", "Rob", ip="1.2.3.4")
+    assert ok2
+
+    # Third start with uppercase form should also count against same rate limit
+    ok3, _ = service.start_email_verification("SVC-CASE@TEST.COM", "Rob", ip="1.2.3.4")
+    assert ok3
+    code_from_last = mock_send.call_args.args[2]
+
+    # Fourth start should hit rate limit (max 3 per 10 min)
+    ok4, msg = service.start_email_verification(" svc-case@test.com ", "Rob", ip="1.2.3.4")
+    assert not ok4 and "wait" in msg.lower()
+
+    # Verify code from last variant can be checked with normalized email
+    assert service.check_email_verification("svc-case@test.com", code_from_last) is True

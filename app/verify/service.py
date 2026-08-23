@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from flask import current_app, session
 
 from app.models import db, VerificationCode, VerificationAttempt
+from app.utils import normalize_email
 from app.verify import providers
 from app.verify.providers import ProviderError
 
@@ -76,6 +77,7 @@ def check_phone_verification(phone_e164, code):
 
 
 def start_email_verification(email, first_name, ip):
+    email = normalize_email(email)
     if not rate_limit_ok(email, ip):
         return False, RATE_LIMIT_MSG
     _record_attempt(email, 'email', ip)
@@ -97,6 +99,7 @@ def start_email_verification(email, first_name, ip):
 
 
 def check_email_verification(email, code):
+    email = normalize_email(email)
     row = (VerificationCode.query
            .filter_by(email=email, consumed_at=None)
            .order_by(VerificationCode.created_at.desc())
