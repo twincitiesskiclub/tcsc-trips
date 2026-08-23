@@ -81,7 +81,7 @@ def test_target_rate_limit(mock_send, ctx):
 def test_phone_start_degrades_with_friendly_copy(mock_start, ctx):
     ok, msg = service.start_phone_verification(PHONE, ip="1.2.3.4")
     assert not ok
-    assert "email" in msg.lower()  # points at the email path
+    assert "can't receive texts" in msg.lower()  # points at the reachable escape hatch
 
 
 def test_identity_ttl(app):

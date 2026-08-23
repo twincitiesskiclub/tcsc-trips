@@ -397,6 +397,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const progressBar = document.querySelector('.progress-bar');
     let verifyPhone = null;
     let phoneVerified = false; // a phone verification succeeded this session
+    let reverifying = false;   // "Not [name]?" re-verification in progress
     let resendTimer = null;
 
     const byId = id => document.getElementById(id);
@@ -482,6 +483,28 @@ document.addEventListener('DOMContentLoaded', () => {
       return resp.json();
     }
 
+    function resetWizardFields() {
+      // Drop answers derived from the wrong identity: saved state plus every
+      // step 1-3 field. Payment fields (excluded from persistence) and
+      // readonly fields (invite email) are left alone.
+      try {
+        sessionStorage.removeItem(STORAGE_KEY);
+      } catch (e) {
+        // silently fail
+      }
+      registrationForm.querySelectorAll('input, select').forEach(field => {
+        if (!field.name || UNSAVED_FIELDS.has(field.name)) return;
+        if (field.type === 'hidden' || field.readOnly) return;
+        if (field.type === 'radio' || field.type === 'checkbox') {
+          field.checked = false;
+        } else {
+          field.value = '';
+        }
+      });
+      show('emergency-edit');
+      hide('emergency-confirm');
+    }
+
     function enterWizard(opts) {
       const continueUnverified = !!(opts && opts.continueUnverified);
       const cuInput = byId('continue-unverified');
@@ -489,11 +512,20 @@ document.addEventListener('DOMContentLoaded', () => {
       verifySection.hidden = true;
       registrationForm.hidden = false;
       if (progressBar) progressBar.hidden = false;
-      if (opts && opts.firstName) {
-        const welcome = byId('verify-welcome');
-        if (welcome) {
-          welcome.textContent = `Welcome back, ${opts.firstName}! We filled in what we have on file. Give it a once-over and finish up.`;
+      const welcome = byId('verify-welcome');
+      if (welcome) {
+        if (opts && opts.firstName) {
+          const welcomeText = byId('verify-welcome-text');
+          if (welcomeText) {
+            welcomeText.textContent = `Welcome back, ${opts.firstName}! We filled in what we have on file. Give it a once-over and finish up.`;
+          }
+          const notMeLink = byId('verify-not-me-link');
+          if (notMeLink) {
+            notMeLink.textContent = `Not ${opts.firstName}? Verify with your email instead.`;
+          }
           welcome.hidden = false;
+        } else {
+          welcome.hidden = true;
         }
       }
       if (continueUnverified) show('unverified-notice'); else hide('unverified-notice');
@@ -635,6 +667,11 @@ document.addEventListener('DOMContentLoaded', () => {
           showVerifyError(body.error || 'Something went wrong. Please try again.');
           return;
         }
+        if (reverifying) {
+          // The previous identity's prefill no longer applies.
+          resetWizardFields();
+          reverifying = false;
+        }
         await verifiedPrefillThenEnter(null);
       } catch (e) {
         showVerifyError('Something went wrong checking the code. Please try again.');
@@ -673,8 +710,37 @@ document.addEventListener('DOMContentLoaded', () => {
     });
     byId('verify-email-dead-link').addEventListener('click', e => {
       e.preventDefault();
+      if (reverifying) {
+        // They said "Not [name]", so the old identity's answers must not
+        // ride along into the flagged path.
+        resetWizardFields();
+        reverifying = false;
+      }
       setPaymentStatusLine('new');
       enterWizard({ continueUnverified: true });
+    });
+
+    // "Not [name]?" on the welcome banner: back to step 0, email entry,
+    // to re-point the session at the right account. The backend re-links
+    // user_id on a successful email check for a phone-verified session.
+    byId('verify-not-me-link').addEventListener('click', e => {
+      e.preventDefault();
+      reverifying = true;
+      showVerifyError('');
+      registrationForm.hidden = true;
+      if (progressBar) progressBar.hidden = true;
+      hide('verify-welcome');
+      hide('unverified-notice');
+      hide('verify-expired-notice');
+      hide('verify-phone-entry');
+      hide('verify-code-entry');
+      hide('verify-email-code-row');
+      byId('verify-email-msg').textContent =
+        "No problem. Enter the email you've used with the club and we'll match you to the right account.";
+      show('verify-email-entry');
+      verifySection.hidden = false;
+      byId('verify-email').focus();
+      window.scrollTo({ top: 0 });
     });
 
     // Enter advances the visible verify step (these inputs sit outside the
@@ -707,26 +773,31 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // Resume after a refresh: a still-verified session skips straight back
-    // into the wizard (keeping its recorded continue_unverified choice); an
-    // unverified session that had already entered re-enters flagged.
+    // into the wizard (keeping its recorded continue_unverified choice).
+    // An expired or missing identity always lands back on step 0, never a
+    // silent downgrade to the flagged path; only an explicit escape-hatch
+    // click enters flagged-unverified. Saved answers restore either way.
     (async () => {
+      let entry = null;
       try {
         const data = await fetchPrefill();
+        entry = storedWizardEntry();
         if (data.verified) {
           phoneVerified = true;
           applyPrefill(data);
           enterWizard({
-            continueUnverified: storedWizardEntry() === '1',
+            continueUnverified: entry === '1',
             firstName: data.user ? data.user.firstName : null
           });
           return;
         }
       } catch (e) {
-        // Fall through to the sessionStorage check.
+        entry = storedWizardEntry();
       }
-      if (storedWizardEntry() !== null) {
-        setPaymentStatusLine('new');
-        enterWizard({ continueUnverified: true });
+      if (entry === '0') {
+        // A verified session had entered the wizard, then the identity
+        // expired (2h TTL). Explain why step 0 is back.
+        show('verify-expired-notice');
       }
     })();
   }

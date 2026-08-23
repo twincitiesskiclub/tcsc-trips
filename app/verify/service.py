@@ -25,7 +25,8 @@ RATE_LIMIT_MSG = ("We've sent several codes already. The latest one is the "
                   "valid one. Please wait a few minutes before requesting "
                   "another.")
 SMS_DOWN_MSG = ("Text messages aren't going through right now. This is on "
-                "us, not you. Continue with email verification instead.")
+                "us, not you. Use the \"Can't receive texts?\" link below "
+                "to continue.")
 EMAIL_DOWN_MSG = ("We couldn't send the email just now. Please try again in "
                   "a minute, or continue without verification.")
 

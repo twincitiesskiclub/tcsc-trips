@@ -14,7 +14,7 @@ from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
-from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email
+from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email, normalize_phone_e164
 from ..trips.models import TripSeries
 from ..trips.questions import (
     apply_template, get_template, load_trip_templates, validate_questions,
@@ -1050,7 +1050,16 @@ def edit_user(user_id):
             update_if_present('last_name', request.form.get('last_name'))
             update_if_present('email', request.form.get('email'))
             update_if_present('pronouns', request.form.get('pronouns'))
-            update_if_present('phone', request.form.get('phone'))
+            new_phone = request.form.get('phone')
+            if new_phone is not None and new_phone != '':
+                user.phone = new_phone
+                # Keep the match column in step with the display value. A
+                # changed number is unproven until re-verified; junk simply
+                # becomes phone_e164=None (the admin path stays permissive).
+                new_e164 = normalize_phone_e164(new_phone)
+                if new_e164 != user.phone_e164:
+                    user.phone_verified_at = None
+                user.phone_e164 = new_e164
             dob = request.form.get('date_of_birth')
             if dob:
                 try:

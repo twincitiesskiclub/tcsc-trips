@@ -55,6 +55,10 @@
           <h2 class="form-section__title">Let's find you</h2>
           <p class="form-section__subtitle">We'll text a code to confirm your number.</p>
 
+          <div id="verify-expired-notice" class="notice notice--warn" hidden>
+            Your verification expired. Verify your number again and your answers will be right where you left them.
+          </div>
+
           <div id="verify-error" class="notice notice--error" hidden></div>
 
           <div id="verify-phone-entry">
@@ -112,7 +116,10 @@
           </div>
         </section>
 
-        <div id="verify-welcome" class="notice notice--info" hidden></div>
+        <div id="verify-welcome" class="notice notice--info" hidden>
+          <span id="verify-welcome-text"></span>
+          <a href="#" id="verify-not-me-link"></a>
+        </div>
         <div id="unverified-notice" class="notice notice--warn" hidden>
           You're continuing without a verified match, so you'll be registered as a new
           member and entered in the new-member lottery. An organizer will review your
