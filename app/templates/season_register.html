@@ -15,7 +15,7 @@
         <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
       </header>
 
-      <nav class="progress-bar">
+      <nav class="progress-bar" hidden>
         <div class="progress-bar__steps">
           <button class="progress-step progress-step--active" data-section="section-about">
             <span class="progress-step__number">1</span>
@@ -50,8 +50,78 @@
           {% endif %}
         {% endwith %}
 
-        <form id="registration-form" method="POST" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}">
+        <!-- Step 0: find the member by verified phone (email fallback) -->
+        <section id="section-verify" class="form-section">
+          <h2 class="form-section__title">Let's find you</h2>
+          <p class="form-section__subtitle">We'll text a code to confirm your number.</p>
+
+          <div id="verify-error" class="notice notice--error" hidden></div>
+
+          <div id="verify-phone-entry">
+            <div class="form-field">
+              <label class="form-field__label" for="verify-phone">Cell Number</label>
+              <input class="form-input" type="tel" id="verify-phone" inputmode="tel" autocomplete="tel" placeholder="Your cell number">
+            </div>
+            <button type="button" class="btn btn--full" id="verify-send-btn">Text me a code</button>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="verify-skip-link">New to TCSC? Start here.</a>
+              (Skied with us before? Verify above. Registering as new puts you in the new-member lottery.)
+            </p>
+            <p class="form-field__hint" style="margin-top: 8px;">
+              <a href="#" id="verify-cant-text-link">Can't receive texts?</a>
+            </p>
+          </div>
+
+          <div id="verify-code-entry" hidden>
+            <p class="form-field__hint" style="margin-bottom: 12px;">
+              We texted <span id="verify-phone-echo"></span>
+              <a href="#" id="verify-edit-phone">Edit</a>
+            </p>
+            <div class="form-field">
+              <label class="form-field__label" for="verify-code">Verification Code</label>
+              <input class="form-input" type="text" id="verify-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="6-digit code">
+            </div>
+            <div class="form-row form-row--pair">
+              <button type="button" class="btn" id="verify-check-btn">Verify</button>
+              <button type="button" class="btn btn--secondary" id="verify-resend-btn" disabled>Resend (30)</button>
+            </div>
+            <p class="form-field__hint">Registering on a computer? The code went to your phone. It may not light up if Do Not Disturb is on.</p>
+          </div>
+
+          <div id="verify-email-entry" hidden>
+            <p id="verify-email-msg" class="form-field__hint" style="margin-bottom: 12px;">
+              Your number's verified. We just don't have it on file yet (most alumni don't).
+              Enter the email you've used with the club and we'll link you up.
+            </p>
+            <div class="form-field">
+              <label class="form-field__label" for="verify-email">Email</label>
+              <input class="form-input" type="email" id="verify-email" autocomplete="email" placeholder="Email you've used with the club">
+            </div>
+            <button type="button" class="btn" id="verify-email-send-btn">Email me a code</button>
+            <div id="verify-email-code-row" hidden style="margin-top: 16px;">
+              <p class="form-field__hint" style="margin-bottom: 12px;">Enter the code we emailed to <span id="verify-email-echo"></span></p>
+              <div class="form-field">
+                <label class="form-field__label" for="verify-email-code">Verification Code</label>
+                <input class="form-input" type="text" id="verify-email-code" inputmode="numeric" autocomplete="one-time-code" maxlength="8" placeholder="6-digit code">
+              </div>
+              <button type="button" class="btn" id="verify-email-check-btn">Verify</button>
+            </div>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="verify-email-dead-link">That email doesn't work for me anymore</a>
+            </p>
+          </div>
+        </section>
+
+        <div id="verify-welcome" class="notice notice--info" hidden></div>
+        <div id="unverified-notice" class="notice notice--warn" hidden>
+          You're continuing without a verified match, so you'll be registered as a new
+          member and entered in the new-member lottery. An organizer will review your
+          registration and link any membership history.
+        </div>
+
+        <form id="registration-form" method="POST" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}" hidden>
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="continue_unverified" id="continue-unverified" value="0">
 
           <!-- Section 1: About You -->
           <div id="section-about" class="form-section">
@@ -65,20 +135,6 @@
               {% else %}
                 <input class="form-input" type="email" id="email" name="email" placeholder="Email Address" autocomplete="email" required>
               {% endif %}
-            </div>
-
-            <div class="form-field">
-              <div class="pill-group__label">Member Type</div>
-              <div class="pill-group">
-                <label class="pill">
-                  <input type="radio" name="status" value="new" required>
-                  New Member
-                </label>
-                <label class="pill">
-                  <input type="radio" name="status" value="returning_former">
-                  Returning / Former
-                </label>
-              </div>
             </div>
 
             <div class="form-row form-row--pair">
@@ -174,6 +230,16 @@
             <h2 class="form-section__title">Emergency Contact</h2>
             <p class="form-section__subtitle">Someone we can reach in case of emergency</p>
 
+            <div id="emergency-confirm" hidden>
+              <p class="form-field__label">Still your emergency contact?</p>
+              <p id="emergency-summary" style="margin-bottom: 16px;"></p>
+              <div class="form-row form-row--pair">
+                <button type="button" class="btn" id="emergency-keep-btn">Yes, keep</button>
+                <button type="button" class="btn btn--secondary" id="emergency-update-btn">Update</button>
+              </div>
+            </div>
+
+            <div id="emergency-edit">
             <div class="form-row form-row--pair">
               <div class="form-field">
                 <label class="form-field__label" for="emergencyName">Contact's Full Name</label>
@@ -195,6 +261,7 @@
                 <input class="form-input" type="email" id="emergencyEmail" name="emergencyEmail" placeholder="Email Address" autocomplete="off" required>
               </div>
             </div>
+            </div>
           </div>
 
           <hr class="form-divider">
@@ -210,6 +277,8 @@
               <span class="price-summary__amount">${{ '%.2f' % (season.price_cents / 100) }}</span>
             </div>
             {% endif %}
+
+            <p id="payment-status-line" class="form-field__hint" style="margin-bottom: 16px;" hidden></p>
 
             <div class="form-field">
               <label class="form-field__label" for="name">Name on Card</label>
