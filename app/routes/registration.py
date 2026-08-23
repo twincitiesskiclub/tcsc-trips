@@ -3,7 +3,11 @@ from ..models import db, Season, UserSeason, User, Payment
 from ..constants import DATE_FORMAT, UserStatus, UserSeasonStatus
 from datetime import datetime
 from ..errors import flash_error, flash_info
-from ..utils import get_current_times, normalize_email, format_datetime_central, today_central, validate_registration_form
+from ..utils import (get_current_times, normalize_email, normalize_phone_e164,
+                     format_phone_display, format_datetime_central,
+                     today_central, validate_registration_form)
+from ..verify.service import get_verified_identity, clear_verified_identity
+from ..notifications.sms import send_sms
 from .. import late_link
 
 registration = Blueprint('registration', __name__)
@@ -68,13 +72,59 @@ def season_register(season_id):
         try:
             form = request.form
             email = normalize_email(form['email'])
-            user = User.get_by_email(email)
 
-            if invite_token and user is not None:
-                existing_us = UserSeason.get_for_user_season(user.id, season.id)
-                if existing_us and existing_us.status in (UserSeasonStatus.ACTIVE, UserSeasonStatus.PENDING_LOTTERY):
-                    flash_error("This link has already been used — you're already registered for this season.")
-                    return redirect(url_for('registration.season_register', season_id=season_id))
+            # Invite-token short-circuit happens before any verification
+            # concerns: a late-registration link for someone already
+            # registered bounces immediately, regardless of session state.
+            if invite_token:
+                invite_check_user = User.get_by_email(email)
+                if invite_check_user is not None:
+                    existing_us = UserSeason.get_for_user_season(invite_check_user.id, season.id)
+                    if existing_us and existing_us.status in (
+                            UserSeasonStatus.ACTIVE, UserSeasonStatus.PENDING_LOTTERY):
+                        flash_error("This link has already been used — you're "
+                                    "already registered for this season.")
+                        return redirect(url_for('registration.season_register',
+                                                season_id=season_id))
+
+            identity = get_verified_identity()
+            verified_user = None
+            if identity and identity.get('user_id'):
+                verified_user = User.query.get(identity['user_id'])
+
+            continue_unverified = form.get('continue_unverified') == '1'
+            if identity is None and not continue_unverified:
+                # Session expired or the member skipped step 0 entirely.
+                flash_error('Your verification expired. Please verify your '
+                            'number again — your answers are saved.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+
+            if verified_user is not None:
+                user = verified_user
+                if email != user.email and User.get_by_email(email):
+                    flash_error('That email already belongs to another '
+                                'member. Please use a different one.')
+                    return redirect(url_for('registration.season_register',
+                                            season_id=season_id))
+            else:
+                user = None
+                existing = User.get_by_email(email)
+                if existing is not None:
+                    if continue_unverified:
+                        # Flagged path: reuse the row, admin will review.
+                        user = existing
+                    else:
+                        flash_error('That email already has a member account. '
+                                    'Go back and verify with this email, or '
+                                    'choose "Continue anyway" if you can no '
+                                    'longer receive mail there.')
+                        return redirect(url_for('registration.season_register',
+                                                season_id=season_id))
+
+            # A session identity means the phone was OTP-verified this
+            # session, whether or not it's linked to an existing account yet.
+            verified = identity is not None
 
             # Get payment_intent_id for coordination with webhook
             payment_intent_id = form.get('payment_intent_id')
@@ -83,9 +133,9 @@ def season_register(season_id):
                 return redirect(url_for('registration.season_register', season_id=season_id))
             existing_payment = Payment.get_by_payment_intent(payment_intent_id)
 
-            # Determine member_type from backend only BEFORE checking dates
-            # Check user existence first
-            is_returning = bool(user and getattr(user, 'is_returning', False))
+            # Returning only when the identity is verified; unverified
+            # registrations are treated as new (manual capture) and reviewed.
+            is_returning = bool(verified and user and user.is_returning)
 
             # Check if registration window is open for this user type
             member_type_str = 'returning' if is_returning else 'new'
@@ -107,15 +157,6 @@ def season_register(season_id):
                 flash_error(f'Sorry, the registration window for {status_msg} is currently closed.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
 
-            client_claimed_status = form['status']
-            # Check consistency between claimed status and actual status
-            if client_claimed_status == 'returning_former' and not is_returning:
-                flash_error('Your email is not associated with a returning member. Please register as a New Member.')
-                return redirect(url_for('registration.season_register', season_id=season_id))
-            if client_claimed_status == 'new' and is_returning:
-                flash_error('Your email is associated with a returning member. Please register as a Returning Member.')
-                return redirect(url_for('registration.season_register', season_id=season_id))
-            
             # --- Proceed with form processing only if checks pass ---
             # Collect all personal fields from form
             user_fields = dict(
@@ -132,6 +173,12 @@ def season_register(season_id):
                 emergency_contact_phone=form['emergencyPhone'],
                 emergency_contact_email=form['emergencyEmail'],
             )
+            phone_e164 = normalize_phone_e164(form['phone'])
+            if identity is not None:
+                # The verified number wins over whatever is typed in the form.
+                phone_e164 = identity['phone_e164']
+                user_fields['phone'] = format_phone_display(phone_e164)
+
             # Convert dob string to date object
             dob_str = form['dob']
             if dob_str:
@@ -141,8 +188,14 @@ def season_register(season_id):
                     flash_error('Invalid date format for Date of Birth. Please use YYYY-MM-DD.')
                     return redirect(url_for('registration.season_register', season_id=season_id))
 
-            # Validate all form fields before proceeding
-            is_valid, validation_errors = validate_registration_form(form, user_fields.get('date_of_birth'))
+            # Validate all form fields before proceeding. The form no longer
+            # submits a status radio (verified identity determines it), but
+            # validate_registration_form still expects one — synthesize it
+            # from the backend-derived member type rather than touching the
+            # shared validator/constants.
+            validation_form = form.copy()
+            validation_form['status'] = 'returning_former' if is_returning else 'new'
+            is_valid, validation_errors = validate_registration_form(validation_form, user_fields.get('date_of_birth'))
             if not is_valid:
                 for error in validation_errors:
                     flash_error(error)
@@ -156,12 +209,19 @@ def season_register(season_id):
                 db.session.add(user)
                 db.session.flush()  # get user.id
 
+            user.phone_e164 = phone_e164
+            if identity is not None:
+                user.phone_verified_at = user.phone_verified_at or datetime.utcnow()
+
             # Link payment to user if webhook created it before form submission
             if existing_payment and not existing_payment.user_id:
                 existing_payment.user_id = user.id
 
-            # Determine member_type from backend (already validated above)
-            member_type = 'returning' if user.is_returning else 'new'
+            # Determine member_type from backend (already validated above,
+            # gated the same way is_returning is: unverified stays 'new')
+            member_type = member_type_str
+
+            needs_review = not verified
 
             # Find or create UserSeason for this user and season
             # Note: Webhook may have already created this record. We check first to avoid
@@ -173,17 +233,25 @@ def season_register(season_id):
                     season_id=season.id,
                     registration_type=member_type,
                     registration_date=today_central(),
-                    status=UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
+                    status=UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY,
+                    needs_review=needs_review,
                 )
                 db.session.add(user_season)
             else:
                 user_season.registration_type = member_type
                 user_season.registration_date = current_time.date()
                 user_season.status = UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
+                user_season.needs_review = needs_review
 
             db.session.commit()
             payment_hold = not is_returning
             amount_display = f"${season.price_cents / 100:.2f}" if season.price_cents else None
+            if is_returning:
+                send_sms(user, 'confirmation_returning',
+                         season_name=season.name, amount=amount_display)
+            else:
+                send_sms(user, 'confirmation_lottery', season_name=season.name)
+            clear_verified_identity()
             return render_template('season_success.html',
                 season=season,
                 payment_hold=payment_hold,
