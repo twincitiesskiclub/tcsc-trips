@@ -54,6 +54,7 @@ FORM = dict(
     tshirtSize="M", experience="3-7", emergencyName="Em Contact",
     emergencyRelation="friend", emergencyPhone="612-555-0189",
     emergencyEmail="em@example.com", payment_intent_id="pi_test_verify",
+    volunteerInterests="event_volunteer",
 )
 
 

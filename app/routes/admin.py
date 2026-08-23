@@ -2,7 +2,9 @@ from flask import Blueprint, render_template, jsonify, request, redirect, url_fo
 from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, Tag, UserTag
-from ..constants import DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS, CENTS_PER_DOLLAR, UserSeasonStatus
+from ..constants import (DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS,
+                         CENTS_PER_DOLLAR, UserSeasonStatus,
+                         VOLUNTEER_INTERESTS, VOLUNTEER_COMMITTEES)
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
 from ..slack.client import get_channel_id_by_name, get_slack_client
@@ -832,6 +834,8 @@ def export_season_members(season_id):
         'Registration Date',
         'Payment Date',
         'Season Status',
+        'Volunteer Interests',
+        'Volunteer Committees',
     ]
 
     writer.writerow(header)
@@ -857,6 +861,10 @@ def export_season_members(season_id):
             us.registration_date,
             us.payment_date or '',
             us.status,
+            '; '.join(VOLUNTEER_INTERESTS.get(k, k)
+                      for k in (us.volunteer_interests or [])),
+            '; '.join(VOLUNTEER_COMMITTEES.get(k, k)
+                      for k in (us.volunteer_committees or [])),
         ])
 
     output.seek(0)
@@ -866,6 +874,27 @@ def export_season_members(season_id):
         mimetype='text/csv',
         headers={'Content-Disposition': f'attachment; filename={filename}'}
     )
+
+@admin.route('/admin/seasons/<int:season_id>/volunteer-ask/preview')
+@admin_required
+def volunteer_ask_preview(season_id):
+    """Counts for the confirm dialog before the Slack volunteer backfill."""
+    Season.query.get_or_404(season_id)
+    from app.slack.volunteer_backfill import backfill_stats
+    return jsonify(backfill_stats(season_id))
+
+
+@admin.route('/admin/seasons/<int:season_id>/volunteer-ask', methods=['POST'])
+@admin_required
+def volunteer_ask_send(season_id):
+    """DM the volunteer-interest form to registered members who haven't
+    answered it. Safe to re-trigger: answered and recently-asked members
+    are skipped."""
+    Season.query.get_or_404(season_id)
+    from app.slack.volunteer_backfill import send_backfill_asks
+    result = send_backfill_asks(season_id)
+    return jsonify({'success': True, **result})
+
 
 def get_current_season():
     """Get the current, next upcoming, or most recent season."""
@@ -906,10 +935,16 @@ def get_users_data():
     # Build a map of user_id -> {season_id: status} for all seasons
     all_user_seasons = UserSeason.query.all()
     user_seasons_map = {}
+    volunteer_map = {}  # user_id -> {season_id: {interests, committees}}
     for us in all_user_seasons:
         if us.user_id not in user_seasons_map:
             user_seasons_map[us.user_id] = {}
         user_seasons_map[us.user_id][us.season_id] = us.status
+        if us.volunteer_interests:
+            volunteer_map.setdefault(us.user_id, {})[us.season_id] = {
+                'interests': us.volunteer_interests,
+                'committees': us.volunteer_committees or [],
+            }
 
     # Build a map of user_id -> {trip_count, total_paid} from successful payments
     payment_stats = db.session.query(
@@ -950,6 +985,7 @@ def get_users_data():
             'slack_uid': user.slack_user.slack_uid if user.slack_user else '',
             'season_status': current_season_status,
             'seasons': user_season_data,  # {season_id: status} for all seasons
+            'volunteer': volunteer_map.get(user.id, {}),  # {season_id: {interests, committees}}
             'is_returning': user.is_returning,
             'created_at': user.created_at.isoformat() if user.created_at else '',
             'trip_count': user_payment_stats['trips'],
@@ -964,7 +1000,9 @@ def get_users_data():
         'users': users_data,
         'current_season': {'id': current_season.id, 'name': current_season.name} if current_season else None,
         'seasons': [{'id': s.id, 'name': s.name} for s in all_seasons],
-        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name, 'emoji': t.emoji, 'gradient': t.gradient} for t in all_tags]
+        'tags': [{'id': t.id, 'name': t.name, 'display_name': t.display_name, 'emoji': t.emoji, 'gradient': t.gradient} for t in all_tags],
+        'volunteer_options': {'interests': VOLUNTEER_INTERESTS,
+                              'committees': VOLUNTEER_COMMITTEES}
     })
 
 
@@ -1012,7 +1050,9 @@ def user_detail(user_id):
                           user=user,
                           payments=payments,
                           user_seasons=user_seasons,
-                          trip_registrations=sorted_trips)
+                          trip_registrations=sorted_trips,
+                          volunteer_interest_labels=VOLUNTEER_INTERESTS,
+                          volunteer_committee_labels=VOLUNTEER_COMMITTEES)
 
 @admin.route('/admin/users/<int:user_id>/edit', methods=['GET', 'POST'])
 @admin_required

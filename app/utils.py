@@ -311,3 +311,36 @@ def validate_registration_form(form: dict, dob: date = None) -> tuple[bool, list
         errors.append(f"Emergency contact email: {msg.lower()}")
 
     return len(errors) == 0, errors
+
+
+def validate_volunteer_selections(interests, committees):
+    """Validate the volunteer-interest answer (web form and Slack backfill).
+
+    Returns (clean_interests, clean_committees, errors). Committees submitted
+    without the 'committee' interest are cleared, not stored.
+    """
+    from app.constants import VOLUNTEER_INTERESTS, VOLUNTEER_COMMITTEES
+
+    errors = []
+    interests = [i for i in (interests or [])]
+    committees = [c for c in (committees or [])]
+
+    unknown = [i for i in interests if i not in VOLUNTEER_INTERESTS]
+    if unknown:
+        errors.append('Invalid volunteer selection.')
+    if not interests:
+        errors.append('Pick at least one way to help this season.')
+
+    if 'committee' in interests:
+        unknown_committees = [c for c in committees
+                              if c not in VOLUNTEER_COMMITTEES]
+        if unknown_committees:
+            errors.append('Invalid committee selection.')
+        if not committees:
+            errors.append('You picked Join a committee. Which one(s)?')
+    else:
+        committees = []
+
+    if errors:
+        return [], [], errors
+    return interests, committees, []

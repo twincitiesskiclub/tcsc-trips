@@ -118,7 +118,8 @@ select.form-input {
   background: #e8ecf1;
 }
 
-.pill input[type="radio"] {
+.pill input[type="radio"],
+.pill input[type="checkbox"] {
   position: absolute;
   opacity: 0;
   width: 0;
@@ -127,14 +128,16 @@ select.form-input {
 }
 
 .pill--selected,
-.pill:has(input[type="radio"]:checked) {
+.pill:has(input[type="radio"]:checked),
+.pill:has(input[type="checkbox"]:checked) {
   background: var(--color-primary);
   color: #fff;
   border-color: var(--color-primary);
 }
 
 .pill--selected:hover,
-.pill:has(input[type="radio"]:checked):hover {
+.pill:has(input[type="radio"]:checked):hover,
+.pill:has(input[type="checkbox"]:checked):hover {
   background: var(--color-primary);
 }
 

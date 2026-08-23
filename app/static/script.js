@@ -322,7 +322,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const formData = {};
     registrationForm.querySelectorAll('input, select').forEach(field => {
       if (!field.name || UNSAVED_FIELDS.has(field.name)) return;
-      if (field.type === 'hidden' || field.type === 'checkbox') return;
+      if (field.type === 'hidden') return;
+      if (field.type === 'checkbox') {
+        // Checkbox groups (volunteer interests/committees) persist as arrays.
+        if (!Array.isArray(formData[field.name])) formData[field.name] = [];
+        if (field.checked) formData[field.name].push(field.value);
+        return;
+      }
       if (field.type === 'radio') {
         if (field.checked) formData[field.name] = field.value;
         return;
@@ -345,6 +351,12 @@ document.addEventListener('DOMContentLoaded', () => {
         if (UNSAVED_FIELDS.has(fieldName)) return;
         const field = registrationForm.querySelector(`[name="${fieldName}"]`);
         if (!field || field.readOnly) return;
+        if (Array.isArray(formData[fieldName])) {
+          registrationForm.querySelectorAll(`input[name="${fieldName}"]`).forEach(cb => {
+            cb.checked = formData[fieldName].includes(cb.value);
+          });
+          return;
+        }
         if (field.type === 'radio') {
           const radio = registrationForm.querySelector(`[name="${fieldName}"][value="${formData[fieldName]}"]`);
           if (radio) radio.checked = true;
@@ -390,6 +402,54 @@ document.addEventListener('DOMContentLoaded', () => {
   // restored answers win and prefill only fills fields left empty).
   restoreFormState();
   // --- End Form State Persistence ---
+
+  // --- Get Involved: committee reveal + pick-at-least-one gate ---
+  const committeeToggle = document.getElementById('volunteer-committee-toggle');
+  const committeePicker = document.getElementById('committee-picker');
+  const volunteerError = document.getElementById('volunteer-error');
+
+  function updateCommitteeReveal() {
+    if (committeeToggle && committeePicker) {
+      committeePicker.hidden = !committeeToggle.checked;
+    }
+  }
+
+  function showVolunteerError(message) {
+    if (!volunteerError) return;
+    volunteerError.textContent = message || '';
+    volunteerError.hidden = !message;
+  }
+
+  function validateVolunteerSection() {
+    if (!document.getElementById('volunteer-interests')) return true;
+    const interests = registrationForm.querySelectorAll('input[name="volunteerInterests"]:checked');
+    if (interests.length === 0) {
+      showVolunteerError('Pick at least one way to help this season.');
+      return false;
+    }
+    if (committeeToggle && committeeToggle.checked) {
+      const committees = registrationForm.querySelectorAll('input[name="volunteerCommittees"]:checked');
+      if (committees.length === 0) {
+        showVolunteerError('You picked Join a committee. Which one(s)?');
+        return false;
+      }
+    }
+    showVolunteerError('');
+    return true;
+  }
+
+  if (committeeToggle) {
+    committeeToggle.addEventListener('change', updateCommitteeReveal);
+    updateCommitteeReveal(); // restored answers may have re-checked it
+  }
+  // A visible error re-validates live, so it disappears as soon as the
+  // member fixes their pick instead of waiting for the next submit.
+  registrationForm.querySelectorAll('input[name="volunteerInterests"], input[name="volunteerCommittees"]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (volunteerError && !volunteerError.hidden) validateVolunteerSection();
+    });
+  });
+  // --- End Get Involved ---
 
   // --- Step 0: verify phone (email fallback) ahead of the wizard ---
   const verifySection = document.getElementById('section-verify');
@@ -913,8 +973,17 @@ document.addEventListener('DOMContentLoaded', () => {
       isSubmitting = true;
       toggleLoadingState(true);
 
-      if (!validateRequiredFields()) {
-        showError('Please fill in all required fields before submitting.');
+      const fieldsOk = validateRequiredFields();
+      const volunteerOk = validateVolunteerSection();
+      if (!fieldsOk || !volunteerOk) {
+        if (!fieldsOk) {
+          showError('Please fill in all required fields before submitting.');
+        } else {
+          const volunteerSection = document.getElementById('section-volunteer');
+          if (volunteerSection) {
+            volunteerSection.scrollIntoView({behavior: 'smooth', block: 'center'});
+          }
+        }
         isSubmitting = false;
         toggleLoadingState(false);
         return;

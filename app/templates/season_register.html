@@ -32,8 +32,13 @@
             <span class="progress-step__label">Emergency</span>
           </button>
           <div class="progress-bar__line"></div>
-          <button class="progress-step" data-section="section-payment">
+          <button class="progress-step" data-section="section-volunteer">
             <span class="progress-step__number">4</span>
+            <span class="progress-step__label">Get Involved</span>
+          </button>
+          <div class="progress-bar__line"></div>
+          <button class="progress-step" data-section="section-payment">
+            <span class="progress-step__number">5</span>
             <span class="progress-step__label">Payment</span>
           </button>
         </div>
@@ -273,7 +278,62 @@
 
           <hr class="form-divider">
 
-          <!-- Section 4: Payment -->
+          <!-- Section 4: Get Involved -->
+          <div id="section-volunteer" class="form-section">
+            <h2 class="form-section__title">Get Involved</h2>
+            <p class="form-section__subtitle">Pick how you'll pitch in this season</p>
+
+            <p class="form-field__hint" style="margin-bottom: 16px;">
+              TCSC is 100% volunteer-run, and the season goes best when everyone
+              pitches in. Pick at least one way you'd like to help. We'll follow
+              up based on what you choose.
+            </p>
+
+            <div class="form-field">
+              <div class="pill-group" id="volunteer-interests">
+                <label class="pill">
+                  <input type="checkbox" name="volunteerInterests" value="practice_lead">
+                  Lead a group at practice
+                </label>
+                <label class="pill">
+                  <input type="checkbox" name="volunteerInterests" value="event_volunteer">
+                  Volunteer at an event <span class="pill__hint">Dry Tri, Second Harvest, and more</span>
+                </label>
+                <label class="pill">
+                  <input type="checkbox" name="volunteerInterests" value="committee" id="volunteer-committee-toggle">
+                  Join a committee
+                </label>
+              </div>
+            </div>
+
+            <div class="form-field" id="committee-picker" hidden>
+              <div class="pill-group__label">Which committee(s)? Pick at least one.</div>
+              <div class="pill-group" id="volunteer-committees">
+                <label class="pill">
+                  <input type="checkbox" name="volunteerCommittees" value="adventures">
+                  Adventures <span class="pill__hint">trip planning</span>
+                </label>
+                <label class="pill">
+                  <input type="checkbox" name="volunteerCommittees" value="apparel">
+                  Apparel <span class="pill__hint">designs and products</span>
+                </label>
+                <label class="pill">
+                  <input type="checkbox" name="volunteerCommittees" value="dry_tri">
+                  Dry Tri <span class="pill__hint">event planning</span>
+                </label>
+                <label class="pill">
+                  <input type="checkbox" name="volunteerCommittees" value="social">
+                  Social <span class="pill__hint">community events</span>
+                </label>
+              </div>
+            </div>
+
+            <p class="card-error" id="volunteer-error" role="alert" hidden></p>
+          </div>
+
+          <hr class="form-divider">
+
+          <!-- Section 5: Payment -->
           <div id="section-payment" class="form-section">
             <h2 class="form-section__title">Payment</h2>
             <p class="form-section__subtitle">Secure payment via Stripe</p>

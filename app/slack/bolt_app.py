@@ -324,6 +324,50 @@ if _bot_token:
                     text=f":warning: {result.get('error', 'Could not record RSVP')}"
                 )
 
+    @bolt_app.action("volunteer_interests_input")
+    @bolt_app.action("volunteer_committees_input")
+    def handle_volunteer_form_input(ack):
+        """The form elements keep their own state in the message; Slack just
+        needs the interaction acknowledged."""
+        ack()
+
+    @bolt_app.action("volunteer_submit")
+    def handle_volunteer_submit(ack, body, action, client, logger):
+        """Save a volunteer-interest answer submitted from the backfill DM."""
+        ack()
+
+        from app.slack.blocks.volunteer import (
+            build_volunteer_ask_blocks, build_volunteer_thanks_blocks)
+        from app.slack.volunteer_backfill import process_volunteer_submit
+
+        slack_uid = body["user"]["id"]
+        season_id = int(action["value"])
+        state_values = (body.get("state") or {}).get("values") or {}
+
+        with get_app_context():
+            result = process_volunteer_submit(slack_uid, season_id, state_values)
+
+        channel_id = body.get("channel", {}).get("id")
+        message_ts = body.get("message", {}).get("ts")
+        if not channel_id or not message_ts:
+            logger.warning("volunteer_submit without channel/ts (user=%s)", slack_uid)
+            return
+
+        if result["ok"]:
+            blocks = build_volunteer_thanks_blocks(
+                result["first_name"], result["interests"], result["committees"])
+            text = f"Thanks, {result['first_name']}! Your volunteer picks are saved."
+        else:
+            blocks = build_volunteer_ask_blocks(
+                result["first_name"], season_id,
+                error=result["error"],
+                selected_interests=result["interests"],
+                selected_committees=result["committees"])
+            text = result["error"]
+
+        client.chat_update(channel=channel_id, ts=message_ts,
+                           blocks=blocks, text=text)
+
     @bolt_app.action("home_rsvp")
     def handle_home_rsvp_action(ack, body, action, client, logger):
         """Handle RSVP from App Home tab - opens modal for status selection."""

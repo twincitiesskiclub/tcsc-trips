@@ -120,6 +120,7 @@
                         <th class="px-4 py-2 font-medium text-tcsc-gray-600">Status</th>
                         <th class="px-4 py-2 font-medium text-tcsc-gray-600">Registration Date</th>
                         <th class="px-4 py-2 font-medium text-tcsc-gray-600">Payment Date</th>
+                        <th class="px-4 py-2 font-medium text-tcsc-gray-600">Volunteering</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -141,6 +142,24 @@
                         </td>
                         <td class="px-4 py-3">{{ us.registration_date.strftime('%Y-%m-%d') if us.registration_date else '-' }}</td>
                         <td class="px-4 py-3">{{ us.payment_date.strftime('%Y-%m-%d') if us.payment_date else '-' }}</td>
+                        <td class="px-4 py-3">
+                            {% if us.volunteer_interests %}
+                                {%- set interest_names = [] -%}
+                                {%- for key in us.volunteer_interests -%}
+                                    {%- set _ = interest_names.append(volunteer_interest_labels.get(key, key)) -%}
+                                {%- endfor -%}
+                                {{ interest_names | join(', ') }}
+                                {%- if us.volunteer_committees %}
+                                    {%- set committee_names = [] -%}
+                                    {%- for key in us.volunteer_committees -%}
+                                        {%- set _ = committee_names.append(volunteer_committee_labels.get(key, key)) -%}
+                                    {%- endfor %}
+                                    <span class="block text-tcsc-gray-600">{{ committee_names | join(', ') }}</span>
+                                {%- endif -%}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
