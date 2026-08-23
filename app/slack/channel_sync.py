@@ -46,6 +46,7 @@ from app.notifications.slack import (
     send_tier_transition_notification,
     send_sync_summary_notification,
 )
+from app.notifications.sms import send_sms
 
 # Pattern for deactivated Slack user placeholder emails
 # These are system-generated emails for users who have been deactivated
@@ -658,6 +659,8 @@ def invite_new_members(
                 dry_run=dry_run
             )
             result.invites_sent += 1
+            if not dry_run and db_user is not None:
+                send_sms(db_user, 'slack_invite')
         except (CookieExpiredError, AdminAPIError) as e:
             current_app.logger.error(f"Failed to invite {email}: {e}")
             result.errors.append(f"Failed to invite {email}: {e}")

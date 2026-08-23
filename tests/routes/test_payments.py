@@ -335,6 +335,15 @@ class TestCreateSeasonPaymentIntentWindowGate:
             status='requires_payment_method',
         )
 
+        # Member type now comes from the verified session, not the typed
+        # email (see app/routes/payments.py / CLAUDE.md).
+        with client.session_transaction() as sess:
+            sess['verified_identity'] = {
+                'phone_e164': '+16125550100',
+                'user_id': returning_member['user_id'],
+                'ts': datetime.utcnow().isoformat(),
+            }
+
         resp = client.post(
             '/create-season-payment-intent',
             json={

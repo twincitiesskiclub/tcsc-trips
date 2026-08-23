@@ -279,151 +279,535 @@ document.addEventListener('DOMContentLoaded', () => {
     new PaymentForm();
   }
 
-  // Email validation for returning member (always runs)
-  const emailInput = document.getElementById('email');
-  if (emailInput) {
-    let emailStatusMsg = document.createElement('div');
-    emailStatusMsg.id = 'email-status-msg';
-    emailStatusMsg.style.marginTop = '6px';
-    emailStatusMsg.style.fontSize = '14px';
-    emailInput.parentNode.appendChild(emailStatusMsg);
-
-    emailInput.addEventListener('blur', async function() {
-      const email = emailInput.value.trim().toLowerCase();
-      emailStatusMsg.textContent = '';
-      if (!email) return;
-      emailStatusMsg.textContent = 'Checking membership status...';
-
-      // Get radio buttons for member status
-      const newMemberRadio = document.querySelector('input[name="status"][value="new"]');
-      const returningRadio = document.querySelector('input[name="status"][value="returning_former"]');
-
-      const seasonId = emailInput.closest('form')?.dataset.seasonId;
-
-      try {
-        const resp = await fetch('/api/is_returning_member', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email, season_id: seasonId })
-        });
-        const data = await resp.json();
-        if (data.is_returning) {
-          emailStatusMsg.textContent = '✅ Returning/Former Member';
-          emailStatusMsg.style.color = '#166534';
-          if (returningRadio) returningRadio.checked = true;
-          const submitBtn = document.getElementById('register-btn');
-          if (submitBtn) submitBtn.disabled = false;
-        } else if (data.new_registration_open === false) {
-          emailStatusMsg.textContent = '⚠️ Registration for new members isn\'t currently open. Please check back when the new member registration window opens.';
-          emailStatusMsg.style.color = '#b07b2c';
-          const submitBtn = document.getElementById('register-btn');
-          if (submitBtn) submitBtn.disabled = true;
-        } else {
-          emailStatusMsg.textContent = '👋 Looks like you\'re new here. We\'ll register you as a new member. If you think you\'ve registered before, try a different email.';
-          emailStatusMsg.style.color = '#3730a3';
-          if (newMemberRadio) newMemberRadio.checked = true;
-        }
-      } catch (err) {
-        emailStatusMsg.textContent = 'Error checking membership status.';
-        emailStatusMsg.style.color = '#e44';
-      }
-    });
+  // Registration success page: the submission went through, so this
+  // season's saved answers are no longer needed and must not leak into a
+  // future registration. CSP blocks inline scripts on that page, so the
+  // cleanup lives here, keyed off the success marker element.
+  const successMarker = document.getElementById('registration-success');
+  if (successMarker && successMarker.dataset.seasonId) {
+    const successKey = `tcsc-registration-${successMarker.dataset.seasonId}`;
+    try {
+      sessionStorage.removeItem(successKey);
+      sessionStorage.removeItem(`${successKey}-entered`);
+    } catch (e) {
+      // silently fail
+    }
   }
 
   // Get the registration form and price from a data attribute or JS variable
   const registrationForm = document.getElementById('registration-form');
+  if (!registrationForm) return;
   // You can set this in your template: <form ... data-price-cents="{{ season.price_cents }}">
-  const priceCents = parseInt(registrationForm?.dataset.priceCents || 0, 10);
+  const priceCents = parseInt(registrationForm.dataset.priceCents || 0, 10);
   const priceDollars = priceCents / 100;
 
-  // Only run payment logic if the form and card element exist
-  if (registrationForm && document.getElementById('card-element')) {
-    let stripe, card, clientSecret;
-    let isSubmitting = false;
-    let idempotencyKey = null;
+  // --- Form State Persistence (sessionStorage, this browser tab only) ---
+  // Answers survive a mid-wizard refresh and are cleared on successful
+  // submit. Payment fields (name on card, agreement) and hidden control
+  // fields are never persisted; card details live in Stripe's iframe and
+  // never touch this code.
+  const STORAGE_KEY = `tcsc-registration-${registrationForm.dataset.seasonId}`;
+  const ENTERED_KEY = `${STORAGE_KEY}-entered`;
+  const UNSAVED_FIELDS = new Set(['csrf_token', 'continue_unverified', 'payment_intent_id', 'name', 'agreement']);
 
-    // Persist only non-sensitive preferences for this browser tab. Personal,
-    // contact, birth-date, and emergency-contact data must not be retained in
-    // browser storage after someone leaves the registration page.
-    const STORAGE_KEY = `tcsc-registration-${registrationForm.dataset.seasonId}`;
-    const FIELDS_TO_SAVE = [
-      'tshirtSize', 'technique', 'experience'
-    ];
+  try {
+    // Remove data written by versions that persisted form answers in
+    // localStorage, which outlives the tab.
+    localStorage.removeItem(STORAGE_KEY);
+  } catch (e) {
+    // Storage may be unavailable; there is nothing else to clean up.
+  }
 
+  function saveFormState() {
+    const formData = {};
+    registrationForm.querySelectorAll('input, select').forEach(field => {
+      if (!field.name || UNSAVED_FIELDS.has(field.name)) return;
+      if (field.type === 'hidden' || field.type === 'checkbox') return;
+      if (field.type === 'radio') {
+        if (field.checked) formData[field.name] = field.value;
+        return;
+      }
+      formData[field.name] = field.value;
+    });
     try {
-      // Remove data written by versions that persisted the full registration
-      // form, including DOB and emergency contact details.
-      localStorage.removeItem(STORAGE_KEY);
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
     } catch (e) {
-      // Storage may be unavailable; there is nothing else to clean up.
+      // sessionStorage might be full or disabled - silently fail
     }
+  }
 
-    function saveFormState() {
-      const formData = {};
-      FIELDS_TO_SAVE.forEach(fieldName => {
+  function restoreFormState() {
+    try {
+      const saved = sessionStorage.getItem(STORAGE_KEY);
+      if (!saved) return;
+      const formData = JSON.parse(saved);
+      Object.keys(formData).forEach(fieldName => {
+        if (UNSAVED_FIELDS.has(fieldName)) return;
         const field = registrationForm.querySelector(`[name="${fieldName}"]`);
-        if (field) {
-          if (field.type === 'radio') {
-            const checked = registrationForm.querySelector(`[name="${fieldName}"]:checked`);
-            if (checked) formData[fieldName] = checked.value;
-          } else {
-            formData[fieldName] = field.value;
-          }
+        if (!field || field.readOnly) return;
+        if (field.type === 'radio') {
+          const radio = registrationForm.querySelector(`[name="${fieldName}"][value="${formData[fieldName]}"]`);
+          if (radio) radio.checked = true;
+        } else {
+          field.value = formData[fieldName];
         }
       });
-      try {
-        sessionStorage.setItem(STORAGE_KEY, JSON.stringify(formData));
-      } catch (e) {
-        // sessionStorage might be full or disabled - silently fail
-      }
+    } catch (e) {
+      // Invalid JSON or other error - silently fail
+    }
+  }
+
+  function rememberWizardEntered(continueUnverified) {
+    try {
+      sessionStorage.setItem(ENTERED_KEY, continueUnverified ? '1' : '0');
+    } catch (e) {
+      // silently fail
+    }
+  }
+
+  function storedWizardEntry() {
+    try {
+      return sessionStorage.getItem(ENTERED_KEY); // null, '0', or '1'
+    } catch (e) {
+      return null;
+    }
+  }
+
+  // Debounce helper to avoid excessive sessionStorage writes
+  let saveTimeout = null;
+  function debouncedSave() {
+    if (saveTimeout) clearTimeout(saveTimeout);
+    saveTimeout = setTimeout(saveFormState, 500);
+  }
+
+  // Attach save listeners to all form inputs
+  registrationForm.querySelectorAll('input, select').forEach(input => {
+    input.addEventListener('input', debouncedSave);
+    input.addEventListener('change', debouncedSave);
+  });
+
+  // Restore form state on page load (before any verify prefill runs, so
+  // restored answers win and prefill only fills fields left empty).
+  restoreFormState();
+  // --- End Form State Persistence ---
+
+  // --- Step 0: verify phone (email fallback) ahead of the wizard ---
+  const verifySection = document.getElementById('section-verify');
+  if (verifySection) {
+    const progressBar = document.querySelector('.progress-bar');
+    let verifyPhone = null;
+    let phoneVerified = false; // a phone verification succeeded this session
+    let reverifying = false;   // "Not [name]?" re-verification in progress
+    let resendTimer = null;
+
+    const byId = id => document.getElementById(id);
+    const show = id => { const node = byId(id); if (node) node.hidden = false; };
+    const hide = id => { const node = byId(id); if (node) node.hidden = true; };
+
+    function showVerifyError(message) {
+      const box = byId('verify-error');
+      if (!box) return;
+      box.textContent = message || '';
+      box.hidden = !message;
     }
 
-    function restoreFormState() {
-      try {
-        const saved = sessionStorage.getItem(STORAGE_KEY);
-        if (!saved) return;
-        const formData = JSON.parse(saved);
-        FIELDS_TO_SAVE.forEach(fieldName => {
-          if (formData[fieldName] === undefined) return;
-          const field = registrationForm.querySelector(`[name="${fieldName}"]`);
-          if (field) {
-            if (field.type === 'radio') {
-              const radio = registrationForm.querySelector(`[name="${fieldName}"][value="${formData[fieldName]}"]`);
-              if (radio) radio.checked = true;
-            } else {
-              field.value = formData[fieldName];
-            }
-          }
-        });
-      } catch (e) {
-        // Invalid JSON or other error - silently fail
-      }
+    async function postJson(url, payload) {
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      return resp.json();
     }
 
-    function clearFormState() {
+    function setPaymentStatusLine(memberType) {
+      const line = byId('payment-status-line');
+      if (!line) return;
+      if (memberType === 'returning') {
+        line.textContent = `You're registering as a returning member. Your card will be charged $${priceDollars.toFixed(2)} today.`;
+      } else if (memberType === 'new') {
+        line.textContent = "You're registering as a new member. We'll place a hold on your card; you're only charged if you get a spot in the lottery.";
+      } else {
+        // Membership type unknown (prefill fetch failed); don't guess.
+        line.textContent = "We'll confirm your membership type at checkout.";
+      }
+      line.hidden = false;
+    }
+
+    function setIfEmpty(id, value) {
+      const field = byId(id);
+      if (!field || !value) return;
+      if (field.value.trim() === '') field.value = value;
+    }
+
+    function setRadioIfUnset(name, value) {
+      if (!value) return;
+      if (registrationForm.querySelector(`input[name="${name}"]:checked`)) return;
+      const radio = registrationForm.querySelector(`input[name="${name}"][value="${value}"]`);
+      if (radio) radio.checked = true;
+    }
+
+    function applyPrefill(data) {
+      // Restored sessionStorage answers win; prefill only fills empty fields.
+      setPaymentStatusLine(data.memberType || 'new');
+      const user = data.user;
+      if (!user) return;
+      setIfEmpty('email', user.email);
+      setIfEmpty('firstName', user.firstName);
+      setIfEmpty('lastName', user.lastName);
+      setIfEmpty('pronouns', user.pronouns);
+      setIfEmpty('dob', user.dob);
+      setIfEmpty('phone', user.phone);
+      setIfEmpty('tshirtSize', user.tshirtSize);
+      setRadioIfUnset('technique', user.technique);
+      setRadioIfUnset('experience', user.experience);
+      setIfEmpty('emergencyName', user.emergencyName);
+      setIfEmpty('emergencyRelation', user.emergencyRelation);
+      setIfEmpty('emergencyPhone', user.emergencyPhone);
+      setIfEmpty('emergencyEmail', user.emergencyEmail);
+      // Only collapse to the read-only summary when every emergency field
+      // has a value; hidden empty required inputs would block submission.
+      const emergencyComplete = ['emergencyName', 'emergencyRelation', 'emergencyPhone', 'emergencyEmail']
+        .every(id => byId(id) && byId(id).value.trim() !== '');
+      if (emergencyComplete) {
+        byId('emergency-summary').textContent =
+          `${byId('emergencyName').value} (${byId('emergencyRelation').value}), ${byId('emergencyPhone').value}`;
+        show('emergency-confirm');
+        hide('emergency-edit');
+      }
+      saveFormState();
+    }
+
+    async function fetchPrefill() {
+      const resp = await fetch('/api/verify/prefill');
+      return resp.json();
+    }
+
+    function resetWizardFields() {
+      // Drop answers derived from the wrong identity: saved state plus every
+      // step 1-3 field. Payment fields (excluded from persistence) and
+      // readonly fields (invite email) are left alone.
       try {
         sessionStorage.removeItem(STORAGE_KEY);
       } catch (e) {
         // silently fail
       }
+      registrationForm.querySelectorAll('input, select').forEach(field => {
+        if (!field.name || UNSAVED_FIELDS.has(field.name)) return;
+        if (field.type === 'hidden' || field.readOnly) return;
+        if (field.type === 'radio' || field.type === 'checkbox') {
+          field.checked = false;
+        } else {
+          field.value = '';
+        }
+      });
+      show('emergency-edit');
+      hide('emergency-confirm');
     }
 
-    // Debounce helper to avoid excessive sessionStorage writes
-    let saveTimeout = null;
-    function debouncedSave() {
-      if (saveTimeout) clearTimeout(saveTimeout);
-      saveTimeout = setTimeout(saveFormState, 500);
+    function enterWizard(opts) {
+      const continueUnverified = !!(opts && opts.continueUnverified);
+      const cuInput = byId('continue-unverified');
+      if (cuInput) cuInput.value = continueUnverified ? '1' : '0';
+      verifySection.hidden = true;
+      registrationForm.hidden = false;
+      if (progressBar) progressBar.hidden = false;
+      const welcome = byId('verify-welcome');
+      if (welcome) {
+        if (opts && opts.firstName) {
+          const welcomeText = byId('verify-welcome-text');
+          if (welcomeText) {
+            welcomeText.textContent = `Welcome back, ${opts.firstName}! We filled in what we have on file. Give it a once-over and finish up.`;
+          }
+          const notMeLink = byId('verify-not-me-link');
+          if (notMeLink) {
+            notMeLink.textContent = `Not ${opts.firstName}? Verify with your email instead.`;
+          }
+          welcome.hidden = false;
+        } else {
+          welcome.hidden = true;
+        }
+      }
+      if (continueUnverified) show('unverified-notice'); else hide('unverified-notice');
+      rememberWizardEntered(continueUnverified);
+      window.scrollTo({ top: 0 });
     }
 
-    // Attach save listeners to all form inputs
-    registrationForm.querySelectorAll('input, select').forEach(input => {
-      input.addEventListener('input', debouncedSave);
-      input.addEventListener('change', debouncedSave);
+    function startResendCountdown(seconds) {
+      const btn = byId('verify-resend-btn');
+      if (!btn) return;
+      let remaining = seconds;
+      btn.disabled = true;
+      btn.textContent = `Resend (${remaining})`;
+      clearInterval(resendTimer);
+      resendTimer = setInterval(() => {
+        remaining -= 1;
+        if (remaining <= 0) {
+          clearInterval(resendTimer);
+          btn.disabled = false;
+          btn.textContent = 'Resend';
+        } else {
+          btn.textContent = `Resend (${remaining})`;
+        }
+      }, 1000);
+    }
+
+    async function verifiedPrefillThenEnter(fallbackFirstName) {
+      let data = null;
+      try {
+        data = await fetchPrefill();
+      } catch (e) {
+        // Prefill is a convenience; verification already succeeded.
+      }
+      if (data) applyPrefill(data);
+      else setPaymentStatusLine(null);
+      const firstName = (data && data.user && data.user.firstName) || fallbackFirstName || null;
+      enterWizard({ continueUnverified: false, firstName });
+    }
+
+    async function sendPhoneCode() {
+      showVerifyError('');
+      const phoneValue = byId('verify-phone').value.trim();
+      const btn = byId('verify-send-btn');
+      btn.disabled = true;
+      try {
+        const body = await postJson('/api/verify/phone/start', { phone: phoneValue });
+        if (!body.ok) {
+          showVerifyError(body.error || 'Something went wrong. Please try again.');
+          return;
+        }
+        verifyPhone = phoneValue;
+        byId('verify-phone-echo').textContent = phoneValue;
+        hide('verify-phone-entry');
+        show('verify-code-entry');
+        byId('verify-code').focus();
+        startResendCountdown(30);
+      } catch (e) {
+        showVerifyError('Something went wrong sending the code. Please try again.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function checkPhoneCode() {
+      showVerifyError('');
+      const code = byId('verify-code').value.replace(/\s+/g, '');
+      if (!code) {
+        showVerifyError('Enter the code from the text we sent.');
+        return;
+      }
+      const btn = byId('verify-check-btn');
+      btn.disabled = true;
+      try {
+        const body = await postJson('/api/verify/phone/check', { phone: verifyPhone, code });
+        // On a wrong code the input keeps its value so it can be corrected.
+        if (!body.ok) {
+          showVerifyError(body.error || 'Something went wrong. Please try again.');
+          return;
+        }
+        phoneVerified = true;
+        if (body.match === 'one') {
+          await verifiedPrefillThenEnter(body.firstName);
+          return;
+        }
+        // 'none' and 'multiple' both route to the email step; only the copy differs.
+        if (body.match === 'multiple') {
+          byId('verify-email-msg').textContent =
+            "More than one member shares this number, so we'll match you by email " +
+            "instead. Enter the email you've used with the club.";
+        }
+        hide('verify-code-entry');
+        show('verify-email-entry');
+        byId('verify-email').focus();
+      } catch (e) {
+        showVerifyError('Something went wrong checking the code. Please try again.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function sendEmailCode() {
+      showVerifyError('');
+      const emailValue = byId('verify-email').value.trim();
+      const btn = byId('verify-email-send-btn');
+      btn.disabled = true;
+      try {
+        const body = await postJson('/api/verify/email/start', { email: emailValue });
+        if (!body.ok) {
+          showVerifyError(body.error || 'Something went wrong. Please try again.');
+          return;
+        }
+        if (!body.exists) {
+          showVerifyError("We don't have that email on file. Double-check the spelling, or use the link below if you no longer have access to it.");
+          return;
+        }
+        byId('verify-email-echo').textContent = emailValue;
+        show('verify-email-code-row');
+        byId('verify-email-code').focus();
+      } catch (e) {
+        showVerifyError('Something went wrong sending the code. Please try again.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    async function checkEmailCode() {
+      showVerifyError('');
+      const emailValue = byId('verify-email').value.trim();
+      const code = byId('verify-email-code').value.replace(/\s+/g, '');
+      if (!code) {
+        showVerifyError('Enter the code from the email we sent.');
+        return;
+      }
+      const btn = byId('verify-email-check-btn');
+      btn.disabled = true;
+      try {
+        const body = await postJson('/api/verify/email/check', { email: emailValue, code });
+        if (!body.ok) {
+          showVerifyError(body.error || 'Something went wrong. Please try again.');
+          return;
+        }
+        if (reverifying) {
+          // The previous identity's prefill no longer applies.
+          resetWizardFields();
+          reverifying = false;
+        }
+        await verifiedPrefillThenEnter(null);
+      } catch (e) {
+        showVerifyError('Something went wrong checking the code. Please try again.');
+      } finally {
+        btn.disabled = false;
+      }
+    }
+
+    byId('verify-send-btn').addEventListener('click', sendPhoneCode);
+    byId('verify-check-btn').addEventListener('click', checkPhoneCode);
+    byId('verify-resend-btn').addEventListener('click', sendPhoneCode);
+    byId('verify-email-send-btn').addEventListener('click', sendEmailCode);
+    byId('verify-email-check-btn').addEventListener('click', checkEmailCode);
+
+    byId('verify-edit-phone').addEventListener('click', e => {
+      e.preventDefault();
+      clearInterval(resendTimer);
+      showVerifyError('');
+      hide('verify-code-entry');
+      show('verify-phone-entry');
+      byId('verify-phone').focus();
     });
 
-    // Restore form state on page load
-    restoreFormState();
-    // --- End Form State Persistence ---
+    // Escape hatches. continue_unverified stays "0" only when a phone
+    // verification succeeded this session; the two skip-verification links
+    // always take the flagged path (new-member lottery + admin review).
+    byId('verify-skip-link').addEventListener('click', e => {
+      e.preventDefault();
+      setPaymentStatusLine('new');
+      enterWizard({ continueUnverified: !phoneVerified });
+    });
+    byId('verify-cant-text-link').addEventListener('click', e => {
+      e.preventDefault();
+      setPaymentStatusLine('new');
+      enterWizard({ continueUnverified: true });
+    });
+    byId('verify-email-dead-link').addEventListener('click', e => {
+      e.preventDefault();
+      if (reverifying) {
+        // They said "Not [name]", so the old identity's answers must not
+        // ride along into the flagged path.
+        resetWizardFields();
+        reverifying = false;
+      }
+      setPaymentStatusLine('new');
+      enterWizard({ continueUnverified: true });
+    });
+
+    // "Not [name]?" on the welcome banner: back to step 0, email entry,
+    // to re-point the session at the right account. The backend re-links
+    // user_id on a successful email check for a phone-verified session.
+    byId('verify-not-me-link').addEventListener('click', e => {
+      e.preventDefault();
+      reverifying = true;
+      showVerifyError('');
+      registrationForm.hidden = true;
+      if (progressBar) progressBar.hidden = true;
+      hide('verify-welcome');
+      hide('unverified-notice');
+      hide('verify-expired-notice');
+      hide('verify-phone-entry');
+      hide('verify-code-entry');
+      hide('verify-email-code-row');
+      byId('verify-email-msg').textContent =
+        "No problem. Enter the email you've used with the club and we'll match you to the right account.";
+      show('verify-email-entry');
+      verifySection.hidden = false;
+      byId('verify-email').focus();
+      window.scrollTo({ top: 0 });
+    });
+
+    // Enter advances the visible verify step (these inputs sit outside the
+    // form, so the browser would otherwise do nothing).
+    [['verify-phone', 'verify-send-btn'],
+     ['verify-code', 'verify-check-btn'],
+     ['verify-email', 'verify-email-send-btn'],
+     ['verify-email-code', 'verify-email-check-btn']].forEach(([inputId, btnId]) => {
+      byId(inputId).addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          byId(btnId).click();
+        }
+      });
+    });
+
+    // Emergency contact: keep the summary and move on, or reopen the fields.
+    const keepBtn = byId('emergency-keep-btn');
+    if (keepBtn) keepBtn.addEventListener('click', () => {
+      const target = byId('section-payment');
+      if (!target) return;
+      const offset = (progressBar ? progressBar.offsetHeight : 0) + 20;
+      const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
+      window.scrollTo({ top, behavior: 'smooth' });
+    });
+    const updateBtn = byId('emergency-update-btn');
+    if (updateBtn) updateBtn.addEventListener('click', () => {
+      hide('emergency-confirm');
+      show('emergency-edit');
+    });
+
+    // Resume after a refresh: a still-verified session skips straight back
+    // into the wizard (keeping its recorded continue_unverified choice).
+    // An expired or missing identity always lands back on step 0, never a
+    // silent downgrade to the flagged path; only an explicit escape-hatch
+    // click enters flagged-unverified. Saved answers restore either way.
+    (async () => {
+      let entry = null;
+      try {
+        const data = await fetchPrefill();
+        entry = storedWizardEntry();
+        if (data.verified) {
+          phoneVerified = true;
+          applyPrefill(data);
+          enterWizard({
+            continueUnverified: entry === '1',
+            firstName: data.user ? data.user.firstName : null
+          });
+          return;
+        }
+      } catch (e) {
+        entry = storedWizardEntry();
+      }
+      if (entry === '0') {
+        // A verified session had entered the wizard, then the identity
+        // expired (2h TTL). Explain why step 0 is back.
+        show('verify-expired-notice');
+      }
+    })();
+  }
+  // --- End Step 0 ---
+
+  // Only run payment logic if the form and card element exist
+  if (document.getElementById('card-element')) {
+    let stripe, card, clientSecret;
+    let isSubmitting = false;
+    let idempotencyKey = null;
 
     async function fetchStripeKey() {
       const response = await fetch('/get-stripe-key');
@@ -572,9 +956,10 @@ document.addEventListener('DOMContentLoaded', () => {
         paymentIntentInput.value = result.paymentIntent.id;
         registrationForm.appendChild(paymentIntentInput);
 
-        // Clear saved form state before submitting
-        clearFormState();
-
+        // Saved answers are NOT cleared here: the server can still reject
+        // this POST (expired identity, email collision, closed window) and
+        // redirect back promising "your answers are saved". The success
+        // page clears the keys instead.
         registrationForm.submit();
       } catch (err) {
         showError('Payment failed. Please try again.');

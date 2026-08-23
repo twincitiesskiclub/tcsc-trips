@@ -47,6 +47,18 @@ Stripe capture method varies by payment type, and getting it wrong charges membe
 
 Lifecycle: authorize → hold → admin captures or refunds. Payment holds are what make selective acceptance possible; don't "simplify" trip/new-member payments to automatic capture.
 
+## Phone Verification (season registration)
+
+Member identity for season registration is a verified phone (`User.phone_e164`,
+E.164, indexed, deliberately NOT unique — households share numbers). Codes:
+Twilio Verify for SMS, `VerificationCode` + Resend for the email fallback.
+The verified identity lives in the Flask session (`app/verify/service.py`,
+2-hour TTL) and is the ONLY source for returning-vs-new and capture method —
+never trust a typed email for pricing. Unverified registrations degrade to
+manual capture + `UserSeason.needs_review`; the admin review page
+(`/admin/registration-review?season_id=N`) must be checked before running a
+lottery. SMS templates live in `config/sms.yaml`; `send_sms()` never raises.
+
 ## Slack Tier Logic
 
 | `User.status` | `seasons_since_active` | Slack tier |

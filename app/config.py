@@ -10,6 +10,18 @@ def load_stripe_config():
     if not stripe.api_key:
         raise ValueError("Missing STRIPE_SECRET_KEY in environment variables")
 
+def configure_app(app):
+    """Configure SMS and verification provider credentials.
+
+    No hard failure when unset; the app must boot without SMS in degraded mode.
+    """
+    app.config['TWILIO_ACCOUNT_SID'] = os.getenv('TWILIO_ACCOUNT_SID')
+    app.config['TWILIO_API_KEY_SID'] = os.getenv('TWILIO_API_KEY_SID')
+    app.config['TWILIO_API_KEY_SECRET'] = os.getenv('TWILIO_API_KEY_SECRET')
+    app.config['TWILIO_VERIFY_SERVICE_SID'] = os.getenv('TWILIO_VERIFY_SERVICE_SID')
+    app.config['TWILIO_MESSAGING_SERVICE_SID'] = os.getenv('TWILIO_MESSAGING_SERVICE_SID')
+    app.config['RESEND_API_KEY'] = os.getenv('RESEND_API_KEY')
+
 def configure_database(app, environment):
     """Configure the database based on environment.
 

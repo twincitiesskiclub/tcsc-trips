@@ -24,9 +24,10 @@ E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
-# Head as of the done-emoji snapshot migration (down_revision is
-# READINESS_DIGEST_REVISION above) — bump whenever a new migration lands.
-HEAD_REVISION = "a7c1e5f2b9d3"
+# Head as of the phone_e164/verification-tables migration (down_revision is
+# a7c1e5f2b9d3, the trip series migration). Bump whenever a new migration
+# lands.
+HEAD_REVISION = "8055e0305cc4"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -79,9 +80,18 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
     connection.exec_driver_sql(
         # Bare stub: real `users` predates e36bbec59bde and isn't otherwise
         # touched by the migrations under test here, but the lead-availability
-        # tables (added after 1b29976741b6) FK to it, so it must exist in this
-        # synthetic baseline for the upgrade to head to succeed.
-        "CREATE TABLE users (id INTEGER PRIMARY KEY)"
+        # tables (added after 1b29976741b6) FK to it, and the SMS
+        # registration migration (8055e0305cc4) backfills phone_e164 from
+        # `phone`, so both must exist in this synthetic baseline for the
+        # upgrade to head to succeed.
+        "CREATE TABLE users (id INTEGER PRIMARY KEY, phone VARCHAR(20))"
+    )
+    connection.exec_driver_sql(
+        # Bare stub: real `user_seasons` predates e36bbec59bde; the SMS
+        # registration migration (8055e0305cc4) adds needs_review to it, so
+        # it must exist in this synthetic baseline for the upgrade to head
+        # to succeed.
+        "CREATE TABLE user_seasons (user_id INTEGER PRIMARY KEY)"
     )
     connection.exec_driver_sql(
         # Bare stub: real `trips` predates e36bbec59bde; the trip series
