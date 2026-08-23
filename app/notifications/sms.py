@@ -33,8 +33,12 @@ def send_sms(user, template_key, **kwargs):
         return True
     except ProviderError as exc:
         if exc.code == 21610:  # recipient has replied STOP
-            user.sms_opt_out = True
-            db.session.commit()
+            try:
+                user.sms_opt_out = True
+                db.session.commit()
+            except Exception as commit_exc:
+                current_app.logger.warning(
+                    "sms: failed to record opt-out for user %s: %s", user.id, commit_exc)
         current_app.logger.warning(
             "sms: %s to user %s failed: %s", template_key, user.id, exc)
         return False

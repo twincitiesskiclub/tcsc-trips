@@ -68,3 +68,43 @@ def test_records_opt_out_on_21610(mock_send, app, user):
 def test_never_raises(mock_send, app, user):
     with app.app_context():
         assert send_sms(User.query.get(user.id), "slack_invite") is False
+
+
+@patch("app.notifications.sms.twilio_send_sms")
+def test_templates_fit_single_segment(mock_send, app, user):
+    """All templates must render to <= 160 chars (GSM-7 single segment)."""
+    with app.app_context():
+        from app.notifications.sms import _templates
+        templates = _templates()
+
+        # Test confirmation_returning with realistic values
+        returning_body = templates["confirmation_returning"].format(
+            season_name="2026 Fall/Winter", amount="$205.00")
+        assert len(returning_body) <= 160, (
+            f"confirmation_returning too long: {len(returning_body)} chars"
+        )
+
+        # Test confirmation_lottery with realistic values
+        lottery_body = templates["confirmation_lottery"].format(
+            season_name="2026 Fall/Winter")
+        assert len(lottery_body) <= 160, (
+            f"confirmation_lottery too long: {len(lottery_body)} chars"
+        )
+
+        # Test slack_invite (no kwargs)
+        slack_body = templates["slack_invite"]
+        assert len(slack_body) <= 160, (
+            f"slack_invite too long: {len(slack_body)} chars"
+        )
+
+
+@patch("app.notifications.sms.twilio_send_sms",
+       side_effect=ProviderError("unsubscribed", code=21610))
+@patch("app.notifications.sms.db.session.commit",
+       side_effect=Exception("commit failed"))
+def test_guards_opt_out_commit(mock_commit, mock_send, app, user):
+    """If db.session.commit() raises during opt-out, never_raises still holds."""
+    with app.app_context():
+        # Should not raise even if commit fails
+        result = send_sms(User.query.get(user.id), "slack_invite")
+        assert result is False
