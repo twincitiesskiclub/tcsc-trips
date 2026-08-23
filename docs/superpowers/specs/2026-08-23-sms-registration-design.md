@@ -1,7 +1,7 @@
 # SMS-first season registration design
 
 Date: 2026-08-23
-Status: approved pending Rob's review
+Status: implemented on branch sms-registration (2026-08-23)
 Scope: season registration only. Trips and events keep their email gates and adopt this layer later. Lottery-result texts are deferred to a fast follow.
 Deadline: live before September season registration opens.
 
@@ -85,7 +85,7 @@ Payment, the Stripe webhook, and the UserSeason creation race are unchanged. The
 Complete v1 send list:
 
 1. Verification codes (Twilio Verify for SMS, Resend for email).
-2. Registration confirmation SMS after payment success. Returning: "TCSC: You're registered for the 2026-27 season! Your card was charged $150. See you out there. Reply STOP to opt out." New: "TCSC: You're in the lottery for the 2026-27 season! There's a hold on your card, but you're only charged if you get a spot. We'll be in touch. Reply STOP to opt out."
+2. Registration confirmation SMS after payment success. Returning: "TCSC: You're registered for the 2026-27 season! Your card was charged $150. See you out there. Reply STOP to opt out." New: "TCSC: You're in the lottery for the {season_name} season! Your card has a hold and is only charged if you get a spot. Reply STOP to opt out"
 3. Slack invite heads-up when an accepted new member's invite email goes out: "TCSC: Welcome to the club! Your Slack invite just landed in your email. That's where everything happens, so come say hi. Reply STOP to opt out."
 
 Nothing else in v1. No lottery-result texts (fast follow). The Slack invite mechanism itself is unchanged (inviteBulk email), preserving the email-based SlackUser auto-link.

@@ -82,7 +82,7 @@ def season_register(season_id):
                     existing_us = UserSeason.get_for_user_season(invite_check_user.id, season.id)
                     if existing_us and existing_us.status in (
                             UserSeasonStatus.ACTIVE, UserSeasonStatus.PENDING_LOTTERY):
-                        flash_error("This link has already been used — you're "
+                        flash_error("This link has already been used. You're "
                                     "already registered for this season.")
                         return redirect(url_for('registration.season_register',
                                                 season_id=season_id))
@@ -96,7 +96,7 @@ def season_register(season_id):
             if identity is None and not continue_unverified:
                 # Session expired or the member skipped step 0 entirely.
                 flash_error('Your verification expired. Please verify your '
-                            'number again — your answers are saved.')
+                            'number again. Your answers are saved.')
                 return redirect(url_for('registration.season_register',
                                         season_id=season_id))
 
