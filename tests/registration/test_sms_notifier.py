@@ -100,11 +100,17 @@ def test_templates_fit_single_segment(mock_send, app, user):
 
 @patch("app.notifications.sms.twilio_send_sms",
        side_effect=ProviderError("unsubscribed", code=21610))
-@patch("app.notifications.sms.db.session.commit",
-       side_effect=Exception("commit failed"))
-def test_guards_opt_out_commit(mock_commit, mock_send, app, user):
-    """If db.session.commit() raises during opt-out, never_raises still holds."""
+def test_guards_opt_out_commit(mock_send, app, user):
+    """If db.session.commit() raises during opt-out, never_raises still holds.
+    Session must be usable after the failure (rollback clears pending state)."""
     with app.app_context():
-        # Should not raise even if commit fails
-        result = send_sms(User.query.get(user.id), "slack_invite")
-        assert result is False
+        # Patch commit to fail only during send_sms, then verify session is usable
+        with patch("app.notifications.sms.db.session.commit",
+                   side_effect=Exception("commit failed")):
+            result = send_sms(User.query.get(user.id), "slack_invite")
+            assert result is False
+
+        # After the patch context exits (commit is restored), verify session works
+        # by performing a simple query that would fail if session was in pending-rollback
+        count = User.query.count()
+        assert count >= 1

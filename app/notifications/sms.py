@@ -39,6 +39,11 @@ def send_sms(user, template_key, **kwargs):
             except Exception as commit_exc:
                 current_app.logger.warning(
                     "sms: failed to record opt-out for user %s: %s", user.id, commit_exc)
+                try:
+                    db.session.rollback()
+                except Exception as rollback_exc:
+                    current_app.logger.warning(
+                        "sms: failed to rollback session for user %s: %s", user.id, rollback_exc)
         current_app.logger.warning(
             "sms: %s to user %s failed: %s", template_key, user.id, exc)
         return False
