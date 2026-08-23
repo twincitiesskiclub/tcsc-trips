@@ -99,6 +99,26 @@ def test_templates_fit_single_segment(mock_send, app, user):
         )
 
 
+class _RaisingIdUser:
+    """Stub with normal phone_e164/sms_opt_out but a .id that blows up, like
+    a detached/expired SQLAlchemy instance would on attribute access."""
+    phone_e164 = "+16125550166"
+    sms_opt_out = False
+
+    @property
+    def id(self):
+        raise RuntimeError("boom: instance is detached")
+
+
+@patch("app.notifications.sms.twilio_send_sms")
+def test_survives_unreadable_user_id(mock_send, app):
+    """The user_id cache read happens outside the old try/except; make sure
+    it's now covered so a raise there can't escape send_sms."""
+    with app.app_context():
+        assert send_sms(_RaisingIdUser(), "slack_invite") is False
+    mock_send.assert_not_called()
+
+
 @patch("app.notifications.sms.twilio_send_sms",
        side_effect=ProviderError("unsubscribed", code=21610))
 def test_guards_opt_out_commit(mock_send, app):

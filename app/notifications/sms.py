@@ -24,9 +24,10 @@ def send_sms(user, template_key, **kwargs):
 
     Returns True on send, False on skip or failure. Never raises.
     """
-    with db.session.no_autoflush:
-        user_id = user.id  # Cache before potential session issues
+    user_id = None
     try:
+        with db.session.no_autoflush:
+            user_id = user.id  # Cache before potential session issues
         if not user.phone_e164 or user.sms_opt_out:
             return False
         body = _templates()[template_key].format(**kwargs)
@@ -50,6 +51,10 @@ def send_sms(user, template_key, **kwargs):
             "sms: %s to user %s failed: %s", template_key, user_id, exc)
         return False
     except Exception as exc:
+        # Outermost safety net: covers the user_id cache read above too, so a
+        # detached/expired `user` (DetachedInstanceError, transient DB error
+        # on attribute refresh) can never escape this function. Don't touch
+        # user attributes here -- they may be exactly what's unreadable.
         current_app.logger.warning(
-            "sms: %s to user %s failed: %s", template_key, user_id, exc)
+            "sms: %s failed for user_id=%s: %s", template_key, user_id, exc)
         return False
