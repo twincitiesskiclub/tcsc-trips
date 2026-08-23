@@ -1,4 +1,5 @@
 from unittest.mock import patch
+import time
 
 import pytest
 
@@ -100,17 +101,36 @@ def test_templates_fit_single_segment(mock_send, app, user):
 
 @patch("app.notifications.sms.twilio_send_sms",
        side_effect=ProviderError("unsubscribed", code=21610))
-def test_guards_opt_out_commit(mock_send, app, user):
+def test_guards_opt_out_commit(mock_send, app):
     """If db.session.commit() raises during opt-out, never_raises still holds.
-    Session must be usable after the failure (rollback clears pending state)."""
+    Session must be usable after the failure (rollback clears pending-rollback state).
+    Tests with a REAL commit failure by violating NOT NULL constraint."""
+    # Don't use the user fixture to avoid session contamination
     with app.app_context():
-        # Patch commit to fail only during send_sms, then verify session is usable
-        with patch("app.notifications.sms.db.session.commit",
-                   side_effect=Exception("commit failed")):
-            result = send_sms(User.query.get(user.id), "slack_invite")
-            assert result is False
+        # Create a fresh user for this test with unique email to avoid collisions
+        unique_email = f"real-failure-{int(time.time()*1000)}@test.com"
+        test_user = User(email=unique_email, first_name="Test", last_name="User",
+                         phone_e164="+16125551234")
+        db.session.add(test_user)
+        db.session.commit()
 
-        # After the patch context exits (commit is restored), verify session works
-        # by performing a simple query that would fail if session was in pending-rollback
-        count = User.query.count()
-        assert count >= 1
+        # Force a real commit failure: violate NOT NULL constraint on first_name
+        test_user.first_name = None
+        # Now send_sms will try to commit sms_opt_out=True, which fails,
+        # triggers our except block, and rollback() must clear the session state
+        result = send_sms(test_user, "slack_invite")
+        assert result is False
+
+        # After send_sms's rollback(), the session should be clean.
+        # Verify the session is usable after the failure.
+        # Without rollback() in send_sms, this would raise sqlalchemy.exc.PendingRollbackError
+        # Use no_autoflush to prevent autoflush from triggering the same error
+        with db.session.no_autoflush:
+            count = User.query.count()
+            assert count >= 1
+
+        # Clean up the test user (with session in good state after rollback)
+        test_user_db = User.query.filter_by(email=unique_email).first()
+        if test_user_db:
+            db.session.delete(test_user_db)
+            db.session.commit()

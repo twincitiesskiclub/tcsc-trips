@@ -24,12 +24,14 @@ def send_sms(user, template_key, **kwargs):
 
     Returns True on send, False on skip or failure. Never raises.
     """
+    with db.session.no_autoflush:
+        user_id = user.id  # Cache before potential session issues
     try:
         if not user.phone_e164 or user.sms_opt_out:
             return False
         body = _templates()[template_key].format(**kwargs)
         twilio_send_sms(user.phone_e164, body)
-        current_app.logger.info("sms: sent %s to user %s", template_key, user.id)
+        current_app.logger.info("sms: sent %s to user %s", template_key, user_id)
         return True
     except ProviderError as exc:
         if exc.code == 21610:  # recipient has replied STOP
@@ -38,16 +40,16 @@ def send_sms(user, template_key, **kwargs):
                 db.session.commit()
             except Exception as commit_exc:
                 current_app.logger.warning(
-                    "sms: failed to record opt-out for user %s: %s", user.id, commit_exc)
+                    "sms: failed to record opt-out for user %s: %s", user_id, commit_exc)
                 try:
                     db.session.rollback()
                 except Exception as rollback_exc:
                     current_app.logger.warning(
-                        "sms: failed to rollback session for user %s: %s", user.id, rollback_exc)
+                        "sms: failed to rollback session for user %s: %s", user_id, rollback_exc)
         current_app.logger.warning(
-            "sms: %s to user %s failed: %s", template_key, user.id, exc)
+            "sms: %s to user %s failed: %s", template_key, user_id, exc)
         return False
     except Exception as exc:
         current_app.logger.warning(
-            "sms: %s to user %s failed: %s", template_key, user.id, exc)
+            "sms: %s to user %s failed: %s", template_key, user_id, exc)
         return False
