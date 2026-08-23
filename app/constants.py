@@ -63,6 +63,21 @@ VALID_TECHNIQUES = {'classic', 'skate', 'no_preference'}
 VALID_EXPERIENCE_LEVELS = {'1-3', '3-7', '7+'}
 VALID_MEMBER_STATUSES = {'new', 'returning_former'}
 
+# Volunteer-interest question (season registration + Slack backfill).
+# Keys are stored in UserSeason.volunteer_interests / volunteer_committees;
+# labels are the single source for web form, Slack blocks, and admin views.
+VOLUNTEER_INTERESTS = {
+    'practice_lead': 'Lead a group at practice',
+    'event_volunteer': 'Volunteer at an event',
+    'committee': 'Join a committee',
+}
+VOLUNTEER_COMMITTEES = {
+    'adventures': 'Adventures (trip planning)',
+    'apparel': 'Apparel (designs and products)',
+    'dry_tri': 'Dry Tri (event planning)',
+    'social': 'Social (community events)',
+}
+
 # Field length limits
 MAX_NAME_LENGTH = 100
 MAX_PHONE_LENGTH = 20

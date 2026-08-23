@@ -14,6 +14,8 @@
   var currentView = 'all';
   var selectedSeasonId = null;
   var mr_effectiveSeasonName = null;
+  var mr_effectiveSeasonId = null;
+  var volunteerOptions = { interests: {}, committees: {} };
 
   // Filter state flags for saved-chip tracking
   var activeChip = null;   // 'active-members' | 'unlinked-slack' | 'no-roles' | null
@@ -154,6 +156,7 @@
     var effId = seasonIdToUse !== null ? seasonIdToUse : (currentSeason ? currentSeason.id : null);
     var _es = (effId !== null) ? allSeasons.find(function(s){return s.id === effId;}) : null;
     mr_effectiveSeasonName = _es ? _es.name : null;
+    mr_effectiveSeasonId = effId;
     usersData.forEach(function (user) {
       if (effId !== null && user.seasons) {
         user.season_status = user.seasons[String(effId)] || '';
@@ -162,10 +165,44 @@
     });
   }
 
+  // Volunteer answer for the season the view is scoped to (null = no answer)
+  function mr_volunteerFor(user) {
+    if (mr_effectiveSeasonId === null || !user.volunteer) return null;
+    return user.volunteer[String(mr_effectiveSeasonId)] || null;
+  }
+
+  // Committee label without its parenthetical, e.g. "Adventures (trip
+  // planning)" -> "Adventures"
+  function mr_committeeShort(key) {
+    var label = volunteerOptions.committees[key] || key;
+    return label.replace(/\s*\(.*\)$/, '');
+  }
+
+  function mr_populateVolunteerFilter() {
+    var sel = document.getElementById('mr-volunteer-filter');
+    if (!sel) return;
+    function opt(value, text) {
+      var o = document.createElement('option');
+      o.value = value;
+      o.textContent = text;
+      sel.appendChild(o);
+    }
+    opt('any', 'Answered (any)');
+    opt('none', 'No answer yet');
+    Object.keys(volunteerOptions.interests).forEach(function (key) {
+      opt(key, volunteerOptions.interests[key]);
+    });
+    Object.keys(volunteerOptions.committees).forEach(function (key) {
+      opt('committee:' + key, 'Committee: ' + mr_committeeShort(key));
+    });
+  }
+
   function mr_applyFilters() {
     var searchVal = (document.getElementById('mr-search').value || '').toLowerCase();
     var statusVal = document.getElementById('mr-status-filter').value;
     var seasonVal = document.getElementById('mr-season-filter').value;
+    var volunteerEl = document.getElementById('mr-volunteer-filter');
+    var volunteerVal = volunteerEl ? volunteerEl.value : '';
 
     // Get selected roles from popover
     var selectedRoles = mr_getSelectedRoles();
@@ -208,6 +245,22 @@
           if (user.season_status) return false;
         } else {
           if (user.season_status !== seasonVal) return false;
+        }
+      }
+
+      // Volunteer-interest filter (scoped to the effective season)
+      if (volunteerVal) {
+        var vol = mr_volunteerFor(user);
+        if (volunteerVal === 'any') {
+          if (!vol) return false;
+        } else if (volunteerVal === 'none') {
+          var registered = mr_effectiveSeasonId !== null &&
+            user.seasons && user.seasons[String(mr_effectiveSeasonId)];
+          if (!registered || vol) return false;
+        } else if (volunteerVal.indexOf('committee:') === 0) {
+          if (!vol || (vol.committees || []).indexOf(volunteerVal.slice(10)) === -1) return false;
+        } else {
+          if (!vol || (vol.interests || []).indexOf(volunteerVal) === -1) return false;
         }
       }
 
@@ -495,6 +548,26 @@
       ];
     }
     content.appendChild(block('Emergency', ecRows));
+    content.appendChild(el('hr', { class: 'mr-dw-sep' }, []));
+
+    // Volunteering block (answer for the season the view is scoped to)
+    var vol = mr_volunteerFor(user);
+    var volRows;
+    if (vol) {
+      var interestText = (vol.interests || []).map(function (k) {
+        return volunteerOptions.interests[k] || k;
+      }).join(', ');
+      volRows = [kv('Will help with', interestText || null)];
+      if ((vol.committees || []).length > 0) {
+        volRows.push(kv('Committees', vol.committees.map(mr_committeeShort).join(', ')));
+      }
+    } else {
+      var volRegistered = mr_effectiveSeasonId !== null &&
+        user.seasons && user.seasons[String(mr_effectiveSeasonId)];
+      volRows = [el('p', { class: 'mr-v--empty', style: 'font-size:13.5px;color:#94a3b8' },
+        [volRegistered ? 'No answer yet' : 'Not registered this season'])];
+    }
+    content.appendChild(block('Volunteering', volRows));
     content.appendChild(el('hr', { class: 'mr-dw-sep' }, []));
 
     // Roles block
@@ -1196,10 +1269,11 @@
       });
     }
 
-    // Status + season-status filters
+    // Status + season-status + volunteer filters
     var statusFilter = document.getElementById('mr-status-filter');
     var seasonFilter = document.getElementById('mr-season-filter');
-    [statusFilter, seasonFilter].forEach(function (sel) {
+    var volunteerFilter = document.getElementById('mr-volunteer-filter');
+    [statusFilter, seasonFilter, volunteerFilter].forEach(function (sel) {
       if (sel) sel.addEventListener('change', function () {
         activeChip = null;
         document.querySelectorAll('.mr-qf-chip').forEach(function (c) {
@@ -1280,6 +1354,8 @@
       allSeasons = data.seasons || [];
       allTags = data.tags || [];
       currentSeason = data.current_season || null;
+      volunteerOptions = data.volunteer_options || { interests: {}, committees: {} };
+      mr_populateVolunteerFilter();
 
       // Sort alphabetically by last_name, then first_name
       usersData.sort(function (a, b) {

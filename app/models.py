@@ -320,6 +320,10 @@ class UserSeason(db.Model):
     payment_date = db.Column(db.Date)
     status = db.Column(db.String(50), nullable=False, default=UserSeasonStatus.PENDING_LOTTERY)
     needs_review = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    # Volunteer-interest answer (keys from constants.VOLUNTEER_INTERESTS /
+    # VOLUNTEER_COMMITTEES). Null = never answered (pre-question registrants).
+    volunteer_interests = db.Column(JSON)
+    volunteer_committees = db.Column(JSON)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

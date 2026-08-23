@@ -5,7 +5,8 @@ from datetime import datetime
 from ..errors import flash_error, flash_info
 from ..utils import (get_current_times, normalize_email, normalize_phone_e164,
                      format_phone_display, format_datetime_central,
-                     today_central, validate_registration_form)
+                     today_central, validate_registration_form,
+                     validate_volunteer_selections)
 from ..verify.service import get_verified_identity, clear_verified_identity
 from ..notifications.sms import send_sms
 from .. import late_link
@@ -223,7 +224,12 @@ def season_register(season_id):
             validation_form = form.copy()
             validation_form['status'] = 'returning_former' if is_returning else 'new'
             is_valid, validation_errors = validate_registration_form(validation_form, user_fields.get('date_of_birth'))
-            if not is_valid:
+            volunteer_interests, volunteer_committees, volunteer_errors = (
+                validate_volunteer_selections(
+                    form.getlist('volunteerInterests'),
+                    form.getlist('volunteerCommittees')))
+            validation_errors.extend(volunteer_errors)
+            if not is_valid or volunteer_errors:
                 for error in validation_errors:
                     flash_error(error)
                 return redirect(url_for('registration.season_register', season_id=season_id))
@@ -266,6 +272,8 @@ def season_register(season_id):
                     registration_date=today_central(),
                     status=UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY,
                     needs_review=needs_review,
+                    volunteer_interests=volunteer_interests,
+                    volunteer_committees=volunteer_committees,
                 )
                 db.session.add(user_season)
             else:
@@ -273,6 +281,8 @@ def season_register(season_id):
                 user_season.registration_date = current_time.date()
                 user_season.status = UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
                 user_season.needs_review = needs_review
+                user_season.volunteer_interests = volunteer_interests
+                user_season.volunteer_committees = volunteer_committees
 
             db.session.commit()
             payment_hold = not is_returning
