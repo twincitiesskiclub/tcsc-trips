@@ -4,7 +4,7 @@ from flask import Flask
 from flask_migrate import Migrate
 
 from .auth import init_oauth
-from .config import configure_database, load_stripe_config
+from .config import configure_database, load_stripe_config, configure_app
 from .models import db
 from .events.models import (
     Event,
@@ -54,6 +54,7 @@ def create_app(environment=None):
         raise ValueError('FLASK_SECRET_KEY environment variable is required')
 
     configure_database(app, environment)
+    configure_app(app)
     init_oauth(app)
     init_security(app, environment)
 
