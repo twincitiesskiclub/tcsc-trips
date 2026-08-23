@@ -39,6 +39,7 @@ from .routes.season_api import bp as season_api_bp
 from .routes.slack_interactivity import slack_bp
 from .routes.socials import socials
 from .routes.trips import trips
+from .routes.verify import verify_api
 from .scheduler import init_scheduler
 
 
@@ -82,6 +83,7 @@ def create_app(environment=None):
     app.register_blueprint(registration)
     app.register_blueprint(season_api_bp)
     app.register_blueprint(slack_bp)
+    app.register_blueprint(verify_api)
 
     # Slack Bolt verifies its own request signatures. Browser CSRF tokens are
     # neither available nor appropriate for Slack's server-to-server hooks.
