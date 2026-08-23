@@ -149,6 +149,23 @@ def validate_phone(phone: str, field_name: str = "Phone") -> tuple[bool, str]:
     return True, ""
 
 
+def normalize_phone_e164(raw):
+    """Normalize a US phone number to E.164 (+1XXXXXXXXXX).
+
+    Accepts 10 digits or 11 digits with a leading 1, in any common
+    formatting. Returns None for anything else (including non-US numbers) —
+    callers treat None as "no usable phone", never as an error.
+    """
+    if not raw:
+        return None
+    digits = re.sub(r'\D', '', raw)
+    if len(digits) == 11 and digits.startswith('1'):
+        digits = digits[1:]
+    if len(digits) != 10:
+        return None
+    return '+1' + digits
+
+
 def validate_required_string(value: str, field_name: str, max_length: int) -> tuple[bool, str]:
     """Validate a required string field.
 
