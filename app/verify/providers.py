@@ -16,8 +16,11 @@ class ProviderError(Exception):
 
 
 def _twilio_auth():
-    return (current_app.config['TWILIO_API_KEY_SID'],
-            current_app.config['TWILIO_API_KEY_SECRET'])
+    key_sid = current_app.config['TWILIO_API_KEY_SID']
+    key_secret = current_app.config['TWILIO_API_KEY_SECRET']
+    if not key_sid or not key_secret:
+        raise ProviderError('Twilio credentials are not configured')
+    return (key_sid, key_secret)
 
 
 def _raise_for_twilio(resp):
