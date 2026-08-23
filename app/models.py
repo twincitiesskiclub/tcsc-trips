@@ -112,6 +112,10 @@ class User(db.Model):
     notes = db.Column(db.Text)
     user_metadata = db.Column(JSON)
     phone = db.Column(db.String(20))
+    phone_e164 = db.Column(db.String(16), index=True)  # +1XXXXXXXXXX; NOT unique (households share numbers)
+    phone_verified_at = db.Column(db.DateTime)
+    email_verified_at = db.Column(db.DateTime)
+    sms_opt_out = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     date_of_birth = db.Column(db.Date)
     pronouns = db.Column(db.String(50))
     preferred_technique = db.Column(db.String(50))
@@ -137,6 +141,14 @@ class User(db.Model):
     def get_by_email(cls, email):
         """Find a user by email address. Returns None if not found."""
         return cls.query.filter_by(email=email).one_or_none()
+
+    @classmethod
+    def get_by_phone(cls, phone_e164):
+        """All users sharing this normalized phone, oldest first.
+
+        Returns a list — phone_e164 is deliberately non-unique.
+        """
+        return cls.query.filter_by(phone_e164=phone_e164).order_by(cls.id).all()
 
     @property
     def full_name(self):
@@ -307,6 +319,7 @@ class UserSeason(db.Model):
     registration_date = db.Column(db.Date, nullable=False)
     payment_date = db.Column(db.Date)
     status = db.Column(db.String(50), nullable=False, default=UserSeasonStatus.PENDING_LOTTERY)
+    needs_review = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -433,3 +446,27 @@ class AppConfig(db.Model):
             config = cls(key=key, value=value, description=description, category=category)
             db.session.add(config)
         return config
+
+
+class VerificationCode(db.Model):
+    """Emailed 6-digit codes. Phone codes live in Twilio Verify, not here."""
+    __tablename__ = 'verification_codes'
+
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), nullable=False, index=True)
+    code_hash = db.Column(db.String(64), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    expires_at = db.Column(db.DateTime, nullable=False)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    consumed_at = db.Column(db.DateTime)
+
+
+class VerificationAttempt(db.Model):
+    """Send-attempt log used only for rate limiting."""
+    __tablename__ = 'verification_attempts'
+
+    id = db.Column(db.Integer, primary_key=True)
+    target = db.Column(db.String(64), nullable=False, index=True)  # phone_e164 or email
+    channel = db.Column(db.String(10), nullable=False)  # 'sms' | 'email'
+    ip = db.Column(db.String(45), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)
