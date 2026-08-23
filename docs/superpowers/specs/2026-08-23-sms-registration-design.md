@@ -92,7 +92,7 @@ Nothing else in v1. No lottery-result texts (fast follow). The Slack invite mech
 
 Mechanics:
 
-- New Messaging Service "Registration - TCSC" on the existing +1 612 444 8606 number, separate from the practices service. A2P Standard brand is already approved.
+- Registration texts send through the existing "Practices - TCSC" Messaging Service (`MG1d94fd27cac61678a41e94914c56cccb`): the club's one number can belong to only one service, and the approved A2P campaign (VERIFIED, LOW_VOLUME) is attached to it. Creating a second service would mean a new campaign approval, which takes weeks. Revisit separation if the club ever buys a second number.
 - Texts are plain GSM-7, no emoji, one segment each. Templates live in `config/sms.yaml`.
 - Twilio handles STOP/START at the carrier level; a webhook records `sms_opt_out` on the User so we stop trying.
 - `app/notifications/sms.py`: `send_sms(user, template, **kwargs)` resolves `phone_e164`, checks opt-out, logs, and never raises into the calling flow. A failed confirmation text logs and moves on; it must not fail a registration.
@@ -100,11 +100,8 @@ Mechanics:
 
 ## Account setup (outside the repo)
 
-- Twilio: create the Verify service and the "Registration - TCSC" Messaging Service, attach the number. Doable with the stored API key.
-- Resend: domain `tcsc.ski` registered (id 965f61ec-6742-4d3a-9245-17465965f7b9, us-east-1). Requires three DNS records in the club's Cloudflare (not reachable from Rob's personal CF account):
-  - TXT `resend._domainkey.tcsc.ski` = `p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQDRxFF2CyikpqzCLLkD4UYRDvUg6zt51Aj2ptuDKbM/pSpj+NnUe4Gf5yVZaITjSk8SAn4Ue13Hp/6dMvO/tkdiPUnjDJz/abBTdU4njR43pK/EQaH+QdHdPkFJH90juTcOkPUo05O2uj2IT5rhxUabZ8Pd8DDlFhbR875v5Qh04QIDAQAB`
-  - MX `send.tcsc.ski` = `feedback-smtp.us-east-1.amazonses.com` priority 10
-  - TXT `send.tcsc.ski` = `v=spf1 include:amazonses.com ~all`
+- Twilio: DONE 2026-08-23. Verify service "Twin Cities Ski Club" created (`VAc3db44e72c904154c4892c8c89afc911`, 6-digit codes). Registration texts reuse the existing Messaging Service (see Messaging).
+- Resend: DONE 2026-08-23. Domain `tcsc.ski` verified for sending (id 965f61ec-6742-4d3a-9245-17465965f7b9, us-east-1); DNS records added to the club's Cloudflare by Rob; smoke-test email delivered from `club@tcsc.ski`.
 - Warm the Resend domain before September: send a handful of real mails to club-controlled inboxes ahead of launch.
 - Env vars (dev `.env` done; Render needs them at deploy): `TWILIO_ACCOUNT_SID`, `TWILIO_API_KEY_SID`, `TWILIO_API_KEY_SECRET`, `TWILIO_VERIFY_SERVICE_SID`, `TWILIO_MESSAGING_SERVICE_SID`, `RESEND_API_KEY`.
 
