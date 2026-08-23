@@ -100,6 +100,21 @@ def season_register(season_id):
                 return redirect(url_for('registration.season_register',
                                         season_id=season_id))
 
+            # Disclaimed identity: someone who verified into account A but
+            # then took an unverified escape hatch with a DIFFERENT email
+            # (the "Not [name]?" flow) has renounced that account link. Drop
+            # it so nothing below binds to A's row, pricing, or capture
+            # treatment. The identity dict itself is kept: the phone was
+            # genuinely verified, so phone_e164/phone_verified_at stamping
+            # below still applies to whichever row this POST resolves to.
+            identity_disclaimed = (
+                continue_unverified
+                and verified_user is not None
+                and email != normalize_email(verified_user.email)
+            )
+            if identity_disclaimed:
+                verified_user = None
+
             if verified_user is not None:
                 user = verified_user
                 if email != user.email and User.get_by_email(email):
@@ -125,11 +140,16 @@ def season_register(season_id):
             # needs_review is about account-MATCH confidence, computed now
             # (before any row is created/reused below) from the pre-creation
             # state: true whenever no phone was verified this session at
-            # all, or an existing row is being claimed (email collision +
+            # all, an existing row is being claimed (email collision +
             # continue_unverified) without a verified link to that specific
-            # account. A brand-new row created from a verified-but-unlinked
-            # phone (user is still None here) is NOT flagged.
-            needs_review = identity is None or (user is not None and verified_user is None)
+            # account, or a verified account link was disclaimed (the phone
+            # matched someone, but this registrant says it isn't them - an
+            # admin should eyeball that). A brand-new row created from a
+            # verified-but-unlinked phone (user is still None here) is NOT
+            # flagged.
+            needs_review = (identity is None
+                            or identity_disclaimed
+                            or (user is not None and verified_user is None))
 
             # Get payment_intent_id for coordination with webhook
             payment_intent_id = form.get('payment_intent_id')

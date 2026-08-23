@@ -94,3 +94,20 @@ def test_unverified_is_always_manual_new(mock_create, client, fixtures):
     assert kwargs["capture_method"] == "manual"
     assert kwargs["metadata"]["member_type"] == "NEW"
     assert kwargs["metadata"]["verified"] == "false"
+
+
+@patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
+def test_verified_identity_with_different_email_demotes_to_manual_new(
+        mock_create, client, fixtures):
+    # Session identity points at returning member A, but the intent is being
+    # created for a different typed email (the "Not [name]?" disclaim flow,
+    # or a mistyped/changed email). Never auto-capture on A's credentials.
+    _set_identity(client, user_id=fixtures["user_id"])
+    resp = client.post("/create-season-payment-intent", json={
+        "season_id": fixtures["season_id"],
+        "email": "pi-someone-else@test.com", "name": "Not Pat"})
+    assert resp.status_code == 200
+    kwargs = mock_create.call_args.kwargs
+    assert kwargs["capture_method"] == "manual"
+    assert kwargs["metadata"]["member_type"] == "NEW"
+    assert kwargs["metadata"]["verified"] == "false"

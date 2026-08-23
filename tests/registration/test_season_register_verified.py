@@ -172,3 +172,57 @@ def test_verified_phone_but_unmatched_collision_flag_stays_new_and_reviewed(
             UserSeason.query.filter_by(season_id=old_season_id).delete()
             db.session.delete(Season.query.get(old_season_id))
             db.session.commit()
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_disclaimed_identity_never_binds_to_verified_row(
+        mock_sms, client, app, season):
+    """Session verified into returning account A, then the registrant took
+    the "Not [name]?" path and exited through an unverified escape hatch
+    (continue_unverified=1) with a brand-new email. The POST must create a
+    fresh flagged lottery row and leave A's row completely untouched."""
+    a_email = "reg-account-a@test.com"
+    with app.app_context():
+        old_season = Season(
+            name="Verify Test Old A", year=2086, price_cents=15000,
+            season_type='winter',
+            start_date=date(2086, 11, 1), end_date=date(2087, 3, 1))
+        db.session.add(old_season)
+        db.session.commit()
+        a = User(email=a_email, first_name="Alice", last_name="Owner",
+                 phone_e164=PHONE)
+        db.session.add(a)
+        db.session.commit()
+        db.session.add(UserSeason(
+            user_id=a.id, season_id=old_season.id,
+            registration_type="new",
+            registration_date=date(2086, 10, 1),
+            status=UserSeasonStatus.ACTIVE,
+        ))
+        db.session.commit()
+        a_id, old_season_id = a.id, old_season.id
+
+    try:
+        _set_identity(client, user_id=a_id)  # phone matched A this session
+        resp = client.post(f"/seasons/{season}/register",
+                           data={**FORM, "continue_unverified": "1"})
+        assert resp.status_code == 200
+        with app.app_context():
+            a = User.query.get(a_id)
+            assert a.first_name == "Alice"      # A's row untouched
+            assert a.email == a_email
+            assert UserSeason.get_for_user_season(a_id, season) is None
+            b = User.query.filter_by(email=EMAIL).one()
+            assert b.id != a_id                 # fresh row, not A
+            us = UserSeason.get_for_user_season(b.id, season)
+            assert us.registration_type == "new"
+            assert us.status == UserSeasonStatus.PENDING_LOTTERY
+            assert us.needs_review is True      # disclaimed match: eyeball it
+        assert mock_sms.call_args.args[1] == "confirmation_lottery"
+    finally:
+        with app.app_context():
+            UserSeason.query.filter_by(user_id=a_id).delete()
+            db.session.commit()
+            db.session.delete(User.query.get(a_id))
+            db.session.delete(Season.query.get(old_season_id))
+            db.session.commit()

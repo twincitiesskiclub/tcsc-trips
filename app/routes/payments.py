@@ -666,6 +666,14 @@ def create_season_payment_intent():
         verified_user = None
         if identity and identity.get('user_id'):
             verified_user = User.query.get(identity['user_id'])
+        # A typed email that differs from the verified account's email means
+        # the payer is not (or no longer claims to be) that account - e.g.
+        # the "Not [name]?" disclaim flow. Demote to new/manual so money is
+        # only auto-captured for a proven returning match. The legitimate
+        # verified-member-changing-email case just gets a hold instead of an
+        # instant charge; an admin captures it. Conservative and money-safe.
+        if verified_user is not None and email != normalize_email(verified_user.email):
+            verified_user = None
         if verified_user is not None and verified_user.is_returning:
             member_type = MemberType.RETURNING.value
         else:
