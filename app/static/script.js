@@ -279,6 +279,21 @@ document.addEventListener('DOMContentLoaded', () => {
     new PaymentForm();
   }
 
+  // Registration success page: the submission went through, so this
+  // season's saved answers are no longer needed and must not leak into a
+  // future registration. CSP blocks inline scripts on that page, so the
+  // cleanup lives here, keyed off the success marker element.
+  const successMarker = document.getElementById('registration-success');
+  if (successMarker && successMarker.dataset.seasonId) {
+    const successKey = `tcsc-registration-${successMarker.dataset.seasonId}`;
+    try {
+      sessionStorage.removeItem(successKey);
+      sessionStorage.removeItem(`${successKey}-entered`);
+    } catch (e) {
+      // silently fail
+    }
+  }
+
   // Get the registration form and price from a data attribute or JS variable
   const registrationForm = document.getElementById('registration-form');
   if (!registrationForm) return;
@@ -339,15 +354,6 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     } catch (e) {
       // Invalid JSON or other error - silently fail
-    }
-  }
-
-  function clearFormState() {
-    try {
-      sessionStorage.removeItem(STORAGE_KEY);
-      sessionStorage.removeItem(ENTERED_KEY);
-    } catch (e) {
-      // silently fail
     }
   }
 
@@ -416,9 +422,14 @@ document.addEventListener('DOMContentLoaded', () => {
     function setPaymentStatusLine(memberType) {
       const line = byId('payment-status-line');
       if (!line) return;
-      line.textContent = memberType === 'returning'
-        ? `You're registering as a returning member. Your card will be charged $${priceDollars.toFixed(2)} today.`
-        : "You're registering as a new member. We'll place a hold on your card; you're only charged if you get a spot in the lottery.";
+      if (memberType === 'returning') {
+        line.textContent = `You're registering as a returning member. Your card will be charged $${priceDollars.toFixed(2)} today.`;
+      } else if (memberType === 'new') {
+        line.textContent = "You're registering as a new member. We'll place a hold on your card; you're only charged if you get a spot in the lottery.";
+      } else {
+        // Membership type unknown (prefill fetch failed); don't guess.
+        line.textContent = "We'll confirm your membership type at checkout.";
+      }
       line.hidden = false;
     }
 
@@ -517,7 +528,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Prefill is a convenience; verification already succeeded.
       }
       if (data) applyPrefill(data);
-      else setPaymentStatusLine('new');
+      else setPaymentStatusLine(null);
       const firstName = (data && data.user && data.user.firstName) || fallbackFirstName || null;
       enterWizard({ continueUnverified: false, firstName });
     }
@@ -874,9 +885,10 @@ document.addEventListener('DOMContentLoaded', () => {
         paymentIntentInput.value = result.paymentIntent.id;
         registrationForm.appendChild(paymentIntentInput);
 
-        // Clear saved form state before submitting
-        clearFormState();
-
+        // Saved answers are NOT cleared here: the server can still reject
+        // this POST (expired identity, email collision, closed window) and
+        // redirect back promising "your answers are saved". The success
+        // page clears the keys instead.
         registrationForm.submit();
       } catch (err) {
         showError('Payment failed. Please try again.');

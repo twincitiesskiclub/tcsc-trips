@@ -14,7 +14,7 @@
         <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
       </header>
 
-      <div class="page-content page-content--narrow">
+      <div class="page-content page-content--narrow" id="registration-success" data-season-id="{{ season.id }}">
         <div style="text-align: center; margin-bottom: 24px;">
           <h1>Thank you for registering!</h1>
           <p style="color: var(--text-muted);">Your registration for <strong>{{ season.name }}</strong> has been received.</p>
@@ -53,5 +53,9 @@
         </div>
       </div>
     </div>
+    {# Clears this season's saved registration answers from sessionStorage.
+       This page's CSP has no 'unsafe-inline', so the cleanup lives in
+       script.js, keyed off #registration-success above. #}
+    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
   </body>
 </html>
