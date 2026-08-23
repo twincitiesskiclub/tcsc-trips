@@ -1,0 +1,72 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}Registration Review{% endblock %}
+
+{% block content %}
+<div class="flex items-center justify-between mb-6 flex-wrap gap-4">
+    <div>
+        <h1 class="text-2xl font-semibold text-tcsc-navy m-0">Registration review: {{ season.name }}</h1>
+        <p class="mt-1 text-sm text-zinc-500">Resolve these before the lottery runs.</p>
+    </div>
+    <a href="{{ url_for('admin.get_admin_seasons') }}" class="bg-gray-200 text-gray-600 px-4 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Back to Seasons</a>
+</div>
+
+<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100 mb-6">
+    <h2 class="text-lg font-semibold text-tcsc-navy mt-0">Unverified registrations ({{ flagged|length }})</h2>
+    <p class="text-sm text-zinc-500">These members registered without completing verification. Confirm who
+        they are before the lottery runs; their payments are holds, nothing is charged yet.</p>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+            <thead>
+                <tr class="text-left text-xs font-semibold uppercase text-zinc-500 border-b border-tcsc-gray-100">
+                    <th class="py-2 pr-4">Name</th>
+                    <th class="py-2 pr-4">Email</th>
+                    <th class="py-2 pr-4">Phone</th>
+                    <th class="py-2 pr-4">Type</th>
+                    <th class="py-2 pr-4">Date</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for us in flagged %}
+                <tr class="border-b border-tcsc-gray-100">
+                    <td class="py-2 pr-4">{{ us.user.full_name }}</td>
+                    <td class="py-2 pr-4">{{ us.user.email }}</td>
+                    <td class="py-2 pr-4">{{ us.user.phone or "" }}</td>
+                    <td class="py-2 pr-4">{{ us.registration_type }}</td>
+                    <td class="py-2 pr-4">{{ us.registration_date }}</td>
+                </tr>
+                {% else %}
+                <tr><td class="py-3 text-zinc-500" colspan="5">Nothing flagged for review.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="bg-white p-6 rounded-tcsc border border-tcsc-gray-100">
+    <h2 class="text-lg font-semibold text-tcsc-navy mt-0">Possible returning members registered as new ({{ suspects|length }})</h2>
+    <p class="text-sm text-zinc-500">Each row is a new registration whose name or birth date matches an
+        existing member with a past active season. If they are the same person, merge before the lottery
+        so they keep their returning spot.</p>
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm border-collapse">
+            <thead>
+                <tr class="text-left text-xs font-semibold uppercase text-zinc-500 border-b border-tcsc-gray-100">
+                    <th class="py-2 pr-4">New registration</th>
+                    <th class="py-2 pr-4">Possible match</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in suspects %}
+                <tr class="border-b border-tcsc-gray-100">
+                    <td class="py-2 pr-4">{{ s.registration.user.full_name }} ({{ s.registration.user.email }})</td>
+                    <td class="py-2 pr-4">{% for m in s.matches %}{{ m.full_name }} ({{ m.email }}){% if not loop.last %}, {% endif %}{% endfor %}</td>
+                </tr>
+                {% else %}
+                <tr><td class="py-3 text-zinc-500" colspan="2">No possible duplicates found.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

@@ -760,6 +760,43 @@ def activate_season(season_id):
     return redirect(url_for('admin.get_admin_seasons'))
 
 
+@admin.route('/admin/registration-review')
+@admin_required
+def registration_review():
+    """Pre-lottery review report: unverified registrations and possible
+    returning members who registered as new."""
+    season_id = request.args.get('season_id', type=int)
+    season = Season.query.get_or_404(season_id)
+
+    flagged = (UserSeason.query
+               .filter_by(season_id=season.id, needs_review=True)
+               .join(User).order_by(User.last_name).all())
+
+    # New registrations this season whose name or DOB matches a different
+    # user who has actually been ACTIVE before — the "returning member who
+    # registered as new" trap.
+    new_regs = (UserSeason.query
+                .filter_by(season_id=season.id, registration_type='new')
+                .join(User).all())
+    suspects = []
+    for us in new_regs:
+        u = us.user
+        candidates = User.query.filter(
+            User.id != u.id,
+            db.or_(
+                db.and_(func.lower(User.first_name) == u.first_name.lower(),
+                        func.lower(User.last_name) == u.last_name.lower()),
+                db.and_(User.date_of_birth.isnot(None),
+                        User.date_of_birth == u.date_of_birth),
+            )).all()
+        matches = [c for c in candidates if c.is_returning]
+        if matches:
+            suspects.append({'registration': us, 'matches': matches})
+
+    return render_template('admin/registration_review.html',
+                            season=season, flagged=flagged, suspects=suspects)
+
+
 @admin.route('/admin/seasons/<int:season_id>/export')
 @admin_required
 def export_season_members(season_id):
