@@ -13,6 +13,7 @@ from ..notifications.slack import send_payment_notification
 from app.slack import trips as trip_slack
 from ..security import csrf
 from .. import late_link
+from app.verify.service import get_verified_identity
 
 payments = Blueprint('payments', __name__)
 
@@ -660,9 +661,16 @@ def create_season_payment_intent():
         season = Season.query.get(season_id)
         if not season or not season.price_cents:
             return json_error('Invalid season or price')
-        # Derive member_type on the backend
-        user = User.get_by_email(email)
-        member_type = MemberType.RETURNING.value if user and user.is_returning else MemberType.NEW.value
+        # Identity comes from the verified session, never the typed email.
+        identity = get_verified_identity()
+        verified_user = None
+        if identity and identity.get('user_id'):
+            verified_user = User.query.get(identity['user_id'])
+        if verified_user is not None and verified_user.is_returning:
+            member_type = MemberType.RETURNING.value
+        else:
+            member_type = MemberType.NEW.value
+        verified = identity is not None and verified_user is not None
         # A valid invite token for this (season, email) bypasses the window gate.
         invite_payload = late_link.verify(invite_token) if invite_token else None
         invite_valid_for_email = (
@@ -684,13 +692,9 @@ def create_season_payment_intent():
         ).first()
         if existing_payment:
             return json_error('You have already registered for this season.')
-        # Determine capture method
-        if member_type == MemberType.NEW.value:
-            capture_method = 'manual'
-        elif member_type == MemberType.RETURNING.value:
-            capture_method = 'automatic'
-        else:
-            return json_error('Invalid member_type')
+        # Returning members are guaranteed a spot: charge immediately.
+        # Everyone else (new or unverified) gets a hold; see CLAUDE.md.
+        capture_method = 'automatic' if member_type == MemberType.RETURNING.value else 'manual'
         intent = stripe.PaymentIntent.create(
             amount=season.price_cents,
             currency='usd',
@@ -703,7 +707,8 @@ def create_season_payment_intent():
                 'email': email,
                 'season_id': str(season_id),
                 'member_type': member_type,
-                'payment_type': PaymentType.SEASON
+                'payment_type': PaymentType.SEASON,
+                'verified': 'true' if verified else 'false',
             },
             **stripe_idempotency_options(),
         )
