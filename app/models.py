@@ -324,6 +324,8 @@ class UserSeason(db.Model):
     # VOLUNTEER_COMMITTEES). Null = never answered (pre-question registrants).
     volunteer_interests = db.Column(JSON)
     volunteer_committees = db.Column(JSON)
+    # When the Slack backfill last asked this member (rate-limits re-sends)
+    volunteer_asked_at = db.Column(db.DateTime)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

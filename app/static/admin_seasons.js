@@ -385,6 +385,49 @@
   }
 
   // -----------------------------------------------------------------------
+  // Slack volunteer backfill: preview counts, confirm, send
+  // -----------------------------------------------------------------------
+
+  function stlVolunteerAsk(season) {
+    fetch('/admin/seasons/' + season.id + '/volunteer-ask/preview')
+      .then(function (res) { return res.json(); })
+      .then(function (stats) {
+        var notes = [];
+        if (stats.cooldown) notes.push(stats.cooldown + ' asked within the last 3 days (skipped)');
+        if (stats.no_slack) notes.push(stats.no_slack + ' with no linked Slack account');
+        var noteText = notes.length ? ' Not included: ' + notes.join('; ') + '.' : '';
+        if (!stats.eligible) {
+          if (window.showToast) showToast('No one to ask right now.' + noteText, 'success');
+          return;
+        }
+        var body = 'DM the volunteer question to ' + stats.eligible +
+          ' registered member' + (stats.eligible === 1 ? '' : 's') +
+          " who haven't answered it." + noteText;
+        return stlConfirm({ title: 'Ask on Slack?', body: body, confirmLabel: 'Send DMs' })
+          .then(function (ok) {
+            if (!ok) return;
+            return fetch('/admin/seasons/' + season.id + '/volunteer-ask', {
+              method: 'POST',
+              headers: { 'Accept': 'application/json' }
+            })
+              .then(function (res) { return res.json(); })
+              .then(function (data) {
+                if (data.success) {
+                  var msg = 'Sent ' + data.sent + ' DM' + (data.sent === 1 ? '' : 's') +
+                    (data.failed ? ' (' + data.failed + ' failed)' : '');
+                  if (window.showToast) showToast(msg, data.failed ? 'error' : 'success');
+                } else if (window.showToast) {
+                  showToast(data.error || 'Failed to send', 'error');
+                }
+              });
+          });
+      })
+      .catch(function (err) {
+        if (window.showToast) showToast('Error: ' + err.message, 'error');
+      });
+  }
+
+  // -----------------------------------------------------------------------
   // Activate action
   // -----------------------------------------------------------------------
 
@@ -628,6 +671,11 @@
         class: 'admin-ui-dw-btn-ghost',
         onclick: function () { stlLateLinkModal(season); }
       }, ['Late Link']),
+      el('button', {
+        type: 'button',
+        class: 'admin-ui-dw-btn-ghost',
+        onclick: function () { stlVolunteerAsk(season); }
+      }, ['Ask on Slack']),
       activateBtn,
       deleteBtn
     ]);
@@ -733,6 +781,14 @@
         class: 'stl-btn stl-btn-ghost',
         download: 'download'
       }, ['Export CSV']),
+      el('button', {
+        type: 'button',
+        class: 'stl-btn stl-btn-ghost',
+        onclick: function (e) {
+          e.stopPropagation();
+          stlVolunteerAsk(season);
+        }
+      }, ['Ask on Slack']),
       el('button', {
         type: 'button',
         class: 'stl-btn stl-btn-ghost',

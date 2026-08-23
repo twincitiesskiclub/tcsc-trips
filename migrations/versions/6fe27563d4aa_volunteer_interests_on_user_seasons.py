@@ -19,9 +19,11 @@ def upgrade():
     with op.batch_alter_table('user_seasons', schema=None) as batch_op:
         batch_op.add_column(sa.Column('volunteer_interests', sa.JSON(), nullable=True))
         batch_op.add_column(sa.Column('volunteer_committees', sa.JSON(), nullable=True))
+        batch_op.add_column(sa.Column('volunteer_asked_at', sa.DateTime(), nullable=True))
 
 
 def downgrade():
     with op.batch_alter_table('user_seasons', schema=None) as batch_op:
+        batch_op.drop_column('volunteer_asked_at')
         batch_op.drop_column('volunteer_committees')
         batch_op.drop_column('volunteer_interests')

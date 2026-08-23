@@ -875,6 +875,27 @@ def export_season_members(season_id):
         headers={'Content-Disposition': f'attachment; filename={filename}'}
     )
 
+@admin.route('/admin/seasons/<int:season_id>/volunteer-ask/preview')
+@admin_required
+def volunteer_ask_preview(season_id):
+    """Counts for the confirm dialog before the Slack volunteer backfill."""
+    Season.query.get_or_404(season_id)
+    from app.slack.volunteer_backfill import backfill_stats
+    return jsonify(backfill_stats(season_id))
+
+
+@admin.route('/admin/seasons/<int:season_id>/volunteer-ask', methods=['POST'])
+@admin_required
+def volunteer_ask_send(season_id):
+    """DM the volunteer-interest form to registered members who haven't
+    answered it. Safe to re-trigger: answered and recently-asked members
+    are skipped."""
+    Season.query.get_or_404(season_id)
+    from app.slack.volunteer_backfill import send_backfill_asks
+    result = send_backfill_asks(season_id)
+    return jsonify({'success': True, **result})
+
+
 def get_current_season():
     """Get the current, next upcoming, or most recent season."""
     today = datetime.utcnow().date()
