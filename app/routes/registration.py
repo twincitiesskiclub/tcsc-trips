@@ -122,9 +122,14 @@ def season_register(season_id):
                         return redirect(url_for('registration.season_register',
                                                 season_id=season_id))
 
-            # A session identity means the phone was OTP-verified this
-            # session, whether or not it's linked to an existing account yet.
-            verified = identity is not None
+            # needs_review is about account-MATCH confidence, computed now
+            # (before any row is created/reused below) from the pre-creation
+            # state: true whenever no phone was verified this session at
+            # all, or an existing row is being claimed (email collision +
+            # continue_unverified) without a verified link to that specific
+            # account. A brand-new row created from a verified-but-unlinked
+            # phone (user is still None here) is NOT flagged.
+            needs_review = identity is None or (user is not None and verified_user is None)
 
             # Get payment_intent_id for coordination with webhook
             payment_intent_id = form.get('payment_intent_id')
@@ -133,9 +138,11 @@ def season_register(season_id):
                 return redirect(url_for('registration.season_register', season_id=season_id))
             existing_payment = Payment.get_by_payment_intent(payment_intent_id)
 
-            # Returning only when the identity is verified; unverified
-            # registrations are treated as new (manual capture) and reviewed.
-            is_returning = bool(verified and user and user.is_returning)
+            # Returning pricing requires the verified phone to be linked to
+            # THIS account specifically — a verified-but-unmatched phone (new
+            # number) or an unverified row-reuse (collision + flag) never
+            # earns returning treatment, regardless of that row's history.
+            is_returning = bool(verified_user is not None and user and user.is_returning)
 
             # Check if registration window is open for this user type
             member_type_str = 'returning' if is_returning else 'new'
@@ -212,6 +219,12 @@ def season_register(season_id):
             user.phone_e164 = phone_e164
             if identity is not None:
                 user.phone_verified_at = user.phone_verified_at or datetime.utcnow()
+            else:
+                # No session identity means this phone_e164 is only the
+                # typed form value — clear any stale verified-at from a
+                # prior legitimate verification so a reused/updated row
+                # never carries an unverified number that looks verified.
+                user.phone_verified_at = None
 
             # Link payment to user if webhook created it before form submission
             if existing_payment and not existing_payment.user_id:
@@ -220,8 +233,6 @@ def season_register(season_id):
             # Determine member_type from backend (already validated above,
             # gated the same way is_returning is: unverified stays 'new')
             member_type = member_type_str
-
-            needs_review = not verified
 
             # Find or create UserSeason for this user and season
             # Note: Webhook may have already created this record. We check first to avoid

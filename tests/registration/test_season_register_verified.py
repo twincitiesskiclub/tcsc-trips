@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from app import create_app
+from app.constants import UserSeasonStatus
 from app.models import db, Season, User, UserSeason
 
 EMAIL = "reg-verified@test.com"
@@ -122,3 +123,52 @@ def test_verified_returning_member_updates_own_row(mock_sms, client, app, season
         user = User.query.get(uid)
         assert user.first_name == "Reg"  # updated in place, no duplicate row
         assert User.query.filter_by(email=EMAIL).count() == 1
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_verified_phone_but_unmatched_collision_flag_stays_new_and_reviewed(
+        mock_sms, client, app, season):
+    """A phone verified via OTP this session (identity present) but with no
+    user_id match must NOT unlock returning pricing just because the typed
+    email happens to collide with someone else's returning-member row. The
+    collision guard is bypassed via continue_unverified, so the reused row
+    is priced as new/manual and flagged for admin review — pricing is
+    earned only by a verified *account link*, not merely a verified phone.
+    """
+    with app.app_context():
+        now = datetime.utcnow()
+        old_season = Season(
+            name="Verify Test Old", year=2088, price_cents=15000,
+            season_type='winter',
+            start_date=date(2088, 11, 1), end_date=date(2089, 3, 1))
+        db.session.add(old_season)
+        db.session.commit()
+        u = User(email=EMAIL, first_name="Old", last_name="Returner")
+        db.session.add(u)
+        db.session.commit()
+        db.session.add(UserSeason(
+            user_id=u.id, season_id=old_season.id,
+            registration_type="new",
+            registration_date=date(2088, 10, 1),
+            status=UserSeasonStatus.ACTIVE,
+        ))
+        db.session.commit()
+        old_season_id = old_season.id
+
+    try:
+        _set_identity(client, user_id=None)  # verified phone, unmatched
+        resp = client.post(f"/seasons/{season}/register",
+                           data={**FORM, "continue_unverified": "1"})
+        assert resp.status_code == 200
+        with app.app_context():
+            user = User.query.filter_by(email=EMAIL).one()
+            us = UserSeason.get_for_user_season(user.id, season)
+            assert us.registration_type == "new"
+            assert us.status == UserSeasonStatus.PENDING_LOTTERY
+            assert us.needs_review is True
+        assert mock_sms.call_args.args[1] == "confirmation_lottery"
+    finally:
+        with app.app_context():
+            UserSeason.query.filter_by(season_id=old_season_id).delete()
+            db.session.delete(Season.query.get(old_season_id))
+            db.session.commit()
