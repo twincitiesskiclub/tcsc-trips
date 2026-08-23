@@ -11,7 +11,7 @@ verify_api = Blueprint('verify_api', __name__)
 
 
 def _client_ip():
-    return request.headers.get('X-Forwarded-For', request.remote_addr or '?').split(',')[0].strip()
+    return request.headers.get('X-Forwarded-For', '').split(',')[-1].strip() or request.remote_addr or '?'
 
 
 @verify_api.route('/api/verify/phone/start', methods=['POST'])
@@ -50,11 +50,19 @@ def email_start():
     if not ident:
         return jsonify(ok=False, error='Verify your phone first.'), 400
     email = normalize_email((request.get_json() or {}).get('email', ''))
+    ip = _client_ip()
+    if not service.rate_limit_ok(email, ip):
+        return jsonify(ok=False, error=service.RATE_LIMIT_MSG)
     user = User.get_by_email(email)
     if not user:
+        # Record this probe so an unlimited stream of misses against
+        # different emails still gets capped by the per-IP rate limit.
+        # start_email_verification does its own record on the hit path,
+        # so exactly one attempt is recorded per request either way.
+        service._record_attempt(email, 'email', ip)
         return jsonify(ok=True, exists=False)
     ok, error = service.start_email_verification(
-        email, user.first_name, ip=_client_ip())
+        email, user.first_name, ip=ip)
     return jsonify(ok=ok, exists=True, error=error or None)
 
 
