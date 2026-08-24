@@ -34,7 +34,7 @@ def _utc_noon(d):
     return datetime(d.year, d.month, d.day, 12, 0, 0)
 
 
-def _make_season(name, year, *, window_start, window_end, season_type="winter",
+def _make_season(name, year, *, window_start, window_end, season_type="recaptest",
                  registration_limit=None, new_window=None):
     """new_window: optional (start_date, end_date) for the new-member window;
     window_start/end are the returning window."""
@@ -80,30 +80,16 @@ def _make_reg(season, reg_date, *, reg_type="new",
 @pytest.fixture
 def clean(app):
     """Delete every row the tests created, newest tables first."""
-    def cleanup():
-        # Delete all non-test seasons (production interference)
-        all_seasons = Season.query.all()
-        seasons_to_delete = [s for s in all_seasons
-                            if not s.name.startswith("Recap")]
-        for s in seasons_to_delete:
-            UserSeason.query.filter_by(season_id=s.id).delete()
-            db.session.delete(s)
-        # Delete test seasons (year >= 2097)
-        test_seasons = Season.query.filter(Season.year >= 2097).all()
-        for s in test_seasons:
+    with app.app_context():
+        yield
+        seasons = Season.query.filter(Season.year >= 2097).all()
+        for s in seasons:
             UserSeason.query.filter_by(season_id=s.id).delete()
         User.query.filter(User.email.like("%@recap-test.com")).delete(
             synchronize_session=False)
-        for s in test_seasons:
+        for s in seasons:
             db.session.delete(s)
         db.session.commit()
-
-    with app.app_context():
-        # Clean up before test to ensure isolation from prior test runs
-        cleanup()
-        yield
-        # Clean up after test
-        cleanup()
 
 
 @pytest.fixture
@@ -223,7 +209,7 @@ def test_prior_season_requires_same_type(app, season):
     from app.seasons.recap import build_recap
     with app.app_context():
         other = _make_season(
-            "Recap Summer 2097", 2097, season_type="summer",
+            "Recap Summer 2097", 2097, season_type="recaptest-other",
             window_start=date(2097, 1, 6), window_end=date(2097, 1, 26))
         _make_reg(other, date(2097, 1, 6))
         stats = build_recap(season, FOR_DATE)
