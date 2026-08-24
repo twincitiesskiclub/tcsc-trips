@@ -64,9 +64,11 @@ it, so the two can never disagree. Add branches there, never in
 `script.js`.
 
 A verified phone matching one account IS that member: no email code, and
-they may change their email freely without losing automatic capture. Email
-verification survives in two places only, a phone matching 2+ accounts and
-a phone matching none whose typed email hits an existing account.
+they may change their email to any address not already on another account
+without losing automatic capture. Email verification survives in three
+places: a phone matching 2+ accounts, a phone matching none whose typed
+email hits an existing account, and a member who clicks "Not [name]?" to
+disclaim a match the phone made.
 
 Unverified registrations degrade to manual capture plus
 `UserSeason.needs_review`, with `review_note` saying why. The admin review
