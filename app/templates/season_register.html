@@ -126,7 +126,7 @@
 
           <div id="verify-window-wait" hidden>
             <h3 class="form-section__title" id="window-wait-title"></h3>
-            <p>Your answers stay right where you left them.</p>
+            <p>Come back then and we'll get you signed up.</p>
             <p class="form-field__hint" style="margin-top: 16px;">
               <a href="#" id="window-wait-not-me-link" hidden></a>
             </p>
@@ -134,7 +134,7 @@
 
           <div id="verify-window-ended" hidden>
             <h3 class="form-section__title" id="window-ended-title"></h3>
-            <p>Text an organizer about late registration.</p>
+            <p>Text an organizer and we'll see what we can do.</p>
             <p class="form-field__hint" style="margin-top: 16px;">
               <a href="#" id="window-ended-not-me-link" hidden></a>
             </p>
@@ -146,8 +146,8 @@
           <a href="#" id="verify-not-me-link"></a>
         </div>
         <div id="unverified-notice" class="notice notice--warn" hidden>
-          You'll register as a new member and join the lottery. An organizer will check
-          for past membership.
+          Since we couldn't verify you, you'll register as a new member and join the lottery.
+          An organizer will check for past membership.
         </div>
 
         <form id="registration-form" method="POST" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}" hidden>
@@ -170,7 +170,7 @@
 
             <div id="email-collision" class="notice notice--info" hidden>
               <p style="margin: 0 0 12px;"><strong>We found your account.</strong>
-                Verify this email to load your account.</p>
+                Verify this email and we'll pull your info in.</p>
               <p class="card-error" id="email-collision-error" role="alert" hidden></p>
               <button type="button" class="btn" id="email-collision-send">Email me a code</button>
               <div id="email-collision-code-row" hidden style="margin-top: 16px;">
@@ -322,7 +322,7 @@
             <p class="form-section__subtitle">Pick how you'll pitch in this season</p>
 
             <p class="form-field__hint" style="margin-bottom: 16px;">
-              TCSC is all volunteers. Pick at least one way you'd like to help.
+              TCSC is all volunteers. Pick at least one way you'd like to help, and we'll follow up.
             </p>
 
             <div class="form-field">
