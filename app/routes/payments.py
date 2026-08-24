@@ -666,14 +666,11 @@ def create_season_payment_intent():
         verified_user = None
         if identity and identity.get('user_id'):
             verified_user = User.query.get(identity['user_id'])
-        # A typed email that differs from the verified account's email means
-        # the payer is not (or no longer claims to be) that account - e.g.
-        # the "Not [name]?" disclaim flow. Demote to new/manual so money is
-        # only auto-captured for a proven returning match. The legitimate
-        # verified-member-changing-email case just gets a hold instead of an
-        # instant charge; an admin captures it. Conservative and money-safe.
-        if verified_user is not None and email != normalize_email(verified_user.email):
-            verified_user = None
+        # No email check here on purpose. A verified phone that resolved to
+        # one account IS that member, so changing their email is a profile
+        # edit, not grounds to demote them to a hold. The "Not [name]?"
+        # disclaim flow clears user_id from the session upstream, so it
+        # never reaches this line with a stale match.
         if verified_user is not None and verified_user.is_returning:
             member_type = MemberType.RETURNING.value
         else:
@@ -717,6 +714,10 @@ def create_season_payment_intent():
                 'member_type': member_type,
                 'payment_type': PaymentType.SEASON,
                 'verified': 'true' if verified else 'false',
+                # The webhook matches on email today, so a member typing a
+                # new address can get a duplicate stub User. This change
+                # makes email edits more common, so carry the id.
+                'user_id': str(verified_user.id) if verified_user else '',
             },
             **stripe_idempotency_options(),
         )

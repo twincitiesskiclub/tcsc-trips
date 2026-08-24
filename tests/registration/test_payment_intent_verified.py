@@ -97,17 +97,29 @@ def test_unverified_is_always_manual_new(mock_create, client, fixtures):
 
 
 @patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
-def test_verified_identity_with_different_email_demotes_to_manual_new(
+def test_verified_identity_with_different_email_still_auto_captures(
         mock_create, client, fixtures):
-    # Session identity points at returning member A, but the intent is being
-    # created for a different typed email (the "Not [name]?" disclaim flow,
-    # or a mistyped/changed email). Never auto-capture on A's credentials.
+    # Session identity points at returning member A, and the intent is for a
+    # different typed email. Under the phone-is-primary rule that is a
+    # profile edit, not grounds for a hold. This is the fix for the stuck
+    # requires_capture rows from the PR #241 launch, where a verified
+    # returning member who changed their email needed manual capture
+    # within 7 days.
     _set_identity(client, user_id=fixtures["user_id"])
     resp = client.post("/create-season-payment-intent", json={
         "season_id": fixtures["season_id"],
-        "email": "pi-someone-else@test.com", "name": "Not Pat"})
+        "email": "pi-someone-else@test.com", "name": "Pat Payer"})
     assert resp.status_code == 200
     kwargs = mock_create.call_args.kwargs
-    assert kwargs["capture_method"] == "manual"
-    assert kwargs["metadata"]["member_type"] == "NEW"
-    assert kwargs["metadata"]["verified"] == "false"
+    assert kwargs["capture_method"] == "automatic"
+    assert kwargs["metadata"]["member_type"] == "RETURNING"
+    assert kwargs["metadata"]["verified"] == "true"
+    assert kwargs["metadata"]["user_id"] == str(fixtures["user_id"])
+
+
+@patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
+def test_unverified_intent_carries_no_user_id(mock_create, client, fixtures):
+    resp = client.post("/create-season-payment-intent", json={
+        "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer"})
+    assert resp.status_code == 200
+    assert mock_create.call_args.kwargs["metadata"]["user_id"] == ""
