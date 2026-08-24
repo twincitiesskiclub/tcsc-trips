@@ -5,10 +5,13 @@ same contract as app/slack/trips.py: the scheduler job must not die
 because Slack did. Copy style: no em dashes.
 
 Layout (mobile first): the header carries the one number that matters,
-yesterday's count. A context line under it names the season and date.
-Everything season-level sits below a divider as short field pairs, with
-prior-season pace de-emphasized into a context block. Needs-review is
-the only :warning: and stays above the divider so it can't be missed.
+yesterday's count (or the season total once every window has closed and
+the tail posts are about the tally settling). A context line under it
+names the season and date. Yesterday's news, highlights, Get Involved
+answers, and the needs-review warning sit above the single divider;
+season state (totals, prior-season pace, windows) sits below it.
+Needs-review is the only :warning: and stays above the divider so it
+can't be missed.
 """
 import os
 
@@ -20,7 +23,13 @@ CHANNEL_NAME = "leadership-registration"
 
 
 def _base_url():
-    return os.environ.get('EXTERNAL_BASE_URL', 'https://tcsc.ski')
+    return os.environ.get('EXTERNAL_BASE_URL', 'https://tcsc.ski').rstrip('/')
+
+
+def _escape(text):
+    """Slack mrkdwn escaping for interpolated labels."""
+    return (str(text).replace('&', '&amp;')
+            .replace('<', '&lt;').replace('>', '&gt;'))
 
 
 def _section(text):
@@ -28,12 +37,9 @@ def _section(text):
             "text": {"type": "mrkdwn", "text": text}}
 
 
-def _fields_section(fields, text=None):
-    block = {"type": "section",
-             "fields": [{"type": "mrkdwn", "text": f} for f in fields]}
-    if text:
-        block["text"] = {"type": "mrkdwn", "text": text}
-    return block
+def _fields_section(fields):
+    return {"type": "section",
+            "fields": [{"type": "mrkdwn", "text": f} for f in fields]}
 
 
 def _context(elements):
@@ -47,6 +53,14 @@ def _plural(count, noun="registration"):
 
 def _fmt_date(d):
     return d.strftime('%b %-d')
+
+
+def _is_closed(stats):
+    """True once every configured window has fully passed: the tail
+    period where the post exists so leadership sees the tally settle."""
+    windows = [w for w in stats["windows"].values() if w]
+    return bool(windows) and all(
+        not w["is_open"] and stats["for_date"] > w["end"] for w in windows)
 
 
 def _yesterday_line(stats):
@@ -93,24 +107,35 @@ def _window_fields(stats):
 
 
 def _prior_line(stats):
+    """Pace against the prior season, with the comparison already done
+    so the reader isn't left to subtract at 8am."""
     prior = stats["prior_season"]
     if not prior:
         return None
-    return (f"At this point in {prior['name']}: "
-            f"{prior['count_at_same_point']}. "
-            f"It finished at {prior['final_count']}.")
+    total = stats["season_totals"]["total"]
+    then = prior["count_at_same_point"]
+    name = _escape(prior["name"])
+    if total > then:
+        lead = f"Ahead of {name}"
+    elif total < then:
+        lead = f"Behind {name}"
+    else:
+        lead = f"Even with {name}"
+    return (f"{lead}: {then} at this point, "
+            f"{prior['final_count']} at the finish.")
 
 
 def _volunteer_text(stats):
     v = stats["volunteer"]
     if not v["answered"]:
         return None
-    parts = [f"{label} ({count})" for label, count in v["interests"].items()]
+    parts = [f"{_escape(label)} ({count})"
+             for label, count in v["interests"].items()]
     text = (f"*Get Involved*\n{v['answered']} of {v['of']} opted in: "
             + ", ".join(parts) + ".")
     if v["committees"]:
-        committee_parts = [
-            f"{label} ({count})" for label, count in v["committees"].items()]
+        committee_parts = [f"{_escape(label)} ({count})"
+                           for label, count in v["committees"].items()]
         text += "\nCommittees: " + ", ".join(committee_parts) + "."
     return text
 
@@ -118,24 +143,42 @@ def _volunteer_text(stats):
 def build_recap_blocks(stats):
     """Returns (blocks, fallback_text) for chat_postMessage."""
     date_label = stats["for_date"].strftime('%A, %b %-d')
+
+    if _is_closed(stats):
+        # Tail period: the news is the settling total, not the daily zero.
+        header_text = f"{_plural(stats['season_totals']['total'])} this season"
+        if stats["yesterday"]["total"] > 0:
+            lead = _yesterday_line(stats)
+        else:
+            lead = "Registration is closed. 0 yesterday."
+    else:
+        header_text = f"{_plural(stats['yesterday']['total'])} yesterday"
+        lead = _yesterday_line(stats)
+
     blocks = [
         {"type": "header",
-         "text": {"type": "plain_text",
-                  "text": f"{_plural(stats['yesterday']['total'])} "
-                          "yesterday"}},
-        _context([f"{stats['season_name']} · {date_label}"]),
-        _section(_yesterday_line(stats)),
+         "text": {"type": "plain_text", "text": header_text}},
+        _context([f"{_escape(stats['season_name'])} · {date_label}"]),
+        _section(lead),
     ]
 
     if stats["highlights"]:
+        # One mrkdwn element: context elements flow inline, but newlines
+        # inside a single element stack. One :sparkles: marks the zone.
         blocks.append(_context(
-            [f":sparkles: {line}" for line in stats["highlights"]]))
+            [":sparkles: " + "\n".join(stats["highlights"])]))
+
+    volunteer = _volunteer_text(stats)
+    if volunteer:
+        blocks.append(_section(volunteer))
 
     if stats["needs_review"]:
         url = (f"{_base_url()}/admin/registration-review"
                f"?season_id={stats['season_id']}")
+        n = stats["needs_review"]
+        verb = "needs" if n == 1 else "need"
         blocks.append(_section(
-            f":warning: *{_plural(stats['needs_review'])} need review "
+            f":warning: *{_plural(n)} {verb} review "
             f"before the lottery.* <{url}|Open review page>"))
 
     blocks.append({"type": "divider"})
@@ -148,10 +191,6 @@ def build_recap_blocks(stats):
     window_fields = _window_fields(stats)
     if window_fields:
         blocks.append(_fields_section(window_fields))
-
-    volunteer = _volunteer_text(stats)
-    if volunteer:
-        blocks.append(_section(volunteer))
 
     fallback = (f"Registration recap {date_label}: "
                 f"{stats['yesterday']['total']} yesterday, "

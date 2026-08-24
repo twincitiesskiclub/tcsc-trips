@@ -59,6 +59,12 @@ def _all_text(blocks):
     return "\n".join(parts)
 
 
+def _divider_index(blocks):
+    dividers = [i for i, b in enumerate(blocks) if b["type"] == "divider"]
+    assert len(dividers) == 1, "exactly one divider separates the two zones"
+    return dividers[0]
+
+
 def _assert_valid_block_kit(blocks):
     """The Slack limits the renderer must never exceed."""
     assert len(blocks) <= 50
@@ -90,6 +96,15 @@ def test_blocks_render_every_section():
     assert blocks[0]["type"] == "header"
     assert blocks[0]["text"]["text"] == "3 registrations yesterday"
 
+    # Structure: one divider; Get Involved (yesterday's data) above it;
+    # season totals render as fields directly below it.
+    divider = _divider_index(blocks)
+    volunteer_idx = next(i for i, b in enumerate(blocks)
+                         if "Get Involved" in str(b))
+    assert volunteer_idx < divider
+    season_fields = blocks[divider + 1].get("fields")
+    assert season_fields and "*Season total*" in season_fields[0]["text"]
+
     text = _all_text(blocks)
     assert "Winter 2098" in text                # season name in the meta line
     assert "2 new, 1 returning" in text         # yesterday breakdown
@@ -98,8 +113,9 @@ def test_blocks_render_every_section():
     assert "90 / 52" in text                    # season new/returning split
     assert "Day 5 of 21" in text                # window pace
     assert "closes Jan 26" in text
-    assert "Winter 2097" in text                # prior season
-    assert "118" in text
+    assert "Ahead of Winter 2097" in text       # prior pace, comparison done
+    assert "118 at this point" in text
+    assert "240 at the finish" in text
     assert "Lead a group at practice (2)" in text  # volunteer
     assert ":sparkles:" in text                 # highlight
     assert "Biggest day" in text
@@ -139,6 +155,78 @@ def test_quiet_day_renders_clean():
     assert "0 yesterday" in fallback
 
 
+def test_multiple_highlights_stack_in_one_element():
+    from app.slack.season_recap import build_recap_blocks
+    highlights = [
+        "Biggest day of the season so far: 38 registrations.",
+        "Crossed 150 total registrations.",
+        "2 households registered together (shared phone numbers).",
+    ]
+    blocks, _ = build_recap_blocks(_stats(highlights=highlights))
+    _assert_valid_block_kit(blocks)
+    sparkle_blocks = [b for b in blocks if ":sparkles:" in str(b)]
+    assert len(sparkle_blocks) == 1
+    elements = sparkle_blocks[0]["elements"]
+    # Context elements flow inline in Slack; stacking needs one element
+    # with newlines, and one :sparkles: is enough to mark the zone.
+    assert len(elements) == 1
+    assert elements[0]["text"].count("\n") == 2
+    assert elements[0]["text"].count(":sparkles:") == 1
+    for line in highlights:
+        assert line in elements[0]["text"]
+
+
+def test_closed_tail_leads_with_season_total():
+    from app.slack.season_recap import build_recap_blocks
+    blocks, _ = build_recap_blocks(_stats(
+        for_date=date(2098, 1, 30),
+        yesterday={"new": 0, "returning": 0, "total": 0},
+        previous_day_total=0,
+        windows={
+            "returning": {"start": date(2098, 1, 6), "end": date(2098, 1, 26),
+                          "is_open": False, "day_number": None,
+                          "days_remaining": None, "length_days": 21},
+            "new": None,
+        },
+        highlights=[],
+    ))
+    _assert_valid_block_kit(blocks)
+    assert blocks[0]["text"]["text"] == "142 registrations this season"
+    text = _all_text(blocks)
+    assert "Registration is closed. 0 yesterday." in text
+    assert "Closed Jan 26" in text              # past-window field copy
+
+
+def test_future_window_renders_opens_date():
+    from app.slack.season_recap import build_recap_blocks
+    blocks, _ = build_recap_blocks(_stats(windows={
+        "returning": {"start": date(2098, 1, 6), "end": date(2098, 1, 26),
+                      "is_open": True, "day_number": 5,
+                      "days_remaining": 16, "length_days": 21},
+        "new": {"start": date(2098, 1, 15), "end": date(2098, 2, 9),
+                "is_open": False, "day_number": None,
+                "days_remaining": None, "length_days": 26},
+    }))
+    _assert_valid_block_kit(blocks)
+    # One window still open, so the header stays on yesterday's count.
+    assert blocks[0]["text"]["text"] == "3 registrations yesterday"
+    text = _all_text(blocks)
+    assert "Opens Jan 15" in text
+
+
+def test_no_cap_renders_bare_total():
+    from app.slack.season_recap import build_recap_blocks
+    blocks, _ = build_recap_blocks(_stats(
+        season_totals={"new": 90, "returning": 52, "total": 142,
+                       "registration_limit": None, "pct_of_limit": None},
+    ))
+    _assert_valid_block_kit(blocks)
+    divider = _divider_index(blocks)
+    total_field = blocks[divider + 1]["fields"][0]["text"]
+    assert total_field == "*Season total*\n142"
+    assert "%" not in _all_text(blocks)
+
+
 def test_needs_review_warning_renders_with_link():
     from app.slack.season_recap import build_recap_blocks
     blocks, _ = build_recap_blocks(_stats(needs_review=4))
@@ -147,6 +235,17 @@ def test_needs_review_warning_renders_with_link():
     assert "4 registrations need review" in text
     assert ":warning:" in text
     assert "registration-review?season_id=42" in text
+    # The one action item sits above the divider, never below the fold.
+    warning_idx = next(i for i, b in enumerate(blocks)
+                       if ":warning:" in str(b))
+    assert warning_idx < _divider_index(blocks)
+
+
+def test_needs_review_singular_grammar():
+    from app.slack.season_recap import build_recap_blocks
+    blocks, _ = build_recap_blocks(_stats(needs_review=1))
+    text = _all_text(blocks)
+    assert "1 registration needs review" in text
 
 
 def test_post_success(app):
