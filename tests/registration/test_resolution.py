@@ -338,3 +338,21 @@ def test_review_note_defaults_to_null(season):
             u.id, season.id).review_note == "no verified phone"
     finally:
         cleanup(u)
+
+
+def test_window_not_yet_open_names_a_resolved_member(season):
+    """The not-yet-open panel shows "Not [name]?" for a resolved member,
+    so the verdict has to carry the name, not only the date."""
+    u = make_user("early-bird@test.com", PHONE_A, "Early")
+    season.new_start = datetime.utcnow() + timedelta(days=4)
+    season.new_end = datetime.utcnow() + timedelta(days=40)
+    db.session.commit()
+    try:
+        outcome, ctxd = resolution.resolve_registration_step(
+            ident(PHONE_A, u.id), season, datetime.utcnow())
+        assert outcome == resolution.WINDOW_NOT_YET_OPEN
+        assert ctxd['member_type'] == 'new'
+        assert ctxd['opens_at'] == season.new_start
+        assert ctxd['first_name'] == "Early"
+    finally:
+        cleanup(u)

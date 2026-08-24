@@ -159,3 +159,31 @@ test('spinner span survives the label change', async () => {
   await settle();
   assert.ok(window.document.getElementById('button-spinner'));
 });
+
+// --- "Not [name]?" on the not-yet-open panel ---
+
+function notYetOpenVerdict(firstName) {
+  return {
+    outcome: 'window_not_yet_open',
+    context: {member_type: 'new', opens_at: '2099-08-28T17:00:00+00:00', first_name: firstName},
+    user: firstName ? {firstName, lastName: 'Member', email: 'm@test.com'} : null,
+  };
+}
+
+test('not-yet-open panel offers the not-me link for a resolved member', async () => {
+  const {window} = boot({resolve: notYetOpenVerdict('Early')});
+  await settle();
+  const doc = window.document;
+  assert.equal(doc.getElementById('verify-window-wait').hidden, false);
+  const link = doc.getElementById('window-wait-not-me-link');
+  assert.equal(link.hidden, false);
+  assert.equal(link.textContent, 'Not Early? Verify with your email instead.');
+});
+
+test('not-yet-open panel hides the not-me link when nobody was resolved', async () => {
+  const {window} = boot({resolve: notYetOpenVerdict(null)});
+  await settle();
+  const doc = window.document;
+  assert.equal(doc.getElementById('verify-window-wait').hidden, false);
+  assert.equal(doc.getElementById('window-wait-not-me-link').hidden, true);
+});
