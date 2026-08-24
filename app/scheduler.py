@@ -1049,6 +1049,12 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
     A zero-registration day during the window still posts -- the zero is
     the signal. Covers the prior Central day.
 
+    The season comes from select_season(), NOT Season.is_current: the
+    Activate Season action runs at season start, while registration (and
+    this recap) happens weeks earlier. select_season prefers the season
+    taking registrations now, else the soonest ahead (which should_post
+    silences until it opens), else the most recently ended (the tail).
+
     Args:
         app: Flask application instance for context.
         channel_override: Optional channel name to override default.
@@ -1058,12 +1064,14 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
     with app.app_context():
         from app.models import Season
         from app.seasons.recap import build_recap, should_post
+        from app.seasons.selection import select_season
         from app.slack.season_recap import post_season_recap
 
         try:
-            season = Season.get_current()
+            season = select_season(Season.query.all(), datetime.utcnow())
             if not season:
-                app.logger.info("Season recap: no current season, staying quiet")
+                app.logger.info(
+                    "Season recap: no season with registration windows, staying quiet")
                 return
             today = today_central()
             if not should_post(season, today):
