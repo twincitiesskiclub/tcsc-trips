@@ -92,6 +92,15 @@ TRIGGERABLE_JOBS = [
         'category': 'practices',
     },
     {
+        'id': 'season_recap',
+        'name': 'Season Registration Recap',
+        'description': 'Posts daily season registration stats to leadership',
+        'default_channel': '#leadership-registration',
+        'schedule': 'Daily 8:05 AM',
+        'supports_channel_override': True,
+        'category': 'registration',
+    },
+    {
         'id': 'newsletter_daily_update',
         'name': 'Newsletter Daily Update',
         'description': 'Regenerate newsletter with latest content',
