@@ -27,7 +27,7 @@ READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
 # Head as of the volunteer-interests migration (down_revision is
 # 8055e0305cc4, the phone_e164/verification-tables migration). Bump whenever
 # a new migration lands.
-HEAD_REVISION = "6fe27563d4aa"
+HEAD_REVISION = "1137d059b6f4"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
