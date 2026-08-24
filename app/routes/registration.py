@@ -247,10 +247,11 @@ def season_register(season_id):
             if user:
                 for k, v in user_fields.items():
                     setattr(user, k, v)
-                # Phone is the identity proof, so a resolved member may move
-                # their email. The collision check above already rejected an
-                # address belonging to a different account.
-                user.email = email
+                # A verified phone that resolved to this row may move its
+                # email. An unverified row-reuse keeps the address it was
+                # claimed by.
+                if verified_user is not None:
+                    user.email = email
             else:
                 user = User(email=email, status=UserStatus.PENDING, **user_fields)
                 db.session.add(user)

@@ -331,3 +331,23 @@ def test_resolved_member_can_move_their_email(client, app, season):
                 follow_redirects=True)
     with app.app_context():
         assert User.query.get(uid).email == EMAIL
+
+
+def test_unverified_row_reuse_keeps_claimed_email(client, app, season):
+    with app.app_context():
+        existing = User(email=EMAIL, first_name="Reg",
+                        last_name="Verified", status=UserStatus.ACTIVE,
+                        phone_e164="+16125550199",
+                        date_of_birth=date(1994, 1, 15),
+                        tshirt_size="M", emergency_contact_name="Em",
+                        emergency_contact_relation="friend",
+                        emergency_contact_phone="612-555-0189",
+                        emergency_contact_email="em@example.com")
+        db.session.add(existing)
+        db.session.commit()
+        uid = existing.id
+    client.post(f'/seasons/{season}/register',
+                data=dict(FORM, continue_unverified='1'),
+                follow_redirects=True)
+    with app.app_context():
+        assert User.query.get(uid).email == EMAIL
