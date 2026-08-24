@@ -842,7 +842,18 @@ document.addEventListener('DOMContentLoaded', () => {
       // /create-season-payment-intent still sees the old account and would
       // auto-capture a full charge for someone who belongs in the lottery
       // on a hold.
-      await postJson('/api/verify/disclaim', {});
+      let body = null;
+      try {
+        body = await postJson('/api/verify/disclaim', {});
+      } catch (e) {
+        // A failed request cannot confirm that the old identity was dropped.
+      }
+      if (!body || body.ok !== true) {
+        hide('verify-welcome');
+        showOnlyVerifyPanel('verify-phone-entry');
+        show('verify-expired-notice');
+        return;
+      }
       reverifying = true;
       showVerifyError('');
       registrationForm.hidden = true;
