@@ -72,10 +72,6 @@
               <input class="form-input" type="tel" id="verify-phone" inputmode="tel" autocomplete="tel" placeholder="Your cell number">
             </div>
             <button type="button" class="btn btn--full" id="verify-send-btn">Text me a code</button>
-            <p class="form-field__hint" style="margin-top: 16px;">
-              <a href="#" id="verify-skip-link">New to TCSC? Start here.</a>
-              (Skied with us before? Verify above. Registering as new puts you in the new-member lottery.)
-            </p>
             <p class="form-field__hint" style="margin-top: 8px;">
               <a href="#" id="verify-cant-text-link">Can't receive texts?</a>
             </p>
@@ -117,6 +113,31 @@
             </div>
             <p class="form-field__hint" style="margin-top: 16px;">
               <a href="#" id="verify-email-dead-link">That email doesn't work for me anymore</a>
+            </p>
+          </div>
+
+          <div id="verify-already-registered" hidden>
+            <h3 class="form-section__title" id="already-registered-title"></h3>
+            <p id="already-registered-detail"></p>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="already-registered-not-me-link" hidden></a>
+            </p>
+            <a class="btn btn--full" href="https://tcsc.ski">Go to tcsc.ski</a>
+          </div>
+
+          <div id="verify-window-wait" hidden>
+            <h3 class="form-section__title" id="window-wait-title"></h3>
+            <p>We'll pick up right where you left off.</p>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="window-wait-not-me-link" hidden></a>
+            </p>
+          </div>
+
+          <div id="verify-window-ended" hidden>
+            <h3 class="form-section__title" id="window-ended-title"></h3>
+            <p>Text an organizer and we'll see what we can do.</p>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="window-ended-not-me-link" hidden></a>
             </p>
           </div>
         </section>
