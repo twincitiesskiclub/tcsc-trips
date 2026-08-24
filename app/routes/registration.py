@@ -9,6 +9,8 @@ from ..utils import (get_current_times, normalize_email, normalize_phone_e164,
                      validate_volunteer_selections)
 from ..verify.service import get_verified_identity, clear_verified_identity
 from ..notifications.sms import send_sms
+from ..seasons.resolution import (resolve_registration_step, WIZARD_RETURNING,
+                                  ALREADY_REGISTERED)
 from .. import late_link
 
 registration = Blueprint('registration', __name__)
@@ -113,7 +115,11 @@ def season_register(season_id):
                 and verified_user is not None
                 and email != normalize_email(verified_user.email)
             )
+            disclaimed_name = None
+            disclaimed_id = None
             if identity_disclaimed:
+                disclaimed_name = verified_user.full_name
+                disclaimed_id = verified_user.id
                 verified_user = None
 
             if verified_user is not None:
@@ -138,19 +144,17 @@ def season_register(season_id):
                         return redirect(url_for('registration.season_register',
                                                 season_id=season_id))
 
-            # needs_review is about account-MATCH confidence, computed now
-            # (before any row is created/reused below) from the pre-creation
-            # state: true whenever no phone was verified this session at
-            # all, an existing row is being claimed (email collision +
-            # continue_unverified) without a verified link to that specific
-            # account, or a verified account link was disclaimed (the phone
-            # matched someone, but this registrant says it isn't them - an
-            # admin should eyeball that). A brand-new row created from a
-            # verified-but-unlinked phone (user is still None here) is NOT
-            # flagged.
-            needs_review = (identity is None
-                            or identity_disclaimed
-                            or (user is not None and verified_user is None))
+            # needs_review is about account-MATCH confidence, computed from
+            # pre-creation state. review_note says which of the three ways
+            # it went wrong so the admin page does not have to guess.
+            review_note = None
+            if identity is None:
+                review_note = "no verified phone"
+            elif identity_disclaimed:
+                review_note = f"claims not to be {disclaimed_name} (id {disclaimed_id})"[:255]
+            elif user is not None and verified_user is None:
+                review_note = f"claimed existing account {user.email}, email unverified"[:255]
+            needs_review = review_note is not None
 
             # Get payment_intent_id for coordination with webhook
             payment_intent_id = form.get('payment_intent_id')
@@ -159,11 +163,23 @@ def season_register(season_id):
                 return redirect(url_for('registration.season_register', season_id=season_id))
             existing_payment = Payment.get_by_payment_intent(payment_intent_id)
 
-            # Returning pricing requires the verified phone to be linked to
-            # THIS account specifically — a verified-but-unmatched phone (new
-            # number) or an unverified row-reuse (collision + flag) never
-            # earns returning treatment, regardless of that row's history.
-            is_returning = bool(verified_user is not None and user and user.is_returning)
+            # One rule, one place. The POST must not be able to disagree
+            # with the screen the member was just looking at.
+            #
+            # The session dict still carries the disclaimed user_id, so it
+            # has to be scrubbed before the resolver sees it. Otherwise
+            # someone who just said "I'm not Jane" would be priced as Jane.
+            resolver_identity = identity
+            if identity is not None and identity_disclaimed:
+                resolver_identity = {**identity, 'user_id': None}
+            outcome, _ = resolve_registration_step(
+                resolver_identity, season, now_utc,
+                invite_payload if invite_season_match else None)
+            if outcome == ALREADY_REGISTERED:
+                flash_error("You're already registered for this season.")
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+            is_returning = (outcome == WIZARD_RETURNING)
 
             # Check if registration window is open for this user type
             member_type_str = 'returning' if is_returning else 'new'
@@ -216,14 +232,8 @@ def season_register(season_id):
                     flash_error('Invalid date format for Date of Birth. Please use YYYY-MM-DD.')
                     return redirect(url_for('registration.season_register', season_id=season_id))
 
-            # Validate all form fields before proceeding. The form no longer
-            # submits a status radio (verified identity determines it), but
-            # validate_registration_form still expects one — synthesize it
-            # from the backend-derived member type rather than touching the
-            # shared validator/constants.
-            validation_form = form.copy()
-            validation_form['status'] = 'returning_former' if is_returning else 'new'
-            is_valid, validation_errors = validate_registration_form(validation_form, user_fields.get('date_of_birth'))
+            is_valid, validation_errors = validate_registration_form(
+                form, user_fields.get('date_of_birth'))
             volunteer_interests, volunteer_committees, volunteer_errors = (
                 validate_volunteer_selections(
                     form.getlist('volunteerInterests'),
@@ -237,6 +247,10 @@ def season_register(season_id):
             if user:
                 for k, v in user_fields.items():
                     setattr(user, k, v)
+                # Phone is the identity proof, so a resolved member may move
+                # their email. The collision check above already rejected an
+                # address belonging to a different account.
+                user.email = email
             else:
                 user = User(email=email, status=UserStatus.PENDING, **user_fields)
                 db.session.add(user)
@@ -272,6 +286,7 @@ def season_register(season_id):
                     registration_date=today_central(),
                     status=UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY,
                     needs_review=needs_review,
+                    review_note=review_note,
                     volunteer_interests=volunteer_interests,
                     volunteer_committees=volunteer_committees,
                 )
@@ -281,6 +296,7 @@ def season_register(season_id):
                 user_season.registration_date = current_time.date()
                 user_season.status = UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
                 user_season.needs_review = needs_review
+                user_season.review_note = review_note
                 user_season.volunteer_interests = volunteer_interests
                 user_season.volunteer_committees = volunteer_committees
 

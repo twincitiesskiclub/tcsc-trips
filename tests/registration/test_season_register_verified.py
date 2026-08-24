@@ -4,7 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from app import create_app
-from app.constants import UserSeasonStatus
+from app.constants import UserSeasonStatus, UserStatus
 from app.models import db, Season, User, UserSeason
 
 EMAIL = "reg-verified@test.com"
@@ -227,3 +227,107 @@ def test_disclaimed_identity_never_binds_to_verified_row(
             db.session.delete(User.query.get(a_id))
             db.session.delete(Season.query.get(old_season_id))
             db.session.commit()
+
+
+def test_unverified_registration_records_why(client, app, season):
+    with client.session_transaction() as sess:
+        sess.pop('verified_identity', None)
+    form = dict(FORM, continue_unverified='1')
+    client.post(f'/seasons/{season}/register', data=form,
+                follow_redirects=True)
+    with app.app_context():
+        u = User.query.filter_by(email=EMAIL).one_or_none()
+        assert u is not None
+        us = UserSeason.get_for_user_season(u.id, season)
+        assert us.needs_review is True
+        assert us.review_note == "no verified phone"
+
+
+def test_disclaimed_identity_does_not_get_returning_pricing(client, app, season):
+    """'Not Jane?' must not be priced as Jane.
+
+    The session still carries Jane's user_id at this point, so the route
+    has to scrub it before the resolver sees it.
+    """
+    with app.app_context():
+        jane = User(email="jane-disclaim@test.com", first_name="Jane",
+                    last_name="Owner", status=UserStatus.ACTIVE,
+                    phone_e164=PHONE, date_of_birth=date(1990, 1, 1),
+                    tshirt_size="M", emergency_contact_name="Em",
+                    emergency_contact_relation="friend",
+                    emergency_contact_phone="612-555-0999",
+                    emergency_contact_email="em@test.com")
+        db.session.add(jane)
+        db.session.commit()
+        past = Season(name="Disclaim Past", year=2087, price_cents=1000,
+                      season_type='winter', start_date=date(2087, 11, 1),
+                      end_date=date(2088, 3, 1))
+        db.session.add(past)
+        db.session.commit()
+        db.session.add(UserSeason(user_id=jane.id, season_id=past.id,
+                                  registration_type='new',
+                                  registration_date=date(2087, 10, 1),
+                                  status=UserSeasonStatus.ACTIVE))
+        db.session.commit()
+        jane_id, past_id = jane.id, past.id
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': PHONE, 'user_id': jane_id,
+            'ts': datetime.utcnow().isoformat()}
+    # EMAIL differs from Jane's, plus continue_unverified: the disclaim flow.
+    client.post(f'/seasons/{season}/register',
+                data=dict(FORM, continue_unverified='1'),
+                follow_redirects=True)
+    try:
+        with app.app_context():
+            u = User.query.filter_by(email=EMAIL).one_or_none()
+            us = UserSeason.get_for_user_season(u.id, season)
+            assert us.registration_type == 'new'
+            assert us.status == UserSeasonStatus.PENDING_LOTTERY
+            assert us.needs_review is True
+            assert "Jane Owner" in us.review_note
+    finally:
+        with app.app_context():
+            UserSeason.query.filter_by(user_id=jane_id).delete()
+            db.session.commit()
+            db.session.delete(User.query.get(jane_id))
+            db.session.delete(Season.query.get(past_id))
+            db.session.commit()
+
+
+def test_verified_new_member_is_not_flagged(client, app, season):
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': PHONE, 'user_id': None,
+            'ts': datetime.utcnow().isoformat()}
+    client.post(f'/seasons/{season}/register', data=dict(FORM),
+                follow_redirects=True)
+    with app.app_context():
+        u = User.query.filter_by(email=EMAIL).one_or_none()
+        us = UserSeason.get_for_user_season(u.id, season)
+        assert us.needs_review is False
+        assert us.review_note is None
+        assert us.registration_type == 'new'
+        assert u.phone_verified_at is not None
+
+
+def test_resolved_member_can_move_their_email(client, app, season):
+    with app.app_context():
+        existing = User(email="old-address@test.com", first_name="Reg",
+                        last_name="Verified", status=UserStatus.ACTIVE,
+                        phone_e164=PHONE, date_of_birth=date(1994, 1, 15),
+                        tshirt_size="M", emergency_contact_name="Em",
+                        emergency_contact_relation="friend",
+                        emergency_contact_phone="612-555-0189",
+                        emergency_contact_email="em@example.com")
+        db.session.add(existing)
+        db.session.commit()
+        uid = existing.id
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': PHONE, 'user_id': uid,
+            'ts': datetime.utcnow().isoformat()}
+    client.post(f'/seasons/{season}/register', data=dict(FORM),
+                follow_redirects=True)
+    with app.app_context():
+        assert User.query.get(uid).email == EMAIL
