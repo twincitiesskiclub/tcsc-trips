@@ -360,9 +360,32 @@ def webhook_received():
             name = metadata.get('name') or ''
             _log_unknown_payment_type(payment_type, payment_intent_id)
 
-            # Find or create user
-            user = User.get_by_email(email)
-            if not user and member_type == MemberType.RETURNING.value:
+            # Season intents carry the verified account id. Matching on email
+            # alone creates a duplicate ACTIVE stub whenever a verified member
+            # registers under a new address, which this change makes more
+            # common, not less. Trips do not emit user_id and are left alone.
+            user = None
+            metadata_user_id = ''
+            if payment_type == PaymentType.SEASON:
+                metadata_user_id = metadata.get('user_id') or ''
+                if metadata_user_id.isdigit():
+                    user = User.query.get(int(metadata_user_id))
+
+                if metadata_user_id and user is None:
+                    current_app.logger.warning(
+                        "PaymentIntent %s carried unresolved user_id %s",
+                        payment_intent_id,
+                        metadata_user_id,
+                    )
+                elif user is None:
+                    user = User.get_by_email(email)
+            else:
+                user = User.get_by_email(email)
+            if (
+                not user
+                and not metadata_user_id
+                and member_type == MemberType.RETURNING.value
+            ):
                 # Returning member should already exist, but create if not
                 first_name, last_name = (name.split(' ', 1) + [""])[:2]
                 user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.ACTIVE)
@@ -666,14 +689,15 @@ def create_season_payment_intent():
         verified_user = None
         if identity and identity.get('user_id'):
             verified_user = User.query.get(identity['user_id'])
-        # A typed email that differs from the verified account's email means
-        # the payer is not (or no longer claims to be) that account - e.g.
-        # the "Not [name]?" disclaim flow. Demote to new/manual so money is
-        # only auto-captured for a proven returning match. The legitimate
-        # verified-member-changing-email case just gets a hold instead of an
-        # instant charge; an admin captures it. Conservative and money-safe.
-        if verified_user is not None and email != normalize_email(verified_user.email):
-            verified_user = None
+        # No email check here on purpose. A verified phone that resolved to
+        # one account IS that member, so changing their email is a profile
+        # edit, not grounds to demote them to a hold.
+        #
+        # This is only safe because POST /api/verify/disclaim nulls user_id
+        # server-side when someone clicks "Not [name]?". This endpoint gets
+        # no disclaim signal of its own, so that call is what stands between
+        # a household member and an automatic full charge on a returning
+        # member's classification. Do not remove one without the other.
         if verified_user is not None and verified_user.is_returning:
             member_type = MemberType.RETURNING.value
         else:
@@ -717,6 +741,10 @@ def create_season_payment_intent():
                 'member_type': member_type,
                 'payment_type': PaymentType.SEASON,
                 'verified': 'true' if verified else 'false',
+                # The webhook matches on email today, so a member typing a
+                # new address can get a duplicate stub User. This change
+                # makes email edits more common, so carry the id.
+                'user_id': str(verified_user.id) if verified_user else '',
             },
             **stripe_idempotency_options(),
         )
