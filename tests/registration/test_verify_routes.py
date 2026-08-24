@@ -230,14 +230,26 @@ def test_email_lookup_reports_existence_without_sending(client, app):
 
 def test_email_lookup_is_rate_limited(client, app):
     """Otherwise it is an unlimited membership-enumeration oracle."""
-    with app.app_context():
-        VerificationAttempt.query.delete()
-        db.session.commit()
-    seen_limit = False
-    for i in range(15):
-        body = client.post('/api/verify/email/lookup',
-                           json={'email': f'probe{i}@test.com'}).get_json()
-        if body['ok'] is False:
-            seen_limit = True
-            break
-    assert seen_limit, "lookup never rate-limited across 15 distinct probes"
+    try:
+        with app.app_context():
+            VerificationAttempt.query.filter(
+                VerificationAttempt.ip == '127.0.0.1',
+                VerificationAttempt.target.like('probe%'),
+            ).delete(synchronize_session=False)
+            db.session.commit()
+        seen_limit = False
+        for i in range(15):
+            body = client.post('/api/verify/email/lookup',
+                               json={'email': f'probe{i}@test.com'}).get_json()
+            if body['ok'] is False:
+                seen_limit = True
+                break
+        assert seen_limit, "lookup never rate-limited across 15 distinct probes"
+    finally:
+        with app.app_context():
+            db.session.rollback()
+            VerificationAttempt.query.filter(
+                VerificationAttempt.target.like('probe%@test.com'),
+                VerificationAttempt.channel == 'email',
+            ).delete(synchronize_session=False)
+            db.session.commit()

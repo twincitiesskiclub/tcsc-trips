@@ -159,7 +159,7 @@ def resolve():
 
 @verify_api.route('/api/verify/disclaim', methods=['POST'])
 def disclaim():
-    """"Not [name]?" — drop the account link, keep the verified phone.
+    """The "Not [name]?" action drops the account link, not the phone.
 
     Without this, clicking "Not [name]?" changes nothing on the server. The
     session keeps pointing at the account the registrant just said they are
