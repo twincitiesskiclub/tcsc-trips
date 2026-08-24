@@ -6,7 +6,7 @@ import re
 
 from .constants import (
     TIMEZONE, DATE_FORMAT, DATETIME_FORMAT,
-    VALID_TSHIRT_SIZES, VALID_TECHNIQUES, VALID_EXPERIENCE_LEVELS, VALID_MEMBER_STATUSES,
+    VALID_TSHIRT_SIZES, VALID_TECHNIQUES, VALID_EXPERIENCE_LEVELS,
     MAX_NAME_LENGTH, MAX_PHONE_LENGTH, MAX_PRONOUNS_LENGTH,
     MAX_RELATION_LENGTH, MIN_MEMBER_AGE, MAX_MEMBER_AGE
 )
@@ -247,11 +247,6 @@ def validate_registration_form(form: dict, dob: date = None) -> tuple[bool, list
 
     # Email
     valid, msg = validate_email(form.get('email', ''))
-    if not valid:
-        errors.append(msg)
-
-    # Member status
-    valid, msg = validate_choice(form.get('status', ''), VALID_MEMBER_STATUSES, 'Member status')
     if not valid:
         errors.append(msg)
 

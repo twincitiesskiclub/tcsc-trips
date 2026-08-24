@@ -1,11 +1,13 @@
-from datetime import date
+from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
 import pytest
 
 from app import create_app
-from app.models import db, User, VerificationAttempt
-from app.verify.service import RATE_LIMIT_MSG
+from app.constants import UserStatus
+from app.models import db, Season, User, VerificationAttempt
+from app.verify.service import (RATE_IP_MAX, RATE_LIMIT_MSG,
+                                RATE_LOOKUP_IP_MAX)
 
 PHONE_RAW = "612-555-0177"
 PHONE = "+16125550177"
@@ -26,6 +28,24 @@ def app():
 @pytest.fixture
 def client(app):
     return app.test_client()
+
+
+@pytest.fixture
+def season(app):
+    with app.app_context():
+        now = datetime.utcnow()
+        s = Season(name="Verify Route Test", year=2095, price_cents=15000,
+                   season_type='winter',
+                   start_date=date(2095, 11, 1), end_date=date(2096, 3, 1),
+                   returning_start=now - timedelta(days=1),
+                   returning_end=now + timedelta(days=30),
+                   new_start=now - timedelta(days=1),
+                   new_end=now + timedelta(days=30))
+        db.session.add(s)
+        db.session.commit()
+        yield s.id
+        db.session.delete(Season.query.get(s.id))
+        db.session.commit()
 
 
 @pytest.fixture
@@ -154,3 +174,163 @@ def test_client_ip_uses_last_xff_entry(app):
     with app.test_request_context(environ_overrides={"REMOTE_ADDR": "9.9.9.9"}):
         # No header at all falls back to the connecting address.
         assert _client_ip() == "9.9.9.9"
+
+
+def test_resolve_without_identity_asks_for_phone(client, season):
+    resp = client.get(f'/api/verify/resolve?season_id={season}')
+    assert resp.status_code == 200
+    assert resp.get_json()['outcome'] == 'verify_phone'
+
+
+def test_resolve_not_yet_open_labels_utc_timestamp(client, season):
+    registration_season = Season.query.get(season)
+    registration_season.new_start = datetime.utcnow() + timedelta(days=4)
+    registration_season.new_end = datetime.utcnow() + timedelta(days=40)
+    db.session.commit()
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550378', 'user_id': None,
+            'ts': datetime.utcnow().isoformat()}
+
+    body = client.get(f'/api/verify/resolve?season_id={season}').get_json()
+
+    assert body['outcome'] == 'window_not_yet_open'
+    assert body['context']['opens_at'].endswith('+00:00')
+
+
+def test_resolve_unknown_season_404s(client):
+    assert client.get('/api/verify/resolve?season_id=99999999').status_code == 404
+
+
+def test_disclaim_drops_the_account_but_keeps_the_phone(client, season):
+    """The payment route has no disclaim signal of its own; this is it."""
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550377', 'user_id': 4242,
+            'ts': datetime.utcnow().isoformat()}
+    assert client.post('/api/verify/disclaim').get_json() == {'ok': True}
+    with client.session_transaction() as sess:
+        ident = sess['verified_identity']
+    assert ident['user_id'] is None
+    assert ident['phone_e164'] == '+16125550377'
+    assert ident['disclaimed_user_id'] == 4242
+
+
+def test_disclaim_keeps_the_marker_across_a_second_click(client):
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550377', 'user_id': 4242,
+            'ts': datetime.utcnow().isoformat()}
+
+    assert client.post('/api/verify/disclaim').get_json() == {'ok': True}
+    assert client.post('/api/verify/disclaim').get_json() == {'ok': True}
+
+    with client.session_transaction() as sess:
+        ident = sess['verified_identity']
+    assert ident['disclaimed_user_id'] == 4242
+    assert ident['user_id'] is None
+
+
+@patch("app.routes.verify.service.check_phone_verification", return_value=True)
+def test_phone_check_clears_disclaimed_identity(mock_check, client):
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550377', 'user_id': None,
+            'disclaimed_user_id': 4242,
+            'ts': datetime.utcnow().isoformat()}
+
+    response = client.post('/api/verify/phone/check', json={
+        'phone': '612-555-0199', 'code': '123456'})
+
+    assert response.get_json()['match'] == 'none'
+    with client.session_transaction() as sess:
+        ident = sess['verified_identity']
+    assert ident['disclaimed_user_id'] is None
+
+
+def test_disclaim_without_an_identity_is_refused(client):
+    resp = client.post('/api/verify/disclaim')
+    assert resp.status_code == 400
+    assert resp.get_json()['ok'] is False
+
+
+def test_email_lookup_reports_existence_without_sending(client, app):
+    with app.app_context():
+        u = User(email="lookup@test.com", first_name="Look", last_name="Up",
+                 status=UserStatus.PENDING, date_of_birth=date(1990, 1, 1),
+                 tshirt_size="M", emergency_contact_name="Em",
+                 emergency_contact_relation="friend",
+                 emergency_contact_phone="612-555-0999",
+                 emergency_contact_email="em@test.com")
+        db.session.add(u)
+        db.session.commit()
+        uid = u.id
+    try:
+        hit = client.post('/api/verify/email/lookup',
+                          json={'email': 'lookup@test.com'}).get_json()
+        assert hit == {'ok': True, 'exists': True}
+        miss = client.post('/api/verify/email/lookup',
+                           json={'email': 'nobody@test.com'}).get_json()
+        assert miss == {'ok': True, 'exists': False}
+    finally:
+        with app.app_context():
+            db.session.delete(User.query.get(uid))
+            db.session.commit()
+
+
+LOOKUP_XFF = "10.99.15.2"
+LOOKUP_HEADERS = {"X-Forwarded-For": LOOKUP_XFF}
+
+
+def _clear_lookup_probes(app):
+    with app.app_context():
+        db.session.rollback()
+        VerificationAttempt.query.filter(
+            VerificationAttempt.target.like('probe%@test.com'),
+        ).delete(synchronize_session=False)
+        VerificationAttempt.query.filter_by(target=PHONE).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+
+def test_email_lookup_is_rate_limited(client, app):
+    """Otherwise it is an unlimited membership-enumeration oracle.
+
+    Lookups have their own per-IP pool: the 31st distinct probe in an hour
+    is refused.
+    """
+    _clear_lookup_probes(app)
+    try:
+        for i in range(RATE_LOOKUP_IP_MAX):
+            body = client.post('/api/verify/email/lookup',
+                               json={'email': f'probe{i}@test.com'},
+                               headers=LOOKUP_HEADERS).get_json()
+            assert body == {'ok': True, 'exists': False}, (i, body)
+        refused = client.post('/api/verify/email/lookup',
+                              json={'email': 'probe-last@test.com'},
+                              headers=LOOKUP_HEADERS).get_json()
+        assert refused == {'ok': False, 'error': RATE_LIMIT_MSG}
+        with app.app_context():
+            assert VerificationAttempt.query.filter_by(
+                target='probe0@test.com').one().channel == 'lookup'
+    finally:
+        _clear_lookup_probes(app)
+
+
+@patch("app.verify.service.providers.twilio_verify_start")
+def test_lookups_do_not_lock_the_household_out_of_sms(mock_start, client, app):
+    """Ten blur-time lookups from one router must leave phone/start alone."""
+    _clear_lookup_probes(app)
+    try:
+        for i in range(RATE_IP_MAX):
+            body = client.post('/api/verify/email/lookup',
+                               json={'email': f'probe{i}@test.com'},
+                               headers=LOOKUP_HEADERS).get_json()
+            assert body['ok'] is True
+        resp = client.post('/api/verify/phone/start',
+                           json={'phone': PHONE_RAW},
+                           headers=LOOKUP_HEADERS).get_json()
+        assert resp == {'ok': True, 'error': None}
+        assert mock_start.called
+    finally:
+        _clear_lookup_probes(app)

@@ -44,7 +44,8 @@ def fixtures(app):
         db.session.add_all([
             UserSeason(user_id=flagged.id, season_id=s.id,
                        registration_type="new", registration_date=date.today(),
-                       status=UserSeasonStatus.PENDING_LOTTERY, needs_review=True),
+                       status=UserSeasonStatus.PENDING_LOTTERY, needs_review=True,
+                       review_note="no verified phone"),
             UserSeason(user_id=dupe_new.id, season_id=s.id,
                        registration_type="new", registration_date=date.today(),
                        status=UserSeasonStatus.PENDING_LOTTERY),
@@ -69,5 +70,6 @@ def test_review_page_lists_flagged_and_fuzzy_dupes(client, fixtures):
     assert resp.status_code == 200
     html = resp.data.decode()
     assert "rev-flagged@test.com" in html      # needs_review list
+    assert "no verified phone" in html         # review_note explains the flag
     assert "rev-dupe-new@test.com" in html     # fuzzy-match list
     assert "rev-dupe-old@test.com" in html     # shown as the possible match

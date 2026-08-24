@@ -61,7 +61,7 @@
           <p class="form-section__subtitle">We'll text a code to confirm your number.</p>
 
           <div id="verify-expired-notice" class="notice notice--warn" hidden>
-            Your verification expired. Verify your number again and your answers will be right where you left them.
+            Your verification expired. Verify again and your answers are still here.
           </div>
 
           <div id="verify-error" class="notice notice--error" hidden></div>
@@ -72,12 +72,11 @@
               <input class="form-input" type="tel" id="verify-phone" inputmode="tel" autocomplete="tel" placeholder="Your cell number">
             </div>
             <button type="button" class="btn btn--full" id="verify-send-btn">Text me a code</button>
-            <p class="form-field__hint" style="margin-top: 16px;">
-              <a href="#" id="verify-skip-link">New to TCSC? Start here.</a>
-              (Skied with us before? Verify above. Registering as new puts you in the new-member lottery.)
-            </p>
             <p class="form-field__hint" style="margin-top: 8px;">
               <a href="#" id="verify-cant-text-link">Can't receive texts?</a>
+            </p>
+            <p class="form-field__hint">
+              Stuck? Email us at <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a>.
             </p>
           </div>
 
@@ -94,13 +93,12 @@
               <button type="button" class="btn" id="verify-check-btn">Verify</button>
               <button type="button" class="btn btn--secondary" id="verify-resend-btn" disabled>Resend (30)</button>
             </div>
-            <p class="form-field__hint">Registering on a computer? The code went to your phone. It may not light up if Do Not Disturb is on.</p>
+            <p class="form-field__hint">On a computer? The code went to your phone.</p>
           </div>
 
           <div id="verify-email-entry" hidden>
             <p id="verify-email-msg" class="form-field__hint" style="margin-bottom: 12px;">
-              Your number's verified. We just don't have it on file yet (most alumni don't).
-              Enter the email you've used with the club and we'll link you up.
+              Enter the email you use with the club and we'll link your account.
             </p>
             <div class="form-field">
               <label class="form-field__label" for="verify-email">Email</label>
@@ -116,7 +114,32 @@
               <button type="button" class="btn" id="verify-email-check-btn">Verify</button>
             </div>
             <p class="form-field__hint" style="margin-top: 16px;">
-              <a href="#" id="verify-email-dead-link">That email doesn't work for me anymore</a>
+              <a href="#" id="verify-email-dead-link">Can't reach that inbox?</a>
+            </p>
+          </div>
+
+          <div id="verify-already-registered" hidden>
+            <h3 class="form-section__title" id="already-registered-title"></h3>
+            <p id="already-registered-detail"></p>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="already-registered-not-me-link" hidden></a>
+            </p>
+            <a class="btn btn--full" href="https://tcsc.ski">Go to tcsc.ski</a>
+          </div>
+
+          <div id="verify-window-wait" hidden>
+            <h3 class="form-section__title" id="window-wait-title"></h3>
+            <p>Come back then and we'll get you signed up.</p>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="window-wait-not-me-link" hidden></a>
+            </p>
+          </div>
+
+          <div id="verify-window-ended" hidden>
+            <h3 class="form-section__title" id="window-ended-title"></h3>
+            <p>Email us at <a href="mailto:contact@twincitiesskiclub.org">contact@twincitiesskiclub.org</a> and we'll see what we can do.</p>
+            <p class="form-field__hint" style="margin-top: 16px;">
+              <a href="#" id="window-ended-not-me-link" hidden></a>
             </p>
           </div>
         </section>
@@ -126,9 +149,8 @@
           <a href="#" id="verify-not-me-link"></a>
         </div>
         <div id="unverified-notice" class="notice notice--warn" hidden>
-          You're continuing without a verified match, so you'll be registered as a new
-          member and entered in the new-member lottery. An organizer will review your
-          registration and link any membership history.
+          Since we couldn't verify you, you'll register as a new member and join the lottery.
+          An organizer will check for past membership.
         </div>
 
         <form id="registration-form" method="POST" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}" hidden>
@@ -147,6 +169,25 @@
               {% else %}
                 <input class="form-input" type="email" id="email" name="email" placeholder="Email Address" autocomplete="email" required>
               {% endif %}
+            </div>
+
+            <div id="email-collision" class="notice notice--info" hidden>
+              <p style="margin: 0 0 12px;"><strong>We found your account.</strong>
+                Verify this email and we'll pull your info in.</p>
+              <p class="card-error" id="email-collision-error" role="alert" hidden></p>
+              <button type="button" class="btn" id="email-collision-send">Email me a code</button>
+              <div id="email-collision-code-row" hidden style="margin-top: 16px;">
+                <div class="form-field">
+                  <label class="form-field__label" for="email-collision-code">Verification Code</label>
+                  <input class="form-input" type="text" id="email-collision-code"
+                         inputmode="numeric" autocomplete="one-time-code" maxlength="8"
+                         placeholder="6-digit code">
+                </div>
+                <button type="button" class="btn" id="email-collision-check">Verify</button>
+              </div>
+              <p class="form-field__hint" style="margin-top: 16px;">
+                <a href="#" id="email-collision-dead">Can't reach that inbox?</a>
+              </p>
             </div>
 
             <div class="form-row form-row--pair">
@@ -284,9 +325,7 @@
             <p class="form-section__subtitle">Pick how you'll pitch in this season</p>
 
             <p class="form-field__hint" style="margin-bottom: 16px;">
-              TCSC is 100% volunteer-run, and the season goes best when everyone
-              pitches in. Pick at least one way you'd like to help. We'll follow
-              up based on what you choose.
+              TCSC is all volunteers. Pick at least one way you'd like to help, and we'll follow up.
             </p>
 
             <div class="form-field">
@@ -367,7 +406,7 @@
           </div>
 
           <button type="submit" class="btn btn--full" id="register-btn">
-            <span id="button-text">Register & Pay{% if season.price_cents %} ${{ '%.2f' % (season.price_cents / 100) }}{% endif %}</span>
+            <span id="button-text">Register</span>
             <span id="button-spinner" style="display: none;">
               <svg width="20" height="20" viewBox="0 0 20 20" class="spin">
                 <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" fill="none" stroke-dasharray="40" stroke-dashoffset="10"/>

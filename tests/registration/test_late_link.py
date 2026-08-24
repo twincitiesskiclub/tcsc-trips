@@ -148,11 +148,18 @@ class TestRegistrationInviteBypass:
             ))
             db.session.commit()
             token = generate(closed_season.id, email)
+            user_id = user.id
         try:
-            # POST minimally — we expect to be short-circuited before form validation runs.
+            # A verified session and an intent nothing is bound to: the
+            # route short-circuits once payment binding is known, before
+            # form validation runs.
+            with client.session_transaction() as sess:
+                sess['verified_identity'] = {
+                    'phone_e164': '+16125550411', 'user_id': user_id,
+                    'ts': datetime.utcnow().isoformat()}
             response = client.post(
                 f'/seasons/{closed_season.id}/register?invite={token}',
-                data={'email': email},
+                data={'email': email, 'payment_intent_id': 'pi_late_link_unbound'},
                 follow_redirects=False,
             )
             # The route short-circuits and redirects back to the register page.

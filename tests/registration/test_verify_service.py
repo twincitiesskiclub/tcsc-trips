@@ -118,3 +118,65 @@ def test_email_normalization_closes_rate_limit_bypass(mock_send, ctx):
 
     # Verify code from last variant can be checked with normalized email
     assert service.check_email_verification("svc-case@test.com", code_from_last) is True
+
+
+# --- Lookup pool: blur-time existence checks must not eat the send budget ---
+
+LOOKUP_IP = "10.99.15.1"
+LOOKUP_TARGET_PREFIX = "lookup-pool-"
+
+
+def _lookup_targets(n):
+    return [f"{LOOKUP_TARGET_PREFIX}{i}@test.com" for i in range(n)]
+
+
+@pytest.fixture
+def lookup_ctx(app):
+    with app.app_context():
+        yield
+        db.session.rollback()
+        VerificationAttempt.query.filter(
+            VerificationAttempt.target.like(f"{LOOKUP_TARGET_PREFIX}%@test.com")
+        ).delete(synchronize_session=False)
+        VerificationAttempt.query.filter(
+            VerificationAttempt.target == PHONE).delete(synchronize_session=False)
+        db.session.commit()
+
+
+@patch("app.verify.service.providers.twilio_verify_start")
+def test_lookups_do_not_consume_the_send_ip_budget(mock_start, lookup_ctx):
+    """Four people behind one router, three lookups each, must still be
+    able to get an SMS code from that router."""
+    for target in _lookup_targets(service.RATE_IP_MAX):
+        assert service.lookup_rate_limit_ok(target, LOOKUP_IP)
+        service._record_attempt(target, 'lookup', LOOKUP_IP)
+    ok, msg = service.start_phone_verification(PHONE, ip=LOOKUP_IP)
+    assert ok, msg
+    assert mock_start.called
+
+
+def test_lookup_ip_ceiling_refuses_the_thirty_first(lookup_ctx):
+    targets = _lookup_targets(service.RATE_LOOKUP_IP_MAX + 1)
+    for target in targets[:-1]:
+        assert service.lookup_rate_limit_ok(target, LOOKUP_IP)
+        service._record_attempt(target, 'lookup', LOOKUP_IP)
+    assert service.lookup_rate_limit_ok(targets[-1], LOOKUP_IP) is False
+
+
+def test_lookup_keeps_the_per_target_ceiling(lookup_ctx):
+    target = _lookup_targets(1)[0]
+    for _ in range(service.RATE_TARGET_MAX):
+        assert service.lookup_rate_limit_ok(target, LOOKUP_IP)
+        service._record_attempt(target, 'lookup', LOOKUP_IP)
+    assert service.lookup_rate_limit_ok(target, LOOKUP_IP) is False
+
+
+def test_send_ip_ceiling_is_unchanged_and_separate_from_lookups(lookup_ctx):
+    targets = _lookup_targets(service.RATE_IP_MAX + 1)
+    for target in targets[:-1]:
+        assert service.rate_limit_ok(target, LOOKUP_IP)
+        service._record_attempt(target, 'sms', LOOKUP_IP)
+    # 11th send from this IP is refused ...
+    assert service.rate_limit_ok(targets[-1], LOOKUP_IP) is False
+    # ... while a lookup from the same IP is still fine: separate pool.
+    assert service.lookup_rate_limit_ok(targets[-1], LOOKUP_IP) is True

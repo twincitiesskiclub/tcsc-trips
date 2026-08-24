@@ -320,6 +320,9 @@ class UserSeason(db.Model):
     payment_date = db.Column(db.Date)
     status = db.Column(db.String(50), nullable=False, default=UserSeasonStatus.PENDING_LOTTERY)
     needs_review = db.Column(db.Boolean, nullable=False, default=False, server_default='false')
+    # Why the row was flagged, for the admin review page. "claims Jane R.
+    # (id 412), couldn't verify email" beats a bare checkbox.
+    review_note = db.Column(db.String(255))
     # Volunteer-interest answer (keys from constants.VOLUNTEER_INTERESTS /
     # VOLUNTEER_COMMITTEES). Null = never answered (pre-question registrants).
     volunteer_interests = db.Column(JSON)
@@ -473,6 +476,6 @@ class VerificationAttempt(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     target = db.Column(db.String(64), nullable=False, index=True)  # phone_e164 or email
-    channel = db.Column(db.String(10), nullable=False)  # 'sms' | 'email'
+    channel = db.Column(db.String(10), nullable=False)  # 'sms' | 'email' | 'lookup'
     ip = db.Column(db.String(45), nullable=False, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)

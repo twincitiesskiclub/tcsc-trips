@@ -49,15 +49,32 @@ Lifecycle: authorize → hold → admin captures or refunds. Payment holds are w
 
 ## Phone Verification (season registration)
 
-Member identity for season registration is a verified phone (`User.phone_e164`,
-E.164, indexed, deliberately NOT unique — households share numbers). Codes:
-Twilio Verify for SMS, `VerificationCode` + Resend for the email fallback.
-The verified identity lives in the Flask session (`app/verify/service.py`,
-2-hour TTL) and is the ONLY source for returning-vs-new and capture method —
-never trust a typed email for pricing. Unverified registrations degrade to
-manual capture + `UserSeason.needs_review`; the admin review page
-(`/admin/registration-review?season_id=N`) must be checked before running a
-lottery. SMS templates live in `config/sms.yaml`; `send_sms()` never raises.
+Every registrant verifies by SMS. There is no new-member bypass; the phone
+is the identity proof. Member identity is a verified phone
+(`User.phone_e164`, E.164, indexed, deliberately NOT unique because
+households share numbers). Codes: Twilio Verify for SMS, `VerificationCode`
++ Resend for the email fallback. The verified identity lives in the Flask
+session (`app/verify/service.py`, 2-hour TTL).
+
+**One resolver decides everything.** `app/seasons/resolution.py` returns one
+of seven outcomes given the session identity, a season, the time, and an
+optional late-link payload. The client renders that verdict and decides
+nothing itself. Both `/api/verify/resolve` and the registration POST call
+it, so the two can never disagree. Add branches there, never in
+`script.js`.
+
+A verified phone matching one account IS that member: no email code, and
+they may change their email to any address not already on another account
+without losing automatic capture. Email verification survives in three
+places: a phone matching 2+ accounts, a phone matching none whose typed
+email hits an existing account, and a member who clicks "Not [name]?" to
+disclaim a match the phone made.
+
+Unverified registrations degrade to manual capture plus
+`UserSeason.needs_review`, with `review_note` saying why. The admin review
+page (`/admin/registration-review?season_id=N`) must be checked before
+running a lottery. SMS templates live in `config/sms.yaml`; `send_sms()`
+never raises.
 
 ## Slack Tier Logic
 

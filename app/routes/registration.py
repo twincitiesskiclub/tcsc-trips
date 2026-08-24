@@ -9,6 +9,11 @@ from ..utils import (get_current_times, normalize_email, normalize_phone_e164,
                      validate_volunteer_selections)
 from ..verify.service import get_verified_identity, clear_verified_identity
 from ..notifications.sms import send_sms
+from ..seasons.resolution import (
+    ALREADY_REGISTERED, HOLDS_A_SPOT, NEED_EMAIL, VERIFY_PHONE, WINDOW_ENDED,
+    WINDOW_NOT_YET_OPEN, WIZARD_NEW, WIZARD_RETURNING,
+    resolve_registration_step,
+)
 from .. import late_link
 
 registration = Blueprint('registration', __name__)
@@ -74,20 +79,6 @@ def season_register(season_id):
             form = request.form
             email = normalize_email(form['email'])
 
-            # Invite-token short-circuit happens before any verification
-            # concerns: a late-registration link for someone already
-            # registered bounces immediately, regardless of session state.
-            if invite_token:
-                invite_check_user = User.get_by_email(email)
-                if invite_check_user is not None:
-                    existing_us = UserSeason.get_for_user_season(invite_check_user.id, season.id)
-                    if existing_us and existing_us.status in (
-                            UserSeasonStatus.ACTIVE, UserSeasonStatus.PENDING_LOTTERY):
-                        flash_error("This link has already been used. You're "
-                                    "already registered for this season.")
-                        return redirect(url_for('registration.season_register',
-                                                season_id=season_id))
-
             identity = get_verified_identity()
             verified_user = None
             if identity and identity.get('user_id'):
@@ -113,8 +104,70 @@ def season_register(season_id):
                 and verified_user is not None
                 and email != normalize_email(verified_user.email)
             )
+            disclaimed_name = None
+            disclaimed_id = None
             if identity_disclaimed:
+                disclaimed_name = verified_user.full_name
+                disclaimed_id = verified_user.id
                 verified_user = None
+
+            # Bind the submitted PaymentIntent before treating an email match
+            # as an account collision. The capturable webhook can create the
+            # new member's stub row before this POST reaches the server.
+            payment_intent_id = form.get('payment_intent_id')
+            if not payment_intent_id:
+                flash_error('Payment is required to complete registration.')
+                return redirect(url_for('registration.season_register', season_id=season_id))
+            existing = User.get_by_email(email)
+            payment_candidate = Payment.get_by_payment_intent(
+                payment_intent_id)
+            payment_owner_id = (
+                verified_user.id
+                if verified_user is not None
+                else existing.id if existing is not None else None
+            )
+            payment_owner_matches = (
+                payment_candidate is not None
+                and (
+                    payment_candidate.user_id == payment_owner_id
+                    if payment_candidate.user_id is not None
+                    else normalize_email(payment_candidate.email) == email
+                )
+            )
+            existing_payment = (
+                payment_candidate
+                if payment_candidate is not None
+                and payment_candidate.payment_type == 'season'
+                and payment_candidate.season_id == season.id
+                and payment_owner_matches
+                else None
+            )
+            # A registration that holds a spot is this member's own
+            # in-flight one, not a duplicate, exactly when the submitted
+            # PaymentIntent is bound to them. The webhook can win the race
+            # and create the row first on both the invite and general
+            # paths, so both read this one predicate.
+            reconciling_own_payment = existing_payment is not None
+            owns_webhook_stub = (
+                existing is not None
+                and reconciling_own_payment
+                and existing_payment.user_id == existing.id
+                and existing.status == UserStatus.PENDING
+                and not existing.is_returning
+            )
+
+            # Invite-token short-circuit: a late-registration link for
+            # someone already registered bounces before form validation.
+            # It has to wait for payment binding, or an invited returning
+            # member whose automatic charge succeeded (webhook first,
+            # ACTIVE row already written) is bounced after paying.
+            if invite_token and existing is not None and not reconciling_own_payment:
+                existing_us = UserSeason.get_for_user_season(existing.id, season.id)
+                if existing_us and existing_us.status in HOLDS_A_SPOT:
+                    flash_error("This link has already been used. You're "
+                                "already registered for this season.")
+                    return redirect(url_for('registration.season_register',
+                                            season_id=season_id))
 
             if verified_user is not None:
                 user = verified_user
@@ -125,9 +178,10 @@ def season_register(season_id):
                                             season_id=season_id))
             else:
                 user = None
-                existing = User.get_by_email(email)
                 if existing is not None:
-                    if continue_unverified:
+                    if owns_webhook_stub:
+                        user = existing
+                    elif continue_unverified:
                         # Flagged path: reuse the row, admin will review.
                         user = existing
                     else:
@@ -138,32 +192,78 @@ def season_register(season_id):
                         return redirect(url_for('registration.season_register',
                                                 season_id=season_id))
 
-            # needs_review is about account-MATCH confidence, computed now
-            # (before any row is created/reused below) from the pre-creation
-            # state: true whenever no phone was verified this session at
-            # all, an existing row is being claimed (email collision +
-            # continue_unverified) without a verified link to that specific
-            # account, or a verified account link was disclaimed (the phone
-            # matched someone, but this registrant says it isn't them - an
-            # admin should eyeball that). A brand-new row created from a
-            # verified-but-unlinked phone (user is still None here) is NOT
-            # flagged.
-            needs_review = (identity is None
-                            or identity_disclaimed
-                            or (user is not None and verified_user is None))
+            flagged_row_reuse = (
+                user is not None
+                and verified_user is None
+                and not owns_webhook_stub
+            )
 
-            # Get payment_intent_id for coordination with webhook
-            payment_intent_id = form.get('payment_intent_id')
-            if not payment_intent_id:
-                flash_error('Payment is required to complete registration.')
-                return redirect(url_for('registration.season_register', season_id=season_id))
-            existing_payment = Payment.get_by_payment_intent(payment_intent_id)
+            # needs_review is about account-MATCH confidence, computed from
+            # pre-creation state. review_note says which of the three ways
+            # it went wrong so the admin page does not have to guess.
+            review_note = None
+            if identity is None:
+                review_note = "no verified phone"
+            elif identity_disclaimed:
+                review_note = f"claims not to be {disclaimed_name} (id {disclaimed_id})"[:255]
+            elif flagged_row_reuse:
+                review_note = f"claimed existing account {user.email}, email unverified"[:255]
+            elif identity is not None and identity.get('disclaimed_user_id'):
+                shared_user_id = identity['disclaimed_user_id']
+                shared_user = User.query.get(shared_user_id)
+                if shared_user is not None:
+                    review_note = (
+                        f"shared number with {shared_user.full_name} "
+                        f"(id {shared_user_id})"
+                    )[:255]
+                else:
+                    review_note = (
+                        "shared number with a deleted account "
+                        f"(id {shared_user_id})"
+                    )[:255]
+            needs_review = review_note is not None
 
-            # Returning pricing requires the verified phone to be linked to
-            # THIS account specifically — a verified-but-unmatched phone (new
-            # number) or an unverified row-reuse (collision + flag) never
-            # earns returning treatment, regardless of that row's history.
-            is_returning = bool(verified_user is not None and user and user.is_returning)
+            # One rule, one place. The POST must not be able to disagree
+            # with the screen the member was just looking at.
+            #
+            # The session dict still carries the disclaimed user_id, so it
+            # has to be scrubbed before the resolver sees it. Otherwise
+            # someone who just said "I'm not Jane" would be priced as Jane.
+            resolver_identity = identity
+            if identity is not None and identity_disclaimed:
+                resolver_identity = {**identity, 'user_id': None}
+            outcome, outcome_context = resolve_registration_step(
+                resolver_identity, season, now_utc,
+                invite_payload if invite_season_match else None)
+            if outcome == ALREADY_REGISTERED and not reconciling_own_payment:
+                flash_error("You're already registered for this season.")
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+            if outcome in (WINDOW_NOT_YET_OPEN, WINDOW_ENDED):
+                status_msg = f"{outcome_context['member_type']} members"
+                flash_error(f'Sorry, the registration window for {status_msg} is currently closed.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+            if outcome == NEED_EMAIL:
+                flash_error('Please verify your email first.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+
+            if outcome == WIZARD_RETURNING:
+                is_returning = True
+            elif outcome in (WIZARD_NEW, VERIFY_PHONE):
+                is_returning = False
+            elif outcome == ALREADY_REGISTERED and reconciling_own_payment:
+                # The webhook already classified and created this row. Keep
+                # that payment-time classification while filling in the form.
+                is_returning = (
+                    str(outcome_context.get('member_type', '')).lower()
+                    == 'returning'
+                )
+            else:
+                flash_error('Please restart registration and verify again.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
 
             # Check if registration window is open for this user type
             member_type_str = 'returning' if is_returning else 'new'
@@ -206,6 +306,11 @@ def season_register(season_id):
                 # The verified number wins over whatever is typed in the form.
                 phone_e164 = identity['phone_e164']
                 user_fields['phone'] = format_phone_display(phone_e164)
+            if flagged_row_reuse:
+                phone_source = 'verified' if identity is not None else 'unverified'
+                review_note = (
+                    f"{review_note}; from {phone_source} phone {phone_e164}"
+                )[:255]
 
             # Convert dob string to date object
             dob_str = form['dob']
@@ -216,14 +321,8 @@ def season_register(season_id):
                     flash_error('Invalid date format for Date of Birth. Please use YYYY-MM-DD.')
                     return redirect(url_for('registration.season_register', season_id=season_id))
 
-            # Validate all form fields before proceeding. The form no longer
-            # submits a status radio (verified identity determines it), but
-            # validate_registration_form still expects one — synthesize it
-            # from the backend-derived member type rather than touching the
-            # shared validator/constants.
-            validation_form = form.copy()
-            validation_form['status'] = 'returning_former' if is_returning else 'new'
-            is_valid, validation_errors = validate_registration_form(validation_form, user_fields.get('date_of_birth'))
+            is_valid, validation_errors = validate_registration_form(
+                form, user_fields.get('date_of_birth'))
             volunteer_interests, volunteer_committees, volunteer_errors = (
                 validate_volunteer_selections(
                     form.getlist('volunteerInterests'),
@@ -237,20 +336,28 @@ def season_register(season_id):
             if user:
                 for k, v in user_fields.items():
                     setattr(user, k, v)
+                # A verified phone that resolved to this row may move its
+                # email. An unverified row-reuse keeps the address it was
+                # claimed by.
+                if verified_user is not None:
+                    user.email = email
             else:
                 user = User(email=email, status=UserStatus.PENDING, **user_fields)
                 db.session.add(user)
                 db.session.flush()  # get user.id
 
-            user.phone_e164 = phone_e164
-            if identity is not None:
-                user.phone_verified_at = user.phone_verified_at or datetime.utcnow()
-            else:
-                # No session identity means this phone_e164 is only the
-                # typed form value — clear any stale verified-at from a
-                # prior legitimate verification so a reused/updated row
-                # never carries an unverified number that looks verified.
-                user.phone_verified_at = None
+            if not flagged_row_reuse:
+                user.phone_e164 = phone_e164
+                if identity is not None:
+                    user.phone_verified_at = (
+                        user.phone_verified_at or datetime.utcnow()
+                    )
+                else:
+                    # No session identity means this phone_e164 is only the
+                    # typed form value. Clear any stale verified-at from a
+                    # prior legitimate verification so a reused/updated row
+                    # never carries an unverified number that looks verified.
+                    user.phone_verified_at = None
 
             # Link payment to user if webhook created it before form submission
             if existing_payment and not existing_payment.user_id:
@@ -272,6 +379,7 @@ def season_register(season_id):
                     registration_date=today_central(),
                     status=UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY,
                     needs_review=needs_review,
+                    review_note=review_note,
                     volunteer_interests=volunteer_interests,
                     volunteer_committees=volunteer_committees,
                 )
@@ -281,6 +389,7 @@ def season_register(season_id):
                 user_season.registration_date = current_time.date()
                 user_season.status = UserSeasonStatus.ACTIVE if is_returning else UserSeasonStatus.PENDING_LOTTERY
                 user_season.needs_review = needs_review
+                user_season.review_note = review_note
                 user_season.volunteer_interests = volunteer_interests
                 user_season.volunteer_committees = volunteer_committees
 
