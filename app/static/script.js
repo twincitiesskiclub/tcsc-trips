@@ -17,6 +17,17 @@ const STRIPE_CARD_STYLES = {
   }
 };
 
+// Submit button label for season registration. The verb matches the
+// capture method: a returning member is charged, a new member's card is
+// held for the lottery. Unknown stays neutral rather than promising either.
+function paymentButtonLabel(memberType, priceDollars) {
+  if (!(priceDollars > 0)) return 'Register';
+  const amount = `$${priceDollars.toFixed(2)}`;
+  if (memberType === 'returning') return `Register & Pay ${amount}`;
+  if (memberType === 'new') return `Register & Hold ${amount}`;
+  return 'Register';
+}
+
 // Generate a unique idempotency key for payment requests
 function generateIdempotencyKey() {
   return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -492,6 +503,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setPaymentStatusLine(memberType) {
+      const buttonText = byId('button-text');
+      if (buttonText) buttonText.textContent = paymentButtonLabel(memberType, priceDollars);
       const line = byId('payment-status-line');
       if (!line) return;
       if (memberType === 'returning') {
