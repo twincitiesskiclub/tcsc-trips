@@ -495,9 +495,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const line = byId('payment-status-line');
       if (!line) return;
       if (memberType === 'returning') {
-        line.textContent = `You're registering as a returning member. Your card will be charged $${priceDollars.toFixed(2)} today.`;
+        line.textContent = `Your card will be charged $${priceDollars.toFixed(2)} today.`;
       } else if (memberType === 'new') {
-        line.textContent = "You're registering as a new member. We'll place a hold on your card; you're only charged if you get a spot in the lottery.";
+        line.textContent = `We'll hold $${priceDollars.toFixed(2)} on your card. We charge it only if you get a lottery spot.`;
       } else {
         // Membership type unknown (prefill fetch failed); don't guess.
         line.textContent = "We'll confirm your membership type at checkout.";
@@ -583,7 +583,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (opts && opts.firstName) {
           const welcomeText = byId('verify-welcome-text');
           if (welcomeText) {
-            welcomeText.textContent = `Welcome back, ${opts.firstName}! We filled in what we have on file. Give it a once-over and finish up.`;
+            welcomeText.textContent = `Welcome back, ${opts.firstName}. We filled in what we have. Give it a once-over.`;
           }
           const notMeLink = byId('verify-not-me-link');
           if (notMeLink) {
@@ -639,18 +639,18 @@ document.addEventListener('DOMContentLoaded', () => {
 
         case 'need_email':
           byId('verify-email-msg').textContent =
-            "More than one member shares this number. Enter the email you use with the club.";
+            "Your number matches more than one account. Enter the email you use with the club.";
           showOnlyVerifyPanel('verify-email-entry');
           byId('verify-email').focus();
           return;
 
         case 'already_registered': {
           byId('already-registered-title').textContent =
-            `You're already registered for ${ctx.season_name}.`;
+            "You're already registered.";
           byId('already-registered-detail').textContent =
             ctx.status === 'ACTIVE'
-              ? "Your card was charged. See you out there."
-              : "Your card has a hold. We charge it only if you get a lottery spot.";
+              ? "You've paid with your card. See you out there."
+              : "Your card has a hold. You pay only if you get a lottery spot.";
           setVerdictNotMeLink('already-registered-not-me-link', ctx.first_name);
           showOnlyVerifyPanel('verify-already-registered');
           return;
@@ -742,19 +742,19 @@ document.addEventListener('DOMContentLoaded', () => {
         const body = await postJson('/api/verify/email/start',
                                     { email });
         if (!body.ok) {
-          showCollisionError(body.error || "We couldn't send that code. Try again in a minute.");
+          showCollisionError(body.error || "We can't email you a code right now. Try again in a minute.");
           return;
         }
         if (!body.exists) {
           hide('email-collision-code-row');
-          showCollisionError("We don't have that email on file.");
+          showCollisionError("That email doesn't match an account.");
           return;
         }
         collisionCodeEmail = email;
         show('email-collision-code-row');
         byId('email-collision-code').focus();
       } catch (e) {
-        showCollisionError("We couldn't send that code. Try again in a minute.");
+        showCollisionError("We can't email you a code right now. Try again in a minute.");
       } finally {
         btn.disabled = false;
       }
@@ -770,7 +770,7 @@ document.addEventListener('DOMContentLoaded', () => {
           code: byId('email-collision-code').value.replace(/\s+/g, '')
         });
         if (!body.ok) {
-          showCollisionError(body.error || "That code didn't match. Check your email and try again.");
+          showCollisionError(body.error || "That code doesn't match. Check your email and try again.");
           return;
         }
         hide('email-collision');
@@ -778,7 +778,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // they already have, or a window that isn't open. Re-ask.
         applyVerdict(await resolveAndRender());
       } catch (e) {
-        showCollisionError("That code didn't match. Check your email and try again.");
+        showCollisionError("That code doesn't match. Check your email and try again.");
       } finally {
         btn.disabled = false;
       }
@@ -1000,7 +1000,7 @@ document.addEventListener('DOMContentLoaded', () => {
       hide('verify-expired-notice');
       hide('verify-email-code-row');
       byId('verify-email-msg').textContent =
-        "No problem. Enter the email you've used with the club and we'll match you to the right account.";
+        "Enter the email you use with the club to find your account.";
       showOnlyVerifyPanel('verify-email-entry');
       byId('verify-email').focus();
       window.scrollTo({ top: 0 });
