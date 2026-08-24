@@ -470,11 +470,16 @@ document.addEventListener('DOMContentLoaded', () => {
       box.hidden = !message;
     }
 
-    function showCollisionError(message) {
+    function showCollisionError(message, lookupPath = false) {
       const box = byId('email-collision-error');
       if (!box) return;
       box.textContent = message || '';
       box.hidden = !message;
+      if (message && lookupPath) {
+        show('email-collision');
+        hide('email-collision-send');
+        hide('email-collision-code-row');
+      }
     }
 
     async function postJson(url, payload) {
@@ -700,28 +705,29 @@ document.addEventListener('DOMContentLoaded', () => {
       const value = emailField.value.trim();
       if (value === lastLookupEmail) return;
       if (!value || !value.includes('@')) return;
-      lastLookupEmail = value;
       showCollisionError('');
       let body;
       try {
         body = await postJson('/api/verify/email/lookup', { email: value });
       } catch (e) {
         if (byId('email').value.trim() === value) {
-          showCollisionError('You can check that email again in a minute.');
+          showCollisionError('You can check that email again in a minute.', true);
         }
         return;
       }
       if (byId('email').value.trim() !== value) return;
       if (!body.ok) {
-        showCollisionError(body.error || 'You can check that email again in a minute.');
+        showCollisionError(body.error || 'You can check that email again in a minute.', true);
         return;
       }
+      lastLookupEmail = value;
       if (!body.exists) {
         hide('email-collision');
         return;
       }
       collisionCodeEmail = null;
       hide('email-collision-code-row');
+      show('email-collision-send');
       show('email-collision');
     }
 
