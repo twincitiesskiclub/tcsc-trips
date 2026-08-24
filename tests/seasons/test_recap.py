@@ -143,3 +143,42 @@ def test_no_limit_means_no_percentage(app, clean):
         stats = build_recap(s, FOR_DATE)
     assert stats["season_totals"]["registration_limit"] is None
     assert stats["season_totals"]["pct_of_limit"] is None
+
+
+def test_window_day_math(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        stats = build_recap(season, FOR_DATE)
+    w = stats["windows"]["returning"]
+    # Window opened 4 days before FOR_DATE: day 5 of 21, 16 days left.
+    assert w["is_open"] is True
+    assert w["day_number"] == 5
+    assert w["days_remaining"] == 16
+    assert w["length_days"] == 21
+    assert stats["windows"]["new"] is None
+
+
+def test_should_post_gate(app, clean):
+    from app.seasons.recap import should_post
+    with app.app_context():
+        s = _make_season(
+            "Recap Gate 2098", 2098,
+            window_start=date(2098, 1, 6), window_end=date(2098, 1, 20),
+            new_window=(date(2098, 1, 13), date(2098, 1, 27)),
+        )
+        assert should_post(s, date(2098, 1, 5)) is False   # before any window
+        assert should_post(s, date(2098, 1, 6)) is True    # first day
+        assert should_post(s, date(2098, 1, 22)) is True   # new window open
+        assert should_post(s, date(2098, 2, 3)) is True    # 7 days after last end
+        assert should_post(s, date(2098, 2, 4)) is False   # 8 days after
+
+
+def test_should_post_false_without_windows(app, clean):
+    from app.seasons.recap import should_post
+    with app.app_context():
+        s = Season(name="Recap Bare 2097", year=2097, season_type="winter",
+                   price_cents=15000,
+                   start_date=date(2097, 11, 1), end_date=date(2098, 3, 1))
+        db.session.add(s)
+        db.session.commit()
+        assert should_post(s, date(2097, 12, 1)) is False
