@@ -4,7 +4,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 from app import create_app
-from app.models import db, Season, User, UserSeason
+from app.models import db, Payment, Season, User, UserSeason
 from app.constants import UserSeasonStatus
 
 EMAIL = "pi-verified@test.com"
@@ -50,6 +50,7 @@ def fixtures(app):
                                   status=UserSeasonStatus.ACTIVE))
         db.session.commit()
         yield {"season_id": s.id, "user_id": u.id}
+        Payment.query.filter_by(season_id=s.id).delete()
         UserSeason.query.filter_by(user_id=u.id).delete()
         db.session.commit()
         db.session.delete(User.query.get(u.id))
@@ -69,6 +70,32 @@ def _intent_mock():
     m = MagicMock()
     m.id, m.client_secret, m.amount, m.status = "pi_x", "cs_x", 15000, "requires_payment_method"
     return m
+
+
+def _apply_season_webhook(metadata):
+    from app.routes.payments import webhook_received
+    from flask import current_app
+
+    payload = {
+        "type": "payment_intent.succeeded",
+        "data": {
+            "object": {
+                "id": f"pi_metadata_user_id_{metadata['user_id']}",
+                "amount": 15000,
+                "metadata": metadata,
+            }
+        },
+    }
+    with patch.dict(
+        "os.environ",
+        {"FLASK_ENV": "development", "STRIPE_WEBHOOK_SECRET": ""},
+    ):
+        with current_app.test_request_context(
+            "/webhook", method="POST", json=payload,
+        ):
+            with patch("app.routes.payments.send_payment_notification"):
+                response = webhook_received()
+    assert response.status_code == 200
 
 
 @patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
@@ -123,3 +150,21 @@ def test_unverified_intent_carries_no_user_id(mock_create, client, fixtures):
         "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer"})
     assert resp.status_code == 200
     assert mock_create.call_args.kwargs["metadata"]["user_id"] == ""
+
+
+@patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
+def test_webhook_prefers_metadata_user_id_over_email(mock_create, client, app, fixtures):
+    """Otherwise a verified member using a new address gets a duplicate stub."""
+    from app.routes.payments import webhook_received
+    uid = fixtures["user_id"]
+    with app.app_context():
+        before = User.query.count()
+    metadata = {
+        'email': 'never-seen-before@test.com', 'name': 'Pat Payer',
+        'season_id': str(fixtures["season_id"]),
+        'member_type': 'RETURNING', 'payment_type': 'SEASON',
+        'verified': 'true', 'user_id': str(uid),
+    }
+    with app.app_context():
+        _apply_season_webhook(metadata)   # helper below
+        assert User.query.count() == before, "webhook created a duplicate stub"

@@ -360,8 +360,16 @@ def webhook_received():
             name = metadata.get('name') or ''
             _log_unknown_payment_type(payment_type, payment_intent_id)
 
-            # Find or create user
-            user = User.get_by_email(email)
+            # Prefer the verified account id the intent carried. Matching on
+            # email alone creates a duplicate ACTIVE stub whenever a verified
+            # member registers under a new address, which this change makes
+            # more common, not less.
+            user = None
+            metadata_user_id = metadata.get('user_id') or ''
+            if metadata_user_id.isdigit():
+                user = User.query.get(int(metadata_user_id))
+            if user is None:
+                user = User.get_by_email(email)
             if not user and member_type == MemberType.RETURNING.value:
                 # Returning member should already exist, but create if not
                 first_name, last_name = (name.split(' ', 1) + [""])[:2]
@@ -668,9 +676,13 @@ def create_season_payment_intent():
             verified_user = User.query.get(identity['user_id'])
         # No email check here on purpose. A verified phone that resolved to
         # one account IS that member, so changing their email is a profile
-        # edit, not grounds to demote them to a hold. The "Not [name]?"
-        # disclaim flow clears user_id from the session upstream, so it
-        # never reaches this line with a stale match.
+        # edit, not grounds to demote them to a hold.
+        #
+        # This is only safe because POST /api/verify/disclaim nulls user_id
+        # server-side when someone clicks "Not [name]?". This endpoint gets
+        # no disclaim signal of its own, so that call is what stands between
+        # a household member and an automatic full charge on a returning
+        # member's classification. Do not remove one without the other.
         if verified_user is not None and verified_user.is_returning:
             member_type = MemberType.RETURNING.value
         else:
