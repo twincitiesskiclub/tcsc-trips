@@ -5,7 +5,9 @@ app/slack/season_recap.py, scheduling in app/scheduler.py.
 """
 from datetime import timedelta
 
-from app.constants import UserSeasonStatus
+from app.constants import (
+    UserSeasonStatus, VOLUNTEER_COMMITTEES, VOLUNTEER_INTERESTS,
+)
 from app.models import Season, UserSeason
 from app.utils import utc_naive_to_central_naive
 
@@ -101,6 +103,67 @@ def _prior_season(season, for_date):
     return None
 
 
+def _volunteer_summary(day_rows):
+    """Get Involved answers among the day's registrations. Null interests
+    means the question was never asked (pre-question registrant); an empty
+    list means they answered and declined -- both count as unanswered here,
+    only actual opt-ins are tallied."""
+    answered = [r for r in day_rows if r.volunteer_interests]
+    interests = {}
+    committees = {}
+    for row in answered:
+        for key in row.volunteer_interests:
+            label = VOLUNTEER_INTERESTS.get(key, key)
+            interests[label] = interests.get(label, 0) + 1
+        if 'committee' in row.volunteer_interests:
+            for key in (row.volunteer_committees or []):
+                label = VOLUNTEER_COMMITTEES.get(key, key)
+                committees[label] = committees.get(label, 0) + 1
+    return {
+        "answered": len(answered),
+        "of": len(day_rows),
+        "interests": interests,
+        "committees": committees,
+    }
+
+
+def _highlights(for_date, day_rows, season_rows):
+    """Fun lines, each included only when true."""
+    lines = []
+    day_total = len(day_rows)
+
+    # Biggest day of the season so far (ties don't count, nor does 1).
+    daily = {}
+    for row in season_rows:
+        if row.registration_date < for_date:
+            daily[row.registration_date] = daily.get(row.registration_date, 0) + 1
+    if day_total > 1 and day_total > max(daily.values(), default=0):
+        lines.append(
+            f"Biggest day of the season so far: {day_total} registrations.")
+
+    # Crossed a multiple of 50 (measured through for_date, so an early
+    # same-morning registration can't claim yesterday's milestone).
+    through = sum(1 for r in season_rows if r.registration_date <= for_date)
+    before = through - day_total
+    if through >= 50 and through // 50 > before // 50:
+        lines.append(f"Crossed {(through // 50) * 50} total registrations.")
+
+    # Households: two registrations sharing a verified phone number.
+    phones = {}
+    for row in day_rows:
+        phone = row.user.phone_e164 if row.user else None
+        if phone:
+            phones[phone] = phones.get(phone, 0) + 1
+    shared = sum(1 for count in phones.values() if count >= 2)
+    if shared == 1:
+        lines.append("A household registered together (shared phone number).")
+    elif shared > 1:
+        lines.append(
+            f"{shared} households registered together (shared phone numbers).")
+
+    return lines
+
+
 def build_recap(season, for_date):
     """Stats dict for the recap covering the Central date `for_date`."""
     season_rows = _counted_rows(season.id)
@@ -127,4 +190,8 @@ def build_recap(season, for_date):
             "new": _window(season.new_start, season.new_end, for_date),
         },
         "prior_season": _prior_season(season, for_date),
+        "volunteer": _volunteer_summary(day_rows),
+        "needs_review": UserSeason.query.filter_by(
+            season_id=season.id, needs_review=True).count(),
+        "highlights": _highlights(for_date, day_rows, season_rows),
     }

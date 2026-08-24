@@ -228,3 +228,79 @@ def test_prior_season_skips_empty_seasons(app, season):
         stats = build_recap(season, FOR_DATE)
     # The empty nearer season is skipped; the older one with data is used.
     assert stats["prior_season"]["name"] == "Recap Older 2097"
+
+
+def test_volunteer_summary_counts_yesterday_only(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        _make_reg(season, FOR_DATE,
+                  interests=["practice_lead", "committee"],
+                  committees=["social"])
+        _make_reg(season, FOR_DATE, interests=["practice_lead"])
+        _make_reg(season, FOR_DATE, interests=[])          # declined
+        _make_reg(season, FOR_DATE - timedelta(days=1),
+                  interests=["event_volunteer"])           # not yesterday
+        stats = build_recap(season, FOR_DATE)
+    v = stats["volunteer"]
+    assert v["answered"] == 2
+    assert v["of"] == 3
+    assert v["interests"] == {
+        "Lead a group at practice": 2, "Join a committee": 1}
+    assert v["committees"] == {"Social (community events)": 1}
+
+
+def test_needs_review_counts_whole_season(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        _make_reg(season, FOR_DATE - timedelta(days=3), needs_review=True)
+        _make_reg(season, FOR_DATE, needs_review=True)
+        _make_reg(season, FOR_DATE)
+        stats = build_recap(season, FOR_DATE)
+    assert stats["needs_review"] == 2
+
+
+def test_highlight_record_day(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        _make_reg(season, FOR_DATE - timedelta(days=2))
+        _make_reg(season, FOR_DATE)
+        _make_reg(season, FOR_DATE)
+        stats = build_recap(season, FOR_DATE)
+    assert any("Biggest day" in line for line in stats["highlights"])
+
+
+def test_no_record_highlight_for_single_registration(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        _make_reg(season, FOR_DATE)
+        stats = build_recap(season, FOR_DATE)
+    assert not any("Biggest day" in line for line in stats["highlights"])
+
+
+def test_highlight_milestone_crossed(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        for _ in range(48):
+            _make_reg(season, FOR_DATE - timedelta(days=2))
+        for _ in range(3):
+            _make_reg(season, FOR_DATE)
+        stats = build_recap(season, FOR_DATE)
+    assert any("50" in line and "Crossed" in line
+               for line in stats["highlights"])
+
+
+def test_highlight_household(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        _make_reg(season, FOR_DATE, phone="+16125550190")
+        _make_reg(season, FOR_DATE, phone="+16125550190")
+        _make_reg(season, FOR_DATE, phone="+16125550191")
+        stats = build_recap(season, FOR_DATE)
+    assert any("household" in line for line in stats["highlights"])
+
+
+def test_no_highlights_on_quiet_day(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        stats = build_recap(season, FOR_DATE)
+    assert stats["highlights"] == []
