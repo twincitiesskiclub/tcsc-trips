@@ -178,7 +178,7 @@ def disclaim():
         return jsonify(ok=False, error='Verify your number first.'), 400
     service.set_verified_identity(
         identity['phone_e164'], user_id=None,
-        disclaimed_user_id=identity.get('user_id'))
+        disclaimed_user_id=identity.get('user_id') or identity.get('disclaimed_user_id'))
     return jsonify(ok=True)
 
 

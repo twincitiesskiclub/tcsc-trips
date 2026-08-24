@@ -215,6 +215,21 @@ def test_disclaim_drops_the_account_but_keeps_the_phone(client, season):
     assert ident['disclaimed_user_id'] == 4242
 
 
+def test_disclaim_keeps_the_marker_across_a_second_click(client):
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550377', 'user_id': 4242,
+            'ts': datetime.utcnow().isoformat()}
+
+    assert client.post('/api/verify/disclaim').get_json() == {'ok': True}
+    assert client.post('/api/verify/disclaim').get_json() == {'ok': True}
+
+    with client.session_transaction() as sess:
+        ident = sess['verified_identity']
+    assert ident['disclaimed_user_id'] == 4242
+    assert ident['user_id'] is None
+
+
 @patch("app.routes.verify.service.check_phone_verification", return_value=True)
 def test_phone_check_clears_disclaimed_identity(mock_check, client):
     with client.session_transaction() as sess:
