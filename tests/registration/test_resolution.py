@@ -310,3 +310,21 @@ def test_single_phone_match_is_not_adopted_without_a_verified_link(season):
         assert ctxd['first_name'] is None
     finally:
         cleanup(u)
+
+
+def test_review_note_defaults_to_null(season):
+    u = make_user("note@test.com", PHONE_A, "Nora")
+    us = UserSeason(user_id=u.id, season_id=season.id,
+                    registration_type='new',
+                    registration_date=date.today(),
+                    status=UserSeasonStatus.PENDING_LOTTERY)
+    db.session.add(us)
+    db.session.commit()
+    try:
+        assert us.review_note is None
+        us.review_note = "no verified phone"
+        db.session.commit()
+        assert UserSeason.get_for_user_season(
+            u.id, season.id).review_note == "no verified phone"
+    finally:
+        cleanup(u)
