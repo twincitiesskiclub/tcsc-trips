@@ -538,11 +538,6 @@ document.addEventListener('DOMContentLoaded', () => {
       saveFormState();
     }
 
-    async function fetchPrefill() {
-      const resp = await fetch('/api/verify/prefill');
-      return resp.json();
-    }
-
     function resetWizardFields() {
       // Drop answers derived from the wrong identity: saved state plus every
       // step 1-3 field. Payment fields (excluded from persistence) and
@@ -593,6 +588,94 @@ document.addEventListener('DOMContentLoaded', () => {
       window.scrollTo({ top: 0 });
     }
 
+    const VERIFY_PANELS = [
+      'verify-phone-entry', 'verify-code-entry', 'verify-email-entry',
+      'verify-already-registered', 'verify-window-wait', 'verify-window-ended'
+    ];
+
+    function showOnlyVerifyPanel(id) {
+      VERIFY_PANELS.forEach(panel => { if (panel !== id) hide(panel); });
+      if (id) show(id);
+      verifySection.hidden = false;
+      registrationForm.hidden = true;
+      if (progressBar) progressBar.hidden = true;
+    }
+
+    function formatWindowDate(iso) {
+      if (!iso) return null;
+      return new Date(iso).toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: 'numeric', minute: '2-digit', timeZone: 'America/Chicago'
+      });
+    }
+
+    // The server decided. This only renders.
+    function applyVerdict(body) {
+      const ctx = body.context || {};
+      switch (body.outcome) {
+        case 'verify_phone':
+          showOnlyVerifyPanel('verify-phone-entry');
+          return;
+
+        case 'need_email':
+          byId('verify-email-msg').textContent =
+            "More than one member shares this number. Enter the email you use with the club.";
+          showOnlyVerifyPanel('verify-email-entry');
+          byId('verify-email').focus();
+          return;
+
+        case 'already_registered': {
+          byId('already-registered-title').textContent =
+            `You're already registered for ${ctx.season_name}.`;
+          byId('already-registered-detail').textContent =
+            ctx.status === 'ACTIVE'
+              ? "Your card was charged. See you out there."
+              : "Your card has a hold. We charge it only if you get a lottery spot.";
+          showOnlyVerifyPanel('verify-already-registered');
+          return;
+        }
+
+        case 'window_not_yet_open': {
+          const who = ctx.member_type === 'returning' ? 'Returning member' : 'New member';
+          const when = formatWindowDate(ctx.opens_at);
+          byId('window-wait-title').textContent = when
+            ? `${who} registration opens ${when}.`
+            : `${who} registration isn't open yet.`;
+          showOnlyVerifyPanel('verify-window-wait');
+          return;
+        }
+
+        case 'window_ended': {
+          const who = ctx.member_type === 'returning' ? 'Returning member' : 'New member';
+          const when = formatWindowDate(ctx.closed_at);
+          byId('window-ended-title').textContent = when
+            ? `${who} registration closed ${when}.`
+            : `${who} registration is closed.`;
+          showOnlyVerifyPanel('verify-window-ended');
+          return;
+        }
+
+        case 'wizard_returning':
+        case 'wizard_new':
+          if (body.user) applyPrefill({ memberType: ctx.member_type, user: body.user });
+          else setPaymentStatusLine(ctx.member_type);
+          enterWizard({ continueUnverified: false, firstName: ctx.first_name });
+          return;
+
+        default:
+          showOnlyVerifyPanel('verify-phone-entry');
+      }
+    }
+
+    async function resolveAndRender() {
+      const invite = new URLSearchParams(window.location.search).get('invite');
+      const seasonId = registrationForm.dataset.seasonId;
+      let url = `/api/verify/resolve?season_id=${encodeURIComponent(seasonId)}`;
+      if (invite) url += `&invite=${encodeURIComponent(invite)}`;
+      const resp = await fetch(url);
+      return resp.json();
+    }
+
     function startResendCountdown(seconds) {
       const btn = byId('verify-resend-btn');
       if (!btn) return;
@@ -610,19 +693,6 @@ document.addEventListener('DOMContentLoaded', () => {
           btn.textContent = `Resend (${remaining})`;
         }
       }, 1000);
-    }
-
-    async function verifiedPrefillThenEnter(fallbackFirstName) {
-      let data = null;
-      try {
-        data = await fetchPrefill();
-      } catch (e) {
-        // Prefill is a convenience; verification already succeeded.
-      }
-      if (data) applyPrefill(data);
-      else setPaymentStatusLine(null);
-      const firstName = (data && data.user && data.user.firstName) || fallbackFirstName || null;
-      enterWizard({ continueUnverified: false, firstName });
     }
 
     async function sendPhoneCode() {
@@ -666,19 +736,7 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
         phoneVerified = true;
-        if (body.match === 'one') {
-          await verifiedPrefillThenEnter(body.firstName);
-          return;
-        }
-        // 'none' and 'multiple' both route to the email step; only the copy differs.
-        if (body.match === 'multiple') {
-          byId('verify-email-msg').textContent =
-            "More than one member shares this number, so we'll match you by email " +
-            "instead. Enter the email you've used with the club.";
-        }
-        hide('verify-code-entry');
-        show('verify-email-entry');
-        byId('verify-email').focus();
+        applyVerdict(await resolveAndRender());
       } catch (e) {
         showVerifyError('Something went wrong checking the code. Please try again.');
       } finally {
@@ -732,7 +790,7 @@ document.addEventListener('DOMContentLoaded', () => {
           resetWizardFields();
           reverifying = false;
         }
-        await verifiedPrefillThenEnter(null);
+        applyVerdict(await resolveAndRender());
       } catch (e) {
         showVerifyError('Something went wrong checking the code. Please try again.');
       } finally {
@@ -755,14 +813,9 @@ document.addEventListener('DOMContentLoaded', () => {
       byId('verify-phone').focus();
     });
 
-    // Escape hatches. continue_unverified stays "0" only when a phone
-    // verification succeeded this session; the two skip-verification links
-    // always take the flagged path (new-member lottery + admin review).
-    byId('verify-skip-link').addEventListener('click', e => {
-      e.preventDefault();
-      setPaymentStatusLine('new');
-      enterWizard({ continueUnverified: !phoneVerified });
-    });
+    // Escape hatches. Verification is mandatory, but registration never
+    // hard-blocks. Both links take the flagged path: new-member lottery,
+    // manual capture, admin review.
     byId('verify-cant-text-link').addEventListener('click', e => {
       e.preventDefault();
       setPaymentStatusLine('new');
@@ -783,8 +836,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // "Not [name]?" on the welcome banner: back to step 0, email entry,
     // to re-point the session at the right account. The backend re-links
     // user_id on a successful email check for a phone-verified session.
-    byId('verify-not-me-link').addEventListener('click', e => {
+    byId('verify-not-me-link').addEventListener('click', async e => {
       e.preventDefault();
+      // Tell the server before showing the email step. Until this lands,
+      // /create-season-payment-intent still sees the old account and would
+      // auto-capture a full charge for someone who belongs in the lottery
+      // on a hold.
+      await postJson('/api/verify/disclaim', {});
       reverifying = true;
       showVerifyError('');
       registrationForm.hidden = true;
@@ -832,33 +890,28 @@ document.addEventListener('DOMContentLoaded', () => {
       show('emergency-edit');
     });
 
-    // Resume after a refresh: a still-verified session skips straight back
-    // into the wizard (keeping its recorded continue_unverified choice).
-    // An expired or missing identity always lands back on step 0, never a
-    // silent downgrade to the flagged path; only an explicit escape-hatch
-    // click enters flagged-unverified. Saved answers restore either way.
+    // Resume after a refresh. The server re-decides; the client never
+    // guesses. An expired identity lands back on step 0 with an
+    // explanation, never a silent downgrade to the flagged path.
     (async () => {
       let entry = null;
       try {
-        const data = await fetchPrefill();
         entry = storedWizardEntry();
-        if (data.verified) {
+        const body = await resolveAndRender();
+        if (body.outcome !== 'verify_phone') {
           phoneVerified = true;
-          applyPrefill(data);
-          enterWizard({
-            continueUnverified: entry === '1',
-            firstName: data.user ? data.user.firstName : null
-          });
+          applyVerdict(body);
           return;
         }
       } catch (e) {
         entry = storedWizardEntry();
       }
-      if (entry === '0') {
-        // A verified session had entered the wizard, then the identity
-        // expired (2h TTL). Explain why step 0 is back.
-        show('verify-expired-notice');
+      if (entry === '1') {
+        // They took an escape hatch earlier; keep them on that path.
+        enterWizard({ continueUnverified: true });
+        return;
       }
+      if (entry === '0') show('verify-expired-notice');
     })();
   }
   // --- End Step 0 ---
