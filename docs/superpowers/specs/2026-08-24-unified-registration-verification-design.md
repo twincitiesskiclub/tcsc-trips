@@ -325,8 +325,8 @@ The unverified notice runs 34 words today:
 
 Becomes:
 
-> You'll register as a new member and join the lottery. An organizer will check
-> for past membership.
+> Since we couldn't verify you, you'll register as a new member and join the
+> lottery. An organizer will check for past membership.
 
 Every string in `season_register.html` and the verify-step branch of `script.js`
 gets the same pass.
