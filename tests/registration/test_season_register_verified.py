@@ -10,6 +10,7 @@ from app.models import db, Payment, Season, User, UserSeason
 
 EMAIL = "reg-verified@test.com"
 PHONE = "+16125550188"
+OWNER_PHONE = "+16125559999"
 
 
 @pytest.fixture
@@ -65,6 +66,61 @@ def _set_identity(client, user_id=None):
         sess["verified_identity"] = {
             "phone_e164": PHONE, "user_id": user_id,
             "ts": datetime.utcnow().isoformat()}
+
+
+def _plant_payment_owner_with_active_history(app, season, user_status):
+    with app.app_context():
+        past_season = Season(
+            name=f"Webhook Owner Past {user_status}",
+            year=2084,
+            price_cents=15000,
+            season_type="winter",
+            start_date=date(2084, 11, 1),
+            end_date=date(2085, 3, 1),
+        )
+        sam = User(
+            email=EMAIL,
+            first_name="Sam",
+            last_name="Member",
+            status=user_status,
+            phone_e164=OWNER_PHONE,
+        )
+        db.session.add_all([past_season, sam])
+        db.session.flush()
+        db.session.add(UserSeason(
+            user_id=sam.id,
+            season_id=past_season.id,
+            registration_type="new",
+            registration_date=date(2084, 10, 1),
+            status=UserSeasonStatus.ACTIVE,
+        ))
+        db.session.add(Payment(
+            payment_intent_id=FORM["payment_intent_id"],
+            email=EMAIL,
+            name="Reg Verified",
+            amount=15000,
+            status="requires_capture",
+            payment_type="season",
+            season_id=season,
+            user_id=sam.id,
+        ))
+        db.session.commit()
+        return sam.id, past_season.id
+
+
+def _delete_payment_owner(app, user_id, past_season_id):
+    with app.app_context():
+        Payment.query.filter_by(
+            payment_intent_id=FORM["payment_intent_id"]
+        ).delete()
+        UserSeason.query.filter_by(user_id=user_id).delete()
+        user = User.query.get(user_id)
+        if user is not None:
+            db.session.delete(user)
+        past_season = Season.query.get(past_season_id)
+        if past_season is not None:
+            db.session.delete(past_season)
+        db.session.commit()
 
 
 @patch("app.routes.registration.send_sms", return_value=True)
@@ -526,6 +582,60 @@ def test_post_adopts_webhook_first_stub_for_verified_new_member(
         assert user_season.needs_review is False
         assert user_season.review_note is None
     assert mock_sms.call_args.args[1] == "confirmation_lottery"
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_payment_link_does_not_adopt_existing_active_member(
+        mock_sms, client, app, season):
+    user_id, past_season_id = _plant_payment_owner_with_active_history(
+        app, season, UserStatus.ACTIVE)
+
+    try:
+        _set_identity(client, user_id=None)
+        response = client.post(
+            f"/seasons/{season}/register",
+            data={**FORM, "continue_unverified": "0"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        assert b'id="registration-success"' not in response.data
+        with app.app_context():
+            sam = User.query.get(user_id)
+            assert sam.first_name == "Sam"
+            assert sam.phone_e164 == OWNER_PHONE
+            assert UserSeason.get_for_user_season(user_id, season) is None
+        mock_sms.assert_not_called()
+    finally:
+        _delete_payment_owner(app, user_id, past_season_id)
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_payment_link_uses_flagged_reuse_for_pending_member_with_active_history(
+        mock_sms, client, app, season):
+    user_id, past_season_id = _plant_payment_owner_with_active_history(
+        app, season, UserStatus.PENDING)
+
+    try:
+        _set_identity(client, user_id=None)
+        response = client.post(
+            f"/seasons/{season}/register",
+            data={**FORM, "continue_unverified": "1"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 200
+        assert b'id="registration-success"' in response.data
+        with app.app_context():
+            sam = User.query.get(user_id)
+            user_season = UserSeason.get_for_user_season(user_id, season)
+            assert sam.phone_e164 == OWNER_PHONE
+            assert user_season.needs_review is True
+            assert EMAIL in user_season.review_note
+            assert PHONE in user_season.review_note
+        assert mock_sms.call_args.args[1] == "confirmation_lottery"
+    finally:
+        _delete_payment_owner(app, user_id, past_season_id)
 
 
 @patch("app.routes.registration.send_sms", return_value=True)

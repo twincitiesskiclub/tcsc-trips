@@ -6,7 +6,7 @@ import pytest
 
 from app import create_app
 from app.models import db, Payment, Season, User, UserSeason
-from app.constants import PaymentType, UserSeasonStatus
+from app.constants import PaymentType, UserSeasonStatus, UserStatus
 
 EMAIL = "pi-verified@test.com"
 PHONE = "+16125550190"
@@ -259,6 +259,67 @@ def test_capturable_webhook_prefers_metadata_user_id_over_email(app, fixtures):
         user_season = UserSeason.get_for_user_season(
             uid, fixtures["season_id"])
         assert user_season.status == UserSeasonStatus.PENDING_LOTTERY
+
+
+def test_capturable_webhook_does_not_link_existing_member_without_user_id(
+        app, fixtures, caplog):
+    user_id = fixtures["user_id"]
+    payment_intent_id = "pi_verified_webhook_capturable_existing_member"
+    metadata = {
+        "email": EMAIL,
+        "name": "Sam Member",
+        "season_id": str(fixtures["season_id"]),
+        "member_type": "NEW",
+        "payment_type": PaymentType.SEASON,
+        "verified": "false",
+        "user_id": "",
+    }
+
+    with app.app_context():
+        sam = User.query.get(user_id)
+        sam.first_name = "Sam"
+        sam.last_name = "Member"
+        db.session.commit()
+        assert sam.status == UserStatus.PENDING
+        assert sam.is_returning is True
+
+        with caplog.at_level(logging.WARNING):
+            _apply_capturable_webhook(metadata, payment_intent_id)
+
+        payment = Payment.get_by_payment_intent(payment_intent_id)
+        assert payment is not None
+        assert payment.user_id is None
+        assert UserSeason.get_for_user_season(
+            user_id, fixtures["season_id"]
+        ) is None
+        assert payment_intent_id in caplog.text
+
+
+def test_succeeded_webhook_does_not_link_existing_member_without_user_id(
+        app, fixtures, caplog):
+    user_id = fixtures["user_id"]
+    payment_intent_id = "pi_verified_webhook_succeeded_existing_member"
+    metadata = {
+        "email": EMAIL,
+        "name": "Sam Member",
+        "season_id": str(fixtures["season_id"]),
+        "member_type": "NEW",
+        "payment_type": PaymentType.SEASON,
+        "verified": "false",
+        "user_id": "",
+    }
+
+    with app.app_context():
+        with caplog.at_level(logging.WARNING):
+            _apply_succeeded_webhook(metadata, payment_intent_id)
+
+        payment = Payment.get_by_payment_intent(payment_intent_id)
+        assert payment is not None
+        assert payment.user_id is None
+        assert UserSeason.get_for_user_season(
+            user_id, fixtures["season_id"]
+        ) is None
+        assert payment_intent_id in caplog.text
 
 
 def test_webhook_does_not_create_member_for_unresolved_metadata_user_id(

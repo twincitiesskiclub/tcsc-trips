@@ -25,6 +25,26 @@ def _stripe_object_value(stripe_object, key, default=None):
     return getattr(stripe_object, key, default)
 
 
+def _season_email_fallback_user(email, payment_intent_id):
+    """Resolve only a fresh webhook stub when an intent has no user_id."""
+    candidate = User.get_by_email(email)
+    if candidate is None:
+        return None, False
+    if (
+        candidate.status == UserStatus.PENDING
+        and not candidate.is_returning
+    ):
+        return candidate, False
+
+    current_app.logger.warning(
+        "PaymentIntent %s had no user_id; refusing email fallback to "
+        "existing member %s",
+        payment_intent_id,
+        candidate.id,
+    )
+    return None, True
+
+
 def _event_registration_from_metadata(metadata):
     registration_id = metadata.get('registration_id')
     try:
@@ -301,6 +321,7 @@ def webhook_received():
             # do not emit user_id and keep their existing email-only behavior.
             user = None
             metadata_user_id = ''
+            blocked_email_fallback = False
             if payment_type == PaymentType.SEASON:
                 metadata_user_id = metadata.get('user_id') or ''
                 if metadata_user_id.isdigit():
@@ -313,7 +334,10 @@ def webhook_received():
                         metadata_user_id,
                     )
                 elif user is None:
-                    user = User.get_by_email(email)
+                    user, blocked_email_fallback = (
+                        _season_email_fallback_user(
+                            email, payment_intent_id)
+                    )
             else:
                 user = User.get_by_email(email)
 
@@ -321,6 +345,7 @@ def webhook_received():
             if (
                 not user
                 and not metadata_user_id
+                and not blocked_email_fallback
                 and member_type == MemberType.NEW.value
             ):
                 first_name, last_name = (name.split(' ', 1) + [""])[:2]
@@ -388,6 +413,7 @@ def webhook_received():
             # common, not less. Trips do not emit user_id and are left alone.
             user = None
             metadata_user_id = ''
+            blocked_email_fallback = False
             if payment_type == PaymentType.SEASON:
                 metadata_user_id = metadata.get('user_id') or ''
                 if metadata_user_id.isdigit():
@@ -400,12 +426,16 @@ def webhook_received():
                         metadata_user_id,
                     )
                 elif user is None:
-                    user = User.get_by_email(email)
+                    user, blocked_email_fallback = (
+                        _season_email_fallback_user(
+                            email, payment_intent_id)
+                    )
             else:
                 user = User.get_by_email(email)
             if (
                 not user
                 and not metadata_user_id
+                and not blocked_email_fallback
                 and member_type == MemberType.RETURNING.value
             ):
                 # Returning member should already exist, but create if not

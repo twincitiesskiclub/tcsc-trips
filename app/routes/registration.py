@@ -160,6 +160,8 @@ def season_register(season_id):
                 existing is not None
                 and existing_payment is not None
                 and existing_payment.user_id == existing.id
+                and existing.status == UserStatus.PENDING
+                and not existing.is_returning
             )
 
             if verified_user is not None:
