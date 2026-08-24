@@ -181,6 +181,22 @@ def test_resolve_without_identity_asks_for_phone(client, season):
     assert resp.get_json()['outcome'] == 'verify_phone'
 
 
+def test_resolve_not_yet_open_labels_utc_timestamp(client, season):
+    registration_season = Season.query.get(season)
+    registration_season.new_start = datetime.utcnow() + timedelta(days=4)
+    registration_season.new_end = datetime.utcnow() + timedelta(days=40)
+    db.session.commit()
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550378', 'user_id': None,
+            'ts': datetime.utcnow().isoformat()}
+
+    body = client.get(f'/api/verify/resolve?season_id={season}').get_json()
+
+    assert body['outcome'] == 'window_not_yet_open'
+    assert body['context']['opens_at'].endswith('+00:00')
+
+
 def test_resolve_unknown_season_404s(client):
     assert client.get('/api/verify/resolve?season_id=99999999').status_code == 404
 
@@ -196,6 +212,24 @@ def test_disclaim_drops_the_account_but_keeps_the_phone(client, season):
         ident = sess['verified_identity']
     assert ident['user_id'] is None
     assert ident['phone_e164'] == '+16125550377'
+    assert ident['disclaimed_user_id'] == 4242
+
+
+@patch("app.routes.verify.service.check_phone_verification", return_value=True)
+def test_phone_check_clears_disclaimed_identity(mock_check, client):
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550377', 'user_id': None,
+            'disclaimed_user_id': 4242,
+            'ts': datetime.utcnow().isoformat()}
+
+    response = client.post('/api/verify/phone/check', json={
+        'phone': '612-555-0199', 'code': '123456'})
+
+    assert response.get_json()['match'] == 'none'
+    with client.session_transaction() as sess:
+        ident = sess['verified_identity']
+    assert ident['disclaimed_user_id'] is None
 
 
 def test_disclaim_without_an_identity_is_refused(client):
