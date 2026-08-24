@@ -131,7 +131,7 @@ def build_recap_blocks(stats):
 
 def post_season_recap(stats, channel_override=None):
     """Post the recap. Returns {"success": bool, "error": str|None}."""
-    channel_name = channel_override or CHANNEL_NAME
+    channel_name = (channel_override or CHANNEL_NAME).lstrip('#')
     try:
         channel_id = get_channel_id_by_name(channel_name)
         if not channel_id:
@@ -141,7 +141,7 @@ def post_season_recap(stats, channel_override=None):
         blocks, fallback = build_recap_blocks(stats)
         get_slack_client().chat_postMessage(
             channel=channel_id, blocks=blocks, text=fallback)
-        return {"success": True}
+        return {"success": True, "error": None}
     except Exception as exc:
         current_app.logger.warning(f"season recap: post failed: {exc}")
         return {"success": False, "error": str(exc)}

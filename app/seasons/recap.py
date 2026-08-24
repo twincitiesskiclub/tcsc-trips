@@ -89,6 +89,8 @@ def _prior_season(season, for_date):
     dated.sort(key=lambda pair: pair[0], reverse=True)
 
     offset = (for_date - anchor).days
+    if offset < 0:
+        return None
     for prior_anchor, prior in dated:
         rows = _counted_rows(prior.id)
         if not rows:
