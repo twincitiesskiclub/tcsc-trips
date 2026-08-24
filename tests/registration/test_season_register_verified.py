@@ -864,8 +864,8 @@ def test_register_page_offers_the_club_sms_number(client, season):
     response = client.get(f"/seasons/{season}/register")
     assert response.status_code == 200
     body = response.get_data(as_text=True)
-    assert 'href="sms:+16124448606"' in body
-    assert "612-444-8606" in body
+    assert 'href="mailto:club@tcsc.ski"' in body
+    assert "club@tcsc.ski" in body
     assert "Text an organizer" not in body
 
 
