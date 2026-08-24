@@ -196,6 +196,26 @@ def test_unconfigured_window_reads_as_not_yet_open(season):
     assert ctxd['opens_at'] is None
 
 
+def test_window_with_only_start_reads_as_not_yet_open(season):
+    season.new_start = datetime.utcnow() - timedelta(days=1)
+    season.new_end = None
+    db.session.commit()
+    outcome, ctxd = resolution.resolve_registration_step(
+        ident(PHONE_A), season, datetime.utcnow())
+    assert outcome == resolution.WINDOW_NOT_YET_OPEN
+    assert ctxd['opens_at'] is None
+
+
+def test_window_with_only_end_reads_as_not_yet_open(season):
+    season.new_start = None
+    season.new_end = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+    outcome, ctxd = resolution.resolve_registration_step(
+        ident(PHONE_A), season, datetime.utcnow())
+    assert outcome == resolution.WINDOW_NOT_YET_OPEN
+    assert ctxd['opens_at'] is None
+
+
 def test_valid_invite_bypasses_a_closed_window(season):
     season.new_start = datetime.utcnow() - timedelta(days=40)
     season.new_end = datetime.utcnow() - timedelta(days=4)
@@ -234,6 +254,24 @@ def test_already_registered_beats_a_closed_window(season):
         cleanup(u)
 
 
+def test_already_registered_beats_a_not_yet_open_window(season):
+    """Precedence: 'you're already in' is useful before opening too."""
+    u = make_user("early@test.com", PHONE_A, "Eli")
+    db.session.add(UserSeason(user_id=u.id, season_id=season.id,
+                              registration_type='new',
+                              registration_date=date.today(),
+                              status=UserSeasonStatus.PENDING_LOTTERY))
+    season.new_start = datetime.utcnow() + timedelta(days=4)
+    season.new_end = datetime.utcnow() + timedelta(days=40)
+    db.session.commit()
+    try:
+        outcome, _ = resolution.resolve_registration_step(
+            ident(PHONE_A, u.id), season, datetime.utcnow())
+        assert outcome == resolution.ALREADY_REGISTERED
+    finally:
+        cleanup(u)
+
+
 def test_shared_phone_beats_already_registered(season):
     """Unresolved multi-match cannot claim anyone's registration."""
     a = make_user("multi-a@test.com", PHONE_B, "Jane")
@@ -251,8 +289,24 @@ def test_shared_phone_beats_already_registered(season):
         cleanup(a, b)
 
 
-def test_stale_user_id_falls_back_to_phone_match(season):
+def test_stale_user_id_does_not_crash(season):
     """A session pointing at a deleted account must not crash."""
     outcome, _ = resolution.resolve_registration_step(
         ident(PHONE_A, 99999999), season, datetime.utcnow())
     assert outcome == resolution.WIZARD_NEW
+
+
+def test_single_phone_match_is_not_adopted_without_a_verified_link(season):
+    """Deliberate. phone/check sets user_id on a single match, so an absent
+    one means there was not exactly one match at verification time.
+    Adopting a match that appeared later would hand over an account the
+    registrant never verified into.
+    """
+    u = make_user("not-adopted@test.com", PHONE_A, "Nina")
+    try:
+        outcome, ctxd = resolution.resolve_registration_step(
+            ident(PHONE_A), season, datetime.utcnow())
+        assert outcome == resolution.WIZARD_NEW
+        assert ctxd['first_name'] is None
+    finally:
+        cleanup(u)

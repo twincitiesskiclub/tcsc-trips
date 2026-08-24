@@ -45,6 +45,8 @@ def resolve_registration_step(identity, season, now, invite_payload=None):
 
     if user is None:
         matches = User.get_by_phone(identity['phone_e164'])
+        # Deliberately do not adopt a single match: phone/check would have set
+        # user_id if that account had been verified at phone-check time.
         if len(matches) > 1:
             # Households share numbers. The phone cannot say which member
             # this is, so an email code has to. Checked before
