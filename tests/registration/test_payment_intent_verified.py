@@ -70,9 +70,10 @@ def fixtures(app):
         UserSeason.query.filter_by(season_id=s.id).delete()
         UserSeason.query.filter_by(user_id=u.id).delete()
         db.session.commit()
-        unresolved_user = User.get_by_email(UNRESOLVED_EMAIL)
-        if unresolved_user:
-            db.session.delete(unresolved_user)
+        for extra_email in (NEW_EMAIL, UNRESOLVED_EMAIL):
+            extra_user = User.get_by_email(extra_email)
+            if extra_user:
+                db.session.delete(extra_user)
         db.session.delete(User.query.get(u.id))
         db.session.delete(User.query.get(metadata_user.id))
         db.session.delete(Season.query.get(s.id))
@@ -116,6 +117,31 @@ def _apply_succeeded_webhook(metadata, payment_intent_id):
         ):
             with patch("app.routes.payments.send_payment_notification"):
                 response = webhook_received()
+    assert response.status_code == 200
+
+
+def _apply_capturable_webhook(metadata, payment_intent_id):
+    from app.routes.payments import webhook_received
+    from flask import current_app
+
+    payload = {
+        "type": "payment_intent.amount_capturable_updated",
+        "data": {
+            "object": {
+                "id": payment_intent_id,
+                "amount": 15000,
+                "metadata": metadata,
+            }
+        },
+    }
+    with patch.dict(
+        "os.environ",
+        {"FLASK_ENV": "development", "STRIPE_WEBHOOK_SECRET": ""},
+    ):
+        with current_app.test_request_context(
+            "/webhook", method="POST", json=payload,
+        ):
+            response = webhook_received()
     assert response.status_code == 200
 
 
@@ -191,6 +217,30 @@ def test_webhook_prefers_metadata_user_id_over_email(mock_create, client, app, f
         assert User.query.count() == before, "webhook created a duplicate stub"
         payment = Payment.get_by_payment_intent(payment_intent_id)
         assert payment.user_id == uid
+
+
+def test_capturable_webhook_prefers_metadata_user_id_over_email(app, fixtures):
+    """A verified new member's address change must not create a stub user."""
+    uid = fixtures["metadata_user_id"]
+    with app.app_context():
+        before = User.query.count()
+        metadata = {
+            'email': NEW_EMAIL, 'name': 'Metadata User',
+            'season_id': str(fixtures["season_id"]),
+            'member_type': 'NEW', 'payment_type': PaymentType.SEASON,
+            'verified': 'true', 'user_id': str(uid),
+        }
+        payment_intent_id = "pi_verified_webhook_capturable_resolved_season"
+
+        _apply_capturable_webhook(metadata, payment_intent_id)
+
+        assert User.query.count() == before, "webhook created a duplicate stub"
+        assert User.get_by_email(NEW_EMAIL) is None
+        payment = Payment.get_by_payment_intent(payment_intent_id)
+        assert payment.user_id == uid
+        user_season = UserSeason.get_for_user_season(
+            uid, fixtures["season_id"])
+        assert user_season.status == UserSeasonStatus.PENDING_LOTTERY
 
 
 def test_webhook_does_not_create_member_for_unresolved_metadata_user_id(

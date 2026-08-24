@@ -9,8 +9,11 @@ from ..utils import (get_current_times, normalize_email, normalize_phone_e164,
                      validate_volunteer_selections)
 from ..verify.service import get_verified_identity, clear_verified_identity
 from ..notifications.sms import send_sms
-from ..seasons.resolution import (resolve_registration_step, WIZARD_RETURNING,
-                                  ALREADY_REGISTERED)
+from ..seasons.resolution import (
+    ALREADY_REGISTERED, NEED_EMAIL, VERIFY_PHONE, WINDOW_ENDED,
+    WINDOW_NOT_YET_OPEN, WIZARD_NEW, WIZARD_RETURNING,
+    resolve_registration_step,
+)
 from .. import late_link
 
 registration = Blueprint('registration', __name__)
@@ -172,14 +175,42 @@ def season_register(season_id):
             resolver_identity = identity
             if identity is not None and identity_disclaimed:
                 resolver_identity = {**identity, 'user_id': None}
-            outcome, _ = resolve_registration_step(
+            outcome, outcome_context = resolve_registration_step(
                 resolver_identity, season, now_utc,
                 invite_payload if invite_season_match else None)
-            if outcome == ALREADY_REGISTERED:
+            reconciling_own_payment = (
+                outcome == ALREADY_REGISTERED
+                and existing_payment is not None
+            )
+            if outcome == ALREADY_REGISTERED and existing_payment is None:
                 flash_error("You're already registered for this season.")
                 return redirect(url_for('registration.season_register',
                                         season_id=season_id))
-            is_returning = (outcome == WIZARD_RETURNING)
+            if outcome in (WINDOW_NOT_YET_OPEN, WINDOW_ENDED):
+                status_msg = f"{outcome_context['member_type']} members"
+                flash_error(f'Sorry, the registration window for {status_msg} is currently closed.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+            if outcome == NEED_EMAIL:
+                flash_error('Please verify your email first.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
+
+            if outcome == WIZARD_RETURNING:
+                is_returning = True
+            elif outcome in (WIZARD_NEW, VERIFY_PHONE):
+                is_returning = False
+            elif reconciling_own_payment:
+                # The webhook already classified and created this row. Keep
+                # that payment-time classification while filling in the form.
+                is_returning = (
+                    str(outcome_context.get('member_type', '')).lower()
+                    == 'returning'
+                )
+            else:
+                flash_error('Please restart registration and verify again.')
+                return redirect(url_for('registration.season_register',
+                                        season_id=season_id))
 
             # Check if registration window is open for this user type
             member_type_str = 'returning' if is_returning else 'new'

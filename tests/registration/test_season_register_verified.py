@@ -5,7 +5,7 @@ import pytest
 
 from app import create_app
 from app.constants import UserSeasonStatus, UserStatus
-from app.models import db, Season, User, UserSeason
+from app.models import db, Payment, Season, User, UserSeason
 
 EMAIL = "reg-verified@test.com"
 PHONE = "+16125550188"
@@ -40,6 +40,7 @@ def season(app):
         db.session.add(s)
         db.session.commit()
         yield s.id
+        Payment.query.filter_by(season_id=s.id).delete()
         UserSeason.query.filter_by(season_id=s.id).delete()
         u = User.query.filter_by(email=EMAIL).one_or_none()
         if u:
@@ -351,3 +352,107 @@ def test_unverified_row_reuse_keeps_claimed_email(client, app, season):
                 follow_redirects=True)
     with app.app_context():
         assert User.query.get(uid).email == EMAIL
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_post_reconciles_webhook_created_registration_for_own_payment(
+        mock_sms, client, app, season):
+    with app.app_context():
+        user = User(email=EMAIL, first_name="Webhook", last_name="First")
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(UserSeason(
+            user_id=user.id,
+            season_id=season,
+            registration_type="NEW",
+            registration_date=date(2099, 10, 1),
+            status=UserSeasonStatus.PENDING_LOTTERY,
+        ))
+        db.session.add(Payment(
+            payment_intent_id=FORM["payment_intent_id"],
+            email=EMAIL,
+            name="Reg Verified",
+            amount=15000,
+            status="requires_capture",
+            payment_type="season",
+            season_id=season,
+            user_id=user.id,
+        ))
+        db.session.commit()
+        user_id = user.id
+
+    _set_identity(client, user_id=user_id)
+    response = client.post(f"/seasons/{season}/register", data=FORM)
+
+    assert response.status_code == 200
+    with app.app_context():
+        user_season = UserSeason.get_for_user_season(user_id, season)
+        assert user_season.volunteer_interests == ["event_volunteer"]
+        assert user_season.needs_review is False
+        assert user_season.review_note is None
+    assert mock_sms.call_args.args[1] == "confirmation_lottery"
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_verified_returning_member_is_rejected_when_window_ended(
+        mock_sms, client, app, season):
+    with app.app_context():
+        now = datetime.utcnow()
+        current_season = Season.query.get(season)
+        current_season.returning_start = now - timedelta(days=30)
+        current_season.returning_end = now - timedelta(days=1)
+        past = Season(
+            name="Verify Window Past",
+            year=2085,
+            price_cents=1000,
+            season_type="winter",
+            start_date=date(2085, 11, 1),
+            end_date=date(2086, 3, 1),
+        )
+        user = User(
+            email=EMAIL,
+            first_name="Window",
+            last_name="Closed",
+            phone_e164=PHONE,
+        )
+        db.session.add_all([past, user])
+        db.session.commit()
+        db.session.add(UserSeason(
+            user_id=user.id,
+            season_id=past.id,
+            registration_type="new",
+            registration_date=date(2085, 10, 1),
+            status=UserSeasonStatus.ACTIVE,
+        ))
+        db.session.commit()
+        user_id, past_id = user.id, past.id
+
+    # The fixture keeps an outer app context whose cached Season predates the
+    # update above. Expire it so the request reads the committed window.
+    db.session.expire_all()
+    assert User.query.get(user_id).is_returning is True
+    assert Season.query.get(season).is_returning_open(now) is False
+
+    try:
+        _set_identity(client, user_id=user_id)
+        response = client.post(
+            f"/seasons/{season}/register", data=FORM,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        with client.session_transaction() as sess:
+            assert (
+                "error",
+                "Sorry, the registration window for returning members is currently closed.",
+            ) in sess.get("_flashes", [])
+        with app.app_context():
+            assert UserSeason.get_for_user_season(user_id, season) is None
+        mock_sms.assert_not_called()
+    finally:
+        with app.app_context():
+            UserSeason.query.filter_by(user_id=user_id).delete()
+            db.session.commit()
+            db.session.delete(User.query.get(user_id))
+            db.session.delete(Season.query.get(past_id))
+            db.session.commit()

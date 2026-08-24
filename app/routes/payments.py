@@ -296,11 +296,33 @@ def webhook_received():
             name = metadata.get('name') or ''
             _log_unknown_payment_type(payment_type, payment_intent_id)
 
-            # Always try to find existing user by email
-            user = User.get_by_email(email)
+            # Season intents carry the verified account id. Resolve it before
+            # email so an address change cannot create a duplicate stub. Trips
+            # do not emit user_id and keep their existing email-only behavior.
+            user = None
+            metadata_user_id = ''
+            if payment_type == PaymentType.SEASON:
+                metadata_user_id = metadata.get('user_id') or ''
+                if metadata_user_id.isdigit():
+                    user = User.query.get(int(metadata_user_id))
+
+                if metadata_user_id and user is None:
+                    current_app.logger.warning(
+                        "PaymentIntent %s carried unresolved user_id %s",
+                        payment_intent_id,
+                        metadata_user_id,
+                    )
+                elif user is None:
+                    user = User.get_by_email(email)
+            else:
+                user = User.get_by_email(email)
 
             # Create new user only if not found and member_type is NEW
-            if not user and member_type == MemberType.NEW.value:
+            if (
+                not user
+                and not metadata_user_id
+                and member_type == MemberType.NEW.value
+            ):
                 first_name, last_name = (name.split(' ', 1) + [""])[:2]
                 user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.PENDING)
                 db.session.add(user)
