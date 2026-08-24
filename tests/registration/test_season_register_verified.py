@@ -856,3 +856,14 @@ def test_verified_returning_member_is_rejected_when_window_ended(
             db.session.delete(User.query.get(user_id))
             db.session.delete(Season.query.get(past_id))
             db.session.commit()
+
+
+def test_register_page_offers_the_club_sms_number(client, season):
+    """The closed-window panel tells the member to text someone, so the
+    page has to say who: a tappable club number."""
+    response = client.get(f"/seasons/{season}/register")
+    assert response.status_code == 200
+    body = response.get_data(as_text=True)
+    assert 'href="sms:+16124448606"' in body
+    assert "612-444-8606" in body
+    assert "Text an organizer" not in body
