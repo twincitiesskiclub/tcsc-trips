@@ -61,7 +61,7 @@
           <p class="form-section__subtitle">We'll text a code to confirm your number.</p>
 
           <div id="verify-expired-notice" class="notice notice--warn" hidden>
-            Your verification expired. Verify your number again and your answers will be right where you left them.
+            Your verification expired. Verify again and your answers are still here.
           </div>
 
           <div id="verify-error" class="notice notice--error" hidden></div>
@@ -90,13 +90,12 @@
               <button type="button" class="btn" id="verify-check-btn">Verify</button>
               <button type="button" class="btn btn--secondary" id="verify-resend-btn" disabled>Resend (30)</button>
             </div>
-            <p class="form-field__hint">Registering on a computer? The code went to your phone. It may not light up if Do Not Disturb is on.</p>
+            <p class="form-field__hint">On a computer? The code went to your phone.</p>
           </div>
 
           <div id="verify-email-entry" hidden>
             <p id="verify-email-msg" class="form-field__hint" style="margin-bottom: 12px;">
-              Your number's verified. We just don't have it on file yet (most alumni don't).
-              Enter the email you've used with the club and we'll link you up.
+              Enter the email you use with the club and we'll link your account.
             </p>
             <div class="form-field">
               <label class="form-field__label" for="verify-email">Email</label>
@@ -112,7 +111,7 @@
               <button type="button" class="btn" id="verify-email-check-btn">Verify</button>
             </div>
             <p class="form-field__hint" style="margin-top: 16px;">
-              <a href="#" id="verify-email-dead-link">That email doesn't work for me anymore</a>
+              <a href="#" id="verify-email-dead-link">Can't reach that inbox?</a>
             </p>
           </div>
 
@@ -127,7 +126,7 @@
 
           <div id="verify-window-wait" hidden>
             <h3 class="form-section__title" id="window-wait-title"></h3>
-            <p>We'll pick up right where you left off.</p>
+            <p>Come back then and we'll get you signed up.</p>
             <p class="form-field__hint" style="margin-top: 16px;">
               <a href="#" id="window-wait-not-me-link" hidden></a>
             </p>
@@ -147,9 +146,8 @@
           <a href="#" id="verify-not-me-link"></a>
         </div>
         <div id="unverified-notice" class="notice notice--warn" hidden>
-          You're continuing without a verified match, so you'll be registered as a new
-          member and entered in the new-member lottery. An organizer will review your
-          registration and link any membership history.
+          Since we couldn't verify you, you'll register as a new member and join the lottery.
+          An organizer will check for past membership.
         </div>
 
         <form id="registration-form" method="POST" data-season-id="{{ season.id }}" data-price-cents="{{ season.price_cents or 0 }}" hidden>
@@ -324,9 +322,7 @@
             <p class="form-section__subtitle">Pick how you'll pitch in this season</p>
 
             <p class="form-field__hint" style="margin-bottom: 16px;">
-              TCSC is 100% volunteer-run, and the season goes best when everyone
-              pitches in. Pick at least one way you'd like to help. We'll follow
-              up based on what you choose.
+              TCSC is all volunteers. Pick at least one way you'd like to help, and we'll follow up.
             </p>
 
             <div class="form-field">
