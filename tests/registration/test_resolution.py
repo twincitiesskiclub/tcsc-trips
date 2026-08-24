@@ -66,6 +66,7 @@ def ident(phone, user_id=None):
 def cleanup(*users):
     for u in users:
         UserSeason.query.filter_by(user_id=u.id).delete()
+        db.session.expire(u, ["user_seasons"])
         db.session.delete(u)
     db.session.commit()
 

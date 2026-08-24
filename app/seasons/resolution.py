@@ -63,8 +63,6 @@ def resolve_registration_step(identity, season, now, invite_payload=None):
             }
 
     is_returning = bool(user is not None and user.is_returning)
-    if user is not None:
-        User.query.session.expire(user, ['user_seasons'])
     member_type = 'returning' if is_returning else 'new'
 
     invite_ok = (invite_payload is not None
