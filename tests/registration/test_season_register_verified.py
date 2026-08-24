@@ -867,3 +867,82 @@ def test_register_page_offers_the_club_sms_number(client, season):
     assert 'href="sms:+16124448606"' in body
     assert "612-444-8606" in body
     assert "Text an organizer" not in body
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_invited_returning_member_survives_webhook_first(
+        mock_sms, client, app, season):
+    """Invited returning member: automatic capture, and the succeeded
+    webhook created the ACTIVE row before this POST landed. The row is
+    bound to the payment being confirmed, so it is theirs to complete,
+    not evidence that the link was already used."""
+    from app.late_link import generate
+    user_id, past_season_id = _plant_payment_owner_with_active_history(
+        app, season, UserStatus.ACTIVE)
+    with app.app_context():
+        db.session.add(UserSeason(
+            user_id=user_id,
+            season_id=season,
+            registration_type="returning",
+            registration_date=date(2099, 10, 1),
+            status=UserSeasonStatus.ACTIVE,
+        ))
+        db.session.commit()
+        token = generate(season, EMAIL)
+
+    try:
+        _set_identity(client, user_id=user_id)
+        response = client.post(
+            f"/seasons/{season}/register?invite={token}", data=FORM,
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 200
+        assert b'id="registration-success"' in response.data
+        with app.app_context():
+            user_season = UserSeason.get_for_user_season(user_id, season)
+            assert user_season.status == UserSeasonStatus.ACTIVE
+            assert user_season.registration_type == "returning"
+            assert user_season.volunteer_interests == ["event_volunteer"]
+            assert user_season.needs_review is False
+        assert mock_sms.call_args.args[1] == "confirmation_returning"
+    finally:
+        _delete_payment_owner(app, user_id, past_season_id)
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_invited_member_with_registration_and_no_bound_payment_is_bounced(
+        mock_sms, client, app, season):
+    """The genuine already-used case: a registration that holds a spot
+    and no payment binding it to this POST."""
+    from app.late_link import generate
+    with app.app_context():
+        user = User(email=EMAIL, first_name="Used", last_name="Link",
+                    status=UserStatus.ACTIVE, phone_e164=PHONE)
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(UserSeason(
+            user_id=user.id,
+            season_id=season,
+            registration_type="returning",
+            registration_date=date(2099, 10, 1),
+            status=UserSeasonStatus.ACTIVE,
+        ))
+        db.session.commit()
+        token = generate(season, EMAIL)
+        user_id = user.id
+
+    _set_identity(client, user_id=user_id)
+    response = client.post(
+        f"/seasons/{season}/register?invite={token}", data=FORM,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 302
+    with client.session_transaction() as sess:
+        flashes = sess.get("_flashes", [])
+    assert any("already been used" in message for _, message in flashes), flashes
+    with app.app_context():
+        user_season = UserSeason.get_for_user_season(user_id, season)
+        assert user_season.volunteer_interests in (None, [])
+    mock_sms.assert_not_called()

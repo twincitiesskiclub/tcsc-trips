@@ -10,7 +10,7 @@ from ..utils import (get_current_times, normalize_email, normalize_phone_e164,
 from ..verify.service import get_verified_identity, clear_verified_identity
 from ..notifications.sms import send_sms
 from ..seasons.resolution import (
-    ALREADY_REGISTERED, NEED_EMAIL, VERIFY_PHONE, WINDOW_ENDED,
+    ALREADY_REGISTERED, HOLDS_A_SPOT, NEED_EMAIL, VERIFY_PHONE, WINDOW_ENDED,
     WINDOW_NOT_YET_OPEN, WIZARD_NEW, WIZARD_RETURNING,
     resolve_registration_step,
 )
@@ -79,20 +79,6 @@ def season_register(season_id):
             form = request.form
             email = normalize_email(form['email'])
 
-            # Invite-token short-circuit happens before any verification
-            # concerns: a late-registration link for someone already
-            # registered bounces immediately, regardless of session state.
-            if invite_token:
-                invite_check_user = User.get_by_email(email)
-                if invite_check_user is not None:
-                    existing_us = UserSeason.get_for_user_season(invite_check_user.id, season.id)
-                    if existing_us and existing_us.status in (
-                            UserSeasonStatus.ACTIVE, UserSeasonStatus.PENDING_LOTTERY):
-                        flash_error("This link has already been used. You're "
-                                    "already registered for this season.")
-                        return redirect(url_for('registration.season_register',
-                                                season_id=season_id))
-
             identity = get_verified_identity()
             verified_user = None
             if identity and identity.get('user_id'):
@@ -156,13 +142,32 @@ def season_register(season_id):
                 and payment_owner_matches
                 else None
             )
+            # A registration that holds a spot is this member's own
+            # in-flight one, not a duplicate, exactly when the submitted
+            # PaymentIntent is bound to them. The webhook can win the race
+            # and create the row first on both the invite and general
+            # paths, so both read this one predicate.
+            reconciling_own_payment = existing_payment is not None
             owns_webhook_stub = (
                 existing is not None
-                and existing_payment is not None
+                and reconciling_own_payment
                 and existing_payment.user_id == existing.id
                 and existing.status == UserStatus.PENDING
                 and not existing.is_returning
             )
+
+            # Invite-token short-circuit: a late-registration link for
+            # someone already registered bounces before form validation.
+            # It has to wait for payment binding, or an invited returning
+            # member whose automatic charge succeeded (webhook first,
+            # ACTIVE row already written) is bounced after paying.
+            if invite_token and existing is not None and not reconciling_own_payment:
+                existing_us = UserSeason.get_for_user_season(existing.id, season.id)
+                if existing_us and existing_us.status in HOLDS_A_SPOT:
+                    flash_error("This link has already been used. You're "
+                                "already registered for this season.")
+                    return redirect(url_for('registration.season_register',
+                                            season_id=season_id))
 
             if verified_user is not None:
                 user = verified_user
@@ -230,11 +235,7 @@ def season_register(season_id):
             outcome, outcome_context = resolve_registration_step(
                 resolver_identity, season, now_utc,
                 invite_payload if invite_season_match else None)
-            reconciling_own_payment = (
-                outcome == ALREADY_REGISTERED
-                and existing_payment is not None
-            )
-            if outcome == ALREADY_REGISTERED and existing_payment is None:
+            if outcome == ALREADY_REGISTERED and not reconciling_own_payment:
                 flash_error("You're already registered for this season.")
                 return redirect(url_for('registration.season_register',
                                         season_id=season_id))
@@ -252,7 +253,7 @@ def season_register(season_id):
                 is_returning = True
             elif outcome in (WIZARD_NEW, VERIFY_PHONE):
                 is_returning = False
-            elif reconciling_own_payment:
+            elif outcome == ALREADY_REGISTERED and reconciling_own_payment:
                 # The webhook already classified and created this row. Keep
                 # that payment-time classification while filling in the form.
                 is_returning = (
