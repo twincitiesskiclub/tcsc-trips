@@ -456,7 +456,6 @@ document.addEventListener('DOMContentLoaded', () => {
   if (verifySection) {
     const progressBar = document.querySelector('.progress-bar');
     let verifyPhone = null;
-    let phoneVerified = false; // a phone verification succeeded this session
     let reverifying = false;   // "Not [name]?" re-verification in progress
     let resendTimer = null;
 
@@ -609,6 +608,15 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
+    function setVerdictNotMeLink(id, firstName) {
+      const link = byId(id);
+      if (!link) return;
+      link.textContent = firstName
+        ? `Not ${firstName}? Verify with your email instead.`
+        : '';
+      link.hidden = !firstName;
+    }
+
     // The server decided. This only renders.
     function applyVerdict(body) {
       const ctx = body.context || {};
@@ -631,6 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
             ctx.status === 'ACTIVE'
               ? "Your card was charged. See you out there."
               : "Your card has a hold. We charge it only if you get a lottery spot.";
+          setVerdictNotMeLink('already-registered-not-me-link', ctx.first_name);
           showOnlyVerifyPanel('verify-already-registered');
           return;
         }
@@ -641,6 +650,7 @@ document.addEventListener('DOMContentLoaded', () => {
           byId('window-wait-title').textContent = when
             ? `${who} registration opens ${when}.`
             : `${who} registration isn't open yet.`;
+          setVerdictNotMeLink('window-wait-not-me-link', ctx.first_name);
           showOnlyVerifyPanel('verify-window-wait');
           return;
         }
@@ -651,6 +661,7 @@ document.addEventListener('DOMContentLoaded', () => {
           byId('window-ended-title').textContent = when
             ? `${who} registration closed ${when}.`
             : `${who} registration is closed.`;
+          setVerdictNotMeLink('window-ended-not-me-link', ctx.first_name);
           showOnlyVerifyPanel('verify-window-ended');
           return;
         }
@@ -735,7 +746,6 @@ document.addEventListener('DOMContentLoaded', () => {
           showVerifyError(body.error || 'Something went wrong. Please try again.');
           return;
         }
-        phoneVerified = true;
         applyVerdict(await resolveAndRender());
       } catch (e) {
         showVerifyError('Something went wrong checking the code. Please try again.');
@@ -833,10 +843,10 @@ document.addEventListener('DOMContentLoaded', () => {
       enterWizard({ continueUnverified: true });
     });
 
-    // "Not [name]?" on the welcome banner: back to step 0, email entry,
-    // to re-point the session at the right account. The backend re-links
-    // user_id on a successful email check for a phone-verified session.
-    byId('verify-not-me-link').addEventListener('click', async e => {
+    // Every "Not [name]?" exit returns to email entry so the session can be
+    // re-pointed at the right account. The backend re-links user_id on a
+    // successful email check for a phone-verified session.
+    async function handleNotMe(e) {
       e.preventDefault();
       // Tell the server before showing the email step. Until this lands,
       // /create-season-payment-intent still sees the old account and would
@@ -856,21 +866,23 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       reverifying = true;
       showVerifyError('');
-      registrationForm.hidden = true;
-      if (progressBar) progressBar.hidden = true;
       hide('verify-welcome');
       hide('unverified-notice');
       hide('verify-expired-notice');
-      hide('verify-phone-entry');
-      hide('verify-code-entry');
       hide('verify-email-code-row');
       byId('verify-email-msg').textContent =
         "No problem. Enter the email you've used with the club and we'll match you to the right account.";
-      show('verify-email-entry');
-      verifySection.hidden = false;
+      showOnlyVerifyPanel('verify-email-entry');
       byId('verify-email').focus();
       window.scrollTo({ top: 0 });
-    });
+    }
+
+    [
+      'verify-not-me-link',
+      'already-registered-not-me-link',
+      'window-wait-not-me-link',
+      'window-ended-not-me-link'
+    ].forEach(id => byId(id).addEventListener('click', handleNotMe));
 
     // Enter advances the visible verify step (these inputs sit outside the
     // form, so the browser would otherwise do nothing).
@@ -909,16 +921,26 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         entry = storedWizardEntry();
         const body = await resolveAndRender();
-        if (body.outcome !== 'verify_phone') {
-          phoneVerified = true;
-          applyVerdict(body);
+        const isWizardVerdict =
+          body.outcome === 'wizard_new' || body.outcome === 'wizard_returning';
+        if (entry === '1' && isWizardVerdict) {
+          // A hatch choice wins over a wizard verdict after refresh or a
+          // redirected POST. Keep the flagged new-member path they chose.
+          setPaymentStatusLine('new');
+          enterWizard({ continueUnverified: true });
           return;
         }
+        applyVerdict(body);
+        if (body.outcome === 'verify_phone' && entry === '0') {
+          show('verify-expired-notice');
+        }
+        return;
       } catch (e) {
         entry = storedWizardEntry();
       }
       if (entry === '1') {
         // They took an escape hatch earlier; keep them on that path.
+        setPaymentStatusLine('new');
         enterWizard({ continueUnverified: true });
         return;
       }
