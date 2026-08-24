@@ -558,7 +558,7 @@ needs_review says something is off. This says what."
 
 **Interfaces:**
 - Consumes: `resolve_registration_step`, `WIZARD_NEW`, `NEED_EMAIL` and siblings from Task 1.
-- Produces: `GET /api/verify/resolve?season_id=N[&invite=TOKEN]` returning `{outcome, context, user}`, and `POST /api/verify/email/lookup` returning `{ok, exists}`. Task 4 and Task 5 call both.
+- Produces: `GET /api/verify/resolve?season_id=N[&invite=TOKEN]` returning `{outcome, context, user}`, `POST /api/verify/email/lookup` returning `{ok, exists}`, and `POST /api/verify/disclaim` returning `{ok}`. Tasks 4 and 5 call all three.
 
 The resolve endpoint folds in the prefill payload so the client makes one call, not two. `/api/verify/prefill` stays for now; Task 5 removes its last caller.
 
@@ -596,6 +596,25 @@ def test_resolve_without_identity_asks_for_phone(client, season):
 
 def test_resolve_unknown_season_404s(client):
     assert client.get('/api/verify/resolve?season_id=99999999').status_code == 404
+
+
+def test_disclaim_drops_the_account_but_keeps_the_phone(client, season):
+    """The payment route has no disclaim signal of its own; this is it."""
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': '+16125550377', 'user_id': 4242,
+            'ts': datetime.utcnow().isoformat()}
+    assert client.post('/api/verify/disclaim').get_json() == {'ok': True}
+    with client.session_transaction() as sess:
+        ident = sess['verified_identity']
+    assert ident['user_id'] is None
+    assert ident['phone_e164'] == '+16125550377'
+
+
+def test_disclaim_without_an_identity_is_refused(client):
+    resp = client.post('/api/verify/disclaim')
+    assert resp.status_code == 400
+    assert resp.get_json()['ok'] is False
 
 
 def test_email_lookup_reports_existence_without_sending(client, app):
@@ -697,6 +716,27 @@ def resolve():
     }
     return jsonify(outcome=outcome, context=serialized,
                    user=_prefill_payload(user))
+
+
+@verify_api.route('/api/verify/disclaim', methods=['POST'])
+def disclaim():
+    """"Not [name]?" — drop the account link, keep the verified phone.
+
+    Without this, clicking "Not [name]?" changes nothing on the server. The
+    session keeps pointing at the account the registrant just said they are
+    not, and every downstream reader believes it. That matters most at
+    /create-season-payment-intent, which receives no disclaim signal of its
+    own and would otherwise auto-capture a full charge against a returning
+    member's classification for someone who belongs in the new-member
+    lottery on a manual hold.
+
+    The phone stays: it really was verified. Only the identity claim goes.
+    """
+    identity = service.get_verified_identity()
+    if not identity:
+        return jsonify(ok=False, error='Verify your number first.'), 400
+    service.set_verified_identity(identity['phone_e164'], user_id=None)
+    return jsonify(ok=True)
 
 
 @verify_api.route('/api/verify/email/lookup', methods=['POST'])
@@ -947,6 +987,22 @@ Replace the whole resume-after-refresh IIFE at the end of the step 0 block with:
       if (entry === '0') show('verify-expired-notice');
     })();
 ```
+
+- [ ] **Step 3b: Make "Not [name]?" tell the server**
+
+The existing `verify-not-me-link` handler changes only client state, so the
+session keeps pointing at the account the registrant just disclaimed. Add the
+server call at the top of that handler, right after `e.preventDefault()`:
+
+```javascript
+      // Tell the server before showing the email step. Until this lands,
+      // /create-season-payment-intent still sees the old account and would
+      // auto-capture a full charge for someone who belongs in the lottery
+      // on a hold.
+      await postJson('/api/verify/disclaim', {});
+```
+
+Change the handler to `async e => {` so the await is legal.
 
 - [ ] **Step 4: Delete the skip link's handler**
 
@@ -1334,6 +1390,45 @@ and use those in the note:
                 review_note = f"claims not to be {disclaimed_name} (id {disclaimed_id})"[:255]
 ```
 
+- [ ] **Step 4b: Actually persist the email change**
+
+`user_fields` has no `email` key, so an existing user's row keeps its old
+address no matter what was typed. The rule that a resolved member may change
+their email was never implemented. Implement it now, immediately after the
+`for k, v in user_fields.items()` loop in the `if user:` branch:
+
+```python
+                # Phone is the identity proof, so a resolved member may move
+                # their email. The collision check above already rejected an
+                # address belonging to a different account.
+                user.email = email
+```
+
+Add this test to the same test module:
+
+```python
+def test_resolved_member_can_move_their_email(client, app, season):
+    with app.app_context():
+        existing = User(email="old-address@test.com", first_name="Reg",
+                        last_name="Verified", status=UserStatus.ACTIVE,
+                        phone_e164=PHONE, date_of_birth=date(1994, 1, 15),
+                        tshirt_size="M", emergency_contact_name="Em",
+                        emergency_contact_relation="friend",
+                        emergency_contact_phone="612-555-0189",
+                        emergency_contact_email="em@example.com")
+        db.session.add(existing)
+        db.session.commit()
+        uid = existing.id
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': PHONE, 'user_id': uid,
+            'ts': datetime.utcnow().isoformat()}
+    client.post(f'/seasons/{season}/register', data=dict(FORM),
+                follow_redirects=True)
+    with app.app_context():
+        assert User.query.get(uid).email == EMAIL
+```
+
 - [ ] **Step 5: Write `review_note` onto the row**
 
 In both the create and update branches of the `UserSeason` block, add `review_note=review_note` alongside `needs_review=needs_review` for the constructor, and `user_season.review_note = review_note` alongside the existing assignment for the update branch.
@@ -1470,9 +1565,13 @@ Replace with:
 ```python
         # No email check here on purpose. A verified phone that resolved to
         # one account IS that member, so changing their email is a profile
-        # edit, not grounds to demote them to a hold. The "Not [name]?"
-        # disclaim flow clears user_id from the session upstream, so it
-        # never reaches this line with a stale match.
+        # edit, not grounds to demote them to a hold.
+        #
+        # This is only safe because POST /api/verify/disclaim nulls user_id
+        # server-side when someone clicks "Not [name]?". This endpoint gets
+        # no disclaim signal of its own, so that call is what stands between
+        # a household member and an automatic full charge on a returning
+        # member's classification. Do not remove one without the other.
 ```
 
 - [ ] **Step 4: Add `user_id` to the metadata**
@@ -1485,6 +1584,62 @@ In the same function's `stripe.PaymentIntent.create` call, add to `metadata`:
                 # makes email edits more common, so carry the id.
                 'user_id': str(verified_user.id) if verified_user else '',
 ```
+
+- [ ] **Step 4b: Make the webhook read `user_id`**
+
+Metadata nothing reads is dead weight, and this metadata has a job. In
+`webhook_received`, the season branch matches on email alone, and when
+`member_type` is RETURNING and the email is unknown it creates
+`User(status=ACTIVE)` plus an ACTIVE `UserSeason` outright, minting a
+membership that never went through the lottery. Since this task makes email
+edits more common, that path gets hit more.
+
+Replace the user lookup in `webhook_received`:
+
+```python
+            # Find or create user
+            user = User.get_by_email(email)
+```
+
+with:
+
+```python
+            # Prefer the verified account id the intent carried. Matching on
+            # email alone creates a duplicate ACTIVE stub whenever a verified
+            # member registers under a new address, which this change makes
+            # more common, not less.
+            user = None
+            metadata_user_id = metadata.get('user_id') or ''
+            if metadata_user_id.isdigit():
+                user = User.query.get(int(metadata_user_id))
+            if user is None:
+                user = User.get_by_email(email)
+```
+
+Add this test:
+
+```python
+@patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
+def test_webhook_prefers_metadata_user_id_over_email(mock_create, client, app, fixtures):
+    """Otherwise a verified member using a new address gets a duplicate stub."""
+    from app.routes.payments import webhook_received
+    uid = fixtures["user_id"]
+    with app.app_context():
+        before = User.query.count()
+    metadata = {
+        'email': 'never-seen-before@test.com', 'name': 'Pat Payer',
+        'season_id': str(fixtures["season_id"]),
+        'member_type': 'RETURNING', 'payment_type': 'SEASON',
+        'verified': 'true', 'user_id': str(uid),
+    }
+    with app.app_context():
+        _apply_season_webhook(metadata)   # helper below
+        assert User.query.count() == before, "webhook created a duplicate stub"
+```
+
+If the module has no way to drive the webhook body directly, add a small
+helper that calls the same branch with a fake `payment_intent` dict rather
+than posting a signed Stripe payload. Keep it in the test module.
 
 - [ ] **Step 5: Run the tests**
 

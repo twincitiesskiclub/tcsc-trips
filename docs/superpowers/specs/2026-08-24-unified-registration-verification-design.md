@@ -237,6 +237,42 @@ capture. Under the phone-is-primary rule that demotion is wrong, and it is the
 direct cause of the stuck `requires_capture` rows noted at launch. They get
 `automatic` capture like any other returning member.
 
+**That guard was doing double duty, and the second job needs a replacement.**
+Besides catching email edits, the email comparison was the only thing at the
+payment layer that noticed a disclaimed identity. "Not [name]?" makes no server
+call today, so the session keeps pointing at the account the registrant just
+said they are not, and `/create-season-payment-intent` receives only
+`season_id`, `email`, `name` and `invite`. It has no disclaim signal of its own.
+
+Without a replacement, this is the failure: B verifies a household number that
+resolves to spouse A, a returning member. B clicks "Not A?", takes the
+can't-reach-that-inbox hatch, and registers. The intent is built from A's
+identity, so B gets `automatic` capture and an immediate full charge, when B is
+a new member who belongs on a manual hold until the lottery runs. If the
+returning window is open and the new window is not, the intent passes the gate
+as returning and the form POST then rejects B, leaving a captured charge with
+no registration behind it.
+
+**So disclaiming becomes a server-side act.** `POST /api/verify/disclaim` sets
+`user_id` to `None` in the session identity, keeping `phone_e164` because the
+phone genuinely was verified. The "Not [name]?" handler calls it before showing
+the email step. Every downstream reader, the resolver, the registration POST,
+and the payment route, then sees an identity that matches what the registrant
+actually claimed. The Task 6 scrub stays as a second line of defense.
+
+**The webhook has to read `user_id`.** Adding it to metadata is pointless while
+`webhook_received` matches on email alone. On its RETURNING branch it creates
+`User(status=ACTIVE)` plus an ACTIVE `UserSeason` outright, which mints a
+membership that never went through the lottery. The webhook prefers
+`metadata['user_id']` and falls back to email only when it is empty.
+
+**And the email edit has to actually happen.** `user_fields` in
+`registration.py` carries no `email` key, so an existing user's row keeps its
+old address no matter what was typed. The rule that a resolved member may change
+their email was never implemented. It is implemented here: assign the typed
+email onto a resolved user's row, still rejecting an address that belongs to a
+different account.
+
 **Put `user_id` in the intent metadata.** Fast-follow #1 from the PR #241
 launch. The webhook matches on email today, so a verified member typing a new
 address can produce a duplicate stub `User`. This change makes email-changing
