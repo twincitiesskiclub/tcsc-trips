@@ -3,6 +3,12 @@
 Rendering is pure (stats dict in, Block Kit out). Posting never raises,
 same contract as app/slack/trips.py: the scheduler job must not die
 because Slack did. Copy style: no em dashes.
+
+Layout (mobile first): the header carries the one number that matters,
+yesterday's count. A context line under it names the season and date.
+Everything season-level sits below a divider as short field pairs, with
+prior-season pace de-emphasized into a context block. Needs-review is
+the only :warning: and stays above the divider so it can't be missed.
 """
 import os
 
@@ -22,73 +28,91 @@ def _section(text):
             "text": {"type": "mrkdwn", "text": text}}
 
 
+def _fields_section(fields, text=None):
+    block = {"type": "section",
+             "fields": [{"type": "mrkdwn", "text": f} for f in fields]}
+    if text:
+        block["text"] = {"type": "mrkdwn", "text": text}
+    return block
+
+
+def _context(elements):
+    return {"type": "context",
+            "elements": [{"type": "mrkdwn", "text": e} for e in elements]}
+
+
 def _plural(count, noun="registration"):
     return f"{count} {noun}" + ("" if count == 1 else "s")
 
 
+def _fmt_date(d):
+    return d.strftime('%b %-d')
+
+
 def _yesterday_line(stats):
+    """Breakdown plus trend, one short line. On a zero day the new and
+    returning split is noise, so only the trend renders."""
     y = stats["yesterday"]
     prev = stats["previous_day_total"]
     if y["total"] > prev:
-        trend = f"up from {prev} the day before"
+        trend = f"Up from {prev} the day before."
     elif y["total"] < prev:
-        trend = f"down from {prev} the day before"
+        trend = f"Down from {prev} the day before."
     else:
-        trend = f"same as the day before ({prev})"
-    return (f"*{_plural(y['total'])} yesterday* "
-            f"({y['new']} new, {y['returning']} returning), {trend}.")
+        trend = f"Same as the day before ({prev})."
+    if y["total"] == 0:
+        return trend
+    return f"{y['new']} new, {y['returning']} returning. {trend}"
 
 
-def _totals_line(stats):
+def _season_fields(stats):
     t = stats["season_totals"]
-    line = (f"Season total: *{t['total']}* "
-            f"({t['new']} new, {t['returning']} returning)")
+    total = f"*Season total*\n{t['total']}"
     if t["pct_of_limit"] is not None:
-        line += f", {t['pct_of_limit']}% of the {t['registration_limit']} cap"
-    return line + "."
+        total += f" of {t['registration_limit']} ({t['pct_of_limit']}%)"
+    split = f"*New / returning*\n{t['new']} / {t['returning']}"
+    return [total, split]
 
 
-def _window_lines(stats):
-    lines = []
-    for label, window in (("Returning", stats["windows"]["returning"]),
-                          ("New member", stats["windows"]["new"])):
+def _window_fields(stats):
+    fields = []
+    for label, window in (("Returning window", stats["windows"]["returning"]),
+                          ("New member window", stats["windows"]["new"])):
         if not window:
             continue
         if window["is_open"]:
-            lines.append(
-                f"{label} window: day {window['day_number']} of "
-                f"{window['length_days']}, closes "
-                f"{window['end'].strftime('%b %-d')}.")
+            value = (f"Day {window['day_number']} of "
+                     f"{window['length_days']}, closes "
+                     f"{_fmt_date(window['end'])}")
         elif stats["for_date"] > window["end"]:
-            lines.append(
-                f"{label} window closed {window['end'].strftime('%b %-d')}.")
+            value = f"Closed {_fmt_date(window['end'])}"
         else:
-            lines.append(
-                f"{label} window opens {window['start'].strftime('%b %-d')}.")
-    return lines
+            value = f"Opens {_fmt_date(window['start'])}"
+        fields.append(f"*{label}*\n{value}")
+    return fields
 
 
 def _prior_line(stats):
     prior = stats["prior_season"]
     if not prior:
         return None
-    return (f"At this same point in {prior['name']}: "
-            f"{prior['count_at_same_point']} registrations "
-            f"(it finished at {prior['final_count']}).")
+    return (f"At this point in {prior['name']}: "
+            f"{prior['count_at_same_point']}. "
+            f"It finished at {prior['final_count']}.")
 
 
-def _volunteer_line(stats):
+def _volunteer_text(stats):
     v = stats["volunteer"]
     if not v["answered"]:
         return None
-    parts = [f"{label} x{count}" for label, count in v["interests"].items()]
-    line = (f"Get Involved: {v['answered']} of {v['of']} opted in. "
+    parts = [f"{label} ({count})" for label, count in v["interests"].items()]
+    text = (f"*Get Involved*\n{v['answered']} of {v['of']} opted in: "
             + ", ".join(parts) + ".")
     if v["committees"]:
         committee_parts = [
-            f"{label} x{count}" for label, count in v["committees"].items()]
-        line += " Committees: " + ", ".join(committee_parts) + "."
-    return line
+            f"{label} ({count})" for label, count in v["committees"].items()]
+        text += "\nCommittees: " + ", ".join(committee_parts) + "."
+    return text
 
 
 def build_recap_blocks(stats):
@@ -97,31 +121,37 @@ def build_recap_blocks(stats):
     blocks = [
         {"type": "header",
          "text": {"type": "plain_text",
-                  "text": f"Registration recap: {date_label}"}},
+                  "text": f"{_plural(stats['yesterday']['total'])} "
+                          "yesterday"}},
+        _context([f"{stats['season_name']} · {date_label}"]),
         _section(_yesterday_line(stats)),
-        _section(_totals_line(stats)),
     ]
 
-    pace = _window_lines(stats)
-    prior = _prior_line(stats)
-    if prior:
-        pace.append(prior)
-    if pace:
-        blocks.append(_section("\n".join(pace)))
-
-    volunteer = _volunteer_line(stats)
-    if volunteer:
-        blocks.append(_section(volunteer))
+    if stats["highlights"]:
+        blocks.append(_context(
+            [f":sparkles: {line}" for line in stats["highlights"]]))
 
     if stats["needs_review"]:
         url = (f"{_base_url()}/admin/registration-review"
                f"?season_id={stats['season_id']}")
         blocks.append(_section(
-            f":warning: {_plural(stats['needs_review'])} need review "
-            f"before the lottery: <{url}|review page>"))
+            f":warning: *{_plural(stats['needs_review'])} need review "
+            f"before the lottery.* <{url}|Open review page>"))
 
-    for line in stats["highlights"]:
-        blocks.append(_section(f":sparkles: {line}"))
+    blocks.append({"type": "divider"})
+    blocks.append(_fields_section(_season_fields(stats)))
+
+    prior = _prior_line(stats)
+    if prior:
+        blocks.append(_context([prior]))
+
+    window_fields = _window_fields(stats)
+    if window_fields:
+        blocks.append(_fields_section(window_fields))
+
+    volunteer = _volunteer_text(stats)
+    if volunteer:
+        blocks.append(_section(volunteer))
 
     fallback = (f"Registration recap {date_label}: "
                 f"{stats['yesterday']['total']} yesterday, "
