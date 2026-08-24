@@ -670,6 +670,7 @@ document.addEventListener('DOMContentLoaded', () => {
         case 'wizard_new':
           if (body.user) applyPrefill({ memberType: ctx.member_type, user: body.user });
           else setPaymentStatusLine(ctx.member_type);
+          phoneResolvedMember = !!ctx.first_name;
           enterWizard({ continueUnverified: false, firstName: ctx.first_name });
           return;
 
@@ -677,6 +678,82 @@ document.addEventListener('DOMContentLoaded', () => {
           showOnlyVerifyPanel('verify-phone-entry');
       }
     }
+
+    // Email correlation inside the wizard. Only fires when the phone
+    // matched nobody: a resolved member owns their email outright and can
+    // change it freely, which is the phone-is-primary rule.
+    let phoneResolvedMember = false;
+
+    async function checkEmailCollision() {
+      if (phoneResolvedMember) return;
+      const emailField = byId('email');
+      const value = emailField.value.trim();
+      if (!value || !value.includes('@')) return;
+      let body;
+      try {
+        body = await postJson('/api/verify/email/lookup', { email: value });
+      } catch (e) {
+        return;  // Detection is a convenience. Never block typing on it.
+      }
+      if (!body.ok || !body.exists) {
+        hide('email-collision');
+        return;
+      }
+      hide('email-collision-code-row');
+      show('email-collision');
+    }
+
+    byId('email').addEventListener('blur', checkEmailCollision);
+
+    byId('email-collision-send').addEventListener('click', async () => {
+      const btn = byId('email-collision-send');
+      btn.disabled = true;
+      try {
+        const body = await postJson('/api/verify/email/start',
+                                    { email: byId('email').value.trim() });
+        if (!body.ok) {
+          showVerifyError(body.error || "We couldn't send that code. Try again in a minute.");
+          return;
+        }
+        show('email-collision-code-row');
+        byId('email-collision-code').focus();
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    byId('email-collision-check').addEventListener('click', async () => {
+      const btn = byId('email-collision-check');
+      btn.disabled = true;
+      try {
+        const body = await postJson('/api/verify/email/check', {
+          email: byId('email').value.trim(),
+          code: byId('email-collision-code').value.replace(/\s+/g, '')
+        });
+        if (!body.ok) {
+          showVerifyError(body.error || "That code didn't match. Check your email and try again.");
+          return;
+        }
+        hide('email-collision');
+        // Linking may flip them to returning, or reveal a registration
+        // they already have, or a window that isn't open. Re-ask.
+        applyVerdict(await resolveAndRender());
+      } finally {
+        btn.disabled = false;
+      }
+    });
+
+    // Last resort, not an opt-out. Someone who cannot reach the inbox on
+    // a matched account still gets to register; an organizer links the
+    // history afterward.
+    byId('email-collision-dead').addEventListener('click', e => {
+      e.preventDefault();
+      hide('email-collision');
+      byId('continue-unverified').value = '1';
+      show('unverified-notice');
+      rememberWizardEntered(true);
+      setPaymentStatusLine('new');
+    });
 
     async function resolveAndRender() {
       const invite = new URLSearchParams(window.location.search).get('invite');
