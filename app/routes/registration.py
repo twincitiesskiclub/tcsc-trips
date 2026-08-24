@@ -164,7 +164,25 @@ def season_register(season_id):
             if not payment_intent_id:
                 flash_error('Payment is required to complete registration.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
-            existing_payment = Payment.get_by_payment_intent(payment_intent_id)
+            payment_candidate = Payment.get_by_payment_intent(
+                payment_intent_id)
+            resolved_user_id = user.id if user is not None else None
+            payment_owner_matches = (
+                payment_candidate is not None
+                and (
+                    payment_candidate.user_id == resolved_user_id
+                    if payment_candidate.user_id is not None
+                    else normalize_email(payment_candidate.email) == email
+                )
+            )
+            existing_payment = (
+                payment_candidate
+                if payment_candidate is not None
+                and payment_candidate.payment_type == 'season'
+                and payment_candidate.season_id == season.id
+                and payment_owner_matches
+                else None
+            )
 
             # One rule, one place. The POST must not be able to disagree
             # with the screen the member was just looking at.

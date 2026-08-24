@@ -2,6 +2,7 @@ from datetime import datetime, timedelta, date
 from unittest.mock import patch
 
 import pytest
+from sqlalchemy import event
 
 from app import create_app
 from app.constants import UserSeasonStatus, UserStatus
@@ -335,8 +336,9 @@ def test_resolved_member_can_move_their_email(client, app, season):
 
 
 def test_unverified_row_reuse_keeps_claimed_email(client, app, season):
+    claimed_email = "keep-me@test.com"
     with app.app_context():
-        existing = User(email=EMAIL, first_name="Reg",
+        existing = User(email=claimed_email, first_name="Reg",
                         last_name="Verified", status=UserStatus.ACTIVE,
                         phone_e164="+16125550199",
                         date_of_birth=date(1994, 1, 15),
@@ -347,11 +349,36 @@ def test_unverified_row_reuse_keeps_claimed_email(client, app, season):
         db.session.add(existing)
         db.session.commit()
         uid = existing.id
-    client.post(f'/seasons/{season}/register',
-                data=dict(FORM, continue_unverified='1'),
-                follow_redirects=True)
-    with app.app_context():
-        assert User.query.get(uid).email == EMAIL
+
+    email_writes = []
+
+    def record_email_write(target, value, oldvalue, initiator):
+        if target.id == uid:
+            email_writes.append((oldvalue, value))
+
+    try:
+        with client.session_transaction() as sess:
+            sess.pop('verified_identity', None)
+        event.listen(User.email, "set", record_email_write)
+        try:
+            response = client.post(
+                f'/seasons/{season}/register',
+                data=dict(FORM, continue_unverified='1',
+                          email=claimed_email),
+                follow_redirects=True,
+            )
+        finally:
+            event.remove(User.email, "set", record_email_write)
+
+        assert response.status_code == 200
+        with app.app_context():
+            assert User.query.get(uid).email == claimed_email
+        assert email_writes == []
+    finally:
+        with app.app_context():
+            UserSeason.query.filter_by(user_id=uid).delete()
+            db.session.delete(User.query.get(uid))
+            db.session.commit()
 
 
 @patch("app.routes.registration.send_sms", return_value=True)
@@ -391,6 +418,122 @@ def test_post_reconciles_webhook_created_registration_for_own_payment(
         assert user_season.needs_review is False
         assert user_season.review_note is None
     assert mock_sms.call_args.args[1] == "confirmation_lottery"
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_post_does_not_reconcile_another_users_payment(
+        mock_sms, client, app, season):
+    owner_email = "payment-owner-a@test.com"
+    with app.app_context():
+        owner = User(
+            email=owner_email,
+            first_name="Payment",
+            last_name="Owner",
+            phone_e164="+16125550177",
+        )
+        registrant = User(
+            email=EMAIL,
+            first_name="Already",
+            last_name="Registered",
+            phone_e164=PHONE,
+        )
+        db.session.add_all([owner, registrant])
+        db.session.flush()
+        owner_season = UserSeason(
+            user_id=owner.id,
+            season_id=season,
+            registration_type="new",
+            registration_date=date(2099, 10, 1),
+            status=UserSeasonStatus.PENDING_LOTTERY,
+            needs_review=True,
+            review_note="leave owner unchanged",
+            volunteer_interests=["committee"],
+        )
+        registrant_season = UserSeason(
+            user_id=registrant.id,
+            season_id=season,
+            registration_type="returning",
+            registration_date=date(2099, 10, 2),
+            status=UserSeasonStatus.ACTIVE,
+            needs_review=True,
+            review_note="leave registrant unchanged",
+            volunteer_interests=["practice_lead"],
+        )
+        db.session.add_all([owner_season, registrant_season])
+        db.session.add(Payment(
+            payment_intent_id="pi_a",
+            email=owner_email,
+            name="Payment Owner",
+            amount=15000,
+            status="requires_capture",
+            payment_type="season",
+            season_id=season,
+            user_id=owner.id,
+        ))
+        db.session.commit()
+        owner_id = owner.id
+        registrant_id = registrant.id
+        owner_before = (
+            owner_season.registration_type,
+            owner_season.registration_date,
+            owner_season.status,
+            owner_season.needs_review,
+            owner_season.review_note,
+            owner_season.volunteer_interests,
+        )
+        registrant_before = (
+            registrant_season.registration_type,
+            registrant_season.registration_date,
+            registrant_season.status,
+            registrant_season.needs_review,
+            registrant_season.review_note,
+            registrant_season.volunteer_interests,
+        )
+
+    try:
+        _set_identity(client, user_id=registrant_id)
+        response = client.post(
+            f"/seasons/{season}/register",
+            data={**FORM, "payment_intent_id": "pi_a"},
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 302
+        with app.app_context():
+            owner_after = UserSeason.get_for_user_season(owner_id, season)
+            registrant_after = UserSeason.get_for_user_season(
+                registrant_id, season)
+            assert UserSeason.query.filter_by(
+                user_id=registrant_id, season_id=season).count() == 1
+            assert (
+                owner_after.registration_type,
+                owner_after.registration_date,
+                owner_after.status,
+                owner_after.needs_review,
+                owner_after.review_note,
+                owner_after.volunteer_interests,
+            ) == owner_before
+            assert (
+                registrant_after.registration_type,
+                registrant_after.registration_date,
+                registrant_after.status,
+                registrant_after.needs_review,
+                registrant_after.review_note,
+                registrant_after.volunteer_interests,
+            ) == registrant_before
+            assert Payment.get_by_payment_intent("pi_a").user_id == owner_id
+        mock_sms.assert_not_called()
+    finally:
+        with app.app_context():
+            Payment.query.filter_by(payment_intent_id="pi_a").delete()
+            UserSeason.query.filter(
+                UserSeason.user_id.in_([owner_id, registrant_id])).delete(
+                    synchronize_session=False)
+            for user_id in (owner_id, registrant_id):
+                user = User.query.get(user_id)
+                if user is not None:
+                    db.session.delete(user)
+            db.session.commit()
 
 
 @patch("app.routes.registration.send_sms", return_value=True)
