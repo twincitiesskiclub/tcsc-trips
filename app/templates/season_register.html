@@ -170,6 +170,25 @@
               {% endif %}
             </div>
 
+            <div id="email-collision" class="notice notice--info" hidden>
+              <p style="margin: 0 0 12px;"><strong>We found your account.</strong>
+                Verify this email and we'll pull your info in.</p>
+              <p class="card-error" id="email-collision-error" role="alert" hidden></p>
+              <button type="button" class="btn" id="email-collision-send">Email me a code</button>
+              <div id="email-collision-code-row" hidden style="margin-top: 16px;">
+                <div class="form-field">
+                  <label class="form-field__label" for="email-collision-code">Verification Code</label>
+                  <input class="form-input" type="text" id="email-collision-code"
+                         inputmode="numeric" autocomplete="one-time-code" maxlength="8"
+                         placeholder="6-digit code">
+                </div>
+                <button type="button" class="btn" id="email-collision-check">Verify</button>
+              </div>
+              <p class="form-field__hint" style="margin-top: 16px;">
+                <a href="#" id="email-collision-dead">Can't reach that inbox?</a>
+              </p>
+            </div>
+
             <div class="form-row form-row--pair">
               <div class="form-field">
                 <label class="form-field__label" for="firstName">First Name</label>
