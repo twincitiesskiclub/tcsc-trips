@@ -6,7 +6,7 @@ app/slack/season_recap.py, scheduling in app/scheduler.py.
 from datetime import timedelta
 
 from app.constants import UserSeasonStatus
-from app.models import UserSeason
+from app.models import Season, UserSeason
 from app.utils import utc_naive_to_central_naive
 
 # PENDING_LOTTERY and ACTIVE count as registrations; any dropped status
@@ -60,6 +60,47 @@ def should_post(season, today):
     return 0 <= (today - last_end).days <= 7
 
 
+def _anchor_date(season):
+    """The season's registration-open anchor: earliest window start, as a
+    Central date. None when no window start is set."""
+    starts = [s for s in (season.returning_start, season.new_start) if s]
+    if not starts:
+        return None
+    return utc_naive_to_central_naive(min(starts)).date()
+
+
+def _prior_season(season, for_date):
+    """Most recent earlier season of the same type that has registrations,
+    compared at the same day-offset from its own anchor."""
+    anchor = _anchor_date(season)
+    if anchor is None:
+        return None
+    candidates = Season.query.filter(
+        Season.season_type == season.season_type,
+        Season.id != season.id,
+    ).all()
+    dated = []
+    for candidate in candidates:
+        candidate_anchor = _anchor_date(candidate)
+        if candidate_anchor and candidate_anchor < anchor:
+            dated.append((candidate_anchor, candidate))
+    dated.sort(key=lambda pair: pair[0], reverse=True)
+
+    offset = (for_date - anchor).days
+    for prior_anchor, prior in dated:
+        rows = _counted_rows(prior.id)
+        if not rows:
+            continue
+        cutoff = prior_anchor + timedelta(days=offset)
+        return {
+            "name": prior.name,
+            "count_at_same_point": sum(
+                1 for r in rows if r.registration_date <= cutoff),
+            "final_count": len(rows),
+        }
+    return None
+
+
 def build_recap(season, for_date):
     """Stats dict for the recap covering the Central date `for_date`."""
     season_rows = _counted_rows(season.id)
@@ -85,4 +126,5 @@ def build_recap(season, for_date):
                 season.returning_start, season.returning_end, for_date),
             "new": _window(season.new_start, season.new_end, for_date),
         },
+        "prior_season": _prior_season(season, for_date),
     }

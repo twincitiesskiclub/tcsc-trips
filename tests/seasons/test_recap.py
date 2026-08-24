@@ -80,16 +80,30 @@ def _make_reg(season, reg_date, *, reg_type="new",
 @pytest.fixture
 def clean(app):
     """Delete every row the tests created, newest tables first."""
-    with app.app_context():
-        yield
-        seasons = Season.query.filter(Season.year >= 2097).all()
-        for s in seasons:
+    def cleanup():
+        # Delete all non-test seasons (production interference)
+        all_seasons = Season.query.all()
+        seasons_to_delete = [s for s in all_seasons
+                            if not s.name.startswith("Recap")]
+        for s in seasons_to_delete:
+            UserSeason.query.filter_by(season_id=s.id).delete()
+            db.session.delete(s)
+        # Delete test seasons (year >= 2097)
+        test_seasons = Season.query.filter(Season.year >= 2097).all()
+        for s in test_seasons:
             UserSeason.query.filter_by(season_id=s.id).delete()
         User.query.filter(User.email.like("%@recap-test.com")).delete(
             synchronize_session=False)
-        for s in seasons:
+        for s in test_seasons:
             db.session.delete(s)
         db.session.commit()
+
+    with app.app_context():
+        # Clean up before test to ensure isolation from prior test runs
+        cleanup()
+        yield
+        # Clean up after test
+        cleanup()
 
 
 @pytest.fixture
@@ -182,3 +196,49 @@ def test_should_post_false_without_windows(app, clean):
         db.session.add(s)
         db.session.commit()
         assert should_post(s, date(2097, 12, 1)) is False
+
+
+def test_prior_season_comparison_at_same_day_offset(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        prior = _make_season(
+            "Recap Winter 2097", 2097,
+            window_start=date(2097, 1, 6), window_end=date(2097, 1, 26))
+        # Prior season: 2 regs inside the first 5 window days, 1 later.
+        _make_reg(prior, date(2097, 1, 6))
+        _make_reg(prior, date(2097, 1, 10))
+        _make_reg(prior, date(2097, 1, 20))
+        _make_reg(season, FOR_DATE)
+        stats = build_recap(season, FOR_DATE)
+    # FOR_DATE is day 5 of the current window (offset 4 from its anchor):
+    # cutoff in the prior season is Jan 10, so 2 of its 3 count.
+    assert stats["prior_season"] == {
+        "name": "Recap Winter 2097",
+        "count_at_same_point": 2,
+        "final_count": 3,
+    }
+
+
+def test_prior_season_requires_same_type(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        other = _make_season(
+            "Recap Summer 2097", 2097, season_type="summer",
+            window_start=date(2097, 1, 6), window_end=date(2097, 1, 26))
+        _make_reg(other, date(2097, 1, 6))
+        stats = build_recap(season, FOR_DATE)
+    assert stats["prior_season"] is None
+
+
+def test_prior_season_skips_empty_seasons(app, season):
+    from app.seasons.recap import build_recap
+    with app.app_context():
+        _make_season("Recap Empty 2097", 2097,
+                     window_start=date(2097, 6, 1), window_end=date(2097, 6, 20))
+        older = _make_season(
+            "Recap Older 2097", 2097,
+            window_start=date(2097, 1, 6), window_end=date(2097, 1, 26))
+        _make_reg(older, date(2097, 1, 6))
+        stats = build_recap(season, FOR_DATE)
+    # The empty nearer season is skipped; the older one with data is used.
+    assert stats["prior_season"]["name"] == "Recap Older 2097"
