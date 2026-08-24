@@ -476,6 +476,6 @@ class VerificationAttempt(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     target = db.Column(db.String(64), nullable=False, index=True)  # phone_e164 or email
-    channel = db.Column(db.String(10), nullable=False)  # 'sms' | 'email'
+    channel = db.Column(db.String(10), nullable=False)  # 'sms' | 'email' | 'lookup'
     ip = db.Column(db.String(45), nullable=False, index=True)
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, index=True)

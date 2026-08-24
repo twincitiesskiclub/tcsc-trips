@@ -19,6 +19,8 @@ MAX_CODE_ATTEMPTS = 5
 RATE_TARGET_MAX = 3          # sends per target per window
 RATE_TARGET_WINDOW_MIN = 10
 RATE_IP_MAX = 10             # sends per ip per hour
+RATE_LOOKUP_IP_MAX = 30      # email existence lookups per ip per hour
+LOOKUP_CHANNEL = 'lookup'    # VerificationAttempt.channel for lookups
 IDENTITY_TTL_SECONDS = 7200
 
 RATE_LIMIT_MSG = ("We've sent several codes already. The latest one is the "
@@ -35,19 +37,46 @@ def _hash_code(email, code):
     return hashlib.sha256(f"{email}:{code}".encode()).hexdigest()
 
 
-def rate_limit_ok(target, ip):
-    now = datetime.utcnow()
+def _target_within_limit(target, now):
     target_count = VerificationAttempt.query.filter(
         VerificationAttempt.target == target,
         VerificationAttempt.created_at > now - timedelta(minutes=RATE_TARGET_WINDOW_MIN),
     ).count()
-    if target_count >= RATE_TARGET_MAX:
-        return False
-    ip_count = VerificationAttempt.query.filter(
+    return target_count < RATE_TARGET_MAX
+
+
+def _ip_count(ip, now, lookups):
+    """Attempts from this ip in the last hour, in one of the two pools."""
+    channel = VerificationAttempt.channel
+    return VerificationAttempt.query.filter(
         VerificationAttempt.ip == ip,
         VerificationAttempt.created_at > now - timedelta(hours=1),
+        channel == LOOKUP_CHANNEL if lookups else channel != LOOKUP_CHANNEL,
     ).count()
-    return ip_count < RATE_IP_MAX
+
+
+def rate_limit_ok(target, ip):
+    """May this ip send a code to this target (SMS or email)?
+
+    Lookups draw from their own per-ip pool. A household or a CGNAT
+    carrier block that blurs the email field a few times each must not
+    lose the ability to receive a code for an hour.
+    """
+    now = datetime.utcnow()
+    if not _target_within_limit(target, now):
+        return False
+    return _ip_count(ip, now, lookups=False) < RATE_IP_MAX
+
+
+def lookup_rate_limit_ok(target, ip):
+    """May this ip ask whether this email belongs to an account?
+
+    Same per-target ceiling as sends, a looser per-ip ceiling of its own.
+    """
+    now = datetime.utcnow()
+    if not _target_within_limit(target, now):
+        return False
+    return _ip_count(ip, now, lookups=True) < RATE_LOOKUP_IP_MAX
 
 
 def _record_attempt(target, channel, ip):

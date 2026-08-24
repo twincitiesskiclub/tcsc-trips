@@ -6,7 +6,8 @@ import pytest
 from app import create_app
 from app.constants import UserStatus
 from app.models import db, Season, User, VerificationAttempt
-from app.verify.service import RATE_LIMIT_MSG
+from app.verify.service import (RATE_IP_MAX, RATE_LIMIT_MSG,
+                                RATE_LOOKUP_IP_MAX)
 
 PHONE_RAW = "612-555-0177"
 PHONE = "+16125550177"
@@ -277,28 +278,59 @@ def test_email_lookup_reports_existence_without_sending(client, app):
             db.session.commit()
 
 
+LOOKUP_XFF = "10.99.15.2"
+LOOKUP_HEADERS = {"X-Forwarded-For": LOOKUP_XFF}
+
+
+def _clear_lookup_probes(app):
+    with app.app_context():
+        db.session.rollback()
+        VerificationAttempt.query.filter(
+            VerificationAttempt.target.like('probe%@test.com'),
+        ).delete(synchronize_session=False)
+        VerificationAttempt.query.filter_by(target=PHONE).delete(
+            synchronize_session=False)
+        db.session.commit()
+
+
 def test_email_lookup_is_rate_limited(client, app):
-    """Otherwise it is an unlimited membership-enumeration oracle."""
+    """Otherwise it is an unlimited membership-enumeration oracle.
+
+    Lookups have their own per-IP pool: the 31st distinct probe in an hour
+    is refused.
+    """
+    _clear_lookup_probes(app)
     try:
-        with app.app_context():
-            VerificationAttempt.query.filter(
-                VerificationAttempt.ip == '127.0.0.1',
-                VerificationAttempt.target.like('probe%'),
-            ).delete(synchronize_session=False)
-            db.session.commit()
-        seen_limit = False
-        for i in range(15):
+        for i in range(RATE_LOOKUP_IP_MAX):
             body = client.post('/api/verify/email/lookup',
-                               json={'email': f'probe{i}@test.com'}).get_json()
-            if body['ok'] is False:
-                seen_limit = True
-                break
-        assert seen_limit, "lookup never rate-limited across 15 distinct probes"
-    finally:
+                               json={'email': f'probe{i}@test.com'},
+                               headers=LOOKUP_HEADERS).get_json()
+            assert body == {'ok': True, 'exists': False}, (i, body)
+        refused = client.post('/api/verify/email/lookup',
+                              json={'email': 'probe-last@test.com'},
+                              headers=LOOKUP_HEADERS).get_json()
+        assert refused == {'ok': False, 'error': RATE_LIMIT_MSG}
         with app.app_context():
-            db.session.rollback()
-            VerificationAttempt.query.filter(
-                VerificationAttempt.target.like('probe%@test.com'),
-                VerificationAttempt.channel == 'email',
-            ).delete(synchronize_session=False)
-            db.session.commit()
+            assert VerificationAttempt.query.filter_by(
+                target='probe0@test.com').one().channel == 'lookup'
+    finally:
+        _clear_lookup_probes(app)
+
+
+@patch("app.verify.service.providers.twilio_verify_start")
+def test_lookups_do_not_lock_the_household_out_of_sms(mock_start, client, app):
+    """Ten blur-time lookups from one router must leave phone/start alone."""
+    _clear_lookup_probes(app)
+    try:
+        for i in range(RATE_IP_MAX):
+            body = client.post('/api/verify/email/lookup',
+                               json={'email': f'probe{i}@test.com'},
+                               headers=LOOKUP_HEADERS).get_json()
+            assert body['ok'] is True
+        resp = client.post('/api/verify/phone/start',
+                           json={'phone': PHONE_RAW},
+                           headers=LOOKUP_HEADERS).get_json()
+        assert resp == {'ok': True, 'error': None}
+        assert mock_start.called
+    finally:
+        _clear_lookup_probes(app)

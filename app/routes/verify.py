@@ -186,14 +186,15 @@ def disclaim():
 def email_lookup():
     """Does this email belong to an account? Detection only, no code sent.
 
-    Rate-limited on the same counters as the send endpoints. Without that
-    this is an unlimited "is X a member?" oracle.
+    Rate-limited on its own per-ip pool, hit or miss. Without a limit this
+    is an unlimited "is X a member?" oracle; on the send pool it would let
+    a few blurs from one router block that router's SMS codes for an hour.
     """
     email = normalize_email((request.get_json() or {}).get('email', ''))
     if not email:
         return jsonify(ok=False, error='Enter an email address.'), 400
     ip = _client_ip()
-    if not service.rate_limit_ok(email, ip):
+    if not service.lookup_rate_limit_ok(email, ip):
         return jsonify(ok=False, error=service.RATE_LIMIT_MSG)
-    service._record_attempt(email, 'email', ip)
+    service._record_attempt(email, service.LOOKUP_CHANNEL, ip)
     return jsonify(ok=True, exists=User.get_by_email(email) is not None)
