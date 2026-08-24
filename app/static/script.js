@@ -1069,6 +1069,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (entry === '1' && isWizardVerdict) {
           // A hatch choice wins over a wizard verdict after refresh or a
           // redirected POST. Keep the flagged new-member path they chose.
+          //
+          // The session may have been resolved in another tab since the
+          // hatch was taken. If the verdict names someone, drop that link
+          // first: /create-season-payment-intent never sees
+          // continue_unverified and would otherwise price and capture the
+          // intent as that member while this POST files a new one.
+          const ctx = body.context || {};
+          if (body.user || ctx.first_name) {
+            let disclaimed = null;
+            try {
+              disclaimed = await postJson('/api/verify/disclaim', {});
+            } catch (e) {
+              // A failed request cannot confirm that the identity was dropped.
+            }
+            if (!disclaimed || disclaimed.ok !== true) {
+              hide('verify-welcome');
+              showOnlyVerifyPanel('verify-phone-entry');
+              show('verify-expired-notice');
+              return;
+            }
+          }
           phoneResolvedMember = false;
           setPaymentStatusLine('new');
           enterWizard({ continueUnverified: true });

@@ -102,7 +102,10 @@ function boot(opts) {
     calls.push({url: u, method: (init && init.method) || 'GET'});
     let body;
     if (u.includes('/api/verify/resolve')) body = opts.resolve;
-    else if (u.includes('/api/verify/disclaim')) body = opts.disclaim || {ok: true};
+    else if (u.includes('/api/verify/disclaim')) {
+      if (opts.onDisclaim) opts.onDisclaim(window);
+      body = opts.disclaim || {ok: true};
+    }
     else body = {ok: false, error: 'stubbed'};
     return Promise.resolve({ok: true, status: 200, json: () => Promise.resolve(body)});
   };
@@ -186,4 +189,58 @@ test('not-yet-open panel hides the not-me link when nobody was resolved', async 
   const doc = window.document;
   assert.equal(doc.getElementById('verify-window-wait').hidden, false);
   assert.equal(doc.getElementById('window-wait-not-me-link').hidden, true);
+});
+
+// --- Resume after an escape hatch when another tab resolved the session ---
+//
+// Tab 1 took "Can't receive texts?" (entered = '1'). Tab 2 verified the
+// phone and resolved to member A. Tab 1 refreshes: the hatch choice still
+// wins, but the server session must stop pointing at A first, or the
+// payment intent is priced and captured as A while the POST files a new
+// member.
+
+test('hatch resume over a resolved session disclaims before entering the wizard', async () => {
+  let formHiddenAtDisclaim = null;
+  const {window, calls} = boot({
+    entered: '1',
+    resolve: wizardVerdict('returning', 'Alice'),
+    disclaim: {ok: true},
+    onDisclaim: w => { formHiddenAtDisclaim = w.document.getElementById('registration-form').hidden; },
+  });
+  await settle();
+  const doc = window.document;
+  const urls = calls.map(c => c.url);
+  const resolveAt = urls.findIndex(u => u.includes('/api/verify/resolve'));
+  const disclaimAt = urls.findIndex(u => u.includes('/api/verify/disclaim'));
+  assert.ok(disclaimAt > resolveAt, `disclaim must follow resolve: ${urls}`);
+  assert.equal(calls[disclaimAt].method, 'POST');
+  assert.equal(formHiddenAtDisclaim, true, 'wizard must not open before disclaim lands');
+  assert.equal(doc.getElementById('registration-form').hidden, false);
+  assert.equal(doc.getElementById('continue-unverified').value, '1');
+  assert.equal(doc.getElementById('unverified-notice').hidden, false);
+  assert.equal(doc.getElementById('verify-welcome').hidden, true);
+  assert.equal(doc.getElementById('button-text').textContent, 'Register & Hold $205.00');
+});
+
+test('hatch resume lands on the phone panel when disclaim fails', async () => {
+  const {window, calls} = boot({
+    entered: '1',
+    resolve: wizardVerdict('returning', 'Alice'),
+    disclaim: {ok: false, error: 'Verify your number first.'},
+  });
+  await settle();
+  const doc = window.document;
+  assert.ok(calls.some(c => c.url.includes('/api/verify/disclaim')));
+  assert.equal(doc.getElementById('registration-form').hidden, true);
+  assert.equal(doc.getElementById('verify-phone-entry').hidden, false);
+  assert.equal(doc.getElementById('verify-expired-notice').hidden, false);
+});
+
+test('hatch resume with nobody resolved enters the wizard without a disclaim', async () => {
+  const {window, calls} = boot({entered: '1', resolve: wizardVerdict('new', null)});
+  await settle();
+  const doc = window.document;
+  assert.ok(!calls.some(c => c.url.includes('/api/verify/disclaim')));
+  assert.equal(doc.getElementById('registration-form').hidden, false);
+  assert.equal(doc.getElementById('continue-unverified').value, '1');
 });
