@@ -118,10 +118,11 @@ def check_email_verification(email, code):
     return True
 
 
-def set_verified_identity(phone_e164, user_id=None):
+def set_verified_identity(phone_e164, user_id=None, disclaimed_user_id=None):
     session['verified_identity'] = {
         'phone_e164': phone_e164,
         'user_id': user_id,
+        'disclaimed_user_id': disclaimed_user_id,
         'ts': datetime.utcnow().isoformat(),
     }
 

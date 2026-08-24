@@ -1,5 +1,5 @@
 """JSON endpoints for the registration verification step (step 0)."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from flask import Blueprint, jsonify, request
 
@@ -150,7 +150,9 @@ def resolve():
         user = User.query.get(identity['user_id'])
     # Datetimes go out as ISO strings; the client only ever formats them.
     serialized = {
-        k: (v.isoformat() if hasattr(v, 'isoformat') else v)
+        k: (v.replace(tzinfo=timezone.utc).isoformat()
+            if isinstance(v, datetime) and v.tzinfo is None
+            else v.isoformat() if hasattr(v, 'isoformat') else v)
         for k, v in context.items()
     }
     return jsonify(outcome=outcome, context=serialized,
@@ -174,7 +176,9 @@ def disclaim():
     identity = service.get_verified_identity()
     if not identity:
         return jsonify(ok=False, error='Verify your number first.'), 400
-    service.set_verified_identity(identity['phone_e164'], user_id=None)
+    service.set_verified_identity(
+        identity['phone_e164'], user_id=None,
+        disclaimed_user_id=identity.get('user_id') or identity.get('disclaimed_user_id'))
     return jsonify(ok=True)
 
 
