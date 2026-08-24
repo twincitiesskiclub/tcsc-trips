@@ -24,6 +24,7 @@ Scheduled Jobs:
 - Hourly: Expire pending cancellation proposals (fail-open)
 - 8:00 AM on the 1st: Draft practices through the end of next month, post readiness digest
 - 9:00 AM daily: Nudge coaches/directors while drafted practices lack details
+- 8:05 AM: Season registration recap → #leadership-registration (window-gated)
 """
 import os
 import fcntl
@@ -1040,6 +1041,49 @@ def run_close_expired_polls_job(app: Flask):
                 )
 
 
+def run_season_recap_job(app: Flask, channel_override: str = None):
+    """Daily registration recap to #leadership-registration.
+
+    Self-gating via should_post(): posts while a registration window is
+    open plus a 7-day tail after the last one closes, silent otherwise.
+    A zero-registration day during the window still posts -- the zero is
+    the signal. Covers the prior Central day.
+
+    Args:
+        app: Flask application instance for context.
+        channel_override: Optional channel name to override default.
+    """
+    from datetime import timedelta
+
+    with app.app_context():
+        from app.models import Season
+        from app.seasons.recap import build_recap, should_post
+        from app.slack.season_recap import post_season_recap
+
+        try:
+            season = Season.get_current()
+            if not season:
+                app.logger.info("Season recap: no current season, staying quiet")
+                return
+            today = today_central()
+            if not should_post(season, today):
+                app.logger.info(
+                    "Season recap: no open or recently closed window, staying quiet")
+                return
+
+            stats = build_recap(season, today - timedelta(days=1))
+            result = post_season_recap(stats, channel_override=channel_override)
+            if result.get("success"):
+                app.logger.info(
+                    f"Season recap posted: {stats['yesterday']['total']} yesterday, "
+                    f"{stats['season_totals']['total']} season total")
+            else:
+                app.logger.warning(
+                    f"Season recap post failed: {result.get('error')}")
+        except Exception as e:
+            app.logger.error(f"Season recap job failed: {e}", exc_info=True)
+
+
 def init_scheduler(app: Flask) -> bool:
     """Initialize the scheduler within the Flask application.
 
@@ -1387,6 +1431,26 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=3600
     )
 
+    # ========================================================================
+    # Season Registration Recap
+    # ========================================================================
+
+    # Daily: registration recap to #leadership-registration while a window
+    # is open (plus a 7-day tail); the job self-gates via should_post().
+    scheduler.add_job(
+        func=run_season_recap_job,
+        args=[app],
+        trigger=CronTrigger(
+            hour=8,
+            minute=5,
+            timezone='America/Chicago'
+        ),
+        id='season_registration_recap',
+        name='Season Registration Recap',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
     scheduler.start()
 
     app.logger.info("=" * 60)
@@ -1464,7 +1528,8 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         job_type: One of 'morning_check', '48h_check', '24h_check',
                   'weekly_summary', 'coach_weekly_summary', 'expire_proposals',
                   'practice_announcements', 'newsletter_daily_update',
-                  'newsletter_sunday_finalize', 'newsletter_monthly_orchestrator'
+                  'newsletter_sunday_finalize', 'newsletter_monthly_orchestrator',
+                  'season_recap'
         channel_override: Optional channel name to override default for Slack posts.
 
     Returns:
@@ -1483,13 +1548,15 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         'newsletter_daily_update': run_newsletter_daily_job,
         'newsletter_sunday_finalize': run_newsletter_sunday_job,
         'newsletter_monthly_orchestrator': run_newsletter_monthly_orchestrator_job,
+        'season_recap': run_season_recap_job,
     }
 
     # Jobs that support channel_override
     jobs_with_channel_override = {
         'morning_check', '48h_check', '24h_check',
         'evening_lead_check', 'morning_lead_check',
-        'weekly_summary', 'coach_weekly_summary', 'practice_announcements'
+        'weekly_summary', 'coach_weekly_summary', 'practice_announcements',
+        'season_recap'
     }
 
     # Lead check jobs require check_type parameter
