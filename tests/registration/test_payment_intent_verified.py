@@ -192,6 +192,24 @@ def test_verified_identity_with_different_email_still_auto_captures(
 
 
 @patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
+def test_verified_member_cannot_charge_email_owned_by_another_member(
+        mock_create, client, fixtures):
+    _set_identity(client, user_id=fixtures["user_id"])
+
+    resp = client.post("/create-season-payment-intent", json={
+        "season_id": fixtures["season_id"],
+        "email": METADATA_USER_EMAIL,
+        "name": "Pat Payer",
+    })
+
+    assert resp.status_code == 400
+    assert resp.get_json() == {
+        "error": "That email belongs to another member. Use a different one."
+    }
+    mock_create.assert_not_called()
+
+
+@patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
 def test_unverified_intent_carries_no_user_id(mock_create, client, fixtures):
     resp = client.post("/create-season-payment-intent", json={
         "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer"})

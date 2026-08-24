@@ -711,9 +711,17 @@ def create_season_payment_intent():
         verified_user = None
         if identity and identity.get('user_id'):
             verified_user = User.query.get(identity['user_id'])
-        # No email check here on purpose. A verified phone that resolved to
-        # one account IS that member, so changing their email is a profile
-        # edit, not grounds to demote them to a hold.
+        if (
+            verified_user is not None
+            and email != normalize_email(verified_user.email)
+            and User.get_by_email(email) is not None
+        ):
+            return json_error(
+                'That email belongs to another member. Use a different one.'
+            )
+        # A verified phone that resolved to one account IS that member, so
+        # changing to an unclaimed email is a profile edit, not grounds to
+        # demote them to a hold.
         #
         # This is only safe because POST /api/verify/disclaim nulls user_id
         # server-side when someone clicks "Not [name]?". This endpoint gets

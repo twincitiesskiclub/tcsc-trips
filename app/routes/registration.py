@@ -125,52 +125,25 @@ def season_register(season_id):
                 disclaimed_id = verified_user.id
                 verified_user = None
 
-            if verified_user is not None:
-                user = verified_user
-                if email != user.email and User.get_by_email(email):
-                    flash_error('That email already belongs to another '
-                                'member. Please use a different one.')
-                    return redirect(url_for('registration.season_register',
-                                            season_id=season_id))
-            else:
-                user = None
-                existing = User.get_by_email(email)
-                if existing is not None:
-                    if continue_unverified:
-                        # Flagged path: reuse the row, admin will review.
-                        user = existing
-                    else:
-                        flash_error('That email already has a member account. '
-                                    'Go back and verify with this email, or '
-                                    'choose "Continue anyway" if you can no '
-                                    'longer receive mail there.')
-                        return redirect(url_for('registration.season_register',
-                                                season_id=season_id))
-
-            # needs_review is about account-MATCH confidence, computed from
-            # pre-creation state. review_note says which of the three ways
-            # it went wrong so the admin page does not have to guess.
-            review_note = None
-            if identity is None:
-                review_note = "no verified phone"
-            elif identity_disclaimed:
-                review_note = f"claims not to be {disclaimed_name} (id {disclaimed_id})"[:255]
-            elif user is not None and verified_user is None:
-                review_note = f"claimed existing account {user.email}, email unverified"[:255]
-            needs_review = review_note is not None
-
-            # Get payment_intent_id for coordination with webhook
+            # Bind the submitted PaymentIntent before treating an email match
+            # as an account collision. The capturable webhook can create the
+            # new member's stub row before this POST reaches the server.
             payment_intent_id = form.get('payment_intent_id')
             if not payment_intent_id:
                 flash_error('Payment is required to complete registration.')
                 return redirect(url_for('registration.season_register', season_id=season_id))
+            existing = User.get_by_email(email)
             payment_candidate = Payment.get_by_payment_intent(
                 payment_intent_id)
-            resolved_user_id = user.id if user is not None else None
+            payment_owner_id = (
+                verified_user.id
+                if verified_user is not None
+                else existing.id if existing is not None else None
+            )
             payment_owner_matches = (
                 payment_candidate is not None
                 and (
-                    payment_candidate.user_id == resolved_user_id
+                    payment_candidate.user_id == payment_owner_id
                     if payment_candidate.user_id is not None
                     else normalize_email(payment_candidate.email) == email
                 )
@@ -183,6 +156,65 @@ def season_register(season_id):
                 and payment_owner_matches
                 else None
             )
+            owns_webhook_stub = (
+                existing is not None
+                and existing_payment is not None
+                and existing_payment.user_id == existing.id
+            )
+
+            if verified_user is not None:
+                user = verified_user
+                if email != user.email and User.get_by_email(email):
+                    flash_error('That email already belongs to another '
+                                'member. Please use a different one.')
+                    return redirect(url_for('registration.season_register',
+                                            season_id=season_id))
+            else:
+                user = None
+                if existing is not None:
+                    if owns_webhook_stub:
+                        user = existing
+                    elif continue_unverified:
+                        # Flagged path: reuse the row, admin will review.
+                        user = existing
+                    else:
+                        flash_error('That email already has a member account. '
+                                    'Go back and verify with this email, or '
+                                    'choose "Continue anyway" if you can no '
+                                    'longer receive mail there.')
+                        return redirect(url_for('registration.season_register',
+                                                season_id=season_id))
+
+            flagged_row_reuse = (
+                user is not None
+                and verified_user is None
+                and not owns_webhook_stub
+            )
+
+            # needs_review is about account-MATCH confidence, computed from
+            # pre-creation state. review_note says which of the three ways
+            # it went wrong so the admin page does not have to guess.
+            review_note = None
+            if identity is None:
+                review_note = "no verified phone"
+            elif identity_disclaimed:
+                review_note = f"claims not to be {disclaimed_name} (id {disclaimed_id})"[:255]
+            elif flagged_row_reuse:
+                review_note = f"claimed existing account {user.email}, email unverified"[:255]
+            elif identity is not None and identity.get('disclaimed_user_id'):
+                shared_user_id = identity['disclaimed_user_id']
+                shared_user = User.query.get(shared_user_id)
+                if shared_user is not None:
+                    review_note = (
+                        f"shared number with {shared_user.full_name} "
+                        f"(id {shared_user_id})"
+                    )[:255]
+                else:
+                    review_note = (
+                        "shared number with a deleted account "
+                        f"(id {shared_user_id})"
+                    )[:255]
+            needs_review = review_note is not None
 
             # One rule, one place. The POST must not be able to disagree
             # with the screen the member was just looking at.
@@ -271,6 +303,11 @@ def season_register(season_id):
                 # The verified number wins over whatever is typed in the form.
                 phone_e164 = identity['phone_e164']
                 user_fields['phone'] = format_phone_display(phone_e164)
+            if flagged_row_reuse:
+                phone_source = 'verified' if identity is not None else 'unverified'
+                review_note = (
+                    f"{review_note}; from {phone_source} phone {phone_e164}"
+                )[:255]
 
             # Convert dob string to date object
             dob_str = form['dob']
@@ -306,15 +343,18 @@ def season_register(season_id):
                 db.session.add(user)
                 db.session.flush()  # get user.id
 
-            user.phone_e164 = phone_e164
-            if identity is not None:
-                user.phone_verified_at = user.phone_verified_at or datetime.utcnow()
-            else:
-                # No session identity means this phone_e164 is only the
-                # typed form value — clear any stale verified-at from a
-                # prior legitimate verification so a reused/updated row
-                # never carries an unverified number that looks verified.
-                user.phone_verified_at = None
+            if not flagged_row_reuse:
+                user.phone_e164 = phone_e164
+                if identity is not None:
+                    user.phone_verified_at = (
+                        user.phone_verified_at or datetime.utcnow()
+                    )
+                else:
+                    # No session identity means this phone_e164 is only the
+                    # typed form value. Clear any stale verified-at from a
+                    # prior legitimate verification so a reused/updated row
+                    # never carries an unverified number that looks verified.
+                    user.phone_verified_at = None
 
             # Link payment to user if webhook created it before form submission
             if existing_payment and not existing_payment.user_id:

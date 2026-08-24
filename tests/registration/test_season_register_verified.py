@@ -146,7 +146,15 @@ def test_verified_phone_but_unmatched_collision_flag_stays_new_and_reviewed(
             start_date=date(2088, 11, 1), end_date=date(2089, 3, 1))
         db.session.add(old_season)
         db.session.commit()
-        u = User(email=EMAIL, first_name="Old", last_name="Returner")
+        owner_phone = "+16125559999"
+        owner_verified_at = datetime(2090, 1, 2, 3, 4, 5)
+        u = User(
+            email=EMAIL,
+            first_name="Old",
+            last_name="Returner",
+            phone_e164=owner_phone,
+            phone_verified_at=owner_verified_at,
+        )
         db.session.add(u)
         db.session.commit()
         db.session.add(UserSeason(
@@ -169,6 +177,9 @@ def test_verified_phone_but_unmatched_collision_flag_stays_new_and_reviewed(
             assert us.registration_type == "new"
             assert us.status == UserSeasonStatus.PENDING_LOTTERY
             assert us.needs_review is True
+            assert user.phone_e164 == owner_phone
+            assert user.phone_verified_at == owner_verified_at
+            assert f"from verified phone {PHONE}" in us.review_note
         assert mock_sms.call_args.args[1] == "confirmation_lottery"
     finally:
         with app.app_context():
@@ -243,6 +254,81 @@ def test_unverified_registration_records_why(client, app, season):
         us = UserSeason.get_for_user_season(u.id, season)
         assert us.needs_review is True
         assert us.review_note == "no verified phone"
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_disclaimed_shared_number_registration_records_review_note(
+        mock_sms, client, app, season):
+    shared_email = "shared-number-owner@test.com"
+    with app.app_context():
+        shared_user = User(
+            email=shared_email,
+            first_name="Shared",
+            last_name="Owner",
+            phone_e164=PHONE,
+        )
+        db.session.add(shared_user)
+        db.session.commit()
+        shared_user_id = shared_user.id
+
+    try:
+        with client.session_transaction() as sess:
+            sess['verified_identity'] = {
+                'phone_e164': PHONE,
+                'user_id': None,
+                'disclaimed_user_id': shared_user_id,
+                'ts': datetime.utcnow().isoformat(),
+            }
+
+        response = client.post(
+            f'/seasons/{season}/register', data=dict(FORM),
+            follow_redirects=False,
+        )
+
+        assert response.status_code == 200
+        with app.app_context():
+            user = User.query.filter_by(email=EMAIL).one()
+            user_season = UserSeason.get_for_user_season(user.id, season)
+            assert user_season.needs_review is True
+            assert "shared number with Shared Owner" in user_season.review_note
+            assert f"(id {shared_user_id})" in user_season.review_note
+        assert mock_sms.call_args.args[1] == "confirmation_lottery"
+    finally:
+        with app.app_context():
+            shared_user = User.query.get(shared_user_id)
+            if shared_user is not None:
+                db.session.delete(shared_user)
+                db.session.commit()
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_disclaimed_deleted_account_registration_records_review_note(
+        mock_sms, client, app, season):
+    with app.app_context():
+        deleted_user_id = (db.session.query(db.func.max(User.id)).scalar() or 0) + 1
+
+    with client.session_transaction() as sess:
+        sess['verified_identity'] = {
+            'phone_e164': PHONE,
+            'user_id': None,
+            'disclaimed_user_id': deleted_user_id,
+            'ts': datetime.utcnow().isoformat(),
+        }
+
+    response = client.post(
+        f'/seasons/{season}/register', data=dict(FORM),
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    with app.app_context():
+        user = User.query.filter_by(email=EMAIL).one()
+        user_season = UserSeason.get_for_user_season(user.id, season)
+        assert user_season.needs_review is True
+        assert user_season.review_note == (
+            f"shared number with a deleted account (id {deleted_user_id})"
+        )
+    assert mock_sms.call_args.args[1] == "confirmation_lottery"
 
 
 def test_disclaimed_identity_does_not_get_returning_pricing(client, app, season):
@@ -372,13 +458,74 @@ def test_unverified_row_reuse_keeps_claimed_email(client, app, season):
 
         assert response.status_code == 200
         with app.app_context():
-            assert User.query.get(uid).email == claimed_email
+            user = User.query.get(uid)
+            assert user.email == claimed_email
+            assert user.phone_e164 == "+16125550199"
+            user_season = UserSeason.get_for_user_season(uid, season)
+            assert (
+                "from unverified phone +16125550188"
+                in user_season.review_note
+            )
         assert email_writes == []
     finally:
         with app.app_context():
             UserSeason.query.filter_by(user_id=uid).delete()
             db.session.delete(User.query.get(uid))
             db.session.commit()
+
+
+@patch("app.routes.registration.send_sms", return_value=True)
+def test_post_adopts_webhook_first_stub_for_verified_new_member(
+        mock_sms, client, app, season):
+    with app.app_context():
+        user = User(
+            email=EMAIL,
+            first_name="Webhook",
+            last_name="Stub",
+            status=UserStatus.PENDING,
+        )
+        db.session.add(user)
+        db.session.flush()
+        db.session.add(UserSeason(
+            user_id=user.id,
+            season_id=season,
+            registration_type="NEW",
+            registration_date=date(2099, 10, 1),
+            status=UserSeasonStatus.PENDING_LOTTERY,
+        ))
+        db.session.add(Payment(
+            payment_intent_id=FORM["payment_intent_id"],
+            email=EMAIL,
+            name="Reg Verified",
+            amount=15000,
+            status="requires_capture",
+            payment_type="season",
+            season_id=season,
+            user_id=user.id,
+        ))
+        db.session.commit()
+        user_id = user.id
+
+    _set_identity(client, user_id=None)
+    response = client.post(
+        f"/seasons/{season}/register",
+        data=FORM,
+        follow_redirects=False,
+    )
+
+    assert response.status_code == 200
+    assert b'id="registration-success"' in response.data
+    with app.app_context():
+        user = User.query.get(user_id)
+        assert User.query.filter_by(email=EMAIL).count() == 1
+        assert user.first_name == FORM["firstName"]
+        assert user.last_name == FORM["lastName"]
+        assert user.date_of_birth == date(1994, 1, 15)
+        assert user.phone_e164 == PHONE
+        user_season = UserSeason.get_for_user_season(user_id, season)
+        assert user_season.needs_review is False
+        assert user_season.review_note is None
+    assert mock_sms.call_args.args[1] == "confirmation_lottery"
 
 
 @patch("app.routes.registration.send_sms", return_value=True)

@@ -79,11 +79,21 @@ def resolve_registration_step(identity, season, now, invite_payload=None):
         # unset bound reads as "not yet", never as "you missed it".
         if start is None or end is None:
             return WINDOW_NOT_YET_OPEN, {'member_type': member_type,
-                                         'opens_at': None}
+                                         'opens_at': None,
+                                         'first_name': (user.first_name
+                                                        if user is not None
+                                                        else None)}
         if now < start:
             return WINDOW_NOT_YET_OPEN, {'member_type': member_type,
-                                         'opens_at': start}
-        return WINDOW_ENDED, {'member_type': member_type, 'closed_at': end}
+                                         'opens_at': start,
+                                         'first_name': (user.first_name
+                                                        if user is not None
+                                                        else None)}
+        return WINDOW_ENDED, {
+            'member_type': member_type,
+            'closed_at': end,
+            'first_name': user.first_name if user is not None else None,
+        }
 
     outcome = WIZARD_RETURNING if is_returning else WIZARD_NEW
     return outcome, {

@@ -174,16 +174,22 @@ def test_window_not_yet_open_carries_the_date(season):
     assert outcome == resolution.WINDOW_NOT_YET_OPEN
     assert ctxd['member_type'] == 'new'
     assert ctxd['opens_at'] == season.new_start
+    assert ctxd['first_name'] is None
 
 
 def test_window_ended_carries_the_date(season):
+    user = make_user("window-ended@test.com", PHONE_A, "Wendy")
     season.new_start = datetime.utcnow() - timedelta(days=40)
     season.new_end = datetime.utcnow() - timedelta(days=4)
     db.session.commit()
-    outcome, ctxd = resolution.resolve_registration_step(
-        ident(PHONE_A), season, datetime.utcnow())
-    assert outcome == resolution.WINDOW_ENDED
-    assert ctxd['closed_at'] == season.new_end
+    try:
+        outcome, ctxd = resolution.resolve_registration_step(
+            ident(PHONE_A, user.id), season, datetime.utcnow())
+        assert outcome == resolution.WINDOW_ENDED
+        assert ctxd['closed_at'] == season.new_end
+        assert ctxd['first_name'] == "Wendy"
+    finally:
+        cleanup(user)
 
 
 def test_unconfigured_window_reads_as_not_yet_open(season):
@@ -194,6 +200,7 @@ def test_unconfigured_window_reads_as_not_yet_open(season):
         ident(PHONE_A), season, datetime.utcnow())
     assert outcome == resolution.WINDOW_NOT_YET_OPEN
     assert ctxd['opens_at'] is None
+    assert ctxd['first_name'] is None
 
 
 def test_window_with_only_start_reads_as_not_yet_open(season):
@@ -204,6 +211,7 @@ def test_window_with_only_start_reads_as_not_yet_open(season):
         ident(PHONE_A), season, datetime.utcnow())
     assert outcome == resolution.WINDOW_NOT_YET_OPEN
     assert ctxd['opens_at'] is None
+    assert ctxd['first_name'] is None
 
 
 def test_window_with_only_end_reads_as_not_yet_open(season):
@@ -214,6 +222,7 @@ def test_window_with_only_end_reads_as_not_yet_open(season):
         ident(PHONE_A), season, datetime.utcnow())
     assert outcome == resolution.WINDOW_NOT_YET_OPEN
     assert ctxd['opens_at'] is None
+    assert ctxd['first_name'] is None
 
 
 def test_valid_invite_bypasses_a_closed_window(season):
@@ -230,10 +239,11 @@ def test_invite_for_another_season_does_not_bypass(season):
     season.new_start = datetime.utcnow() - timedelta(days=40)
     season.new_end = datetime.utcnow() - timedelta(days=4)
     db.session.commit()
-    outcome, _ = resolution.resolve_registration_step(
+    outcome, ctxd = resolution.resolve_registration_step(
         ident(PHONE_A), season, datetime.utcnow(),
         invite_payload={'season_id': season.id + 9999, 'email': 'x@test.com'})
     assert outcome == resolution.WINDOW_ENDED
+    assert ctxd['first_name'] is None
 
 
 def test_already_registered_beats_a_closed_window(season):
