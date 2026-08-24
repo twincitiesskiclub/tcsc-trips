@@ -470,6 +470,13 @@ document.addEventListener('DOMContentLoaded', () => {
       box.hidden = !message;
     }
 
+    function showCollisionError(message) {
+      const box = byId('email-collision-error');
+      if (!box) return;
+      box.textContent = message || '';
+      box.hidden = !message;
+    }
+
     async function postJson(url, payload) {
       const resp = await fetch(url, {
         method: 'POST',
@@ -683,22 +690,37 @@ document.addEventListener('DOMContentLoaded', () => {
     // matched nobody: a resolved member owns their email outright and can
     // change it freely, which is the phone-is-primary rule.
     let phoneResolvedMember = false;
+    let phoneVerifiedThisSession = false;
+    let lastLookupEmail = null;
+    let collisionCodeEmail = null;
 
     async function checkEmailCollision() {
-      if (phoneResolvedMember) return;
+      if (phoneResolvedMember || !phoneVerifiedThisSession) return;
       const emailField = byId('email');
       const value = emailField.value.trim();
+      if (value === lastLookupEmail) return;
       if (!value || !value.includes('@')) return;
+      lastLookupEmail = value;
+      showCollisionError('');
       let body;
       try {
         body = await postJson('/api/verify/email/lookup', { email: value });
       } catch (e) {
-        return;  // Detection is a convenience. Never block typing on it.
+        if (byId('email').value.trim() === value) {
+          showCollisionError('You can check that email again in a minute.');
+        }
+        return;
       }
-      if (!body.ok || !body.exists) {
+      if (byId('email').value.trim() !== value) return;
+      if (!body.ok) {
+        showCollisionError(body.error || 'You can check that email again in a minute.');
+        return;
+      }
+      if (!body.exists) {
         hide('email-collision');
         return;
       }
+      collisionCodeEmail = null;
       hide('email-collision-code-row');
       show('email-collision');
     }
@@ -707,16 +729,26 @@ document.addEventListener('DOMContentLoaded', () => {
 
     byId('email-collision-send').addEventListener('click', async () => {
       const btn = byId('email-collision-send');
+      const email = byId('email').value.trim();
+      showCollisionError('');
       btn.disabled = true;
       try {
         const body = await postJson('/api/verify/email/start',
-                                    { email: byId('email').value.trim() });
+                                    { email });
         if (!body.ok) {
-          showVerifyError(body.error || "We couldn't send that code. Try again in a minute.");
+          showCollisionError(body.error || "We couldn't send that code. Try again in a minute.");
           return;
         }
+        if (!body.exists) {
+          hide('email-collision-code-row');
+          showCollisionError("We don't have that email on file.");
+          return;
+        }
+        collisionCodeEmail = email;
         show('email-collision-code-row');
         byId('email-collision-code').focus();
+      } catch (e) {
+        showCollisionError("We couldn't send that code. Try again in a minute.");
       } finally {
         btn.disabled = false;
       }
@@ -724,22 +756,32 @@ document.addEventListener('DOMContentLoaded', () => {
 
     byId('email-collision-check').addEventListener('click', async () => {
       const btn = byId('email-collision-check');
+      showCollisionError('');
       btn.disabled = true;
       try {
         const body = await postJson('/api/verify/email/check', {
-          email: byId('email').value.trim(),
+          email: collisionCodeEmail,
           code: byId('email-collision-code').value.replace(/\s+/g, '')
         });
         if (!body.ok) {
-          showVerifyError(body.error || "That code didn't match. Check your email and try again.");
+          showCollisionError(body.error || "That code didn't match. Check your email and try again.");
           return;
         }
         hide('email-collision');
         // Linking may flip them to returning, or reveal a registration
         // they already have, or a window that isn't open. Re-ask.
         applyVerdict(await resolveAndRender());
+      } catch (e) {
+        showCollisionError("That code didn't match. Check your email and try again.");
       } finally {
         btn.disabled = false;
+      }
+    });
+
+    byId('email-collision-code').addEventListener('keydown', e => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        byId('email-collision-check').click();
       }
     });
 
@@ -823,6 +865,7 @@ document.addEventListener('DOMContentLoaded', () => {
           showVerifyError(body.error || 'Something went wrong. Please try again.');
           return;
         }
+        phoneVerifiedThisSession = true;
         applyVerdict(await resolveAndRender());
       } catch (e) {
         showVerifyError('Something went wrong checking the code. Please try again.');
@@ -905,11 +948,13 @@ document.addEventListener('DOMContentLoaded', () => {
     // manual capture, admin review.
     byId('verify-cant-text-link').addEventListener('click', e => {
       e.preventDefault();
+      phoneResolvedMember = false;
       setPaymentStatusLine('new');
       enterWizard({ continueUnverified: true });
     });
     byId('verify-email-dead-link').addEventListener('click', e => {
       e.preventDefault();
+      phoneResolvedMember = false;
       if (reverifying) {
         // They said "Not [name]", so the old identity's answers must not
         // ride along into the flagged path.
@@ -924,6 +969,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // re-pointed at the right account. The backend re-links user_id on a
     // successful email check for a phone-verified session.
     async function handleNotMe(e) {
+      phoneResolvedMember = false;
       e.preventDefault();
       // Tell the server before showing the email step. Until this lands,
       // /create-season-payment-intent still sees the old account and would
@@ -998,11 +1044,13 @@ document.addEventListener('DOMContentLoaded', () => {
       try {
         entry = storedWizardEntry();
         const body = await resolveAndRender();
+        if (body.outcome !== 'verify_phone') phoneVerifiedThisSession = true;
         const isWizardVerdict =
           body.outcome === 'wizard_new' || body.outcome === 'wizard_returning';
         if (entry === '1' && isWizardVerdict) {
           // A hatch choice wins over a wizard verdict after refresh or a
           // redirected POST. Keep the flagged new-member path they chose.
+          phoneResolvedMember = false;
           setPaymentStatusLine('new');
           enterWizard({ continueUnverified: true });
           return;
@@ -1017,6 +1065,7 @@ document.addEventListener('DOMContentLoaded', () => {
       }
       if (entry === '1') {
         // They took an escape hatch earlier; keep them on that path.
+        phoneResolvedMember = false;
         setPaymentStatusLine('new');
         enterWizard({ continueUnverified: true });
         return;
