@@ -360,17 +360,32 @@ def webhook_received():
             name = metadata.get('name') or ''
             _log_unknown_payment_type(payment_type, payment_intent_id)
 
-            # Prefer the verified account id the intent carried. Matching on
-            # email alone creates a duplicate ACTIVE stub whenever a verified
-            # member registers under a new address, which this change makes
-            # more common, not less.
+            # Season intents carry the verified account id. Matching on email
+            # alone creates a duplicate ACTIVE stub whenever a verified member
+            # registers under a new address, which this change makes more
+            # common, not less. Trips do not emit user_id and are left alone.
             user = None
-            metadata_user_id = metadata.get('user_id') or ''
-            if metadata_user_id.isdigit():
-                user = User.query.get(int(metadata_user_id))
-            if user is None:
+            metadata_user_id = ''
+            if payment_type == PaymentType.SEASON:
+                metadata_user_id = metadata.get('user_id') or ''
+                if metadata_user_id.isdigit():
+                    user = User.query.get(int(metadata_user_id))
+
+                if metadata_user_id and user is None:
+                    current_app.logger.warning(
+                        "PaymentIntent %s carried unresolved user_id %s",
+                        payment_intent_id,
+                        metadata_user_id,
+                    )
+                elif user is None:
+                    user = User.get_by_email(email)
+            else:
                 user = User.get_by_email(email)
-            if not user and member_type == MemberType.RETURNING.value:
+            if (
+                not user
+                and not metadata_user_id
+                and member_type == MemberType.RETURNING.value
+            ):
                 # Returning member should already exist, but create if not
                 first_name, last_name = (name.split(' ', 1) + [""])[:2]
                 user = User(email=email, first_name=first_name, last_name=last_name, status=UserStatus.ACTIVE)
