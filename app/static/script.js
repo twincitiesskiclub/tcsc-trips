@@ -510,7 +510,7 @@ document.addEventListener('DOMContentLoaded', () => {
       if (memberType === 'returning') {
         line.textContent = `We'll charge your card $${priceDollars.toFixed(2)} today.`;
       } else if (memberType === 'new') {
-        line.textContent = `New members enter a lottery. We'll hold $${priceDollars.toFixed(2)} on your card and charge it only if you get a spot.`;
+        line.textContent = `We'll hold $${priceDollars.toFixed(2)} on your card and charge it only if you get a spot. If more new members sign up than we have room for, spots are decided by lottery.`;
       } else {
         // Membership type unknown (prefill fetch failed); don't guess.
         line.textContent = "We'll confirm your membership type at checkout. We hold the amount until then.";
