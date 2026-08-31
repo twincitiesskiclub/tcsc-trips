@@ -78,13 +78,25 @@ test('the open and closed subheads do not carry dates', () => {
   );
 });
 
-test('the card note matches the hand-written format it replaces', () => {
+test('the coming-soon card note names the upcoming registration dates', () => {
   assert.equal(
-    cardNote(2026, WINDOWS),
+    cardNote('coming_soon', 2026, WINDOWS),
     '2026 registration: returning members Aug 28 · new members Sep 3',
   );
 });
 
-test('there is no card note without dates', () => {
-  assert.equal(cardNote(2026, {}), null);
+test('the open card note states that registration is open', () => {
+  assert.equal(cardNote('open', 2026, {}), 'Registration open');
+  assert.equal(
+    cardNote('open', 2026, { new_start: '2099-09-03T17:00:00Z' }),
+    'Registration open · new members from Sep 3',
+  );
+});
+
+test('the closed card note states that registration is closed', () => {
+  assert.equal(cardNote('closed', 2026, WINDOWS), '2026 registration closed');
+});
+
+test('there is no coming-soon card note without dates', () => {
+  assert.equal(cardNote('coming_soon', 2026, {}), null);
 });

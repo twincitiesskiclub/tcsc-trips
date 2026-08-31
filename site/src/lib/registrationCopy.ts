@@ -60,8 +60,21 @@ export function stripSubhead(state: RegistrationState, w: RegistrationWindows): 
   return dates ? `${dates}. ${ABILITY}` : `Registration opens soon. ${ABILITY}`;
 }
 
-/** "2026 registration: returning members Aug 28 · new members Sep 3" */
-export function cardNote(year: number, w: RegistrationWindows): string | null {
+/** Registration status for a season card, with dates only when still useful. */
+export function cardNote(
+  state: RegistrationState,
+  year: number,
+  w: RegistrationWindows,
+): string | null {
+  if (state === 'open') {
+    const fresh = formatDay(w.new_start);
+    const freshStart = typeof w.new_start === 'string' ? Date.parse(w.new_start) : Number.NaN;
+    return fresh && !Number.isNaN(freshStart) && Date.now() < freshStart
+      ? `Registration open · new members from ${fresh}`
+      : 'Registration open';
+  }
+  if (state === 'closed') return `${year} registration closed`;
+
   const { returning, fresh } = openingDays(w);
   const parts: string[] = [];
   if (returning) parts.push(`returning members ${returning}`);
