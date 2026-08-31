@@ -102,6 +102,24 @@ if (!sparse) {
   }
 }
 
+// A two-column mobile wall needs an even number of grid units. If the
+// collection's scheduled wide tiles leave one unit open, let the last
+// landscape source fill that row. Portrait sources stay square so the tail
+// never solves its shape by cropping away a face.
+const scheduledMobileWideCount = sparse
+  ? 0
+  : arrangedPhotos.filter((_, index) =>
+      sizeClasses[index % sizeClasses.length].includes('max-md:col-span-2'),
+    ).length;
+const mobileTailFillIndex =
+  !sparse && (arrangedPhotos.length + scheduledMobileWideCount) % 2 !== 0
+    ? arrangedPhotos.findLastIndex(
+        (photo, index) =>
+          photo.data.image.width >= photo.data.image.height &&
+          !sizeClasses[index % sizeClasses.length].includes('max-md:col-span-2'),
+      )
+    : -1;
+
 // Composed sparse fallback: under 12 photos, the first three form one
 // deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
 // stacked side tiles) and the rest run as a uniform grid, so the degraded
@@ -117,7 +135,8 @@ const tiles = await Promise.all(
     // grid flow closes the vacated span rather than forcing a portrait wide.
     const span = portrait && proposedSpan.includes('md:col-span-2') ? '' : proposedSpan;
     const squareCrop = (!sparse && !span.includes('md:aspect-auto')) || (composed && i >= 3);
-    const mobileWide = span.includes('max-md:col-span-2');
+    const fillsMobileTail = i === mobileTailFillIndex;
+    const mobileWide = span.includes('max-md:col-span-2') || fillsMobileTail;
     // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
     // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
     // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
@@ -126,10 +145,12 @@ const tiles = await Promise.all(
       ? i === 0
         ? '(min-width: 768px) 66vw, 100vw'
         : '(min-width: 768px) 34vw, 50vw'
-      : span.includes('md:col-span-2')
-        ? mobileWide
+      : mobileWide
+        ? span.includes('md:col-span-2')
           ? '(min-width: 768px) 50vw, 100vw'
-          : '50vw'
+          : '(min-width: 768px) 25vw, 100vw'
+        : span.includes('md:col-span-2')
+          ? '50vw'
         : '(min-width: 768px) 25vw, 50vw';
     // Explicit width clamps the FALLBACK rendition: without it, Astro also
     // generates the plain `src` at full source resolution (a 4000px+ webp
@@ -152,6 +173,7 @@ const tiles = await Promise.all(
       span,
       portrait,
       squareCrop,
+      fillsMobileTail,
       sizesAttr,
       fullSrc: largest?.url ?? full.src,
       fullSrcset: full.srcSet.attribute,
@@ -187,7 +209,7 @@ const tiles = await Promise.all(
           ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
           : 'rule grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
     >
-      {tiles.map(({ photo, span, portrait, squareCrop, sizesAttr, fullSrc, fullSrcset }, i) => (
+      {tiles.map(({ photo, span, portrait, squareCrop, fillsMobileTail, sizesAttr, fullSrc, fullSrcset }, i) => (
         <button
           type="button"
           class:list={[
@@ -198,6 +220,7 @@ const tiles = await Promise.all(
                 ? 'aspect-auto max-md:aspect-[4/3]'
                 : 'aspect-square',
             !composed && span,
+            !composed && fillsMobileTail && 'max-md:col-span-2 max-md:aspect-[3/2]',
           ]}
           data-index={i}
           data-caption={photo.data.caption ?? ''}
