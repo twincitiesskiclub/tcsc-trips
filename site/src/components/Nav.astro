@@ -43,7 +43,7 @@ const pathname = Astro.url.pathname;
             href={l.href}
             aria-current={active ? 'page' : undefined}
             class:list={[
-              'transition-colors duration-150 hover:text-mint',
+              'link-nav',
               active && 'text-mint underline underline-offset-8 decoration-mint/50',
             ]}
           >{l.label}</a>
@@ -52,7 +52,7 @@ const pathname = Astro.url.pathname;
     </nav>
 
     <div class="hidden lg:flex items-center gap-5">
-      <CtaForState {...cta} />
+      <CtaForState {...cta} size="sm" />
     </div>
 
     <button

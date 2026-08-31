@@ -4,10 +4,12 @@
 // then the 2025 course format as a ledger, then the year-one recap and the
 // 2026 status from the markdoc body, then the two outbound links.
 import { getEntry, render } from 'astro:content';
-import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
 import SectionBand from '@/components/SectionBand.astro';
-import { MOSAIC } from '@/components/imageWidths';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
 
 const page = await getEntry('dry_tri', 'dry_tri');
@@ -15,10 +17,10 @@ if (!page) throw new Error('dry_tri singleton missing (src/content/pages/dry_tri
 const { Content } = await render(page);
 const d = page.data;
 const legs = [
-  { label: 'Roll', src: d.roll_photo, alt: d.roll_photo_alt },
-  { label: 'Ride', src: d.ride_photo, alt: d.ride_photo_alt },
-  { label: 'Run', src: d.run_photo, alt: d.run_photo_alt },
-].filter((l) => l.src);
+  { src: d.roll_photo, alt: d.roll_photo_alt ?? '', loading: 'eager' as const },
+  { src: d.ride_photo, alt: d.ride_photo_alt ?? '', loading: 'eager' as const },
+  { src: d.run_photo, alt: d.run_photo_alt ?? '', loading: 'eager' as const },
+].filter((leg): leg is { src: ImageMetadata; alt: string; loading: 'eager' } => Boolean(leg.src));
 ---
 <InnerPageLayout
   title="Dry Tri · Twin Cities Ski Club"
@@ -33,60 +35,36 @@ const legs = [
 >
   {legs.length === 3 && (
     <section class="gutter mx-auto max-w-site band-t-sm" aria-label="The three legs">
-      <div class="rule grid grid-cols-3 gap-px border hairline">
-        {legs.map((l) => (
-          <figure class="bg-paper">
-            <div class="relative aspect-[4/5] overflow-hidden">
-              <Image
-                src={l.src!}
-                alt={l.alt ?? ''}
-                widths={MOSAIC}
-                width={Math.min(1200, l.src!.width)}
-                height={Math.round((Math.min(1200, l.src!.width) * 5) / 4)}
-                fit="cover"
-                position="attention"
-                sizes="33vw"
-                class="absolute inset-0 w-full h-full object-cover"
-                loading="eager"
-                decoding="async"
-              />
-            </div>
-          </figure>
-        ))}
-      </div>
+      <PhotoStrip photos={legs} cols={3} aspect="4/5" />
     </section>
   )}
   {d.courses.length > 0 && (
     <SectionBand variant="paper" seam="The course">
-      <div class="divide-hairline border-t hairline-soft">
+      <Ledger cols="three" surface="paper">
         {d.courses.map((c) => (
-          <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[10rem_1fr_8rem]">
-            <div class="font-semibold text-navy">{c.name}</div>
-            <div class="type-body text-slate">{c.legs}</div>
-            {c.start && <div class="type-caption text-slate pt-0.5 sm:text-right">{c.start}</div>}
-          </div>
+          <LedgerRow label={c.name} note={c.legs} meta={c.start} />
         ))}
-      </div>
+      </Ledger>
       <p class="mt-4 text-sm text-slate">The 2025 format. Each leg starts and ends at the transition zone in the Parley Lake lot.</p>
     </SectionBand>
   )}
-  <div class="gutter mx-auto max-w-site band-b-sm grid md:grid-cols-12">
-    <div class="reading-column prose max-w-prose text-ink">
+  <ProseColumn flush="top">
+    <Fragment slot="prose">
       <Content />
-    </div>
-    <div class="reading-column mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+    </Fragment>
+    <div class="mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm">
       {d.register_url && (
         <a
           href={d.register_url}
-          class="font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+          class="link-inline"
         >Registration and updates</a>
       )}
       {d.results_url && (
         <a
           href={d.results_url}
-          class="font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
+          class="link-inline"
         >2025 results</a>
       )}
     </div>
-  </div>
+  </ProseColumn>
 </InnerPageLayout>

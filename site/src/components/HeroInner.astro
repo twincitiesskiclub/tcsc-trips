@@ -11,6 +11,7 @@
 import { Image } from 'astro:assets';
 import { FULL_BLEED } from '@/components/imageWidths';
 import type { Fact } from '@/components/heroFacts';
+import FactStack from '@/components/FactStack.astro';
 
 interface Props {
   headline: string;
@@ -33,14 +34,12 @@ const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
       {subhead && <p class="type-lede mt-4 text-slate max-w-prose">{subhead}</p>}
     </div>
     {facts.length > 0 && (
-      <ul class="md:col-span-3 md:col-start-10 self-end md:border-l hairline md:pl-6 space-y-3">
-        {facts.map((f) => (
-          <li>
-            <div class="type-stat text-navy">{f.value}</div>
-            <div class="label-caps mt-0.5">{f.label}</div>
-          </li>
-        ))}
-      </ul>
+      <FactStack
+        facts={facts}
+        size="md"
+        align="end"
+        class="md:col-span-3 md:col-start-10"
+      />
     )}
   </div>
   {photo && (

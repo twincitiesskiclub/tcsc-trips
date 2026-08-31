@@ -4,19 +4,23 @@
 // which PhotoMosaic.astro bundles, so pages without a mosaic ship this
 // hidden shell and no JS.
 //
-// The dialog is named directly in global.css's focus-ring surface map, so its
-// controls keep a mint ring without an inline surface override.
+// The navy-deep surface inherits the global navy focus-ring treatment.
 ---
 <div
   data-lightbox
-  class="lightbox-shell fixed inset-0 z-50 hidden bg-ink/95 text-paper flex-col"
+  class="lightbox-shell fixed inset-0 z-50 hidden bg-navy-deep/95 text-paper flex-col"
   role="dialog"
   aria-modal="true"
   aria-label="Photo viewer"
   aria-hidden="true"
 >
-  <button class="self-end p-2.5 -m-2.5" aria-label="Close" data-lightbox-close>
-    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+  <button
+    type="button"
+    class="self-end inline-flex min-h-11 min-w-11 items-center justify-center text-paper/75 transition-colors hover:text-mint"
+    aria-label="Close"
+    data-lightbox-close
+  >
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
       <path d="M6 6l12 12M6 18L18 6" />
     </svg>
   </button>
@@ -25,10 +29,28 @@
   </div>
   {/* Live region: announces caption + position on every photo change, so
       caption-less photos still give screen readers navigation feedback. */}
-  <div class="mt-4 max-w-prose mx-auto text-center text-sm" data-lightbox-caption aria-live="polite"></div>
+  <div class="mt-3 max-w-3xl mx-auto text-center type-caption text-paper/75" data-lightbox-caption aria-live="polite"></div>
   <div class="flex justify-center gap-6 mt-6">
-    <button class="min-h-11 min-w-11 px-5 py-2 border hairline rounded" data-lightbox-prev aria-label="Previous photo">←</button>
-    <button class="min-h-11 min-w-11 px-5 py-2 border hairline rounded" data-lightbox-next aria-label="Next photo">→</button>
+    <button
+      type="button"
+      class="inline-flex min-h-11 min-w-11 items-center justify-center text-paper/75 transition-colors hover:text-mint"
+      data-lightbox-prev
+      aria-label="Previous photo"
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M15 18l-6-6 6-6" />
+      </svg>
+    </button>
+    <button
+      type="button"
+      class="inline-flex min-h-11 min-w-11 items-center justify-center text-paper/75 transition-colors hover:text-mint"
+      data-lightbox-next
+      aria-label="Next photo"
+    >
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+        <path d="M9 18l6-6-6-6" />
+      </svg>
+    </button>
   </div>
 </div>
 
@@ -47,6 +69,30 @@
     padding-bottom: max(var(--lightbox-gutter), calc(env(safe-area-inset-bottom, 0px) + var(--lightbox-safe-gap)));
     padding-left: max(var(--lightbox-gutter), calc(env(safe-area-inset-left, 0px) + var(--lightbox-safe-gap)));
   }
+
+  /* Opening only. The client removes `hidden` and flips aria-hidden in the
+     same turn; @starting-style supplies the first rendered frame. Closing
+     drops this selector before display becomes none, so it stays instant. */
+  [data-lightbox][aria-hidden='false'] {
+    opacity: 1;
+    transition: opacity 200ms var(--ease-out), display 200ms allow-discrete;
+  }
+
+  [data-lightbox][aria-hidden='false'] [data-lightbox-img] {
+    transform: scale(1);
+    transition: transform 200ms var(--ease-out);
+  }
+
+  @starting-style {
+    [data-lightbox][aria-hidden='false'] {
+      opacity: 0;
+    }
+
+    [data-lightbox][aria-hidden='false'] [data-lightbox-img] {
+      transform: scale(0.97);
+    }
+  }
+
   @media (min-width: 48rem) {
     .lightbox-shell {
       --lightbox-gutter: 3rem;

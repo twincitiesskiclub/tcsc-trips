@@ -1,4 +1,7 @@
 ---
+import BandContainer from '@/components/BandContainer.astro';
+import Seam from '@/components/Seam.astro';
+
 interface Props {
   variant?: 'navy' | 'paper';
   /** Section seam: the section name in the Trail Report label voice (small
@@ -19,21 +22,22 @@ const rhythms = {
 const band = rhythms[rhythm];
 
 const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
-const padding = `gutter ${seam ? `pt-8 ${band.b}` : band.y}`;
+const padding = seam ? `pt-8 ${band.b}` : band.y;
 ---
 <section class={surface}>
   {seam && (
-    <div class={'gutter mx-auto max-w-site ' + band.t}>
-      <div class="flex items-center gap-4">
-        <span class="seam">{seam}</span>
-        <span class="rule h-px flex-1" aria-hidden="true"></span>
-      </div>
-    </div>
+    <BandContainer class={band.t}>
+      <Seam
+        label={seam}
+        surface={variant === 'navy' ? 'navy' : 'paper'}
+        as={heading ? 'span' : 'h2'}
+      />
+    </BandContainer>
   )}
-  <div class={'mx-auto max-w-site ' + padding}>
+  <BandContainer class={padding}>
     {heading && (
       <h2 class="type-h2 mb-4">{heading}</h2>
     )}
     <slot />
-  </div>
+  </BandContainer>
 </section>

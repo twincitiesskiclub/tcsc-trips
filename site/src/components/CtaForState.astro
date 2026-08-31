@@ -1,5 +1,6 @@
 ---
 import type { RegistrationState, RegistrationWindows } from '@/lib/registrationState';
+import Button from '@/components/Button.astro';
 
 interface Props {
   state: RegistrationState;
@@ -7,7 +8,7 @@ interface Props {
   label_open: string; url_open?: string;
   label_coming_soon: string; url_coming_soon?: string;
   label_closed: string; url_closed?: string;
-  variant?: 'on-navy' | 'on-paper';
+  size?: 'sm' | 'md';
   // Accepted and ignored. Nav and MobileNavPanel render this component as
   // `<CtaForState {...cta} />`, so every field getRegistrationCta returns has
   // to be nameable here or astro check fails on the spread.
@@ -19,15 +20,12 @@ const {
   label_open, url_open,
   label_coming_soon, url_coming_soon,
   label_closed, url_closed,
-  variant = 'on-navy',
+  size = 'md',
 } = Astro.props;
 
 const label = state === 'open' ? label_open : state === 'coming_soon' ? label_coming_soon : label_closed;
 const url = state === 'open' ? url_open : state === 'coming_soon' ? url_coming_soon : url_closed;
 const disabled = !url;
-const cls = variant === 'on-navy'
-  ? 'inline-flex items-center px-5 py-3 rounded-md bg-mint text-navy font-semibold text-sm transition-colors duration-150 hover:bg-paper active:bg-mint/90'
-  : 'inline-flex items-center px-5 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep active:bg-navy/90';
 
 // Every state's rendered strings ship in the markup so the browser only
 // CHOOSES a variant -- it holds no copy and does no date formatting. The
@@ -47,8 +45,10 @@ const baked = {
   'data-closed-url': url_closed ?? '',
 };
 ---
-{disabled ? (
-  <span class={cls + ' opacity-70 cursor-default'} {...baked}>{label}</span>
-) : (
-  <a href={url} class={cls} {...baked}>{label}</a>
-)}
+<Button
+  variant="on-navy"
+  href={url}
+  size={size}
+  disabled={disabled}
+  {...baked}
+>{label}</Button>

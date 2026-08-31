@@ -97,9 +97,9 @@ const bodyMeasure = variant === 'navy' ? 'max-w-prose-narrow' : 'max-w-prose';
           >{s.data.slug}</HeadingTag>
           <div class="mt-2 flex flex-col items-start gap-1 sm:flex-row sm:items-baseline sm:justify-between sm:gap-x-6">
             <p class:list={['text-lg font-semibold', accent]}>{dollar(s.data.fee_cents)}</p>
-            <p
-              data-season-card-note
-              class:list={['type-caption font-semibold', cardLines.get(s.id)!.open ? accent : muted]}
+              <p
+                data-season-card-note
+                class:list={['type-caption font-semibold', cardLines.get(s.id)!.open ? accent : muted]}
             >
               {cardLines.get(s.id)!.open && (
                 <span class="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-coral align-middle" aria-hidden="true"></span>

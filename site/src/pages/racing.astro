@@ -4,10 +4,12 @@
 // member-shot race photo strip. Strip photos are direct imports, not
 // photos-collection entries (entries would also join the community mosaic).
 import { getEntry, render } from 'astro:content';
-import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
-import { CARD } from '@/components/imageWidths';
 // CONSENT.md:87
 import raceCrewFrosty from '@/assets/images/photos/race-crew-frosty.jpg';
 // CONSENT.md:88
@@ -46,48 +48,26 @@ const raceStrip = [
   photoAlt="Six members in race bibs, arms around each other, in frosty woods before a start"
   photoPosition="center 30%"
 >
-  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
-    <div class="reading-column prose max-w-prose text-ink">
+  <ProseColumn>
+    <Fragment slot="prose">
       <Content />
-    </div>
-  </div>
-  {races.length > 0 && (
-    <section class="gutter mx-auto max-w-site band-b-sm grid md:grid-cols-12">
-      <h2 class="reading-column type-h2-longform text-navy">Races</h2>
-      <div class="reading-column mt-6 divide-hairline">
+    </Fragment>
+    {races.length > 0 && (
+      <section class="mt-12">
+      <h2 class="type-h2-longform text-navy">Races</h2>
+      <Ledger cols="three" rule="top" surface="paper" class="mt-6">
         {races.map((r) => (
-          <div class="py-4 grid gap-x-6 gap-y-1 sm:grid-cols-[10rem_1fr_1fr]">
-            {/* date/name/location always render (possibly empty) so the
-                three grid columns never shift when a field is omitted. */}
-            <div class="type-caption text-slate pt-0.5">{r.date}</div>
-            <div class="font-semibold text-navy">
-              {r.href ? (
-                <a
-                  href={r.href}
-                  class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-                >{r.name}</a>
-              ) : (
-                r.name
-              )}
-            </div>
-            <div class="text-slate">{r.location}</div>
-            {r.notes && <div class="sm:col-span-full text-sm text-slate">{r.notes}</div>}
-          </div>
-        ))}
-      </div>
-      <div class="reading-column rule mt-10 grid grid-cols-2 md:grid-cols-5 gap-px">
-        {raceStrip.map((p) => (
-          <Image
-            src={p.src}
-            alt={p.alt}
-            widths={CARD}
-            sizes="(min-width: 768px) 144px, 50vw"
-            class="w-full aspect-[3/4] object-cover"
-            style={p.position ? `object-position: ${p.position}` : undefined}
-            loading="lazy"
+          <LedgerRow
+            label={r.date}
+            title={r.name}
+            meta={r.location}
+            note={r.notes}
+            href={r.href}
           />
         ))}
-      </div>
-    </section>
-  )}
+      </Ledger>
+      <PhotoStrip photos={raceStrip} cols={5} aspect="3/4" class="mt-10" />
+      </section>
+    )}
+  </ProseColumn>
 </InnerPageLayout>

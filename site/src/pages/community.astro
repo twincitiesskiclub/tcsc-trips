@@ -11,7 +11,11 @@ import { getEntry, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
 import SectionBand from '@/components/SectionBand.astro';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
 import { CARD } from '@/components/imageWidths';
 // CONSENT.md:80
@@ -73,23 +77,18 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   photoAlt="Members in canoes rafted together on a city lake at golden hour"
   photoPosition="center 52%"
 >
-  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
-    <div class="reading-column prose max-w-prose text-ink">
+  <ProseColumn>
+    <Fragment slot="prose">
       <Content />
-    </div>
-    <div class="reading-column rule mt-10 grid grid-cols-2 gap-px">
-      {memberCluster.map((p) => (
-        <Image
-          src={p.src}
-          alt={p.alt}
-          widths={CARD}
-          sizes="(min-width: 768px) 360px, 50vw"
-          class="w-full h-48 md:h-64 object-cover"
-          loading="lazy"
-        />
-      ))}
-    </div>
-  </div>
+    </Fragment>
+    <PhotoStrip
+      photos={memberCluster}
+      cols={2}
+      mobileCols={2}
+      aspect="4/3"
+      class="mt-10"
+    />
+  </ProseColumn>
   {takeaways.length > 0 && (
     <SectionBand
       variant="paper"
@@ -114,23 +113,15 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
                   loading="lazy"
                 />
               )}
-              <div class="divide-hairline border-t hairline-soft">
+              <Ledger cols="two" surface="paper">
                 {g.items.map((item) => (
-                  <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(14rem,18rem)_1fr]">
-                    <div class="font-semibold text-navy">
-                      {item.href ? (
-                        <a
-                          href={item.href}
-                          class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-                        >{item.line}</a>
-                      ) : (
-                        item.line
-                      )}
-                    </div>
-                    {item.detail && <p class="type-body text-slate">{item.detail}</p>}
-                  </div>
+                  <LedgerRow
+                    label={item.line}
+                    note={item.detail}
+                    href={item.href}
+                  />
                 ))}
-              </div>
+              </Ledger>
             </div>
           </div>
         ))}

@@ -1,5 +1,6 @@
 ---
 import type { RegistrationState, RegistrationWindows } from '@/lib/registrationState';
+import Button from '@/components/Button.astro';
 
 interface Props {
   heading: string;
@@ -58,16 +59,16 @@ const subheadBaked = state ? {
   'data-closed-subhead': closed_subhead ?? '',
 } : {};
 ---
-<section id={id} class="bg-navy border-t-[3px] border-coral text-paper">
+<section id={id} class="bg-navy border-t-[3px] border-coral text-paper" data-cta-strip>
   <div class:list={['gutter mx-auto max-w-site flex flex-col md:flex-row md:items-center md:justify-between gap-6', rhythmClass]}>
     <div>
       <h2 class="type-h2 text-mint">{heading}</h2>
       {subhead && <p class="type-body mt-2 text-paper/75 max-w-prose-narrow" {...subheadBaked}>{subhead}</p>}
     </div>
-    <a
+    <Button
       href={cta_url}
-      class="inline-flex items-center px-6 py-3 bg-mint text-navy font-semibold rounded-md"
+      variant="on-navy"
       {...ctaBaked}
-    >{cta_label}</a>
+    >{cta_label}</Button>
   </div>
 </section>

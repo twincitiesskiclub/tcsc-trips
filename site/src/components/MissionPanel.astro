@@ -1,4 +1,6 @@
 ---
+import FactStack from '@/components/FactStack.astro';
+
 // The home page's single moment of paper (DESIGN.md): a full-bleed band, not
 // a floating card. Asymmetric 8/3 split: the mission statement at display
 // scale, plus a stat stack of org facts behind a vertical hairline for the
@@ -25,16 +27,12 @@ const facts: Array<{ value: string; label: string }> = [
   <div class="bg-paper text-ink">
     <div class:list={['gutter mx-auto max-w-site grid gap-10 md:grid-cols-12', band.y]}>
       <p class="type-statement md:col-span-8 text-navy">{body}</p>
-      <ul class="md:col-span-3 md:col-start-10 self-center md:border-l hairline md:pl-7 space-y-5">
-        {facts.map((f) => (
-          <li>
-            <div class="type-stat text-navy">
-              {f.value}
-            </div>
-            <div class="label-caps mt-1.5">{f.label}</div>
-          </li>
-        ))}
-      </ul>
+      <FactStack
+        facts={facts}
+        size="lg"
+        align="center"
+        class="md:col-span-3 md:col-start-10"
+      />
     </div>
   </div>
 </section>

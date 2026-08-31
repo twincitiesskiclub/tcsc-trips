@@ -12,7 +12,11 @@
 // entry.id = filename slug (url), entry.data.slug = display title
 // (see content.config.ts header).
 import { getCollection } from 'astro:content';
-import { shortDate } from '@/lib/formatDate';
+import Ledger from '@/components/Ledger.astro';
+import WaxEntryRow from '@/components/WaxEntryRow.astro';
+import BandContainer from '@/components/BandContainer.astro';
+import Seam from '@/components/Seam.astro';
+import SectionHeader from '@/components/SectionHeader.astro';
 
 interface Props {
   rhythm?: 'sm' | 'md' | 'lg';
@@ -30,45 +34,23 @@ const entries = (await getCollection('wax_entries'))
   .slice(0, 3);
 ---
 {entries.length > 0 && (
-<section class="bg-paper text-ink">
-  <div class="gutter mx-auto max-w-site">
-    {/* Seam: hairline running to the right edge (one device family
-        site-wide); no label text, the h2 below names the section. */}
-    <div class:list={['flex items-center gap-4', band.t]}>
-      <span class="rule h-px flex-1" aria-hidden="true"></span>
-    </div>
-    <div class:list={['pt-8', band.b]}>
-      <div class="flex items-end justify-between mb-8">
-        <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
-        <a href="/wax-room" class="shrink-0 text-mint-deep text-sm hover:text-navy">All entries</a>
+  <section class="bg-paper text-ink">
+    <BandContainer>
+      <Seam surface="paper" class={band.t} />
+      <div class:list={['pt-8', band.b]}>
+        <SectionHeader
+          more_href="/wax-room"
+          more_label="All entries"
+          class="mb-8"
+        >
+          <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
+        </SectionHeader>
+        <Ledger cols="three" surface="paper">
+          {entries.map((e) => (
+            <WaxEntryRow entry={e} density="feed" />
+          ))}
+        </Ledger>
       </div>
-      <ul class="border-y hairline-soft divide-hairline">
-        {entries.map((e) => (
-          <li>
-            <a
-              href={'/wax-room/' + e.id}
-              class="group grid items-baseline gap-x-6 gap-y-1 py-4 md:grid-cols-[8.5rem_1fr_auto]"
-            >
-              <span class="text-xs text-slate tabular-nums">
-                {shortDate(e.data.date)}{e.data.author_name ? ` · ${e.data.author_name}` : ''}
-              </span>
-              <span class="font-semibold text-lg text-navy transition-colors duration-150 group-hover:text-mint-deep">
-                {e.data.slug}
-                {e.data.lede && (
-                  <span class="ml-3 font-sans text-sm font-normal text-slate">{e.data.lede}</span>
-                )}
-              </span>
-              {e.data.conditions_snapshot?.temp_f != null && (
-                <span class="text-xs text-slate tabular-nums">
-                  {e.data.conditions_snapshot.temp_f}°F
-                  {e.data.conditions_snapshot.location ? ` · ${e.data.conditions_snapshot.location}` : ''}
-                </span>
-              )}
-            </a>
-          </li>
-        ))}
-      </ul>
-    </div>
-  </div>
-</section>
+    </BandContainer>
+  </section>
 )}
