@@ -110,6 +110,8 @@ export default {
         'logo-md': '15rem',
         'logo-lg': '17.5rem',
       },
+      minHeight: { 'band-photo-min': '14.375rem' },
+      maxHeight: { 'band-photo-max': '26.25rem' },
     },
   },
   plugins: [typography],
