@@ -11,11 +11,23 @@
   color-scheme: light;
   --gutter: clamp(1.5rem, 4vw, 2.5rem);
   --color-paper-muted: theme(colors.paper / 75%);
-  /* Desktop home chrome: 77px nav plus the 152px prominent trail report.
-     HeroHome consumes the sum so its bottom edge is the viewport fold. */
+  /* Desktop home chrome: 77px nav plus the prominent trail report. HeroHome
+     consumes the measured sum so its bottom edge is the viewport fold. */
   --nav-h: 4.8125rem;
-  --conditions-prominent-h: 9.5rem;
+  --conditions-prominent-h: 11rem;
   --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
+}
+
+@media (min-width: 64rem) {
+  body:has([data-live-conditions][data-filled='true']:not([data-updated-at])) {
+    --conditions-prominent-h: 5.84375rem;
+    --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
+  }
+
+  body:has([data-live-conditions][data-filled='true'] [data-dryland-label]) {
+    --conditions-prominent-h: 3.375rem;
+    --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
+  }
 }
 
 /* Body: Archivo Variable (full character set, all weights).
