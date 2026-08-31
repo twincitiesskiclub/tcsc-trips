@@ -80,9 +80,36 @@ const sizeClasses = [
   '',
 ];
 
+// Wide grid slots belong to landscape sources. When the next source is a
+// portrait, trade it with the next landscape source that was headed for a
+// square slot. This keeps the collection order recognizable while ensuring
+// the dense layout never turns a portrait into a faceless panorama.
+const isSpanningSlot = (index: number) =>
+  sizeClasses[index % sizeClasses.length].includes('md:col-span-2');
+const arrangedPhotos = [...photos];
+if (!sparse) {
+  for (let i = 0; i < arrangedPhotos.length; i += 1) {
+    const image = arrangedPhotos[i].data.image;
+    if (!isSpanningSlot(i) || image.width >= image.height) continue;
+    const replacement = arrangedPhotos.findIndex((candidate, candidateIndex) =>
+      candidateIndex > i &&
+      !isSpanningSlot(candidateIndex) &&
+      candidate.data.image.width >= candidate.data.image.height,
+    );
+    if (replacement !== -1) {
+      [arrangedPhotos[i], arrangedPhotos[replacement]] = [arrangedPhotos[replacement], arrangedPhotos[i]];
+    }
+  }
+}
+
 const tiles = await Promise.all(
-  photos.map(async (photo, i) => {
-    const span = sparse ? '' : sizeClasses[i % sizeClasses.length];
+  arrangedPhotos.map(async (photo, i) => {
+    const proposedSpan = sparse ? '' : sizeClasses[i % sizeClasses.length];
+    const portrait = photo.data.image.height > photo.data.image.width;
+    // The fallback guards collections with too few landscape sources. Dense
+    // grid flow closes the vacated span rather than forcing a portrait wide.
+    const span = portrait && proposedSpan.includes('md:col-span-2') ? '' : proposedSpan;
+    const squareCrop = !sparse && !span.includes('md:aspect-auto');
     // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
     // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
     // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
@@ -113,6 +140,8 @@ const tiles = await Promise.all(
     return {
       photo,
       span,
+      portrait,
+      squareCrop,
       sizesAttr,
       fullSrc: largest?.url ?? full.src,
       fullSrcset: full.srcSet.attribute,
@@ -155,7 +184,7 @@ const composed = sparse && photos.length >= 3;
           ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
           : 'rule grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
     >
-      {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
+      {tiles.map(({ photo, span, portrait, squareCrop, sizesAttr, fullSrc, fullSrcset }, i) => (
         <button
           type="button"
           class:list={[
@@ -179,9 +208,15 @@ const composed = sparse && photos.length >= 3;
             src={photo.data.image}
             alt={photo.data.alt_text}
             width={Math.min(composed && i === 0 ? 1920 : 1600, photo.data.image.width)}
+            height={squareCrop ? Math.min(1600, photo.data.image.width) : undefined}
+            fit={squareCrop ? 'cover' : undefined}
+            position={squareCrop ? 'attention' : undefined}
             widths={MOSAIC}
             sizes={sizesAttr}
-            class="absolute inset-0 w-full h-full object-cover"
+            class:list={[
+              'absolute inset-0 h-full w-full object-cover object-center',
+              portrait && !squareCrop && 'object-[center_25%]',
+            ]}
             loading="lazy"
             decoding="async"
           />
