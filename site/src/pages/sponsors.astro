@@ -7,6 +7,8 @@ import CTAStrip from '@/components/CTAStrip.astro';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import SponsorWall from '@/components/SponsorWall.astro';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { CARD } from '@/components/imageWidths';
 import { metaDescription } from '@/lib/metaDescription';
 // CONSENT.md:42
@@ -48,14 +50,11 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         <p class="mt-5 max-w-prose-narrow text-lg leading-relaxed text-paper">
           {page.data.impact_intro}
         </p>
-        <div class="mt-10 border-y hairline divide-hairline">
+        <Ledger cols="two" surface="navy" class="mt-10">
           {page.data.impact_items.map((item) => (
-            <article class="py-6 grid gap-2 sm:grid-cols-[minmax(12rem,16rem)_1fr] sm:gap-8">
-              <h3 class="type-h3 text-mint">{item.title}</h3>
-              <p class="type-body text-paper">{item.detail}</p>
-            </article>
+            <LedgerRow label={item.title} note={item.detail} />
           ))}
-        </div>
+        </Ledger>
       </div>
     </div>
   </SectionBand>
@@ -95,14 +94,11 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
           {page.data.priorities_intro}
         </p>
       </div>
-      <div class="md:col-span-7 border-y hairline divide-hairline">
+      <Ledger cols="stacked" surface="paper" class="md:col-span-7">
         {page.data.priority_items.map((item) => (
-          <article class="py-6">
-            <h3 class="type-h3 text-navy">{item.title}</h3>
-            <p class="type-body mt-2 max-w-prose text-slate">{item.detail}</p>
-          </article>
+          <LedgerRow title={item.title} note={item.detail} />
         ))}
-      </div>
+      </Ledger>
     </div>
   </SectionBand>
 

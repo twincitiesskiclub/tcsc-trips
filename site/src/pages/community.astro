@@ -12,6 +12,8 @@ import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import SectionBand from '@/components/SectionBand.astro';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
 import { CARD } from '@/components/imageWidths';
 // CONSENT.md:80
@@ -114,23 +116,15 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
                   loading="lazy"
                 />
               )}
-              <div class="divide-hairline border-t hairline-soft">
+              <Ledger cols="two" surface="paper">
                 {g.items.map((item) => (
-                  <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(14rem,18rem)_1fr]">
-                    <div class="font-semibold text-navy">
-                      {item.href ? (
-                        <a
-                          href={item.href}
-                          class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-                        >{item.line}</a>
-                      ) : (
-                        item.line
-                      )}
-                    </div>
-                    {item.detail && <p class="type-body text-slate">{item.detail}</p>}
-                  </div>
+                  <LedgerRow
+                    label={item.line}
+                    note={item.detail}
+                    href={item.href}
+                  />
                 ))}
-              </div>
+              </Ledger>
             </div>
           </div>
         ))}
