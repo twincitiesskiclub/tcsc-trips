@@ -105,7 +105,7 @@ const bodyMeasure = variant === 'navy' ? 'max-w-prose-narrow' : 'max-w-prose';
                 class:list={['type-caption font-semibold', cardLines.get(s.id)!.open ? accent : muted]}
             >
               {cardLines.get(s.id)!.open && (
-                <span class="mr-2 inline-block h-1.5 w-1.5 rounded-full bg-coral align-middle" aria-hidden="true"></span>
+                <span class="label-caps mr-1 text-coral" aria-hidden="true">●</span>
               )}
               {cardLines.get(s.id)!.note}
             </p>
