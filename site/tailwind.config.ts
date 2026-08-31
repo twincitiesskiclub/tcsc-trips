@@ -105,6 +105,11 @@ export default {
         prose: '62ch',
         'prose-narrow': '56ch',
       },
+      spacing: {
+        'logo-sm': '12.5rem',
+        'logo-md': '15rem',
+        'logo-lg': '17.5rem',
+      },
     },
   },
   plugins: [typography],
