@@ -22,11 +22,11 @@ const locations = [
 ---
 <section
   class={variant === 'prominent'
-    ? 'bg-navy-deep text-paper border-y hairline-soft'
+    ? 'group/conditions bg-navy-deep text-paper border-y hairline-soft'
     // Compact strip: solid navy-deep (like prominent), NOT bg-navy/40: the
     // translucent navy over the paper page background landed text-paper/75
     // at 1.91:1 (axe fail); on solid navy-deep it measures 9.1:1 (AA pass).
-    : 'bg-navy-deep text-paper text-xs border-t hairline-soft'}
+    : 'group/conditions bg-navy-deep text-paper text-xs border-t hairline-soft'}
   data-live-conditions
   data-api-url={apiUrl}
   aria-label="Current ski conditions"
@@ -96,6 +96,11 @@ const locations = [
     <div class="gutter mx-auto max-w-site py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/75">
       {/* Mobile keeps just the Theodore Wirth line; the other venues and the
           fever line are desktop-only. */}
+      <span
+        aria-hidden="true"
+        data-live-dot
+        class="label-caps text-xs text-paper/75 group-data-[updated-at]/conditions:text-coral"
+      >●</span>
       {locations.map(({ id, name }) => (
         <div data-location={id} class={id === 'wirth' ? 'flex items-baseline gap-1.5' : 'max-md:hidden flex items-baseline gap-1.5'}>
           <span class="label-caps" data-name>{name}</span>
