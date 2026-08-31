@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import './brandPrimitives.test.mjs';
 
 // Astro emits dist/<slug>/index.html with build.format 'directory' and
 // dist/<slug>.html with 'file'. Production sets TCSC_EDGE_CONFIG=true, which
@@ -128,7 +129,7 @@ test('wires season-neutral registration copy to the external registration route'
   assert.match(source.ctaStrip, /data-registration-subhead/);
   assert.match(
     source.ctaStrip,
-    /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper">/,
+    /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper" data-cta-strip>/,
   );
   assert.match(source.homePage, /<CTAStrip\s+id="registration"/);
   assert.match(source.homePage, /stripSubhead\('open', cta\.windows\)/);
