@@ -87,7 +87,10 @@ const bodyMeasure = variant === 'navy' ? 'max-w-prose-narrow' : 'max-w-prose';
       ]}
     >
       {seasons.map((s) => (
-        <div data-season-card={s.id} class:list={['p-8 md:p-10', surface]}>
+        <div
+          data-season-card={s.id}
+          class:list={['py-8 md:py-10 md:odd:pr-10 md:even:pl-10', surface]}
+        >
           <p class:list={['text-sm', muted]}>{s.data.date_range}</p>
           <HeadingTag
             class:list={[
@@ -127,7 +130,7 @@ const bodyMeasure = variant === 'navy' ? 'max-w-prose-narrow' : 'max-w-prose';
     </div>
     {/* Dues transparency and shared practice details, rendered once below
         both season columns. */}
-    <div class:list={['px-8 md:px-10 py-6', surface]}>
+    <div class:list={['py-6', surface]}>
       <p class:list={['type-body', muted]}>
         Practices run twice a week with KJ, Greg, Rebecca, and Michael. Dues cover coaching and reserved workout space.
       </p>
