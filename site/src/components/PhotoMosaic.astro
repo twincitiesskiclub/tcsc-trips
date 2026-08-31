@@ -24,7 +24,6 @@ import Seam from '@/components/Seam.astro';
 import SectionHeader from '@/components/SectionHeader.astro';
 
 interface Props {
-  limit?: number;
   homeOnly?: boolean;
   /** Optional section header (e.g. on home). Rendered only when the mosaic
       itself renders, so an empty photo pool can't orphan a heading. `number`
@@ -36,7 +35,7 @@ interface Props {
   more_label?: string;
   rhythm?: 'sm' | 'md' | 'lg';
 }
-const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label, rhythm = 'md' } = Astro.props;
+const { homeOnly = false, number = 'Community', heading, more_href, more_label, rhythm = 'md' } = Astro.props;
 const rhythms = {
   sm: { t: 'band-t-sm', b: 'band-b-sm' },
   md: { t: 'band-t', b: 'band-b' },
@@ -49,7 +48,7 @@ const all = await getCollection(
   (e) => e.data.photo_consent_recorded === true && (!homeOnly || e.data.show_on_home),
 );
 all.sort((a, b) => a.data.order - b.data.order);
-const photos = typeof limit === 'number' ? all.slice(0, limit) : all;
+const photos = all;
 
 // Under 12 photos the asymmetric spans leave ragged holes, so fall back to a
 // uniform grid with no span classes.
@@ -69,7 +68,7 @@ const sparse = photos.length < 12;
 //
 // Tail note: photo counts of 4 mod 8 (12, 20, 28...) end on the 2x2 tile
 // with empty cells beside it; counts like 15 or 23 finish the last row
-// cleanly, so prefer those when passing `limit`.
+// cleanly.
 const sizeClasses = [
   '',
   'md:col-span-2 md:aspect-auto',
