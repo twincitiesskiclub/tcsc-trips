@@ -18,7 +18,7 @@ function page(slug) {
 }
 
 
-const TIER_LABELS = ['Trailblazer Partners', 'Community Partners', 'Supporters'];
+const TIER_LABELS = ['Trailblazer partners', 'Community partners', 'Supporters'];
 
 const sponsorsHtml = page('sponsors');
 const homeHtml = readFileSync(new URL('../dist/index.html', import.meta.url), 'utf8');
@@ -64,8 +64,8 @@ const homeSponsorSection = elementContaining(homeHtml, '<section', 'About our sp
 const allLinkedLogos = [...linkedLogos(sponsorsMain), ...linkedLogos(homeSponsorSection)];
 
 test('renders the Trailblazer heading when it is the only populated wall tier', () => {
-  assert.match(sponsorsMain, /<h2\b[^>]*>Trailblazer Partners<\/h2>/);
-  assert.doesNotMatch(sponsorsMain, /Community Partners|Supporters/);
+  assert.match(sponsorsMain, /<h2\b[^>]*>Trailblazer partners<\/h2>/);
+  assert.doesNotMatch(sponsorsMain, /Community partners|Supporters/);
 });
 
 test('keeps the home sponsor strip free of tier headings', () => {
