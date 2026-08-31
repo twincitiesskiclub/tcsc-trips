@@ -98,6 +98,11 @@ projects:
                 value: "true"
             buildCommand: cd site && npm ci && npm run build
             staticPublishPath: site/dist
+            # Pull-request previews build this static site with the same
+            # command, env vars, and headers as production, so a site change
+            # can be walked at a Render URL before it merges (and deploys).
+            previews:
+              generation: automatic
             domains:
               - twincitiesskiclub.org
               - www.twincitiesskiclub.org
