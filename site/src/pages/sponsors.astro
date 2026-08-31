@@ -31,8 +31,13 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
     <SponsorWall headingLevel="h2" />
   </div>
 
-  <SectionBand variant="navy" seam="Sponsor impact">
-    <div class="grid gap-10 md:grid-cols-12 md:gap-14 items-start">
+  <SectionBand
+    variant="navy"
+    seam="Sponsor impact"
+    heading={page.data.impact_heading}
+    headingRole="section"
+  >
+    <div class="mt-4 grid gap-10 md:grid-cols-12 md:gap-14 items-start">
       <figure class="md:col-span-5 md:order-2">
         <Image
           src={rollerskiGoldenHour}
@@ -44,9 +49,6 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         />
       </figure>
       <div class="md:col-span-7 md:order-1">
-        <h2 class="type-h2 text-paper">
-          {page.data.impact_heading}
-        </h2>
         <p class="mt-5 max-w-prose-narrow text-lg leading-relaxed text-paper">
           {page.data.impact_intro}
         </p>
@@ -59,8 +61,14 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
     </div>
   </SectionBand>
 
-  <SectionBand variant="paper" seam="Partner recognition">
-    <div class="grid gap-10 md:grid-cols-12 md:gap-16 items-center">
+  <SectionBand
+    variant="paper"
+    seam="Partner recognition"
+    heading={page.data.recognition_heading}
+    headingRole="longform"
+    flush="bottom"
+  >
+    <div class="mt-4 grid gap-10 md:grid-cols-12 md:gap-16 items-center">
       <figure class="md:col-span-5">
         <Image
           src={greatBearChase}
@@ -76,21 +84,22 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         </figcaption>
       </figure>
       <div class="md:col-span-7 md:pl-4">
-        <h2 class="type-h2 text-navy">
-          {page.data.recognition_heading}
-        </h2>
         <p class="mt-6 max-w-prose text-xl leading-relaxed text-ink">
           {page.data.recognition_body}
         </p>
       </div>
     </div>
+  </SectionBand>
 
-    <div class="mt-20 md:mt-28 pt-12 md:pt-16 border-t hairline grid gap-10 md:grid-cols-12 md:gap-14">
+  <SectionBand
+    variant="paper"
+    seam="What comes next"
+    heading={page.data.priorities_heading}
+    headingRole="longform"
+  >
+    <div class="mt-4 grid gap-10 md:grid-cols-12 md:gap-14">
       <div class="md:col-span-5">
-        <h2 class="type-h2 text-navy">
-          {page.data.priorities_heading}
-        </h2>
-        <p class="mt-5 max-w-prose text-lg leading-relaxed text-slate">
+        <p class="max-w-prose-narrow text-lg leading-relaxed text-ink/75">
           {page.data.priorities_intro}
         </p>
       </div>
@@ -100,13 +109,10 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         ))}
       </Ledger>
     </div>
-  </SectionBand>
-
-  <div class="bg-paper band-b-sm">
-    <p class="gutter mx-auto max-w-site text-base leading-relaxed text-slate">
+    <p class="type-caption mt-12 max-w-prose text-base text-slate">
       {page.data.disclosure}
     </p>
-  </div>
+  </SectionBand>
 
   <CTAStrip
     heading={page.data.contact_heading}
