@@ -150,7 +150,7 @@ const composed = sparse && photos.length >= 3;
         <button
           type="button"
           class:list={[
-            'group relative overflow-hidden bg-paper-card',
+            'group relative overflow-hidden focus-visible:outline-offset-[-3px]',
             composed && i === 0
               ? 'col-span-2 md:row-span-2 aspect-video'
               : composed && i < 3
@@ -165,6 +165,7 @@ const composed = sparse && photos.length >= 3;
           data-full={fullSrc}
           data-full-srcset={fullSrcset}
         >
+          <span class="absolute inset-0 bg-paper-card" aria-hidden="true"></span>
           <Image
             src={photo.data.image}
             alt={photo.data.alt_text}

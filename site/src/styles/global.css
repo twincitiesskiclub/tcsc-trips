@@ -72,7 +72,7 @@ html {
   :root {
     --focus-ring-color: theme(colors.navy);
   }
-  .bg-navy, .bg-navy-deep {
+  .bg-navy, .bg-navy-deep, [data-photo-mosaic], [data-lightbox] {
     --focus-ring-color: theme(colors.mint);
   }
   .bg-paper, .bg-paper-card {
