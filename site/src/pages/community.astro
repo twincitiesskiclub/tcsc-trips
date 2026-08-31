@@ -14,13 +14,21 @@ import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import { metaDescription } from '@/lib/metaDescription';
 import { CARD } from '@/components/imageWidths';
+// CONSENT.md:80
 import canoeSocial from '@/assets/images/photos/canoe-social.jpg';
+// CONSENT.md:81
 import backyardSocial from '@/assets/images/photos/backyard-social.jpg';
+// CONSENT.md:82
 import runClubSelfie from '@/assets/images/photos/run-club-selfie.jpg';
+// CONSENT.md:83
 import winterFive from '@/assets/images/photos/winter-five.jpg';
+// CONSENT.md:84
 import lakesidePicnic from '@/assets/images/photos/lakeside-picnic.jpg';
+// CONSENT.md:85
 import secondHarvest from '@/assets/images/photos/second-harvest.jpg';
+// CONSENT.md:86
 import barnBanquet from '@/assets/images/photos/barn-banquet.jpg';
+// CONSENT.md:104
 import etfFallRide from '@/assets/images/photos/etf-fall-ride.jpg';
 
 const community = await getEntry('community', 'community');
@@ -59,7 +67,7 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   subhead={community.data.intro}
   facts={[
     { value: '2020', label: 'Founded' },
-    { value: 'Photos by club members', label: 'Credits' },
+    { value: 'Member-run', label: 'Board and committees' },
   ]}
   photo={canoeSocial}
   photoAlt="Members in canoes rafted together on a city lake at golden hour"

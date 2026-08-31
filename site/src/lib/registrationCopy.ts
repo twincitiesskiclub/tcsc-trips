@@ -8,6 +8,8 @@ import type { RegistrationState, RegistrationWindows } from './registrationState
 
 const CENTRAL = 'America/Chicago';
 const ABILITY = 'Intermediate ability and up, no racing required.';
+const FALL_WINTER_REOPENS = 'Aug/Sep';
+const SPRING_SUMMER_REOPENS = 'Apr/May';
 
 const dayFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: CENTRAL,
@@ -29,39 +31,53 @@ function openingDays(w: RegistrationWindows) {
   };
 }
 
-/** "Returning members Aug 28; new members Sep 3" — null when no dates. */
+/** "Returning members Aug 28 · new members Sep 3". Null when no dates. */
 export function datesSentence(w: RegistrationWindows): string | null {
   const { returning, fresh } = openingDays(w);
   const parts: string[] = [];
   if (returning) parts.push(`Returning members ${returning}`);
   if (fresh) parts.push(returning ? `new members ${fresh}` : `New members ${fresh}`);
-  return parts.length ? parts.join('; ') : null;
+  return parts.length ? parts.join(' · ') : null;
 }
 
-/**
- * "Returning members Aug 28 · New members Sep 3" — null when no dates.
- *
- * Standalone display line (hero, under the CTA button): each clause reads on
- * its own rather than as a sentence fragment, so both start with a capital
- * and a middle dot separates them instead of a semicolon.
- */
+/** The shared opening-date format for the hero and registration strip. */
 export function datesLine(w: RegistrationWindows): string | null {
-  const { returning, fresh } = openingDays(w);
-  const parts: string[] = [];
-  if (returning) parts.push(`Returning members ${returning}`);
-  if (fresh) parts.push(`New members ${fresh}`);
-  return parts.length ? parts.join(' · ') : null;
+  return datesSentence(w);
+}
+
+export function newMembersLine(w: RegistrationWindows, now: number): string {
+  if (typeof w.new_start !== 'string') return '';
+  const freshStart = Date.parse(w.new_start);
+  const fresh = formatDay(w.new_start);
+  return fresh && !Number.isNaN(freshStart) && now < freshStart
+    ? `New members ${fresh}`
+    : '';
 }
 
 export function stripSubhead(state: RegistrationState, w: RegistrationWindows): string {
   if (state === 'open') return ABILITY;
-  if (state === 'closed') return `Registration is closed. ${ABILITY}`;
+  if (state === 'closed') {
+    return `Registration is closed. Fall/Winter reopens ${FALL_WINTER_REOPENS}, Spring/Summer ${SPRING_SUMMER_REOPENS}. ${ABILITY}`;
+  }
   const dates = datesSentence(w);
   return dates ? `${dates}. ${ABILITY}` : `Registration opens soon. ${ABILITY}`;
 }
 
-/** "2026 registration: returning members Aug 28 · new members Sep 3" */
-export function cardNote(year: number, w: RegistrationWindows): string | null {
+/** Registration status for a season card, with dates only when still useful. */
+export function cardNote(
+  state: RegistrationState,
+  year: number,
+  w: RegistrationWindows,
+): string | null {
+  if (state === 'open') {
+    const fresh = formatDay(w.new_start);
+    const freshStart = typeof w.new_start === 'string' ? Date.parse(w.new_start) : Number.NaN;
+    return fresh && !Number.isNaN(freshStart) && Date.now() < freshStart
+      ? `Registration open · new members from ${fresh}`
+      : 'Registration open';
+  }
+  if (state === 'closed') return `${year} registration closed`;
+
   const { returning, fresh } = openingDays(w);
   const parts: string[] = [];
   if (returning) parts.push(`returning members ${returning}`);

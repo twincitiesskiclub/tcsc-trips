@@ -14,7 +14,7 @@ const { rhythm = 'sm' } = Astro.props;
 const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 
 // Two columns reading top-to-bottom in nav order: the six top-nav
-// destinations plus Trips, Extra Training & Fun, and Dry Tri.
+// destinations plus Trips, Extra training fun, and Dry Tri.
 const colA = [
   { label: 'About', href: '/about' },
   { label: 'Community', href: '/community' },
@@ -25,7 +25,7 @@ const colA = [
 const colB = [
   { label: 'Sponsors', href: '/sponsors' },
   { label: 'Trips', href: '/trips' },
-  { label: 'Extra Training & Fun', href: '/extra-training-fun' },
+  { label: 'Extra training fun', href: '/extra-training-fun' },
   { label: 'Dry Tri', href: '/dry-tri' },
 ];
 ---
@@ -34,7 +34,7 @@ const colB = [
     <div>
       <div class="text-sm font-bold text-mint">Twin Cities Ski Club</div>
       <p class="type-body mt-3 text-paper/75 max-w-prose-narrow">
-        A 501(c)(3) nonprofit for young adults (21-35) in Minneapolis · St. Paul. Two seasons of cross-country ski training a year.
+        A 501(c)(3) nonprofit for cross-country skiers ages 21-35 in Minneapolis · St. Paul. Coached practices twice a week, two seasons a year.
       </p>
     </div>
     <nav aria-label="Footer" class="text-sm grid grid-cols-2 gap-x-6 content-start">

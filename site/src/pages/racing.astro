@@ -8,11 +8,17 @@ import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import { metaDescription } from '@/lib/metaDescription';
 import { CARD } from '@/components/imageWidths';
+// CONSENT.md:87
 import raceCrewFrosty from '@/assets/images/photos/race-crew-frosty.jpg';
+// CONSENT.md:88
 import skiDeSheTrio from '@/assets/images/photos/ski-de-she-trio.jpg';
+// CONSENT.md:89
 import korteMedals from '@/assets/images/photos/korte-medals.jpg';
+// CONSENT.md:90
 import birkieStart from '@/assets/images/photos/birkie-start.jpg';
+// CONSENT.md:91
 import finlandiaPodium from '@/assets/images/photos/finlandia-podium.jpg';
+// CONSENT.md:92
 import skijorRace from '@/assets/images/photos/skijor-race.jpg';
 
 const racing = await getEntry('racing', 'racing');
@@ -35,7 +41,6 @@ const raceStrip = [
   subhead={racing.data.intro}
   facts={[
     { value: '80+', label: 'Skiers at the 2026 Birkie' },
-    { value: 'Always voluntary', label: 'Racing' },
   ]}
   photo={raceCrewFrosty}
   photoAlt="Six members in race bibs, arms around each other, in frosty woods before a start"

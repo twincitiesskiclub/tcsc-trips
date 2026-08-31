@@ -1,5 +1,6 @@
 ---
 import '@/styles/global.css';
+import { getEntry } from 'astro:content';
 import FontPreload from '@/components/FontPreload.astro';
 import Lightbox from '@/components/Lightbox.astro';
 import { NAVY_HEX } from '@/lib/brand';
@@ -9,6 +10,7 @@ import { fetchSeasonData } from '@/lib/seasonData';
 // detected. Deploys are deliberately never blocked by an unreachable API, so
 // this is what stops a stale build from shipping invisibly.
 const season = await fetchSeasonData();
+const siteMeta = await getEntry('site_meta', 'site_meta');
 
 interface Props {
   title: string;
@@ -20,7 +22,7 @@ interface Props {
 
 const {
   title,
-  description = 'Year-round cross-country ski training and community for adults 21-35 in Minneapolis-St. Paul, with coached practices, racing, and trips.',
+  description = siteMeta?.data.description ?? 'Skiing.',
   // Default OG image lives in public/og/ (see site_meta.og_image convention).
   ogImage = '/og/og-default.jpg',
   variant = 'inner',

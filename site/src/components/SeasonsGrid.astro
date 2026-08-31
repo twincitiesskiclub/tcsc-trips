@@ -42,10 +42,11 @@ function registrationLine(entry: CollectionEntry<'practice_seasons'>) {
   if (!record) {
     return { note: entry.data.registration_note, open: entry.data.registration_open };
   }
-  const note = cardNote(record.year ?? new Date().getFullYear(), record);
+  const state = deriveRegistrationState(record, now);
+  const note = cardNote(state, record.year ?? new Date().getFullYear(), record);
   return {
     note: note ?? entry.data.registration_note,
-    open: deriveRegistrationState(record, now) === 'open',
+    open: state === 'open',
   };
 }
 

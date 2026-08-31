@@ -15,7 +15,9 @@ import SectionBand from '@/components/SectionBand.astro';
 import SeasonsGrid from '@/components/SeasonsGrid.astro';
 import { metaDescription } from '@/lib/metaDescription';
 import { CARD } from '@/components/imageWidths';
+// CONSENT.md:78
 import teamBanner from '@/assets/images/photos/team-banner.jpg';
+// CONSENT.md:79
 import rollerskiGoldenHour from '@/assets/images/photos/rollerski-golden-hour.jpg';
 
 const about = await getEntry('about', 'about');
@@ -41,7 +43,7 @@ const { Content } = await render(about);
     </div>
     <Image
       src={rollerskiGoldenHour}
-      alt="A line of members rollerskiing together at golden hour, poles mid-swing"
+      alt="About twenty members in matching club caps posed around a bench after a golden-hour rollerski, skis and helmets at their feet"
       widths={CARD}
       sizes="(min-width: 768px) 720px, 100vw"
       class="reading-column mt-10 w-full h-64 md:h-80 object-cover"

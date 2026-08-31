@@ -49,30 +49,30 @@ const sponsorCommercialSurface = [
 ].join('. ');
 const completedRows = [
   [
-    'Host team waxing sessions',
-    'Two team drills support organized waxing sessions, and shared waxing supplies remain available to members whether or not they race.',
+    'Team wax sessions',
+    'Two wax drills and a shared wax supply, open to every member.',
   ],
   [
-    'Make team travel easier',
-    'Rental vans carried food, equipment, and team supplies to the Pre-Birkie and Great Bear Chase, reducing the logistics handled by volunteer trip leaders.',
+    'Vans to races',
+    'Rental vans carried food, gear, and supplies to the Prebirkie and the Great Bear Chase, so volunteer trip leaders had less to haul.',
   ],
   [
-    'Build a useful team base',
-    'A team tent and Birkie start parking created space for waxing, warming up, testing skis, cheering, and moving people and gear.',
+    'A base at the Birkie',
+    'A team tent and start-area parking: a place to wax, warm up, test skis, and cheer.',
   ],
 ];
 const futureRows = [
   [
-    'Shared wax resources',
-    "Move the team's shared wax collection away from products containing PFAS, often called forever chemicals.",
+    'PFAS-free wax',
+    "Replace the club's shared wax with PFAS-free products.",
   ],
   [
-    'Coaching and training capacity',
-    'Add coaches and secure larger training spaces as the team grows.',
+    'More coaches, more gym space',
+    'Add coaches and book larger training spaces as the club grows.',
   ],
   [
-    'Shared team equipment',
-    'Invest in equipment that lowers the upfront cost of participating and helps new members get up to speed.',
+    'Shared gear',
+    'Equipment that lowers the cost of a first season.',
   ],
 ];
 
@@ -112,37 +112,37 @@ function openingTagBefore(html, marker, tagName) {
 test('renders the approved recognition and impact copy', () => {
   for (const approvedCopy of [
     'Our sponsors',
-    'Trailblazer Partners',
-    'Support from our sponsors strengthens the shared resources behind training, team waxing, travel, and race support while helping TCSC keep participation costs in reach.',
-    'Sponsor support helped TCSC...',
-    'Recent investments strengthened everyday team activities as well as travel, with shared resources available to racers and non-racers.',
+    'Trailblazer partners',
+    'Our sponsors pay for the wax, vans, and race-day gear that every member shares, racer or not, and keep dues within reach.',
+    'What sponsor money paid for',
+    'Everything here is shared by racers and non-racers alike.',
     ...completedRows.flat(),
-    'Visible support at team events',
-    'TCSC purchased six team jackets featuring sponsor logos for use at races and podium photos.',
+    'Sponsor logos at the races',
+    'Six club jackets carry sponsor logos at races and in podium photos.',
     'A sponsor-logo team jacket at the Great Bear Chase.',
-    'What continued support makes possible',
-    'As the team grows, sponsor support gives TCSC flexibility to invest where it can have the most impact.',
+    'What comes next',
+    'Where the next sponsor dollars go.',
     ...futureRows.flat(),
-    'Interested in supporting TCSC?',
-    'Contact club leadership to discuss sponsorship opportunities and current team needs.',
+    'Sponsor TCSC',
+    'Email club leadership about sponsorship and what the club needs this season.',
     'Email club leadership',
-    "Sponsor recognition acknowledges support and does not constitute endorsement of a sponsor's products or services.",
+    "Sponsor recognition is thanks, not an endorsement of a sponsor's products or services.",
   ]) {
     assert.ok(sponsorText.includes(approvedCopy), `missing exact page copy: ${approvedCopy}`);
   }
 });
 
 test('keeps completed impact, recognition, future priorities, and contact in order', () => {
-  const impactHeading = textPosition('Sponsor support helped TCSC...');
-  const recognitionHeading = textPosition('Visible support at team events');
+  const impactHeading = textPosition('What sponsor money paid for');
+  const recognitionHeading = textPosition('Sponsor logos at the races');
   const jacketSentence = textPosition(
-    'TCSC purchased six team jackets featuring sponsor logos for use at races and podium photos.',
+    'Six club jackets carry sponsor logos at races and in podium photos.',
   );
-  const futureHeading = textPosition('What continued support makes possible');
+  const futureHeading = textPosition('What comes next');
   const disclosure = textPosition(
-    "Sponsor recognition acknowledges support and does not constitute endorsement of a sponsor's products or services.",
+    "Sponsor recognition is thanks, not an endorsement of a sponsor's products or services.",
   );
-  const contactHeading = textPosition('Interested in supporting TCSC?');
+  const contactHeading = textPosition('Sponsor TCSC');
 
   let previousPosition = impactHeading;
   for (const [title, detail] of completedRows) {
@@ -175,7 +175,7 @@ test('keeps completed impact, recognition, future priorities, and contact in ord
 test('renders the impact photo before its copy in the mobile DOM flow', () => {
   const photoAlt =
     'alt="A large group of TCSC members posing with roller skis and poles after a summer training session"';
-  const impactHeading = 'Sponsor support helped TCSC...';
+  const impactHeading = 'What sponsor money paid for';
   const photoPosition = sponsorsHtml.indexOf(photoAlt);
   const headingPosition = sponsorsHtml.indexOf(impactHeading);
 
@@ -189,7 +189,7 @@ test('renders the impact photo before its copy in the mobile DOM flow', () => {
 test('keeps the sponsor disclosure at the mobile body-text minimum', () => {
   const disclosureTag = openingTagBefore(
     sponsorsHtml,
-    'Sponsor recognition acknowledges support',
+    'Sponsor recognition is thanks',
     'p',
   );
 
@@ -249,7 +249,7 @@ test('keeps commercial terms and sponsor-specific purchase attribution off the p
 });
 
 test('keeps the home sponsor strip compact and unheaded', () => {
-  assert.equal(homeText.includes('Trailblazer Partners'), false);
+  assert.equal(homeText.includes('Trailblazer partners'), false);
   assert.ok(homeHtml.includes('alt="Twin Cities Orthopedics website"'));
   assert.ok(homeHtml.includes('alt="Kwik Trip website"'));
 });
