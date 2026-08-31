@@ -1,8 +1,7 @@
 ---
 // Footer: hardcoded contact info (contact singleton removed, F07).
-// Footer nav is decoupled from getNavLinks() (F08): covers the full page set
-// in two short columns rather than duplicating the top nav verbatim.
 // No /contact link (page deleted).
+import { FOOTER_EXTRAS, getNavLinks } from '@/components/navLinks';
 
 const email = 'contact@twincitiesskiclub.org';
 const ig = 'https://www.instagram.com/twincitiesskiclub/';
@@ -13,21 +12,12 @@ interface Props {
 const { rhythm = 'sm' } = Astro.props;
 const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 
-// Two columns reading top-to-bottom in nav order: the six top-nav
-// destinations plus Trips, Extra training fun, and Dry Tri.
-const colA = [
-  { label: 'About', href: '/about' },
-  { label: 'Community', href: '/community' },
-  { label: 'Racing', href: '/racing' },
-  { label: 'Coaches', href: '/coaches' },
-  { label: 'Wax Room', href: '/wax-room' },
-];
-const colB = [
-  { label: 'Sponsors', href: '/sponsors' },
-  { label: 'Trips', href: '/trips' },
-  { label: 'Extra training fun', href: '/extra-training-fun' },
-  { label: 'Dry Tri', href: '/dry-tri' },
-];
+// Two columns read top-to-bottom. Primary links stay in the same order as
+// the header, with footer-only destinations appended afterward.
+const footerLinks = [...await getNavLinks(), ...FOOTER_EXTRAS];
+const splitAt = Math.ceil(footerLinks.length / 2);
+const colA = footerLinks.slice(0, splitAt);
+const colB = footerLinks.slice(splitAt);
 ---
 <footer class="bg-navy text-paper border-t hairline-soft">
   <div class:list={['footer-inner gutter mx-auto max-w-site grid gap-10 md:grid-cols-3', rhythmClass]}>
