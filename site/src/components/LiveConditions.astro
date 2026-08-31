@@ -140,13 +140,6 @@ const locations = [
   [data-live-conditions]:not([data-updated-at]) [data-updated] {
     color: var(--color-paper-muted);
   }
-  [data-location] a[data-source-link] {
-    display: inline-flex;
-    min-height: 2.75rem;
-    align-items: center;
-    margin-block: -0.5rem;
-  }
-
   /* Dryland is a dateline, not an empty five-column instrument. The client
      supplies the seasonal label and fever value; CSS only recomposes those
      existing nodes, so no-JS visitors retain the server-rendered venues. */

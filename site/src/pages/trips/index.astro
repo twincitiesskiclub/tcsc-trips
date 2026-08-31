@@ -1,7 +1,6 @@
 ---
 // /trips: index of upcoming trips. TripsTable handles its own empty state.
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
-import ProseColumn from '@/components/ProseColumn.astro';
 import TripsTable from '@/components/TripsTable.astro';
 ---
 <InnerPageLayout
@@ -10,7 +9,7 @@ import TripsTable from '@/components/TripsTable.astro';
   headline="Trips"
   subhead="Race weekends and training trips, with lodging and rides organized by the club."
 >
-  <ProseColumn>
+  <section class="gutter mx-auto max-w-site band-y-sm">
     <TripsTable />
-  </ProseColumn>
+  </section>
 </InnerPageLayout>

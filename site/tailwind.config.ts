@@ -102,6 +102,7 @@ export default {
       maxWidth: {
         site: '80rem',
         statement: '44ch',
+        'logo-mobile': '13.5rem',
         prose: '62ch',
         'prose-narrow': '56ch',
       },

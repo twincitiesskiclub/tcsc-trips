@@ -137,6 +137,16 @@ html {
 /* Type roles live here once. Call sites select a role and a surface color,
    never rebuild the role from text, leading, tracking, or weight utilities. */
 @layer utilities {
+  /* Venue report link tap target (DESIGN.md accessibility: >=44px). Unscoped on
+     purpose: the anchor is injected by the sacred client script, so a component-
+     scoped rule (astro-cid attributes) can never match it. */
+  [data-location] a[data-source-link] {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    margin-block: -0.5rem;
+  }
+
   .gutter {
     padding-left: max(var(--gutter), calc(env(safe-area-inset-left, 0px) + 0.75rem));
     padding-right: max(var(--gutter), calc(env(safe-area-inset-right, 0px) + 0.75rem));
@@ -199,7 +209,8 @@ html {
   }
 
   .type-statement,
-  .prose-statement > p:first-child {
+  .prose-statement > p:first-child,
+  .prose-statement > article > p:first-child {
     max-width: theme(maxWidth.statement);
     font-family: theme(fontFamily.sans);
     font-size: clamp(1.375rem, 1.2rem + 0.9vw, 1.875rem);
@@ -208,7 +219,8 @@ html {
     text-wrap: pretty;
   }
 
-  .prose-statement > p:first-child {
+  .prose-statement > p:first-child,
+  .prose-statement > article > p:first-child {
     color: theme(colors.navy);
   }
 

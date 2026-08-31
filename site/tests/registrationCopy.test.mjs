@@ -83,7 +83,7 @@ test('the coming_soon subhead omits dates rather than inventing them', () => {
 test('the open and closed subheads do not carry dates', () => {
   assert.equal(
     stripSubhead('open', WINDOWS),
-    'Intermediate ability and up, no racing required.',
+    'Registration is open. Intermediate ability and up, no racing required.',
   );
   assert.equal(
     stripSubhead('closed', WINDOWS),

@@ -174,7 +174,7 @@ test('keeps completed impact, recognition, future priorities, and contact in ord
 
 test('renders the impact photo before its detailed copy in the mobile DOM flow', () => {
   const photoAlt =
-    'alt="A large group of TCSC members posing with roller skis and poles after a summer training session"';
+    'alt="About 20 members in matching club caps posed around a bench after a golden-hour rollerski, skis and helmets at their feet"';
   const impactIntro =
     'Everything here is shared by racers and non-racers alike.';
   const photoPosition = sponsorsHtml.indexOf(photoAlt);
@@ -194,7 +194,8 @@ test('keeps the sponsor disclosure at the mobile body-text minimum', () => {
     'p',
   );
 
-  assert.match(disclosureTag, /\btext-base\b/);
+  assert.match(disclosureTag, /\btype-caption\b/);
+  assert.doesNotMatch(disclosureTag, /\btext-base\b/);
   assert.doesNotMatch(disclosureTag, /\btext-xs\b/);
 });
 
@@ -212,7 +213,7 @@ test('keeps current sponsor links accessible and qualified', () => {
   assert.ok(sponsorsHtml.includes('href="mailto:contact@twincitiesskiclub.org"'));
   assert.ok(
     sponsorsHtml.includes(
-      'alt="A large group of TCSC members posing with roller skis and poles after a summer training session"',
+      'alt="About 20 members in matching club caps posed around a bench after a golden-hour rollerski, skis and helmets at their feet"',
     ),
   );
   assert.ok(

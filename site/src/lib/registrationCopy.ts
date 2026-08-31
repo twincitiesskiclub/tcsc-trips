@@ -55,7 +55,7 @@ export function newMembersLine(w: RegistrationWindows, now: number): string {
 }
 
 export function stripSubhead(state: RegistrationState, w: RegistrationWindows): string {
-  if (state === 'open') return ABILITY;
+  if (state === 'open') return `Registration is open. ${ABILITY}`;
   if (state === 'closed') {
     return `Registration is closed. Fall/Winter reopens ${FALL_WINTER_REOPENS}, Spring/Summer ${SPRING_SUMMER_REOPENS}. ${ABILITY}`;
   }

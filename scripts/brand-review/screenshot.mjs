@@ -69,6 +69,7 @@ for (const [build, states] of byBuild) {
             else if (a.press) await page.keyboard.press(a.press);
             else if (a.waitFor) await page.waitForSelector(a.waitFor, { timeout: 15000 });
             else if (a.scroll !== undefined) await page.evaluate((y) => window.scrollTo(0, y), a.scroll);
+            else if (a.scrollIntoView) await page.evaluate((sel) => document.querySelector(sel)?.scrollIntoView({ block: 'start' }), a.scrollIntoView);
             else if (a.wait) await page.waitForTimeout(a.wait);
           }
           await page.waitForTimeout(400); // let the 150ms hover and 200ms lightbox transitions settle

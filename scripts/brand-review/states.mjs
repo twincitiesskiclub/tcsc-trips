@@ -20,7 +20,7 @@ export const STATES = [
     viewports: ["desktop"], actions: [{ hover: "[data-birkie]" }, { wait: 300 }], viewportOnly: true },
   // home, content states
   { id: "home-wax-feed", surface: "home", state: "wax-feed", build: "populated", url: "/", conditions: "live",
-    actions: [{ scroll: 99999 }, { wait: 300 }] },
+    actions: [{ scrollIntoView: "section:has(a[href='/wax-room'])" }, { wait: 300 }], viewportOnly: true },
   { id: "home-hero", surface: "home", state: "hero", build: OPEN, url: "/", conditions: "live",
     viewports: ["mobile", "tablet", "desktop"], actions: [{ wait: 600 }], viewportOnly: true },
   { id: "home-mobile-nav", surface: "home", state: "mobile-nav", build: OPEN, url: "/", conditions: "live",
