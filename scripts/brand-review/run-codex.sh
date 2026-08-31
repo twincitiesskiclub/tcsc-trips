@@ -16,7 +16,13 @@ cd "$root"
 if [ ! -d "$wt" ]; then
   git worktree add -b "brand/$ws" "$wt" site/brand-review
 fi
-[ -e "$wt/site/node_modules" ] || ln -s "$root/site/node_modules" "$wt/site/node_modules"
+# a real dir of per-package symlinks, NOT one symlink: astro's content-layer cache lives in
+# node_modules/.astro, and a shared cache lets concurrent worktree builds clobber each other.
+if [ ! -e "$wt/site/node_modules" ]; then
+  mkdir "$wt/site/node_modules"
+  for p in "$root"/site/node_modules/*; do ln -s "$p" "$wt/site/node_modules/$(basename "$p")"; done
+  ln -s "$root/site/node_modules/.bin" "$wt/site/node_modules/.bin"
+fi
 [ -e "$wt/scripts/brand-review/node_modules" ] || ln -s "$root/scripts/brand-review/node_modules" "$wt/scripts/brand-review/node_modules"
 
 echo "launching codex for $ws in $wt, log: $log"
