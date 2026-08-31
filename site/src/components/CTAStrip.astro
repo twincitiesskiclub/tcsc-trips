@@ -1,5 +1,6 @@
 ---
 import type { RegistrationState, RegistrationWindows } from '@/lib/registrationState';
+import Button from '@/components/Button.astro';
 
 interface Props {
   heading: string;
@@ -64,10 +65,10 @@ const subheadBaked = state ? {
       <h2 class="type-h2 text-mint">{heading}</h2>
       {subhead && <p class="type-body mt-2 text-paper/75 max-w-prose-narrow" {...subheadBaked}>{subhead}</p>}
     </div>
-    <a
+    <Button
       href={cta_url}
-      class="inline-flex items-center px-6 py-3 bg-mint text-navy font-semibold rounded-md"
+      variant="on-navy"
       {...ctaBaked}
-    >{cta_label}</a>
+    >{cta_label}</Button>
   </div>
 </section>

@@ -304,6 +304,17 @@ html {
 }
 
 @layer components {
+  .btn {
+    font-family: 'ArchivoVariable', system-ui, sans-serif;
+    font-size: 1rem;
+    font-weight: 600;
+    line-height: 1;
+  }
+
+  .btn[data-button-size='sm'] {
+    font-size: 0.875rem;
+  }
+
   .fact-stack {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

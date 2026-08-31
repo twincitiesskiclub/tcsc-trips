@@ -6,6 +6,7 @@ export const prerender = true;
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import Ledger from '@/components/Ledger.astro';
 import LedgerRow from '@/components/LedgerRow.astro';
+import Button from '@/components/Button.astro';
 // CONSENT.md:32
 import trailPhoto from '@/assets/images/photos/oo-corridor.jpg';
 
@@ -48,10 +49,7 @@ const destinations = [
         <p class="mt-5 max-w-prose text-lg leading-relaxed text-slate">
           Start at the home page or use one of the links below.
         </p>
-        <a
-          href="/"
-          class="mt-8 inline-flex min-h-11 items-center rounded-md bg-navy px-5 py-3 font-semibold text-mint transition-colors hover:bg-navy-deep"
-        >Back to home</a>
+        <Button href="/" variant="on-paper" class="mt-8">Back to home</Button>
       </div>
 
       <nav aria-label="Try one of these" class="md:col-span-5 md:col-start-8">
