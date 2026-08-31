@@ -100,7 +100,7 @@ const ctaStripSubhead = {
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
-  <SectionBand variant="navy" seam="Seasons">
+  <SectionBand variant="navy" seam="Seasons" rhythm="lg" flush="both">
     <SeasonsGrid variant="navy" headingLevel="h2" />
   </SectionBand>
   <PhotoMosaic
@@ -109,6 +109,7 @@ const ctaStripSubhead = {
     heading="Beyond practice"
     more_href="/community"
     more_label="See what members do"
+    rhythm="md"
   />
   <WaxRoomFeed />
   <CTAStrip

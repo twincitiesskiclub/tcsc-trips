@@ -39,7 +39,7 @@ const legs = [
     </section>
   )}
   {d.courses.length > 0 && (
-    <SectionBand variant="paper" seam="The course">
+    <SectionBand variant="paper" seam="The course" flush="bottom">
       <Ledger cols="three" surface="paper">
         {d.courses.map((c) => (
           <LedgerRow label={c.name} note={c.legs} meta={c.start} />

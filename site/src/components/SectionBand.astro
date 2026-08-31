@@ -11,8 +11,9 @@ interface Props {
   seam?: string;
   heading?: string;
   rhythm?: 'sm' | 'md' | 'lg';
+  flush?: 'top' | 'bottom' | 'both';
 }
-const { variant = 'paper', seam, heading, rhythm = 'md' } = Astro.props;
+const { variant = 'paper', seam, heading, rhythm = 'md', flush } = Astro.props;
 
 const rhythms = {
   sm: { y: 'band-y-sm', t: 'band-t-sm', b: 'band-b-sm' },
@@ -26,11 +27,16 @@ const band = rhythms[rhythm];
 const surface = variant === 'navy'
   ? 'bg-navy text-paper [&_h2]:text-paper [&_h3]:text-paper'
   : 'bg-paper text-ink';
-const padding = seam ? `pt-8 ${band.b}` : band.y;
+const flushTop = flush === 'top' || flush === 'both';
+const flushBottom = flush === 'bottom' || flush === 'both';
+const seamPadding = flushTop ? undefined : band.t;
+const contentPadding = seam
+  ? ['pt-8', !flushBottom && band.b].filter(Boolean).join(' ')
+  : [!flushTop && band.t, !flushBottom && band.b].filter(Boolean).join(' ');
 ---
 <section class={surface}>
   {seam && (
-    <BandContainer class={band.t}>
+    <BandContainer class={seamPadding}>
       <Seam
         label={seam}
         surface={variant === 'navy' ? 'navy' : 'paper'}
@@ -38,7 +44,7 @@ const padding = seam ? `pt-8 ${band.b}` : band.y;
       />
     </BandContainer>
   )}
-  <BandContainer class={padding}>
+  <BandContainer class={contentPadding}>
     {heading && (
       <h2 class="type-h2 mb-4">{heading}</h2>
     )}
