@@ -74,7 +74,7 @@ test('the open and closed subheads do not carry dates', () => {
   );
   assert.equal(
     stripSubhead('closed', WINDOWS),
-    'Registration is closed. Intermediate ability and up, no racing required.',
+    'Registration is closed. Fall/Winter reopens Aug/Sep, Spring/Summer Apr/May. Intermediate ability and up, no racing required.',
   );
 });
 

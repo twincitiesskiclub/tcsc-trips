@@ -8,6 +8,8 @@ import type { RegistrationState, RegistrationWindows } from './registrationState
 
 const CENTRAL = 'America/Chicago';
 const ABILITY = 'Intermediate ability and up, no racing required.';
+const FALL_WINTER_REOPENS = 'Aug/Sep';
+const SPRING_SUMMER_REOPENS = 'Apr/May';
 
 const dayFormatter = new Intl.DateTimeFormat('en-US', {
   timeZone: CENTRAL,
@@ -45,7 +47,9 @@ export function datesLine(w: RegistrationWindows): string | null {
 
 export function stripSubhead(state: RegistrationState, w: RegistrationWindows): string {
   if (state === 'open') return ABILITY;
-  if (state === 'closed') return `Registration is closed. ${ABILITY}`;
+  if (state === 'closed') {
+    return `Registration is closed. Fall/Winter reopens ${FALL_WINTER_REOPENS}, Spring/Summer ${SPRING_SUMMER_REOPENS}. ${ABILITY}`;
+  }
   const dates = datesSentence(w);
   return dates ? `${dates}. ${ABILITY}` : `Registration opens soon. ${ABILITY}`;
 }
