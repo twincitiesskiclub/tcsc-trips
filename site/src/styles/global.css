@@ -1,7 +1,10 @@
 @import 'tailwindcss';
 @config '../../tailwind.config.ts';
 
-:root { color-scheme: light; }
+:root {
+  color-scheme: light;
+  --gutter: clamp(1.5rem, 4vw, 2.5rem);
+}
 
 /* Body: Archivo Variable (full character set, all weights).
    Display: PolySans BulkyWide, covered by TCSC's production web license.
@@ -49,21 +52,6 @@ html {
   min-height: 100dvh;
 }
 
-/* Shared content gutters that expand only when a device cutout needs more
-   room. Full-bleed surface backgrounds remain untouched. */
-.safe-inline-6,
-.safe-inline-6-10 {
-  --safe-inline-gutter: 1.5rem;
-  padding-left: max(var(--safe-inline-gutter), calc(env(safe-area-inset-left, 0px) + 0.75rem));
-  padding-right: max(var(--safe-inline-gutter), calc(env(safe-area-inset-right, 0px) + 0.75rem));
-}
-
-@media (min-width: 48rem) {
-  .safe-inline-6-10 {
-    --safe-inline-gutter: 2.5rem;
-  }
-}
-
 /* Focus-visible baseline (DESIGN.md): always-visible 2px ring, mint on navy
    surfaces, navy on paper. The surface utilities set an inherited custom
    property, so the NEAREST surface ancestor wins regardless of nesting depth
@@ -102,6 +90,11 @@ html {
 /* Type roles live here once. Call sites select a role and a surface color,
    never rebuild the role from text, leading, tracking, or weight utilities. */
 @layer utilities {
+  .gutter {
+    padding-left: max(var(--gutter), calc(env(safe-area-inset-left, 0px) + 0.75rem));
+    padding-right: max(var(--gutter), calc(env(safe-area-inset-right, 0px) + 0.75rem));
+  }
+
   .type-display,
   .type-display-inner,
   .type-h2,
