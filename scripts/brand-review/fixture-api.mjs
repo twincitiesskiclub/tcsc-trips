@@ -40,11 +40,12 @@ export function seasonPayload(state) {
   };
 }
 
+// ids and names match app/conditions/locations.py and the cells in LiveConditions.astro.
 const VENUES = [
-  ["wirth", "Theodore Wirth"],
+  ["wirth", "Theo"],
+  ["elm", "Elm"],
   ["hyland", "Hyland"],
-  ["french", "French Park"],
-  ["battle-creek", "Battle Creek"],
+  ["telemark", "Telemark"],
 ];
 
 export function conditionsPayload(mode) {
