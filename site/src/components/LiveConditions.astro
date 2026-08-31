@@ -195,6 +195,11 @@ const locations = [
     }
   }
 
+  /* In-season failures are announced once in the strip stamp. Keep the
+     venue names as orientation, then remove the repeated "No report" lines. */
+  [data-live-conditions][data-filled='true']:not([data-updated-at]):not(:has([data-dryland-label])) [data-wax] {
+    display: none;
+  }
 </style>
 
 <script>
