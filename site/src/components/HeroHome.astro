@@ -49,7 +49,7 @@ const datesBaked = {
         alt={props.imageAlt}
         widths={FULL_BLEED}
         sizes="100vw"
-        class="absolute inset-0 w-full h-full object-cover object-[center_15%] max-md:object-[60%_15%]"
+        class="absolute inset-0 w-full h-full object-cover object-[center_15%] max-md:object-[60%_15%] md:max-lg:object-[100%_15%]"
         loading="eager"
         fetchpriority="high"
         decoding="async"
@@ -58,20 +58,22 @@ const datesBaked = {
     {/* Functional scrim: heavy only at the text zone, light by 45% up so
         the photograph actually shows. */}
     <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
-    <div class="gutter relative h-full mx-auto max-w-site flex flex-col justify-end pb-14 md:pb-20 text-paper">
-      <h1 class="hero-headline type-display text-mint max-w-5xl">{props.headline}</h1>
-      {props.subline && (
-        <p class="hero-headline type-lede mt-4 text-paper max-w-prose-narrow">{props.subline}</p>
-      )}
-      <div class="hero-headline hero-cta mt-8">
-        <CtaForState
-          state={props.state}
-          windows={props.windows}
-          label_open={props.cta_open_label} url_open={props.cta_open_url}
-          label_coming_soon={props.cta_coming_soon_label} url_coming_soon={props.cta_coming_soon_url}
-          label_closed={props.cta_closed_label} url_closed={props.cta_closed_url}
-        />
-        <p class="mt-3 text-xs md:text-sm text-paper/75" {...datesBaked} hidden={!showDates}>{visibleDates}</p>
+    <div class="gutter relative h-full mx-auto max-w-site flex flex-col justify-end pb-14 md:pb-20 text-paper md:grid md:grid-cols-12 md:items-end">
+      <div class="md:max-lg:col-start-3 md:max-lg:col-span-10 lg:col-start-5 lg:col-span-8">
+        <h1 class="hero-headline type-display text-mint max-w-5xl">{props.headline}</h1>
+        {props.subline && (
+          <p class="hero-headline type-lede mt-4 text-paper max-w-prose-narrow">{props.subline}</p>
+        )}
+        <div class="hero-headline hero-cta mt-8">
+          <CtaForState
+            state={props.state}
+            windows={props.windows}
+            label_open={props.cta_open_label} url_open={props.cta_open_url}
+            label_coming_soon={props.cta_coming_soon_label} url_coming_soon={props.cta_coming_soon_url}
+            label_closed={props.cta_closed_label} url_closed={props.cta_closed_url}
+          />
+          <p class="mt-3 text-xs md:text-sm text-paper/75" {...datesBaked} hidden={!showDates}>{visibleDates}</p>
+        </div>
       </div>
     </div>
   </div>
