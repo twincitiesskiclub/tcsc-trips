@@ -38,8 +38,8 @@ html {
   font-family: 'ArchivoVariable', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: oklch(0.25 0.06 260);
-  color: oklch(0.18 0.04 260);
+  background: theme(colors.navy);
+  color: theme(colors.ink);
 }
 
 /* 100vh is the compatibility fallback. dvh tracks retracting mobile browser
