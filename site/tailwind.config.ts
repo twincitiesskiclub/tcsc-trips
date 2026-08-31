@@ -95,7 +95,12 @@ export default {
         // handles punctuation and any glyphs outside the optimized subset.
         display: ['PolySansBulkyWide', 'ArchivoVariable', 'system-ui', 'sans-serif'],
       },
-      maxWidth: { prose: '62ch', 'prose-narrow': '56ch' },
+      maxWidth: {
+        site: '80rem',
+        statement: '44ch',
+        prose: '62ch',
+        'prose-narrow': '56ch',
+      },
     },
   },
   plugins: [forms, typography],

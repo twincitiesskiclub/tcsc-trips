@@ -35,8 +35,8 @@ const { Content } = await render(about);
   photoAlt="Around fifty TCSC members posing together behind the club banner"
   photoPosition="center 40%"
 >
-  <div class="gutter mx-auto max-w-3xl band-y-sm">
-    <div class="prose prose-lg max-w-prose text-ink [&>p:first-child]:font-semibold [&>p:first-child]:text-xl md:[&>p:first-child]:text-2xl [&>p:first-child]:leading-snug [&>p:first-child]:text-navy">
+  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
+    <div class="reading-column prose prose-lg max-w-prose text-ink [&>p:first-child]:font-semibold [&>p:first-child]:text-xl md:[&>p:first-child]:text-2xl [&>p:first-child]:leading-snug [&>p:first-child]:text-navy">
       <Content />
     </div>
     <Image
@@ -44,7 +44,7 @@ const { Content } = await render(about);
       alt="A line of members rollerskiing together at golden hour, poles mid-swing"
       widths={CARD}
       sizes="(min-width: 768px) 720px, 100vw"
-      class="mt-10 w-full h-64 md:h-80 object-cover"
+      class="reading-column mt-10 w-full h-64 md:h-80 object-cover"
       loading="lazy"
     />
   </div>

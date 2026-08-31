@@ -8,10 +8,9 @@ interface Props {
   seam?: string;
   heading?: string;
   subhead?: string;
-  contentMax?: 'wide' | 'narrow';
   rhythm?: 'sm' | 'md' | 'lg';
 }
-const { variant = 'paper', seam, heading, subhead, contentMax = 'wide', rhythm = 'md' } = Astro.props;
+const { variant = 'paper', seam, heading, subhead, rhythm = 'md' } = Astro.props;
 
 const rhythms = {
   sm: { y: 'band-y-sm', t: 'band-t-sm', b: 'band-b-sm' },
@@ -24,7 +23,7 @@ const band = rhythms[rhythm];
 // keeps the card off the viewport edges below the max width.
 const isCard = variant === 'paper-on-navy';
 const surface = variant === 'navy' ? 'bg-navy text-paper' : isCard ? `bg-navy ${band.y}` : 'bg-paper text-ink';
-const innerMax = contentMax === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
+const innerMax = 'max-w-site';
 const padding = isCard
   ? 'rounded-xl px-8 py-12 md:px-16 md:py-20'
   : `px-6 md:px-10 ${seam ? `pt-8 ${band.b}` : band.y}`;

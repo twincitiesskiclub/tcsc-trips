@@ -15,11 +15,11 @@ const entries = (await getCollection('wax_entries')).sort(
   headline="The Wax Room"
   subhead="Conditions, wax notes, race-day prep, technique. Field reports from TCSC coaches and members."
 >
-  <div class="gutter mx-auto max-w-3xl band-y-sm">
+  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
     {entries.length === 0 ? (
-      <p class="text-slate">No entries yet.</p>
+      <p class="reading-column text-slate">No entries yet.</p>
     ) : (
-      <div class="divide-hairline">
+      <div class="reading-column divide-hairline">
         {entries.map((e) => (
           <article class="py-10 first:pt-0 last:pb-0">
             <div class="text-sm text-slate">

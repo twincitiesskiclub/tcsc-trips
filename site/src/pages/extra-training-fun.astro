@@ -26,8 +26,8 @@ const photos = [
   subhead={d.intro}
   facts={[{ value: '2022', label: 'Member-led since' }]}
 >
-  <div class="gutter mx-auto max-w-3xl band-y-sm">
-    <div class="prose prose-lg max-w-prose text-ink">
+  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
+    <div class="reading-column prose prose-lg max-w-prose text-ink">
       <Content />
     </div>
   </div>
@@ -47,7 +47,7 @@ const photos = [
     </SectionBand>
   )}
   {photos.length > 0 && (
-    <section class="gutter mx-auto max-w-7xl band-y-sm" aria-label="Photos">
+    <section class="gutter mx-auto max-w-site band-y-sm" aria-label="Photos">
       <div class="grid gap-6 md:grid-cols-2">
         {photos.map((p) => (
           <figure>

@@ -95,6 +95,17 @@ html {
     padding-right: max(var(--gutter), calc(env(safe-area-inset-right, 0px) + 0.75rem));
   }
 
+  .reading-column {
+    width: 100%;
+    max-width: theme(maxWidth.prose);
+  }
+
+  @media (min-width: 48rem) {
+    .reading-column {
+      grid-column: span 8 / span 8;
+    }
+  }
+
   .type-display,
   .type-display-inner,
   .type-h2,
@@ -140,7 +151,7 @@ html {
   }
 
   .type-statement {
-    max-width: 44ch;
+    max-width: theme(maxWidth.statement);
     font-family: theme(fontFamily.sans);
     font-size: clamp(1.375rem, 1.2rem + 0.9vw, 1.875rem);
     font-weight: 500;

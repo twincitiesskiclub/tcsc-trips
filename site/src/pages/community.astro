@@ -65,11 +65,11 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   photoAlt="Members in canoes rafted together on a city lake at golden hour"
   photoPosition="center 52%"
 >
-  <div class="gutter mx-auto max-w-3xl band-y-sm">
-    <div class="prose prose-lg max-w-prose text-ink">
+  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
+    <div class="reading-column prose prose-lg max-w-prose text-ink">
       <Content />
     </div>
-    <div class="rule mt-10 grid grid-cols-2 gap-px">
+    <div class="reading-column rule mt-10 grid grid-cols-2 gap-px">
       {memberCluster.map((p) => (
         <Image
           src={p.src}

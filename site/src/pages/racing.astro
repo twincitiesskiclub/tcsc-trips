@@ -41,15 +41,15 @@ const raceStrip = [
   photoAlt="Six members in race bibs, arms around each other, in frosty woods before a start"
   photoPosition="center 30%"
 >
-  <div class="gutter mx-auto max-w-3xl band-y-sm">
-    <div class="prose prose-lg max-w-prose text-ink">
+  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
+    <div class="reading-column prose prose-lg max-w-prose text-ink">
       <Content />
     </div>
   </div>
   {races.length > 0 && (
-    <section class="gutter mx-auto max-w-3xl band-b-sm">
-      <h2 class="type-h2-longform text-navy">Races</h2>
-      <div class="mt-6 divide-hairline">
+    <section class="gutter mx-auto max-w-site band-b-sm grid md:grid-cols-12">
+      <h2 class="reading-column type-h2-longform text-navy">Races</h2>
+      <div class="reading-column mt-6 divide-hairline">
         {races.map((r) => (
           <div class="py-4 grid gap-x-6 gap-y-1 sm:grid-cols-[10rem_1fr_1fr]">
             {/* date/name/location always render (possibly empty) so the
@@ -70,7 +70,7 @@ const raceStrip = [
           </div>
         ))}
       </div>
-      <div class="rule mt-10 grid grid-cols-2 md:grid-cols-5 gap-px">
+      <div class="reading-column rule mt-10 grid grid-cols-2 md:grid-cols-5 gap-px">
         {raceStrip.map((p) => (
           <Image
             src={p.src}
