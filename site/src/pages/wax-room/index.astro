@@ -3,6 +3,7 @@
 // entry.id = filename slug (url), entry.data.slug = display title.
 import { getCollection } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
 import { longDate } from '@/lib/formatDate';
 
 const entries = (await getCollection('wax_entries')).sort(
@@ -15,7 +16,7 @@ const entries = (await getCollection('wax_entries')).sort(
   headline="The Wax Room"
   subhead="Conditions, wax notes, race-day prep, and technique. Field reports from TCSC coaches and members."
 >
-  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
+  <ProseColumn>
     {entries.length === 0 ? (
       <p class="reading-column text-slate">No entries yet. The first reports arrive with the snow.</p>
     ) : (
@@ -40,5 +41,5 @@ const entries = (await getCollection('wax_entries')).sort(
         ))}
       </div>
     )}
-  </div>
+  </ProseColumn>
 </InnerPageLayout>

@@ -315,6 +315,21 @@ html {
     font-size: 0.875rem;
   }
 
+  .prose-column[data-prose-flush='top'],
+  .prose-column[data-prose-flush='both'] {
+    padding-top: 0;
+  }
+
+  .prose-column[data-prose-flush='bottom'],
+  .prose-column[data-prose-flush='both'] {
+    padding-bottom: 0;
+  }
+
+  .prose-column-body > h2:first-child,
+  .prose-column-body > :first-child > h2:first-child {
+    margin-top: 0;
+  }
+
   .fact-stack {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));

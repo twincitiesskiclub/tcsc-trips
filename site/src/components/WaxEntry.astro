@@ -15,6 +15,7 @@
 // true 16:9 renditions server-side instead of shipping the full source
 // behind a CSS object-cover crop.
 import { Image } from 'astro:assets';
+import ProseColumn from '@/components/ProseColumn.astro';
 import { CARD } from '@/components/imageWidths';
 import { longDate } from '@/lib/formatDate';
 
@@ -50,16 +51,17 @@ const hasConditions =
     conditions_snapshot.temp_f != null ||
     conditions_snapshot.wax_used);
 ---
-<article class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
-  <div class="reading-column text-sm text-slate">{formatted}</div>
-  <h1 class="reading-column type-display-inner text-navy mt-3">{title}</h1>
+<ProseColumn as="article">
+  <Fragment slot="before">
+  <div class="text-sm text-slate">{formatted}</div>
+  <h1 class="type-display-inner text-navy mt-3">{title}</h1>
   {author_name && (
-    <div class="reading-column mt-3 text-slate text-sm">
+    <div class="mt-3 text-slate text-sm">
       By {author_name} · <span class="capitalize">{author_role}</span>
     </div>
   )}
   {hasConditions && (
-    <aside class="reading-column mt-6 bg-paper-card p-4 rounded-md text-sm flex gap-6 flex-wrap">
+    <aside class="mt-6 bg-paper-card p-4 rounded-md text-sm flex gap-6 flex-wrap">
       {conditions_snapshot.location && (
         <div>
           <div class="label-caps">Location</div>
@@ -81,7 +83,7 @@ const hasConditions =
     </aside>
   )}
   {photo && (
-    <div class="reading-column my-8 aspect-video overflow-hidden">
+    <div class="my-8 aspect-video overflow-hidden">
       <Image
         src={photo}
         alt={photo_alt}
@@ -96,8 +98,11 @@ const hasConditions =
       />
     </div>
   )}
-  {lede && <p class="reading-column type-lede mt-6 text-slate">{lede}</p>}
-  <div class="reading-column mt-6 prose max-w-prose">
-    <slot />
-  </div>
-</article>
+  {lede && <p class="type-lede mt-6 text-slate">{lede}</p>}
+  </Fragment>
+  <Fragment slot="prose">
+    <div class="mt-6">
+      <slot />
+    </div>
+  </Fragment>
+</ProseColumn>

@@ -6,6 +6,7 @@
 import { getEntry, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
 import Ledger from '@/components/Ledger.astro';
 import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
@@ -48,15 +49,14 @@ const raceStrip = [
   photoAlt="Six members in race bibs, arms around each other, in frosty woods before a start"
   photoPosition="center 30%"
 >
-  <div class="gutter mx-auto max-w-site band-y-sm grid md:grid-cols-12">
-    <div class="reading-column prose max-w-prose text-ink">
+  <ProseColumn>
+    <Fragment slot="prose">
       <Content />
-    </div>
-  </div>
-  {races.length > 0 && (
-    <section class="gutter mx-auto max-w-site band-b-sm grid md:grid-cols-12">
-      <h2 class="reading-column type-h2-longform text-navy">Races</h2>
-      <Ledger cols="three" rule="top" surface="paper" class="reading-column mt-6">
+    </Fragment>
+    {races.length > 0 && (
+      <section class="mt-12">
+      <h2 class="type-h2-longform text-navy">Races</h2>
+      <Ledger cols="three" rule="top" surface="paper" class="mt-6">
         {races.map((r) => (
           <LedgerRow
             label={r.date}
@@ -67,7 +67,7 @@ const raceStrip = [
           />
         ))}
       </Ledger>
-      <div class="reading-column rule mt-10 grid grid-cols-2 md:grid-cols-5 gap-px">
+      <div class="rule mt-10 grid grid-cols-2 md:grid-cols-5 gap-px">
         {raceStrip.map((p) => (
           <Image
             src={p.src}
@@ -80,6 +80,7 @@ const raceStrip = [
           />
         ))}
       </div>
-    </section>
-  )}
+      </section>
+    )}
+  </ProseColumn>
 </InnerPageLayout>
