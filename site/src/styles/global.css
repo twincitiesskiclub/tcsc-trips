@@ -300,9 +300,44 @@ html {
     font-weight: 700;
     letter-spacing: -0.02em;
   }
+
 }
 
 @layer components {
+  .fact-stack {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    border-top: 1px solid var(--hairline-color);
+    padding-top: 1.5rem;
+  }
+
+  .fact-stack .label-caps {
+    margin-top: 0.25rem;
+  }
+
+  @media (min-width: 48rem) {
+    .fact-stack {
+      display: block;
+      border-top: 0;
+      border-left: 1px solid var(--hairline-color);
+      padding-top: 0;
+      padding-left: 1.5rem;
+    }
+
+    .fact-stack > * + * {
+      margin-top: 1rem;
+    }
+
+    .fact-stack[data-fact-align='center'] {
+      align-self: center;
+    }
+
+    .fact-stack[data-fact-align='end'] {
+      align-self: end;
+    }
+  }
+
   .ledger {
     --ledger-rule-color: theme(colors.ink / 10%);
     --ledger-title-color: theme(colors.navy);

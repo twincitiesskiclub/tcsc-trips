@@ -1,0 +1,35 @@
+---
+import type { Fact } from '@/components/heroFacts';
+
+/** Shared organization-fact stack for the mission panel and inner mastheads. */
+interface Props {
+  facts: Fact[];
+  size?: 'lg' | 'md';
+  align?: 'center' | 'end';
+  class?: string;
+}
+
+const {
+  facts,
+  size = 'md',
+  align = 'end',
+  class: className,
+}: Props = Astro.props;
+
+if (facts.length > 3) {
+  throw new Error('FactStack accepts at most three facts');
+}
+---
+
+<ul
+  class:list={['fact-stack', className]}
+  data-fact-size={size}
+  data-fact-align={align}
+>
+  {facts.map((fact) => (
+    <li>
+      <div class="type-stat text-navy">{fact.value}</div>
+      <div class="label-caps">{fact.label}</div>
+    </li>
+  ))}
+</ul>
