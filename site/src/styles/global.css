@@ -482,6 +482,14 @@ html {
     font-weight: 600;
   }
 
+  .ledger-label.ledger-label-caption {
+    color: var(--ledger-detail-color);
+    font-size: 0.875rem;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+  }
+
   .ledger-note {
     max-width: 62ch;
     color: var(--ledger-detail-color);

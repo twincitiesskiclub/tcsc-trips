@@ -91,7 +91,7 @@ const bodyMeasure = variant === 'navy' ? 'max-w-prose-narrow' : 'max-w-prose';
           data-season-card={s.id}
           class:list={['py-8 md:py-10 md:odd:pr-10 md:even:pl-10', surface]}
         >
-          <p class:list={['text-sm', muted]}>{s.data.date_range}</p>
+          <p class:list={['type-caption tabular-nums', muted]}>{s.data.date_range}</p>
           <HeadingTag
             class:list={[
               'mt-3',

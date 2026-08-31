@@ -53,10 +53,10 @@ const hasConditions =
 ---
 <ProseColumn as="article">
   <Fragment slot="before">
-  <div class="text-sm text-slate">{formatted}</div>
+  <div class="type-caption text-slate tabular-nums">{formatted}</div>
   <h1 class="type-display-inner text-navy mt-3">{title}</h1>
   {author_name && (
-    <div class="mt-3 text-slate text-sm">
+    <div class="type-caption mt-3 text-slate">
       By {author_name} · <span class="capitalize">{author_role}</span>
     </div>
   )}
