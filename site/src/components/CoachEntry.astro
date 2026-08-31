@@ -81,7 +81,7 @@ const height = Math.round((width * 5) / 4);
           times down the page read as scaffolding, not information. */}
       <h2 class="type-h2 text-navy">{name}</h2>
       <p class="mt-2 text-mint-deep font-semibold">{role}</p>
-      <div class="mt-6 prose prose-lg max-w-prose text-ink">
+      <div class="mt-6 prose max-w-prose text-ink">
         <slot />
       </div>
       {credentials.length > 0 && (

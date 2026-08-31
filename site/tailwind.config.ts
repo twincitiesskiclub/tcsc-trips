@@ -44,6 +44,9 @@ export default {
       typography: {
         DEFAULT: {
           css: {
+            fontSize: '1.125rem',
+            fontWeight: '400',
+            lineHeight: '1.7',
             '--tw-prose-body': palette.ink,
             '--tw-prose-headings': palette.navy,
             '--tw-prose-lead': palette.slate,
