@@ -33,8 +33,8 @@ const locations = [
   {variant === 'prominent' ? (
     <>
       <div class="safe-inline-6 mx-auto max-w-7xl px-6 pt-3 pb-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-        <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90 shrink-0">Trail report</span>
-        <span class="text-[11px] text-coral ml-auto text-right min-w-0" data-updated>Loading conditions…</span>
+        <span class="seam shrink-0">Trail report</span>
+        <span class="type-caption text-coral ml-auto text-right min-w-0" data-updated>Loading conditions…</span>
       </div>
       <div class="safe-inline-6 mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
         {/* On a phone the full grid is overwhelming, so mobile leads with just
@@ -47,10 +47,10 @@ const locations = [
               ? 'py-1 col-span-2 md:col-span-1 md:pr-5'
               : 'max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5'}
           >
-            <div class="text-[10px] tracking-widest uppercase text-paper/55" data-name>{name}</div>
+            <div class="label-caps" data-name>{name}</div>
             <div class="mt-1 flex items-baseline gap-2">
               <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-temp>·</span>
-              <span class="text-[11px] text-paper/60" data-feels></span>
+              <span class="type-caption text-paper/75" data-feels></span>
             </div>
             {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
                 the post-hydration wax label can wrap without pushing the hero
@@ -75,7 +75,7 @@ const locations = [
           aria-label="Birkie fever. Press to play the song."
           class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
         >
-          <div class="text-[10px] tracking-widest uppercase text-paper/55">
+          <div class="label-caps">
             Birkie fever
             <span class="ml-1 text-mint/50 transition-colors duration-150 group-hover:text-mint" data-fever-note aria-hidden="true">♪</span>
           </div>
@@ -92,13 +92,13 @@ const locations = [
           fever line are desktop-only. */}
       {locations.map(({ id, name }) => (
         <div data-location={id} class={id === 'wirth' ? 'flex items-baseline gap-1.5' : 'max-md:hidden flex items-baseline gap-1.5'}>
-          <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
+          <span class="label-caps" data-name>{name}</span>
           <span class="text-sm font-bold tabular-nums text-paper" data-temp>·</span>
           <span data-wax>·</span>
         </div>
       ))}
       <div data-birkie class="max-md:hidden flex items-baseline gap-1.5">
-        <span class="tracking-widest uppercase text-mint">Birkie fever</span>
+        <span class="label-caps">Birkie fever</span>
         <span class="text-sm font-bold tabular-nums text-paper" data-birkie-word>·</span>
       </div>
     </div>

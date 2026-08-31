@@ -71,12 +71,15 @@ html {
 @layer base {
   :root {
     --focus-ring-color: theme(colors.navy);
+    --label-color: theme(colors.mint-deep);
   }
   .bg-navy, .bg-navy-deep, [data-photo-mosaic], [data-lightbox] {
     --focus-ring-color: theme(colors.mint);
+    --label-color: theme(colors.mint);
   }
   .bg-paper, .bg-paper-card {
     --focus-ring-color: theme(colors.navy);
+    --label-color: theme(colors.mint-deep);
   }
   :focus-visible {
     outline: 2px solid var(--focus-ring-color);
@@ -175,6 +178,7 @@ html {
 
   .label-caps,
   .seam {
+    color: var(--label-color, theme(colors.mint-deep));
     font-family: theme(fontFamily.sans);
     font-size: 0.75rem;
     font-weight: 600;

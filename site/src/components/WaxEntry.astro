@@ -62,19 +62,19 @@ const hasConditions =
     <aside class="mt-6 bg-paper-card p-4 rounded-md text-sm flex gap-6 flex-wrap">
       {conditions_snapshot.location && (
         <div>
-          <div class="text-xs text-slate uppercase tracking-wide">Location</div>
+          <div class="label-caps">Location</div>
           <div>{conditions_snapshot.location}</div>
         </div>
       )}
       {conditions_snapshot.temp_f != null && (
         <div>
-          <div class="text-xs text-slate uppercase tracking-wide">Temp</div>
+          <div class="label-caps">Temp</div>
           <div>{conditions_snapshot.temp_f}°F</div>
         </div>
       )}
       {conditions_snapshot.wax_used && (
         <div>
-          <div class="text-xs text-slate uppercase tracking-wide">Wax used</div>
+          <div class="label-caps">Wax used</div>
           <div>{conditions_snapshot.wax_used}</div>
         </div>
       )}
