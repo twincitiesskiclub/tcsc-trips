@@ -28,6 +28,7 @@ trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b
     trips.map((t) => (
       <LedgerRow
         label={t.data.dates}
+        labelRole="caption"
         title={t.data.slug}
         meta={t.data.location}
         href={t.data.signup_url}

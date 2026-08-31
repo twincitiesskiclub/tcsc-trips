@@ -75,7 +75,7 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   ]}
   photo={canoeSocial}
   photoAlt="Members in canoes rafted together on a city lake at golden hour"
-  photoPosition="center 52%"
+  photoPosition="center 46%"
 >
   <ProseColumn>
     <Fragment slot="prose">
@@ -86,6 +86,7 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
       cols={2}
       mobileCols={2}
       aspect="4/3"
+      layout="lead-three"
       class="mt-10"
     />
   </ProseColumn>
@@ -128,5 +129,8 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
       </div>
     </SectionBand>
   )}
-  <PhotoMosaic />
+  <PhotoMosaic
+    number="Photo wall"
+    heading="Photos by club members"
+  />
 </InnerPageLayout>

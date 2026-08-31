@@ -29,15 +29,15 @@ const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 ---
 <section class="bg-paper text-ink border-y hairline">
   <div class:list={['gutter mx-auto max-w-site grid gap-x-10 gap-y-6 md:grid-cols-12', rhythmClass]}>
-    <div class:list={[facts.length > 0 ? 'md:col-span-7' : 'md:col-span-9']}>
-      <h1 class="type-display-inner text-navy">{headline}</h1>
+    <div class="md:col-span-8">
+      <h1 class="type-display-inner text-balance text-navy">{headline}</h1>
       {subhead && <p class="type-lede mt-4 text-slate max-w-prose">{subhead}</p>}
     </div>
     {facts.length > 0 && (
       <FactStack
         facts={facts}
         size="md"
-        align="end"
+        align={facts.length > 1 ? 'end' : 'start'}
         class="md:col-span-3 md:col-start-10"
       />
     )}
@@ -48,7 +48,7 @@ const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
       alt={photoAlt ?? ''}
       widths={FULL_BLEED}
       sizes="100vw"
-      class="w-full h-[230px] md:h-[280px] object-cover"
+      class="aspect-[16/5] min-h-band-photo-min max-h-band-photo-max w-full object-cover"
       style={photoPosition ? `object-position: ${photoPosition}` : undefined}
       loading="eager"
       fetchpriority="high"

@@ -38,7 +38,7 @@ const tierGroups = groupSponsorsByTier(sponsors);
             widths={THUMB}
             width={Math.min(400, s.data.logo.width)}
             sizes="200px"
-            class="max-h-12 max-w-logo-sm h-auto w-auto"
+            class="max-h-10 sm:max-h-12 max-w-logo-sm h-auto w-auto"
             loading="lazy"
           />
         </Wrapper>
@@ -49,28 +49,22 @@ const tierGroups = groupSponsorsByTier(sponsors);
   tierGroups.map(({ tier, label, items }) => {
     const logoClass =
       tier === 'trailblazer'
-        ? 'max-h-24 max-w-logo-lg'
+        ? 'max-h-16 sm:max-h-24 max-w-[13.5rem] sm:max-w-logo-lg'
         : tier === 'community_partner'
-          ? 'max-h-20 max-w-logo-md'
+          ? 'max-h-16 sm:max-h-20 max-w-logo-md'
           : 'max-h-16 max-w-logo-sm';
-    const footprintClass =
-      tier === 'trailblazer'
-        ? 'h-28 sm:w-logo-lg'
-        : tier === 'community_partner'
-          ? 'h-24 sm:w-logo-md'
-          : 'h-20 sm:w-logo-sm';
 
     return (
-      <section class="mt-14 first:mt-0">
-        <Heading class="type-h2-longform text-navy">
+      <section class="mt-8 first:mt-0 border-y hairline py-8 md:grid md:grid-cols-12 md:gap-8 md:py-10">
+        <Heading class="seam text-mint-deep md:col-span-3">
           {label}
         </Heading>
-        <div class="mt-7 flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-start gap-x-12 gap-y-8">
+        <div class="mt-7 flex flex-wrap items-start justify-start gap-x-6 gap-y-8 sm:gap-x-10 md:col-span-9 md:mt-0">
           {items.map((s) => {
             const Wrapper = s.data.url ? 'a' : 'div';
             return (
               <Wrapper
-                class={`w-full ${footprintClass} inline-flex items-center justify-center sm:justify-start`}
+                class="inline-flex min-h-16 items-center justify-start sm:min-h-24"
                 {...(s.data.url ? { href: s.data.url, rel: 'sponsored' } : {})}
               >
                 <Image

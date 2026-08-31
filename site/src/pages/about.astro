@@ -14,7 +14,11 @@ import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import ProseColumn from '@/components/ProseColumn.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import SeasonsGrid from '@/components/SeasonsGrid.astro';
+import CTAStrip from '@/components/CTAStrip.astro';
+import { getRegistrationCta } from '@/components/registrationCta';
 import { metaDescription } from '@/lib/metaDescription';
+import { isSamePageAnchor } from '@/lib/samePageAnchor';
+import { stripSubhead } from '@/lib/registrationCopy';
 import { CARD } from '@/components/imageWidths';
 // CONSENT.md:78
 import teamBanner from '@/assets/images/photos/team-banner.jpg';
@@ -24,6 +28,29 @@ import rollerskiGoldenHour from '@/assets/images/photos/rollerski-golden-hour.jp
 const about = await getEntry('about', 'about');
 if (!about) throw new Error('about singleton missing (src/content/pages/about.mdoc)');
 const { Content } = await render(about);
+const cta = await getRegistrationCta();
+const soonPreferred = cta.url_coming_soon ?? cta.url_closed;
+const soonIsSelfAnchor = isSamePageAnchor(soonPreferred, Astro.url.href);
+const soonUrl = soonIsSelfAnchor ? cta.url_closed : soonPreferred;
+const soonLabel = soonIsSelfAnchor ? cta.label_closed : cta.label_coming_soon;
+const stripUrl = (cta.state === 'open'
+  ? cta.url_open
+  : cta.state === 'coming_soon'
+    ? soonUrl
+    : cta.url_closed) ?? 'https://tcsc.ski/';
+const stripLabel = cta.state === 'open'
+  ? cta.label_open
+  : cta.state === 'coming_soon'
+    ? soonLabel
+    : cta.label_closed;
+const openSubhead = stripSubhead('open', cta.windows);
+const soonSubhead = stripSubhead('coming_soon', cta.windows);
+const closedSubhead = stripSubhead('closed', cta.windows);
+const stripSubheadCurrent = {
+  open: openSubhead,
+  coming_soon: soonSubhead,
+  closed: closedSubhead,
+}[cta.state];
 ---
 <InnerPageLayout
   title="About · Twin Cities Ski Club"
@@ -36,7 +63,7 @@ const { Content } = await render(about);
   ]}
   photo={teamBanner}
   photoAlt="Around fifty TCSC members posing together behind the club banner"
-  photoPosition="center 40%"
+  photoPosition="center 58%"
 >
   <ProseColumn>
     <Fragment slot="prose">
@@ -49,11 +76,26 @@ const { Content } = await render(about);
       alt="About twenty members in matching club caps posed around a bench after a golden-hour rollerski, skis and helmets at their feet"
       widths={CARD}
       sizes="(min-width: 768px) 720px, 100vw"
-      class="mt-10 w-full h-64 md:h-80 object-cover"
+      class="w-full h-64 md:h-80 object-cover"
       loading="lazy"
     />
   </ProseColumn>
-  <SectionBand variant="paper" heading="Seasons">
-    <SeasonsGrid variant="paper" />
+  <SectionBand variant="paper" seam="Seasons" rhythm="md">
+    <SeasonsGrid variant="paper" headingLevel="h3" />
   </SectionBand>
+  <CTAStrip
+    heading="Come ski with us."
+    subhead={stripSubheadCurrent}
+    cta_label={stripLabel}
+    cta_url={stripUrl}
+    state={cta.state}
+    windows={cta.windows}
+    label_open={cta.label_open} url_open={cta.url_open}
+    label_coming_soon={soonLabel} url_coming_soon={soonUrl}
+    label_closed={cta.label_closed} url_closed={cta.url_closed}
+    open_subhead={openSubhead}
+    soon_subhead={soonSubhead}
+    closed_subhead={closedSubhead}
+    rhythm="md"
+  />
 </InnerPageLayout>

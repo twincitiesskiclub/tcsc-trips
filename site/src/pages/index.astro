@@ -16,9 +16,7 @@ import SectionBand from '@/components/SectionBand.astro';
 import SeasonsGrid from '@/components/SeasonsGrid.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import WaxRoomFeed from '@/components/WaxRoomFeed.astro';
-import SponsorWall from '@/components/SponsorWall.astro';
 import CTAStrip from '@/components/CTAStrip.astro';
-import SectionHeader from '@/components/SectionHeader.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
 import { isSamePageAnchor } from '@/lib/samePageAnchor';
@@ -102,22 +100,18 @@ const ctaStripSubhead = {
     cta_closed_label={cta.label_closed} cta_closed_url={cta.url_closed}
   />
   {h.mission_paragraph && <MissionPanel body={h.mission_paragraph} />}
-  <SectionBand variant="navy" seam="Seasons">
+  <SectionBand variant="navy" seam="Seasons" rhythm="lg" flush="both">
     <SeasonsGrid variant="navy" headingLevel="h2" />
   </SectionBand>
   <PhotoMosaic
     homeOnly={true}
-    number={null}
+    number="Community"
     heading="Beyond practice"
     more_href="/community"
     more_label="See what members do"
+    rhythm="md"
   />
   <WaxRoomFeed />
-  <SectionBand variant="paper" seam="Our sponsors">
-    <SectionHeader more_href="/sponsors" more_label="Sponsor the club">
-      <SponsorWall variant="strip" />
-    </SectionHeader>
-  </SectionBand>
   <CTAStrip
     id="registration"
     rhythm="lg"

@@ -172,18 +172,19 @@ test('keeps completed impact, recognition, future priorities, and contact in ord
   assert.ok(disclosure < contactHeading, 'disclosure must precede the contact section');
 });
 
-test('renders the impact photo before its copy in the mobile DOM flow', () => {
+test('renders the impact photo before its detailed copy in the mobile DOM flow', () => {
   const photoAlt =
     'alt="A large group of TCSC members posing with roller skis and poles after a summer training session"';
-  const impactHeading = 'What sponsor money paid for';
+  const impactIntro =
+    'Everything here is shared by racers and non-racers alike.';
   const photoPosition = sponsorsHtml.indexOf(photoAlt);
-  const headingPosition = sponsorsHtml.indexOf(impactHeading);
+  const introPosition = sponsorsHtml.indexOf(impactIntro);
 
   assert.notEqual(photoPosition, -1, 'missing impact photo');
-  assert.notEqual(headingPosition, -1, 'missing impact heading');
-  assert.ok(photoPosition < headingPosition, 'impact photo must precede impact copy in DOM order');
+  assert.notEqual(introPosition, -1, 'missing impact intro');
+  assert.ok(photoPosition < introPosition, 'impact photo must precede detailed impact copy in DOM order');
   assert.match(openingTagBefore(sponsorsHtml, photoAlt, 'figure'), /\bmd:order-2\b/);
-  assert.match(openingTagBefore(sponsorsHtml, impactHeading, 'div'), /\bmd:order-1\b/);
+  assert.match(openingTagBefore(sponsorsHtml, impactIntro, 'div'), /\bmd:order-1\b/);
 });
 
 test('keeps the sponsor disclosure at the mobile body-text minimum', () => {

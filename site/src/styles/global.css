@@ -11,6 +11,23 @@
   color-scheme: light;
   --gutter: clamp(1.5rem, 4vw, 2.5rem);
   --color-paper-muted: theme(colors.paper / 75%);
+  /* Desktop home chrome: 77px nav plus the prominent trail report. HeroHome
+     consumes the measured sum so its bottom edge is the viewport fold. */
+  --nav-h: 4.8125rem;
+  --conditions-prominent-h: 11rem;
+  --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
+}
+
+@media (min-width: 64rem) {
+  body:has([data-live-conditions][data-filled='true']:not([data-updated-at])) {
+    --conditions-prominent-h: 5.84375rem;
+    --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
+  }
+
+  body:has([data-live-conditions][data-filled='true'] [data-dryland-label]) {
+    --conditions-prominent-h: 3.375rem;
+    --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
+  }
 }
 
 /* Body: Archivo Variable (full character set, all weights).
@@ -437,6 +454,11 @@ html {
       align-self: center;
     }
 
+    .fact-stack[data-fact-align='start'] {
+      align-self: start;
+      padding-top: 0.75rem;
+    }
+
     .fact-stack[data-fact-align='end'] {
       align-self: end;
     }
@@ -477,6 +499,14 @@ html {
     font-weight: 600;
   }
 
+  .ledger-label.ledger-label-caption {
+    color: var(--ledger-detail-color);
+    font-size: 0.875rem;
+    font-weight: 400;
+    font-variant-numeric: tabular-nums;
+    line-height: 1.45;
+  }
+
   .ledger-note {
     max-width: 62ch;
     color: var(--ledger-detail-color);
@@ -503,6 +533,10 @@ html {
     color: inherit;
     font-size: inherit;
     font-weight: inherit;
+  }
+
+  .ledger[data-ledger-cols='three'] > .ledger-row-header {
+    grid-template-columns: 6rem minmax(0, 1fr) auto;
   }
 
   .wax-entry-row .ledger-label {

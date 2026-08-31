@@ -17,10 +17,10 @@ if (!page) throw new Error('dry_tri singleton missing (src/content/pages/dry_tri
 const { Content } = await render(page);
 const d = page.data;
 const legs = [
-  { src: d.roll_photo, alt: d.roll_photo_alt ?? '', loading: 'eager' as const },
-  { src: d.ride_photo, alt: d.ride_photo_alt ?? '', loading: 'eager' as const },
-  { src: d.run_photo, alt: d.run_photo_alt ?? '', loading: 'eager' as const },
-].filter((leg): leg is { src: ImageMetadata; alt: string; loading: 'eager' } => Boolean(leg.src));
+  { caption: 'Roll', src: d.roll_photo, alt: d.roll_photo_alt ?? '', attention: true as const, loading: 'eager' as const },
+  { caption: 'Ride', src: d.ride_photo, alt: d.ride_photo_alt ?? '', attention: true as const, loading: 'eager' as const },
+  { caption: 'Run', src: d.run_photo, alt: d.run_photo_alt ?? '', attention: true as const, loading: 'eager' as const },
+].filter((leg): leg is typeof leg & { src: ImageMetadata } => Boolean(leg.src));
 ---
 <InnerPageLayout
   title="Dry Tri · Twin Cities Ski Club"
@@ -35,11 +35,19 @@ const legs = [
 >
   {legs.length === 3 && (
     <section class="gutter mx-auto max-w-site band-t-sm" aria-label="The three legs">
-      <PhotoStrip photos={legs} cols={3} aspect="4/5" />
+      <PhotoStrip
+        photos={legs}
+        cols={3}
+        aspect="4/5"
+        mobileAspect="3/4"
+        captions
+        captionRole="label"
+        class="max-md:-mx-[var(--gutter)]"
+      />
     </section>
   )}
   {d.courses.length > 0 && (
-    <SectionBand variant="paper" seam="The course">
+    <SectionBand variant="paper" seam="The course" flush="bottom">
       <Ledger cols="three" surface="paper">
         {d.courses.map((c) => (
           <LedgerRow label={c.name} note={c.legs} meta={c.start} />

@@ -7,10 +7,20 @@ interface Props {
   note?: string;
   href?: string;
   header?: boolean;
+  labelRole?: 'default' | 'caption';
   class?: string;
 }
 
-const { label, title, meta, note, href, header = false, class: className } = Astro.props;
+const {
+  label,
+  title,
+  meta,
+  note,
+  href,
+  header = false,
+  labelRole = 'default',
+  class: className,
+} = Astro.props;
 const Row = href ? 'a' : 'div';
 const hasNoteSlot = Astro.slots.has('note');
 const linkTarget = title ? 'title' : 'label';
@@ -23,7 +33,7 @@ const linkTarget = title ? 'title' : 'label';
   data-has-label={String(Boolean(label))}
   data-link-target={href ? linkTarget : undefined}
 >
-  {label && <div class="ledger-label">{label}</div>}
+  {label && <div class:list={['ledger-label', labelRole === 'caption' && 'ledger-label-caption']}>{label}</div>}
   {(title || note || hasNoteSlot) && (
     <div class="ledger-detail">
       {title && <div class="ledger-title">{title}</div>}

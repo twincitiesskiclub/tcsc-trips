@@ -71,18 +71,77 @@ const sparse = photos.length < 12;
 // cleanly.
 const sizeClasses = [
   '',
-  'md:col-span-2 md:aspect-auto',
+  'max-md:col-span-2 max-md:aspect-[3/2] md:col-span-2 md:aspect-auto',
   '',
   'md:row-span-2 md:col-span-2',
   '',
   '',
-  'md:col-span-2 md:aspect-auto',
+  'max-md:col-span-2 max-md:aspect-[3/2] md:col-span-2 md:aspect-auto',
   '',
 ];
 
+// Wide grid slots belong to landscape sources. When the next source is a
+// portrait, trade it with the next landscape source that was headed for a
+// square slot. This keeps the collection order recognizable while ensuring
+// the dense layout never turns a portrait into a faceless panorama.
+const isSpanningSlot = (index: number) =>
+  sizeClasses[index % sizeClasses.length].includes('md:col-span-2');
+const arrangedPhotos = [...photos];
+if (!sparse) {
+  for (let i = 0; i < arrangedPhotos.length; i += 1) {
+    const image = arrangedPhotos[i].data.image;
+    if (!isSpanningSlot(i) || image.width >= image.height) continue;
+    const replacement = arrangedPhotos.findIndex((candidate, candidateIndex) =>
+      candidateIndex > i &&
+      !isSpanningSlot(candidateIndex) &&
+      candidate.data.image.width >= candidate.data.image.height,
+    );
+    if (replacement !== -1) {
+      [arrangedPhotos[i], arrangedPhotos[replacement]] = [arrangedPhotos[replacement], arrangedPhotos[i]];
+    }
+  }
+}
+
+// A two-column mobile wall needs an even number of grid units. If the
+// collection's scheduled wide tiles leave one unit open, let the last
+// landscape source fill that row. Portrait sources stay square so the tail
+// never solves its shape by cropping away a face.
+const scheduledMobileWideCount = sparse
+  ? 0
+  : arrangedPhotos.filter((_, index) =>
+      sizeClasses[index % sizeClasses.length].includes('max-md:col-span-2'),
+    ).length;
+const mobileTailFillIndex =
+  !sparse && (arrangedPhotos.length + scheduledMobileWideCount) % 2 !== 0
+    ? arrangedPhotos.findLastIndex(
+        (photo, index) =>
+          photo.data.image.width >= photo.data.image.height &&
+          !sizeClasses[index % sizeClasses.length].includes('max-md:col-span-2'),
+      )
+    : -1;
+
+// Composed sparse fallback: under 12 photos, the first three form one
+// deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
+// stacked side tiles) and the rest run as a uniform grid, so the degraded
+// state reads as composed, not abandoned. Keyed only on photo count (never
+// on homeOnly), so every consumer inherits it.
+const composed = sparse && photos.length >= 3;
+
 const tiles = await Promise.all(
-  photos.map(async (photo, i) => {
-    const span = sparse ? '' : sizeClasses[i % sizeClasses.length];
+  arrangedPhotos.map(async (photo, i) => {
+    const proposedSpan = sparse ? '' : sizeClasses[i % sizeClasses.length];
+    const portrait = photo.data.image.height > photo.data.image.width;
+    // The fallback guards collections with too few landscape sources. Dense
+    // grid flow closes the vacated span rather than forcing a portrait wide.
+    const span = portrait && proposedSpan.includes('md:col-span-2') ? '' : proposedSpan;
+    const squareCrop = (!sparse && !span.includes('md:aspect-auto')) || (composed && i >= 3);
+    // Sharp's attention crop locks onto the runner's high-contrast torso and
+    // removes her face. Keep the full portrait rendition for this known miss,
+    // then apply the same upper-quarter browser focal point used by portrait
+    // sources in landscape slots.
+    const focalFallback = squareCrop && photo.id === 'dry-tri-runner';
+    const fillsMobileTail = i === mobileTailFillIndex;
+    const mobileWide = span.includes('max-md:col-span-2') || fillsMobileTail;
     // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
     // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
     // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
@@ -91,8 +150,12 @@ const tiles = await Promise.all(
       ? i === 0
         ? '(min-width: 768px) 66vw, 100vw'
         : '(min-width: 768px) 34vw, 50vw'
-      : span.includes('md:col-span-2')
-        ? '50vw'
+      : mobileWide
+        ? span.includes('md:col-span-2')
+          ? '(min-width: 768px) 50vw, 100vw'
+          : '(min-width: 768px) 25vw, 100vw'
+        : span.includes('md:col-span-2')
+          ? '50vw'
         : '(min-width: 768px) 25vw, 50vw';
     // Explicit width clamps the FALLBACK rendition: without it, Astro also
     // generates the plain `src` at full source resolution (a 4000px+ webp
@@ -113,23 +176,20 @@ const tiles = await Promise.all(
     return {
       photo,
       span,
+      portrait,
+      squareCrop,
+      focalFallback,
+      fillsMobileTail,
       sizesAttr,
       fullSrc: largest?.url ?? full.src,
       fullSrcset: full.srcSet.attribute,
     };
   }),
 );
-
-// Composed sparse fallback: under 12 photos, the first three form one
-// deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
-// stacked side tiles) and the rest run as a uniform grid, so the degraded
-// state reads as composed, not abandoned. Keyed only on photo count (never
-// on homeOnly), so every consumer inherits it.
-const composed = sparse && photos.length >= 3;
 ---
 {photos.length > 0 && (
-  <section class:list={['bg-navy', band.b]} data-photo-mosaic>
-    <BandContainer class={band.t}>
+  <section class:list={['bg-navy', heading && band.b]} data-photo-mosaic>
+    <BandContainer class={heading ? band.t : undefined}>
       <Seam
         label={number}
         surface="navy"
@@ -155,7 +215,7 @@ const composed = sparse && photos.length >= 3;
           ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
           : 'rule grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
     >
-      {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
+      {tiles.map(({ photo, span, portrait, squareCrop, focalFallback, fillsMobileTail, sizesAttr, fullSrc, fullSrcset }, i) => (
         <button
           type="button"
           class:list={[
@@ -163,9 +223,10 @@ const composed = sparse && photos.length >= 3;
             composed && i === 0
               ? 'col-span-2 md:row-span-2 aspect-video'
               : composed && i < 3
-                ? 'aspect-auto max-md:aspect-square'
+                ? 'aspect-auto max-md:aspect-[4/3]'
                 : 'aspect-square',
             !composed && span,
+            !composed && fillsMobileTail && 'max-md:col-span-2 max-md:aspect-[3/2]',
           ]}
           data-index={i}
           data-caption={photo.data.caption ?? ''}
@@ -179,9 +240,19 @@ const composed = sparse && photos.length >= 3;
             src={photo.data.image}
             alt={photo.data.alt_text}
             width={Math.min(composed && i === 0 ? 1920 : 1600, photo.data.image.width)}
+            height={squareCrop && !focalFallback ? Math.min(1600, photo.data.image.width) : undefined}
+            fit={squareCrop && !focalFallback ? 'cover' : undefined}
+            position={squareCrop && !focalFallback ? 'attention' : undefined}
             widths={MOSAIC}
             sizes={sizesAttr}
-            class="absolute inset-0 w-full h-full object-cover"
+            class:list={[
+              'absolute inset-0 h-full w-full object-cover',
+              composed && i === 0
+                ? 'object-[center_65%]'
+                : portrait && (!squareCrop || focalFallback)
+                  ? 'object-[center_25%]'
+                  : 'object-center',
+            ]}
             loading="lazy"
             decoding="async"
           />
