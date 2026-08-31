@@ -38,7 +38,7 @@ const tierGroups = groupSponsorsByTier(sponsors);
             widths={THUMB}
             width={Math.min(400, s.data.logo.width)}
             sizes="200px"
-            class="max-h-12 max-w-[200px] h-auto w-auto"
+            class="max-h-12 max-w-logo-sm h-auto w-auto"
             loading="lazy"
           />
         </Wrapper>
@@ -49,20 +49,20 @@ const tierGroups = groupSponsorsByTier(sponsors);
   tierGroups.map(({ tier, label, items }) => {
     const logoClass =
       tier === 'trailblazer'
-        ? 'max-h-24 max-w-[280px]'
+        ? 'max-h-24 max-w-logo-lg'
         : tier === 'community_partner'
-          ? 'max-h-20 max-w-[240px]'
-          : 'max-h-16 max-w-[200px]';
+          ? 'max-h-20 max-w-logo-md'
+          : 'max-h-16 max-w-logo-sm';
     const footprintClass =
       tier === 'trailblazer'
-        ? 'h-28 sm:w-[320px]'
+        ? 'h-28 sm:w-logo-lg'
         : tier === 'community_partner'
-          ? 'h-24 sm:w-[280px]'
-          : 'h-20 sm:w-[240px]';
+          ? 'h-24 sm:w-logo-md'
+          : 'h-20 sm:w-logo-sm';
 
     return (
       <section class="mt-14 first:mt-0">
-        <Heading class="font-display font-semibold text-2xl md:text-3xl text-navy">
+        <Heading class="type-h2-longform text-navy">
           {label}
         </Heading>
         <div class="mt-7 flex flex-col sm:flex-row sm:flex-wrap items-center sm:items-start gap-x-12 gap-y-8">

@@ -7,8 +7,8 @@ const links = await getNavLinks();
 const cta = await getRegistrationCta();
 const pathname = Astro.url.pathname;
 ---
-<header class="bg-navy text-paper border-b border-mint/10">
-  <div class="nav-inner safe-inline-6 mx-auto max-w-7xl px-6 py-4 flex items-center justify-between gap-6">
+<header class="bg-navy text-paper border-b hairline-soft">
+  <div class="nav-inner gutter mx-auto max-w-site py-4 flex items-center justify-between gap-6">
     <a href="/" class="flex min-h-11 items-center gap-3.5" aria-label="Twin Cities Ski Club home">
       <svg width="145" height="22" viewBox="0 0 358.78 54.47" aria-hidden="true">
         <!-- Heritage club logo (from app/static/images/tcsc-logo.svg), recolored
@@ -35,7 +35,7 @@ const pathname = Astro.url.pathname;
       </svg>
     </a>
 
-    <nav aria-label="Primary" class="hidden lg:flex items-center gap-7 text-sm text-paper/85">
+    <nav aria-label="Primary" class="hidden lg:flex items-center gap-7 text-sm text-paper">
       {links.map((l) => {
         const active = isActiveLink(l.href, pathname);
         return (
@@ -44,7 +44,7 @@ const pathname = Astro.url.pathname;
             aria-current={active ? 'page' : undefined}
             class:list={[
               'transition-colors duration-150 hover:text-mint',
-              active && 'text-mint underline underline-offset-[10px] decoration-mint/50',
+              active && 'text-mint underline underline-offset-8 decoration-mint/50',
             ]}
           >{l.label}</a>
         );

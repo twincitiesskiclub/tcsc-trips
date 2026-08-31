@@ -21,21 +21,23 @@ interface Props {
   photoAlt?: string;
   /** CSS object-position for the band crop, e.g. "center 40%". */
   photoPosition?: string;
+  rhythm?: 'sm' | 'md' | 'lg';
 }
-const { headline, subhead, facts = [], photo, photoAlt, photoPosition } = Astro.props;
+const { headline, subhead, facts = [], photo, photoAlt, photoPosition, rhythm = 'sm' } = Astro.props;
+const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 ---
-<section class="bg-paper text-ink border-y border-ink/15">
-  <div class="safe-inline-6 mx-auto max-w-7xl px-6 py-10 md:py-14 grid gap-x-10 gap-y-6 md:grid-cols-12">
+<section class="bg-paper text-ink border-y hairline">
+  <div class:list={['gutter mx-auto max-w-site grid gap-x-10 gap-y-6 md:grid-cols-12', rhythmClass]}>
     <div class:list={[facts.length > 0 ? 'md:col-span-7' : 'md:col-span-9']}>
-      <h1 class="font-display font-semibold text-4xl md:text-6xl leading-[1.05] text-navy">{headline}</h1>
-      {subhead && <p class="mt-4 text-lg md:text-xl text-slate max-w-prose">{subhead}</p>}
+      <h1 class="type-display-inner text-navy">{headline}</h1>
+      {subhead && <p class="type-lede mt-4 text-slate max-w-prose">{subhead}</p>}
     </div>
     {facts.length > 0 && (
-      <ul class="md:col-span-3 md:col-start-10 self-end md:border-l md:border-ink/15 md:pl-6 space-y-3">
+      <ul class="md:col-span-3 md:col-start-10 self-end md:border-l hairline md:pl-6 space-y-3">
         {facts.map((f) => (
           <li>
-            <div class="font-display font-semibold text-navy text-base md:text-lg leading-tight">{f.value}</div>
-            <div class="text-[11px] tracking-[0.14em] uppercase text-mint-deep mt-0.5">{f.label}</div>
+            <div class="type-stat text-navy">{f.value}</div>
+            <div class="label-caps mt-0.5">{f.label}</div>
           </li>
         ))}
       </ul>

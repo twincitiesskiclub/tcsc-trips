@@ -14,24 +14,35 @@
 import { getCollection } from 'astro:content';
 import { shortDate } from '@/lib/formatDate';
 
+interface Props {
+  rhythm?: 'sm' | 'md' | 'lg';
+}
+const { rhythm = 'md' } = Astro.props;
+const rhythms = {
+  sm: { t: 'band-t-sm', b: 'band-b-sm' },
+  md: { t: 'band-t', b: 'band-b' },
+  lg: { t: 'band-t-lg', b: 'band-b-lg' },
+};
+const band = rhythms[rhythm];
+
 const entries = (await getCollection('wax_entries'))
   .sort((a, b) => +b.data.date - +a.data.date || a.id.localeCompare(b.id))
   .slice(0, 3);
 ---
 {entries.length > 0 && (
 <section class="bg-paper text-ink">
-  <div class="safe-inline-6-10 mx-auto max-w-7xl px-6 md:px-10">
+  <div class="gutter mx-auto max-w-site">
     {/* Seam: hairline running to the right edge (one device family
         site-wide); no label text, the h2 below names the section. */}
-    <div class="pt-12 md:pt-16 flex items-center gap-4">
-      <span class="h-px flex-1 bg-ink/15" aria-hidden="true"></span>
+    <div class:list={['flex items-center gap-4', band.t]}>
+      <span class="rule h-px flex-1" aria-hidden="true"></span>
     </div>
-    <div class="pt-8 pb-16 md:pb-20">
+    <div class:list={['pt-8', band.b]}>
       <div class="flex items-end justify-between mb-8">
-        <h2 class="font-display font-semibold text-3xl md:text-4xl text-navy leading-[1.05]">From the Wax Room</h2>
+        <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
         <a href="/wax-room" class="shrink-0 text-mint-deep text-sm hover:text-navy">All entries</a>
       </div>
-      <ul class="border-y border-ink/10 divide-y divide-ink/10">
+      <ul class="border-y hairline-soft divide-hairline">
         {entries.map((e) => (
           <li>
             <a
@@ -41,7 +52,7 @@ const entries = (await getCollection('wax_entries'))
               <span class="text-xs text-slate tabular-nums">
                 {shortDate(e.data.date)}{e.data.author_name ? ` · ${e.data.author_name}` : ''}
               </span>
-              <span class="font-display font-semibold text-lg text-navy leading-tight transition-colors duration-150 group-hover:text-mint-deep">
+              <span class="font-semibold text-lg text-navy transition-colors duration-150 group-hover:text-mint-deep">
                 {e.data.slug}
                 {e.data.lede && (
                   <span class="ml-3 font-sans text-sm font-normal text-slate">{e.data.lede}</span>

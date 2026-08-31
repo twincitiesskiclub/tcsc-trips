@@ -13,19 +13,19 @@ trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b
 const COLS = 'grid items-baseline gap-x-6 gap-y-1 md:grid-cols-[8rem_1fr_minmax(8rem,auto)]';
 ---
 <div>
-  <div class:list={[COLS, 'text-[11px] tracking-wider uppercase text-slate pb-2 border-b border-ink/15 max-md:hidden']}>
+  <div class:list={[COLS, 'label-caps pb-2 border-b hairline max-md:hidden']}>
     <span>Dates</span>
     <span>Trip</span>
     <span>Where</span>
   </div>
   {trips.length === 0 ? (
-    <p class="py-6 border-b border-ink/10 text-slate">
+    <p class="py-6 border-b hairline-soft text-slate">
       No trips posted. New trips are announced here each fall;{' '}
       <a href="mailto:contact@twincitiesskiclub.org" class="text-mint-deep underline">get in touch</a>{' '}
       with questions in the meantime.
     </p>
   ) : (
-    <ul class="divide-y divide-ink/10 border-b border-ink/10">
+    <ul class="divide-hairline border-b hairline-soft">
       {trips.map((t) => {
         const Row = t.data.signup_url ? 'a' : 'div';
         return (
@@ -39,7 +39,7 @@ const COLS = 'grid items-baseline gap-x-6 gap-y-1 md:grid-cols-[8rem_1fr_minmax(
               ]}
             >
               <span class="text-sm text-slate tabular-nums">{t.data.dates}</span>
-              <span class="font-display text-lg md:text-xl font-semibold text-navy transition-colors duration-150 group-hover:text-mint-deep">
+              <span class="text-lg md:text-xl font-semibold text-navy transition-colors duration-150 group-hover:text-mint-deep">
                 {t.data.slug}
               </span>
               <span class="text-sm text-slate">{t.data.location}</span>

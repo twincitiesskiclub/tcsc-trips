@@ -32,8 +32,8 @@ const legs = [
   ]}
 >
   {legs.length === 3 && (
-    <section class="safe-inline-6-10 mx-auto max-w-7xl px-6 md:px-10 pt-14 md:pt-20" aria-label="The three legs">
-      <div class="grid grid-cols-3 gap-px bg-ink/10 border border-ink/10">
+    <section class="gutter mx-auto max-w-site band-t-sm" aria-label="The three legs">
+      <div class="rule grid grid-cols-3 gap-px border hairline">
         {legs.map((l) => (
           <figure class="bg-paper">
             <div class="relative aspect-[4/5] overflow-hidden">
@@ -58,23 +58,23 @@ const legs = [
   )}
   {d.courses.length > 0 && (
     <SectionBand variant="paper" seam="The course">
-      <div class="divide-y divide-ink/10 border-t border-ink/10">
+      <div class="divide-hairline border-t hairline-soft">
         {d.courses.map((c) => (
           <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[10rem_1fr_8rem]">
             <div class="font-semibold text-navy">{c.name}</div>
-            <div class="text-ink/80">{c.legs}</div>
-            {c.start && <div class="text-mint-deep text-sm tracking-wider uppercase pt-0.5 sm:text-right">{c.start}</div>}
+            <div class="type-body text-slate">{c.legs}</div>
+            {c.start && <div class="type-caption text-slate pt-0.5 sm:text-right">{c.start}</div>}
           </div>
         ))}
       </div>
       <p class="mt-4 text-sm text-slate">The 2025 format. Each leg starts and ends at the transition zone in the Parley Lake lot.</p>
     </SectionBand>
   )}
-  <div class="safe-inline-6 mx-auto max-w-3xl px-6 pb-12">
-    <div class="prose prose-lg max-w-prose text-ink">
+  <div class="gutter mx-auto max-w-site band-b-sm grid md:grid-cols-12">
+    <div class="reading-column prose max-w-prose text-ink">
       <Content />
     </div>
-    <div class="mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm">
+    <div class="reading-column mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm">
       {d.register_url && (
         <a
           href={d.register_url}

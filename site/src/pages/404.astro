@@ -35,11 +35,11 @@ const destinations = [
   photoAlt="A freshly groomed ski trail running through a forest coated in snow"
   photoPosition="center 72%"
 >
-  <section class="safe-inline-6 mx-auto max-w-7xl px-6 py-16 md:py-24">
+  <section class="gutter mx-auto max-w-site band-y">
     <div class="grid gap-14 md:grid-cols-12 md:gap-10">
       <div class="md:col-span-6 lg:col-span-5">
-        <p class="text-sm font-semibold tracking-[0.08em] text-mint-deep">404 · Page not found</p>
-        <h2 class="mt-4 max-w-lg font-display text-3xl font-semibold leading-tight text-navy md:text-5xl">
+        <p class="label-caps">404 · Page not found</p>
+        <h2 class="mt-4 type-h2 text-navy">
           Choose another page.
         </h2>
         <p class="mt-5 max-w-prose text-lg leading-relaxed text-slate">
@@ -53,7 +53,7 @@ const destinations = [
 
       <nav aria-label="Helpful destinations" class="md:col-span-5 md:col-start-8">
         <h2 class="text-sm font-semibold text-navy">Helpful destinations</h2>
-        <ul class="mt-3 border-y border-ink/15 divide-y divide-ink/15">
+        <ul class="mt-3 border-y hairline divide-hairline">
           {destinations.map((destination) => (
             <li>
               <a
@@ -63,7 +63,7 @@ const destinations = [
                 <span class="font-semibold text-navy underline decoration-ink/25 underline-offset-4 transition-colors group-hover:text-mint-deep group-hover:decoration-mint-deep">
                   {destination.label}
                 </span>
-                <span class="mt-1 block text-sm leading-relaxed text-slate">{destination.detail}</span>
+                <span class="type-body mt-1 block text-slate">{destination.detail}</span>
               </a>
             </li>
           ))}

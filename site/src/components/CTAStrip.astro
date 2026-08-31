@@ -20,6 +20,7 @@ interface Props {
   open_subhead?: string;
   soon_subhead?: string;
   closed_subhead?: string;
+  rhythm?: 'sm' | 'md' | 'lg';
 }
 const {
   heading, subhead, cta_label, cta_url, id,
@@ -28,7 +29,9 @@ const {
   label_coming_soon, url_coming_soon,
   label_closed, url_closed,
   open_subhead, soon_subhead, closed_subhead,
+  rhythm = 'md',
 } = Astro.props;
+const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 
 // Same attribute vocabulary as CtaForState.astro's `baked` object -- one
 // dispatcher (registrationFlip.ts) reads both, so it must not learn a second
@@ -56,10 +59,10 @@ const subheadBaked = state ? {
 } : {};
 ---
 <section id={id} class="bg-navy border-t-[3px] border-coral text-paper">
-  <div class="safe-inline-6 mx-auto max-w-7xl px-6 py-16 md:py-20 flex flex-col md:flex-row md:items-center md:justify-between gap-6">
+  <div class:list={['gutter mx-auto max-w-site flex flex-col md:flex-row md:items-center md:justify-between gap-6', rhythmClass]}>
     <div>
-      <h2 class="font-display font-semibold text-3xl md:text-4xl text-mint leading-tight">{heading}</h2>
-      {subhead && <p class="mt-2 text-paper/75 text-sm md:text-base max-w-xl text-balance" {...subheadBaked}>{subhead}</p>}
+      <h2 class="type-h2 text-mint">{heading}</h2>
+      {subhead && <p class="type-body mt-2 text-paper/75 max-w-prose-narrow" {...subheadBaked}>{subhead}</p>}
     </div>
     <a
       href={cta_url}

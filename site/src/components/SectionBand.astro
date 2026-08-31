@@ -1,46 +1,39 @@
 ---
 interface Props {
-  variant?: 'navy' | 'paper' | 'paper-on-navy';
+  variant?: 'navy' | 'paper';
   /** Section seam: the section name in the Trail Report label voice (small
       tracked caps) with a hairline running from it to the right edge, on one
       baseline. One device family across the site; physical chapter breaks
       instead of padding gaps wearing badges. */
   seam?: string;
   heading?: string;
-  subhead?: string;
-  contentMax?: 'wide' | 'narrow';
+  rhythm?: 'sm' | 'md' | 'lg';
 }
-const { variant = 'paper', seam, heading, subhead, contentMax = 'wide' } = Astro.props;
+const { variant = 'paper', seam, heading, rhythm = 'md' } = Astro.props;
 
-// paper-on-navy: navy band with a rounded paper card inside; the px-6 gutter
-// keeps the card off the viewport edges below the max width.
-const isCard = variant === 'paper-on-navy';
-const surface = variant === 'navy' ? 'bg-navy text-paper' : isCard ? 'bg-navy py-20' : 'bg-paper text-ink';
-const innerMax = contentMax === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
-const padding = isCard
-  ? 'rounded-xl px-8 py-12 md:px-16 md:py-20'
-  : 'px-6 md:px-10 pb-20 md:pb-28 ' + (seam ? 'pt-8 md:pt-10' : 'pt-20 md:pt-28');
-const seamText = variant === 'navy' ? 'text-mint/90' : 'text-mint-deep';
-const seamRule = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
+const rhythms = {
+  sm: { y: 'band-y-sm', t: 'band-t-sm', b: 'band-b-sm' },
+  md: { y: 'band-y', t: 'band-t', b: 'band-b' },
+  lg: { y: 'band-y-lg', t: 'band-t-lg', b: 'band-b-lg' },
+};
+const band = rhythms[rhythm];
+
+const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
+const padding = `gutter ${seam ? `pt-8 ${band.b}` : band.y}`;
 ---
 <section class={surface}>
-  {seam && !isCard && (
-    <div class={'safe-inline-6-10 mx-auto ' + innerMax + ' px-6 md:px-10 pt-12 md:pt-16'}>
+  {seam && (
+    <div class={'gutter mx-auto max-w-site ' + band.t}>
       <div class="flex items-center gap-4">
-        <span class={'text-[11px] tracking-[0.18em] uppercase font-semibold ' + seamText}>{seam}</span>
-        <span class={'h-px flex-1 ' + seamRule} aria-hidden="true"></span>
+        <span class="seam">{seam}</span>
+        <span class="rule h-px flex-1" aria-hidden="true"></span>
       </div>
     </div>
   )}
-  <div class={isCard ? 'safe-inline-6 px-6' : undefined}>
-    <div class={'mx-auto ' + innerMax + ' ' + (isCard ? 'bg-paper text-ink ' : '') + padding}>
-      {heading && (
-        <h2 class="font-display font-semibold text-4xl md:text-5xl leading-[1.05] mb-4">{heading}</h2>
-      )}
-      {subhead && (
-        <p class="text-lg leading-relaxed max-w-prose mb-8 opacity-90">{subhead}</p>
-      )}
-      <slot />
-    </div>
+  <div class={'mx-auto max-w-site ' + padding}>
+    {heading && (
+      <h2 class="type-h2 mb-4">{heading}</h2>
+    )}
+    <slot />
   </div>
 </section>

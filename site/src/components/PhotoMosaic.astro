@@ -31,8 +31,15 @@ interface Props {
   heading?: string;
   more_href?: string;
   more_label?: string;
+  rhythm?: 'sm' | 'md' | 'lg';
 }
-const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label } = Astro.props;
+const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label, rhythm = 'md' } = Astro.props;
+const rhythms = {
+  sm: { t: 'band-t-sm', b: 'band-b-sm' },
+  md: { t: 'band-t', b: 'band-b' },
+  lg: { t: 'band-t-lg', b: 'band-b-lg' },
+};
+const band = rhythms[rhythm];
 
 const all = await getCollection(
   'photos',
@@ -119,19 +126,19 @@ const tiles = await Promise.all(
 const composed = sparse && photos.length >= 3;
 ---
 {photos.length > 0 && (
-  <section class:list={['bg-navy pb-20', !heading && 'pt-20']} data-photo-mosaic>
+  <section class:list={['bg-navy', band.b, !heading && band.t]} data-photo-mosaic>
     {heading && (
-      <div class="safe-inline-6-10 max-w-7xl mx-auto px-6 md:px-10 pt-12 md:pt-16">
+      <div class:list={['gutter max-w-site mx-auto', band.t]}>
         {/* Seam: section name in the Trail Report label voice, hairline
             running to the right edge (one device family site-wide). */}
         <div class="flex items-center gap-4">
-          {number && <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90">{number}</span>}
-          <span class="h-px flex-1 bg-mint/20" aria-hidden="true"></span>
+          {number && <span class="seam">{number}</span>}
+          <span class="rule h-px flex-1" aria-hidden="true"></span>
         </div>
         <div class="mb-8 mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-          <h2 class="font-display font-semibold text-3xl md:text-5xl text-paper leading-[1.05]">{heading}</h2>
+          <h2 class="type-h2 text-paper">{heading}</h2>
           {more_href && more_label && (
-            <a href={more_href} class="shrink-0 ml-auto text-mint/80 text-sm hover:text-mint">{more_label}</a>
+            <a href={more_href} class="shrink-0 ml-auto text-mint text-sm hover:text-mint">{more_label}</a>
           )}
         </div>
       </div>
@@ -141,16 +148,16 @@ const composed = sparse && photos.length >= 3;
         filtering planned in the spec. */}
     <div
       class={composed
-        ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
+        ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
         : sparse
-          ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
-          : 'grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
+          ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
+          : 'rule grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
     >
       {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
         <button
           type="button"
           class:list={[
-            'group relative overflow-hidden bg-paper-card',
+            'group relative overflow-hidden focus-visible:outline-offset-[-3px]',
             composed && i === 0
               ? 'col-span-2 md:row-span-2 aspect-video'
               : composed && i < 3
@@ -165,6 +172,7 @@ const composed = sparse && photos.length >= 3;
           data-full={fullSrc}
           data-full-srcset={fullSrcset}
         >
+          <span class="absolute inset-0 bg-paper-card" aria-hidden="true"></span>
           <Image
             src={photo.data.image}
             alt={photo.data.alt_text}

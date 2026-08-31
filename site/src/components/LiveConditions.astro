@@ -20,11 +20,11 @@ const locations = [
 ---
 <section
   class={variant === 'prominent'
-    ? 'bg-navy-deep text-paper border-y border-mint/10'
+    ? 'bg-navy-deep text-paper border-y hairline-soft'
     // Compact strip: solid navy-deep (like prominent), NOT bg-navy/40: the
-    // translucent navy over the paper page background landed text-paper/70
+    // translucent navy over the paper page background landed text-paper/75
     // at 1.91:1 (axe fail); on solid navy-deep it measures 9.1:1 (AA pass).
-    : 'bg-navy-deep text-paper text-xs border-t border-mint/10'}
+    : 'bg-navy-deep text-paper text-xs border-t hairline-soft'}
   data-live-conditions
   data-api-url={apiUrl}
   aria-label="Current ski conditions"
@@ -32,11 +32,11 @@ const locations = [
   <span class="sr-only" aria-live="polite" data-announcer></span>
   {variant === 'prominent' ? (
     <>
-      <div class="safe-inline-6 mx-auto max-w-7xl px-6 pt-3 pb-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
-        <span class="text-[11px] tracking-[0.18em] uppercase font-semibold text-mint/90 shrink-0">Trail report</span>
-        <span class="text-[11px] text-coral ml-auto text-right min-w-0" data-updated>Loading conditions…</span>
+      <div class="gutter mx-auto max-w-site pt-3 pb-2 flex flex-wrap items-baseline gap-x-4 gap-y-0.5">
+        <span class="seam shrink-0">Trail report</span>
+        <span class="type-caption text-coral ml-auto text-right min-w-0" data-updated>Loading conditions…</span>
       </div>
-      <div class="safe-inline-6 mx-auto max-w-7xl px-6 pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
+      <div class="gutter mx-auto max-w-site pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
         {/* On a phone the full grid is overwhelming, so mobile leads with just
             the Theodore Wirth cell (the club's home venue); the other three
             venues and the fever cell are desktop-only. */}
@@ -45,18 +45,22 @@ const locations = [
             data-location={id}
             class={id === 'wirth'
               ? 'py-1 col-span-2 md:col-span-1 md:pr-5'
-              : 'max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5'}
+              : 'max-md:hidden py-1 border-l hairline-soft pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5'}
           >
-            <div class="text-[10px] tracking-widest uppercase text-paper/55" data-name>{name}</div>
+            <div class="label-caps" data-name>{name}</div>
             <div class="mt-1 flex items-baseline gap-2">
-              <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-temp>·</span>
-              <span class="text-[11px] text-paper/60" data-feels></span>
+              <span class="font-display text-2xl md:text-3xl text-mint" data-temp>·</span>
+              <span class="type-caption text-paper/75" data-feels></span>
             </div>
             {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
                 the post-hydration wax label can wrap without pushing the hero
                 down (CLS guard). */}
-            <div class="text-xs text-paper/70 mt-1 min-h-8 flex items-start gap-1.5">
-              <span class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0" data-wax-chip hidden></span>
+            <div class="text-xs text-paper/75 mt-1 min-h-8 flex items-start gap-1.5">
+              <span
+                class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0 data-[band=green]:bg-wax-green data-[band=blue]:bg-wax-blue data-[band=purple]:bg-wax-purple data-[band=red]:bg-wax-red"
+                data-wax-chip
+                hidden
+              ></span>
               <span data-wax>·</span>
             </div>
           </div>
@@ -73,33 +77,33 @@ const locations = [
           data-birkie-audio="/audio/birkie-fever.mp3"
           aria-pressed="false"
           aria-label="Birkie fever. Press to play the song."
-          class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
+          class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l hairline-soft md:pl-4"
         >
-          <div class="text-[10px] tracking-widest uppercase text-paper/55">
+          <div class="label-caps">
             Birkie fever
             <span class="ml-1 text-mint/50 transition-colors duration-150 group-hover:text-mint" data-fever-note aria-hidden="true">♪</span>
           </div>
           <div class="mt-1">
-            <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
+            <span class="font-display text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
           </div>
-          <div class="text-xs text-paper/70 mt-1 min-h-8" data-birkie-detail>·</div>
+          <div class="text-xs text-paper/75 mt-1 min-h-8" data-birkie-detail>·</div>
         </button>
       </div>
     </>
   ) : (
-    <div class="safe-inline-6 mx-auto max-w-7xl px-6 py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
+    <div class="gutter mx-auto max-w-site py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/75">
       {/* Mobile keeps just the Theodore Wirth line; the other venues and the
           fever line are desktop-only. */}
       {locations.map(({ id, name }) => (
         <div data-location={id} class={id === 'wirth' ? 'flex items-baseline gap-1.5' : 'max-md:hidden flex items-baseline gap-1.5'}>
-          <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
-          <span class="font-display text-paper" data-temp>·</span>
+          <span class="label-caps" data-name>{name}</span>
+          <span class="text-sm font-bold tabular-nums text-paper" data-temp>·</span>
           <span data-wax>·</span>
         </div>
       ))}
       <div data-birkie class="max-md:hidden flex items-baseline gap-1.5">
-        <span class="tracking-widest uppercase text-mint">Birkie fever</span>
-        <span class="font-display text-paper" data-birkie-word>·</span>
+        <span class="label-caps">Birkie fever</span>
+        <span class="text-sm font-bold tabular-nums text-paper" data-birkie-word>·</span>
       </div>
     </div>
   )}
@@ -124,15 +128,6 @@ const locations = [
     opacity: 0;
     transform: translateY(4px);
   }
-
-  /* Wax chips: the dot's color IS the recommendation (the literal color of
-     the glide wax for the band), set per-render via data-band. Deliberate
-     non-token colors: this is data encoding, not palette decoration, muted
-     to sit quietly on navy-deep. */
-  .wax-chip[data-band='green'] { background: oklch(0.62 0.13 150); }
-  .wax-chip[data-band='blue'] { background: oklch(0.62 0.12 245); }
-  .wax-chip[data-band='purple'] { background: oklch(0.62 0.12 300); }
-  .wax-chip[data-band='red'] { background: oklch(0.62 0.15 25); }
 </style>
 
 <script>

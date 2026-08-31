@@ -4,13 +4,12 @@
 // which PhotoMosaic.astro bundles, so pages without a mosaic ship this
 // hidden shell and no JS.
 //
-// The bg-ink surface is not in the global.css focus-ring surface map
-// (.bg-navy/.bg-paper), so the mint ring is set explicitly via the
-// inherited custom property.
+// The dialog is named directly in global.css's focus-ring surface map, so its
+// controls keep a mint ring without an inline surface override.
 ---
 <div
   data-lightbox
-  class="lightbox-shell fixed inset-0 z-50 hidden bg-ink/95 text-paper flex-col [--focus-ring-color:theme(colors.mint)]"
+  class="lightbox-shell fixed inset-0 z-50 hidden bg-ink/95 text-paper flex-col"
   role="dialog"
   aria-modal="true"
   aria-label="Photo viewer"
@@ -26,10 +25,10 @@
   </div>
   {/* Live region: announces caption + position on every photo change, so
       caption-less photos still give screen readers navigation feedback. */}
-  <div class="mt-4 max-w-3xl mx-auto text-center text-sm" data-lightbox-caption aria-live="polite"></div>
+  <div class="mt-4 max-w-prose mx-auto text-center text-sm" data-lightbox-caption aria-live="polite"></div>
   <div class="flex justify-center gap-6 mt-6">
-    <button class="min-h-11 min-w-11 px-5 py-2 border border-paper/30 rounded" data-lightbox-prev aria-label="Previous photo">←</button>
-    <button class="min-h-11 min-w-11 px-5 py-2 border border-paper/30 rounded" data-lightbox-next aria-label="Next photo">→</button>
+    <button class="min-h-11 min-w-11 px-5 py-2 border hairline rounded" data-lightbox-prev aria-label="Previous photo">←</button>
+    <button class="min-h-11 min-w-11 px-5 py-2 border hairline rounded" data-lightbox-next aria-label="Next photo">→</button>
   </div>
 </div>
 

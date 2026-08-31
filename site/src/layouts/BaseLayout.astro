@@ -2,6 +2,7 @@
 import '@/styles/global.css';
 import FontPreload from '@/components/FontPreload.astro';
 import Lightbox from '@/components/Lightbox.astro';
+import { NAVY_HEX } from '@/lib/brand';
 import { fetchSeasonData } from '@/lib/seasonData';
 
 // Stamped on every page so a fallback build is one curl away from being
@@ -29,7 +30,7 @@ const {
 const isHome = variant === 'home';
 // Every route begins and ends on navy (nav + footer), so browser chrome and
 // the overscroll canvas use that same continuous brand surface.
-const themeColor = '#202A44';
+const themeColor = NAVY_HEX;
 
 // Build formats expose either a generated filename or a directory slash
 // through Astro.url during prerendering. Public routes remain extensionless,
