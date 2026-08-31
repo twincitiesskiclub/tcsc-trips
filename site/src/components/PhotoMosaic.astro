@@ -71,12 +71,12 @@ const sparse = photos.length < 12;
 // cleanly.
 const sizeClasses = [
   '',
-  'md:col-span-2 md:aspect-auto',
+  'max-md:col-span-2 max-md:aspect-[3/2] md:col-span-2 md:aspect-auto',
   '',
   'md:row-span-2 md:col-span-2',
   '',
   '',
-  'md:col-span-2 md:aspect-auto',
+  'max-md:col-span-2 max-md:aspect-[3/2] md:col-span-2 md:aspect-auto',
   '',
 ];
 
@@ -117,6 +117,7 @@ const tiles = await Promise.all(
     // grid flow closes the vacated span rather than forcing a portrait wide.
     const span = portrait && proposedSpan.includes('md:col-span-2') ? '' : proposedSpan;
     const squareCrop = (!sparse && !span.includes('md:aspect-auto')) || (composed && i >= 3);
+    const mobileWide = span.includes('max-md:col-span-2');
     // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
     // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
     // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
@@ -126,7 +127,9 @@ const tiles = await Promise.all(
         ? '(min-width: 768px) 66vw, 100vw'
         : '(min-width: 768px) 34vw, 50vw'
       : span.includes('md:col-span-2')
-        ? '50vw'
+        ? mobileWide
+          ? '(min-width: 768px) 50vw, 100vw'
+          : '50vw'
         : '(min-width: 768px) 25vw, 50vw';
     // Explicit width clamps the FALLBACK rendition: without it, Astro also
     // generates the plain `src` at full source resolution (a 4000px+ webp
@@ -157,8 +160,8 @@ const tiles = await Promise.all(
 );
 ---
 {photos.length > 0 && (
-  <section class:list={['bg-navy', band.b]} data-photo-mosaic>
-    <BandContainer class={band.t}>
+  <section class:list={['bg-navy', heading && band.b]} data-photo-mosaic>
+    <BandContainer class={heading ? band.t : undefined}>
       <Seam
         label={number}
         surface="navy"
