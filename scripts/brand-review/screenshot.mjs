@@ -54,6 +54,15 @@ for (const [build, states] of byBuild) {
           await page.goto(base + s.url, { waitUntil: "networkidle", timeout: 30000 });
           const source = await page.getAttribute("body", "data-season-source");
           if (source !== "api") throw new Error(`data-season-source=${source}`);
+          // Astro images below the fold are loading="lazy"; a full-page capture would show blank
+          // mosaic tiles. Sweep the page so every image requests, wait for them, and return to top.
+          await page.evaluate(async () => {
+            const step = window.innerHeight;
+            for (let y = 0; y < document.body.scrollHeight; y += step) { window.scrollTo(0, y); await new Promise((r) => setTimeout(r, 80)); }
+            window.scrollTo(0, 0);
+            await Promise.all([...document.images].map((img) => img.complete || new Promise((r) => { img.onload = img.onerror = r; })));
+          });
+          await page.waitForTimeout(300);
           for (const a of s.actions ?? []) {
             if (a.click) await page.click(a.click);
             else if (a.hover) await page.hover(a.hover);
