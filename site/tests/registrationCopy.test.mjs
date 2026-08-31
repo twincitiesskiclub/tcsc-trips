@@ -5,6 +5,7 @@ import {
   cardNote,
   datesSentence,
   formatDay,
+  newMembersLine,
   stripSubhead,
 } from '../src/lib/registrationCopy.ts';
 
@@ -51,6 +52,18 @@ test('builds a partial dates sentence when only one window exists', () => {
 
 test('has no dates sentence when no window exists', () => {
   assert.equal(datesSentence({}), null);
+});
+
+test('shows the new-member date only before that window opens', () => {
+  assert.equal(
+    newMembersLine(WINDOWS, Date.parse('2026-08-30T17:00:00Z')),
+    'New members Sep 3',
+  );
+  assert.equal(
+    newMembersLine(WINDOWS, Date.parse(WINDOWS.new_start)),
+    '',
+  );
+  assert.equal(newMembersLine({}, Date.now()), '');
 });
 
 test('the coming_soon subhead leads with the real dates', () => {

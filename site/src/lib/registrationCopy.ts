@@ -45,6 +45,15 @@ export function datesLine(w: RegistrationWindows): string | null {
   return datesSentence(w);
 }
 
+export function newMembersLine(w: RegistrationWindows, now: number): string {
+  if (typeof w.new_start !== 'string') return '';
+  const freshStart = Date.parse(w.new_start);
+  const fresh = formatDay(w.new_start);
+  return fresh && !Number.isNaN(freshStart) && now < freshStart
+    ? `New members ${fresh}`
+    : '';
+}
+
 export function stripSubhead(state: RegistrationState, w: RegistrationWindows): string {
   if (state === 'open') return ABILITY;
   if (state === 'closed') {

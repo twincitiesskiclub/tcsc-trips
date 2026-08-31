@@ -3,7 +3,7 @@ import { Picture } from 'astro:assets';
 import CtaForState from '@/components/CtaForState.astro';
 import { FULL_BLEED } from '@/components/imageWidths';
 import type { RegistrationWindows } from '@/lib/registrationState';
-import { datesLine } from '@/lib/registrationCopy';
+import { datesLine, newMembersLine } from '@/lib/registrationCopy';
 
 interface Props {
   headline: string;
@@ -25,16 +25,16 @@ const props = Astro.props;
 // requested width to the source's intrinsic width and appends the intrinsic
 // width itself as a candidate, so it never upscales (see imageWidths.ts).
 
-// The dates line only ever has something to say while coming_soon (open has
-// no upcoming dates worth announcing; closed with no season data has none to
-// show at all). It still bakes all three variants -- like CtaForState does --
-// so registrationFlip.ts can hide it the moment the browser re-derives a
-// later state, rather than leaving stale dates showing under an "open" CTA.
+// The dates line shows both openings while coming soon, then keeps the new
+// member date while only the returning-member window is open. It bakes all
+// three variants so registrationFlip.ts can keep the line current without a
+// rebuild.
 const dates = datesLine(props.windows ?? {});
+const openDates = newMembersLine(props.windows ?? {}, Date.now());
 const showDates = props.state === 'coming_soon' && Boolean(dates);
 const datesBaked = {
   'data-registration-dates': '',
-  'data-open-dates': '',
+  'data-open-dates': openDates,
   'data-soon-dates': dates ?? '',
   'data-closed-dates': '',
 };
