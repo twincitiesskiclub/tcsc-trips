@@ -81,14 +81,14 @@ const locations = [
           aria-label="Birkie fever. Press to play the song."
           class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l hairline-soft md:pl-4"
         >
-          <div class="label-caps">
+          <div class="label-caps transition-colors group-hover:text-paper">
             Birkie fever
-            <span class="ml-1 text-mint/50 transition-colors duration-150 group-hover:text-mint" data-fever-note aria-hidden="true">♪</span>
+            <span class="ml-1 text-mint/50 transition-colors group-hover:text-paper" data-fever-note aria-hidden="true">♪</span>
           </div>
           <div class="mt-1">
-            <span class="font-display text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
+            <span class="font-display text-2xl md:text-3xl text-mint transition-colors group-hover:text-paper" data-birkie-word>·</span>
           </div>
-          <div class="text-xs text-paper/75 mt-1 min-h-8" data-birkie-detail>·</div>
+          <div class="text-xs text-paper/75 mt-1 min-h-8 transition-colors group-hover:text-paper" data-birkie-detail>·</div>
         </button>
       </div>
     </>
@@ -134,6 +134,12 @@ const locations = [
      copy never carries the live-state signal. */
   [data-live-conditions]:not([data-updated-at]) [data-updated] {
     color: theme(colors.paper / 75%);
+  }
+  [data-location] a[data-source-link] {
+    display: inline-flex;
+    min-height: 2.75rem;
+    align-items: center;
+    margin-block: -0.5rem;
   }
 </style>
 

@@ -100,6 +100,10 @@ html {
     outline: 2px solid var(--focus-ring-color);
     outline-offset: 2px;
   }
+
+  button:not(:disabled) {
+    cursor: pointer;
+  }
 }
 
 /* Paper register: headings use navy, primary body uses ink, and secondary
