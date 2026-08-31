@@ -233,6 +233,13 @@ html {
     border-color: var(--hairline-soft-color);
   }
 
+  /* The off-season label is created by the sacred conditions client. Its
+     legacy class remains untouched, while the containing surface supplies
+     the approved secondary tone. */
+  [data-live-conditions] [data-dryland-label] {
+    color: color-mix(in oklab, theme(colors.paper) 75%, transparent);
+  }
+
   .band-y-sm,
   .band-t-sm,
   .band-b-sm {

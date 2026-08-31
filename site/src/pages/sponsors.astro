@@ -43,14 +43,14 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         <h2 class="type-h2 text-mint">
           {page.data.impact_heading}
         </h2>
-        <p class="mt-5 max-w-prose-narrow text-lg leading-relaxed text-paper/85">
+        <p class="mt-5 max-w-prose-narrow text-lg leading-relaxed text-paper">
           {page.data.impact_intro}
         </p>
         <div class="mt-10 border-y hairline divide-hairline">
           {page.data.impact_items.map((item) => (
             <article class="py-6 grid gap-2 sm:grid-cols-[minmax(12rem,16rem)_1fr] sm:gap-8">
               <h3 class="type-h3 text-mint">{item.title}</h3>
-              <p class="type-body text-paper/80">{item.detail}</p>
+              <p class="type-body text-paper">{item.detail}</p>
             </article>
           ))}
         </div>

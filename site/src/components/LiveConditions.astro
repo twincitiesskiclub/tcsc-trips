@@ -22,7 +22,7 @@ const locations = [
   class={variant === 'prominent'
     ? 'bg-navy-deep text-paper border-y hairline-soft'
     // Compact strip: solid navy-deep (like prominent), NOT bg-navy/40: the
-    // translucent navy over the paper page background landed text-paper/70
+    // translucent navy over the paper page background landed text-paper/75
     // at 1.91:1 (axe fail); on solid navy-deep it measures 9.1:1 (AA pass).
     : 'bg-navy-deep text-paper text-xs border-t hairline-soft'}
   data-live-conditions
@@ -55,7 +55,7 @@ const locations = [
             {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
                 the post-hydration wax label can wrap without pushing the hero
                 down (CLS guard). */}
-            <div class="text-xs text-paper/70 mt-1 min-h-8 flex items-start gap-1.5">
+            <div class="text-xs text-paper/75 mt-1 min-h-8 flex items-start gap-1.5">
               <span
                 class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0 data-[band=green]:bg-wax-green data-[band=blue]:bg-wax-blue data-[band=purple]:bg-wax-purple data-[band=red]:bg-wax-red"
                 data-wax-chip
@@ -86,12 +86,12 @@ const locations = [
           <div class="mt-1">
             <span class="font-display font-semibold text-2xl md:text-3xl text-mint" data-birkie-word>·</span>
           </div>
-          <div class="text-xs text-paper/70 mt-1 min-h-8" data-birkie-detail>·</div>
+          <div class="text-xs text-paper/75 mt-1 min-h-8" data-birkie-detail>·</div>
         </button>
       </div>
     </>
   ) : (
-    <div class="gutter mx-auto max-w-site py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/70">
+    <div class="gutter mx-auto max-w-site py-2 flex gap-x-4 gap-y-1 flex-wrap text-paper/75">
       {/* Mobile keeps just the Theodore Wirth line; the other venues and the
           fever line are desktop-only. */}
       {locations.map(({ id, name }) => (
