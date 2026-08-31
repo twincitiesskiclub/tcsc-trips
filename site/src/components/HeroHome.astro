@@ -58,9 +58,9 @@ const datesBaked = {
     {/* Functional scrim: heavy only at the text zone, light by 45% up so
         the photograph actually shows. */}
     <div class="absolute inset-0 bg-gradient-to-t from-navy/95 via-navy/50 via-45% to-transparent"></div>
-    <div class="gutter relative h-full mx-auto max-w-site flex flex-col justify-end pb-14 md:pb-20 text-paper md:grid md:grid-cols-12 md:items-end">
+    <div class="gutter relative h-full mx-auto max-w-site flex flex-col justify-end pb-14 md:pb-20 lg:pb-10 text-paper md:grid md:grid-cols-12 md:items-end">
       <div class="md:max-lg:col-start-3 md:max-lg:col-span-10 lg:col-start-5 lg:col-span-8">
-        <h1 class="hero-headline type-display text-mint max-w-5xl">{props.headline}</h1>
+        <h1 class="hero-headline hero-title type-display text-mint max-w-5xl">{props.headline}</h1>
         {props.subline && (
           <p class="hero-headline type-lede mt-4 text-paper max-w-prose-narrow">{props.subline}</p>
         )}
@@ -97,6 +97,10 @@ const datesBaked = {
     .hero-frame {
       height: calc(100vh - var(--chrome-h));
       min-height: 540px;
+    }
+    .hero-title {
+      font-size: clamp(4rem, 6.25vw, 5.25rem);
+      white-space: nowrap;
     }
     @supports (height: 100svh) {
       .hero-frame {
