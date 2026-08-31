@@ -15,6 +15,8 @@ import { getCollection } from 'astro:content';
 import { shortDate } from '@/lib/formatDate';
 import Ledger from '@/components/Ledger.astro';
 import LedgerRow from '@/components/LedgerRow.astro';
+import BandContainer from '@/components/BandContainer.astro';
+import Seam from '@/components/Seam.astro';
 
 interface Props {
   rhythm?: 'sm' | 'md' | 'lg';
@@ -33,12 +35,8 @@ const entries = (await getCollection('wax_entries'))
 ---
 {entries.length > 0 && (
 <section class="bg-paper text-ink">
-  <div class="gutter mx-auto max-w-site">
-    {/* Seam: hairline running to the right edge (one device family
-        site-wide); no label text, the h2 below names the section. */}
-    <div class:list={['flex items-center gap-4', band.t]}>
-      <span class="rule h-px flex-1" aria-hidden="true"></span>
-    </div>
+  <BandContainer>
+    <Seam surface="paper" class={band.t} />
     <div class:list={['pt-8', band.b]}>
       <div class="flex items-end justify-between mb-8">
         <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
@@ -58,6 +56,6 @@ const entries = (await getCollection('wax_entries'))
         ))}
       </Ledger>
     </div>
-  </div>
+  </BandContainer>
 </section>
 )}

@@ -19,6 +19,8 @@
 import { getCollection } from 'astro:content';
 import { Image, getImage } from 'astro:assets';
 import { MOSAIC, LIGHTBOX } from '@/components/imageWidths';
+import BandContainer from '@/components/BandContainer.astro';
+import Seam from '@/components/Seam.astro';
 
 interface Props {
   limit?: number;
@@ -126,23 +128,22 @@ const tiles = await Promise.all(
 const composed = sparse && photos.length >= 3;
 ---
 {photos.length > 0 && (
-  <section class:list={['bg-navy', band.b, !heading && band.t]} data-photo-mosaic>
-    {heading && (
-      <div class:list={['gutter max-w-site mx-auto', band.t]}>
-        {/* Seam: section name in the Trail Report label voice, hairline
-            running to the right edge (one device family site-wide). */}
-        <div class="flex items-center gap-4">
-          {number && <span class="seam">{number}</span>}
-          <span class="rule h-px flex-1" aria-hidden="true"></span>
-        </div>
+  <section class:list={['bg-navy', band.b]} data-photo-mosaic>
+    <BandContainer class={band.t}>
+      <Seam
+        label={number}
+        surface="navy"
+        as={heading ? 'span' : 'h2'}
+      />
+      {heading && (
         <div class="mb-8 mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
           <h2 class="type-h2 text-paper">{heading}</h2>
           {more_href && more_label && (
             <a href={more_href} class="shrink-0 ml-auto text-mint text-sm hover:text-mint">{more_label}</a>
           )}
         </div>
-      </div>
-    )}
+      )}
+    </BandContainer>
     {/* The grid runs edge to edge with hairline gaps: the one section that
         breaks the page column. data-tag exists for the /community event_tag
         filtering planned in the spec. */}
