@@ -505,6 +505,10 @@ html {
     font-weight: inherit;
   }
 
+  .ledger[data-ledger-cols='three'] > .ledger-row-header {
+    grid-template-columns: 6rem minmax(0, 1fr) auto;
+  }
+
   .wax-entry-row .ledger-label {
     color: var(--ledger-detail-color);
   }

@@ -5,6 +5,7 @@ import { getCollection } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import ProseColumn from '@/components/ProseColumn.astro';
 import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import WaxEntryRow from '@/components/WaxEntryRow.astro';
 
 const entries = (await getCollection('wax_entries')).sort(
@@ -19,7 +20,14 @@ const entries = (await getCollection('wax_entries')).sort(
 >
   <ProseColumn>
     {entries.length === 0 ? (
-      <p class="reading-column text-slate">No entries yet. The first reports arrive with the snow.</p>
+      <Ledger cols="stacked" rule="top" surface="paper">
+        <LedgerRow>
+          <Fragment slot="note">
+            No entries yet. The first reports arrive with the snow.{' '}
+            <a href="/" class="link-inline">Back to home</a>.
+          </Fragment>
+        </LedgerRow>
+      </Ledger>
     ) : (
       <Ledger cols="three" rule="top" surface="paper">
         {entries.map((e) => (
