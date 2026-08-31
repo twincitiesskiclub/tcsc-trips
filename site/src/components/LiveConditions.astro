@@ -38,22 +38,23 @@ const locations = [
         <Seam label="Trail report" surface="navy" as="h2" class="w-full md:min-w-0 md:flex-1" />
         <span class="type-caption text-coral text-left min-w-0 md:ml-auto md:text-right" data-updated>Loading conditions…</span>
       </div>
-      <div data-conditions-grid class="pb-3 grid grid-cols-2 md:grid-cols-5 gap-y-4">
-        {/* On a phone the full grid is overwhelming, so mobile leads with just
-            the Theodore Wirth cell (the club's home venue); the other three
-            venues and the fever cell are desktop-only. */}
+      <div data-conditions-grid class="grid grid-cols-2 gap-y-4 pb-3 md:grid-cols-3 lg:grid-cols-5">
+        {/* Mobile leads with Theodore Wirth alone. Tablet adds Hyland and the
+            fever reading; the two remaining venues join at the wide grid. */}
         {locations.map(({ id, name }) => (
           <div
             data-location={id}
             class={id === 'wirth'
               ? 'py-1 col-span-2 md:col-span-1 md:border-r hairline-soft md:pr-5'
-              : 'max-md:hidden py-1 md:border-r hairline-soft md:px-4 md:pr-5'}
+              : id === 'elm' || id === 'telemark'
+                ? 'max-lg:hidden py-1 lg:border-r hairline-soft lg:px-4 lg:pr-5'
+                : 'max-md:hidden py-1 md:border-r hairline-soft md:px-4 md:pr-5'}
           >
             <div class="label-caps" data-name>{name}</div>
-            <div class="mt-1 flex items-baseline gap-2">
+            <div class="mt-1">
               <span class="font-display text-2xl md:text-3xl text-mint" data-temp>·</span>
-              <span class="type-caption text-paper/75" data-feels></span>
             </div>
+            <span class="type-caption block min-h-5 whitespace-nowrap text-paper/75" data-feels></span>
             {/* One caption line is reserved so hydration cannot move the hero. */}
             <div class="type-caption text-paper/75 mt-1 min-h-4 flex items-start gap-1.5">
               <span
