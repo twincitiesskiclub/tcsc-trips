@@ -12,9 +12,8 @@
 // entry.id = filename slug (url), entry.data.slug = display title
 // (see content.config.ts header).
 import { getCollection } from 'astro:content';
-import { shortDate } from '@/lib/formatDate';
 import Ledger from '@/components/Ledger.astro';
-import LedgerRow from '@/components/LedgerRow.astro';
+import WaxEntryRow from '@/components/WaxEntryRow.astro';
 import BandContainer from '@/components/BandContainer.astro';
 import Seam from '@/components/Seam.astro';
 
@@ -44,15 +43,7 @@ const entries = (await getCollection('wax_entries'))
       </div>
       <Ledger cols="three" surface="paper">
         {entries.map((e) => (
-          <LedgerRow
-            label={`${shortDate(e.data.date)}${e.data.author_name ? ` · ${e.data.author_name}` : ''}`}
-            title={e.data.slug}
-            note={e.data.lede}
-            meta={e.data.conditions_snapshot?.temp_f != null
-              ? `${e.data.conditions_snapshot.temp_f}°F${e.data.conditions_snapshot.location ? ` · ${e.data.conditions_snapshot.location}` : ''}`
-              : undefined}
-            href={'/wax-room/' + e.id}
-          />
+          <WaxEntryRow entry={e} density="feed" />
         ))}
       </Ledger>
     </div>

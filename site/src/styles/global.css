@@ -161,7 +161,8 @@ html {
     line-height: 1.2;
   }
 
-  .type-h4 {
+  .type-h4,
+  .wax-entry-row .ledger-title {
     font-family: theme(fontFamily.sans);
     font-size: 1.125rem;
     font-weight: 600;
@@ -196,7 +197,9 @@ html {
     line-height: var(--body-lh, 1.65);
   }
 
-  .type-caption {
+  .type-caption,
+  .wax-entry-row .ledger-label,
+  .wax-entry-lede {
     font-family: theme(fontFamily.sans);
     font-size: 0.875rem;
     font-weight: 400;
@@ -487,6 +490,20 @@ html {
     font-weight: inherit;
   }
 
+  .wax-entry-row .ledger-label {
+    color: var(--ledger-detail-color);
+  }
+
+  .wax-entry-lede {
+    display: block;
+    margin-top: 0.25rem;
+    color: var(--ledger-detail-color);
+  }
+
+  .wax-entry-row-feed .wax-entry-lede {
+    display: none;
+  }
+
   .link-ledger {
     text-decoration: none;
   }
@@ -506,6 +523,10 @@ html {
   }
 
   @media (min-width: 48rem) {
+    .wax-entry-row-feed .wax-entry-lede {
+      display: block;
+    }
+
     .ledger[data-ledger-cols='two'] > .ledger-row {
       grid-template-columns: 14rem minmax(0, 1fr);
     }

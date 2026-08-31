@@ -4,7 +4,8 @@
 import { getCollection } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import ProseColumn from '@/components/ProseColumn.astro';
-import { longDate } from '@/lib/formatDate';
+import Ledger from '@/components/Ledger.astro';
+import WaxEntryRow from '@/components/WaxEntryRow.astro';
 
 const entries = (await getCollection('wax_entries')).sort(
   (a, b) => +b.data.date - +a.data.date || a.id.localeCompare(b.id),
@@ -20,26 +21,11 @@ const entries = (await getCollection('wax_entries')).sort(
     {entries.length === 0 ? (
       <p class="reading-column text-slate">No entries yet. The first reports arrive with the snow.</p>
     ) : (
-      <div class="reading-column divide-hairline">
+      <Ledger cols="three" rule="top" surface="paper">
         {entries.map((e) => (
-          <article class="py-10 first:pt-0 last:pb-0">
-            <div class="text-sm text-slate">
-              {longDate(e.data.date)}
-            </div>
-            <h2 class="type-h2-longform text-navy mt-2">
-              <a href={'/wax-room/' + e.id} class="link-ledger">
-                {e.data.slug}
-              </a>
-            </h2>
-            {e.data.author_name && (
-              <div class="mt-2 text-slate text-sm">
-                By {e.data.author_name} · <span class="capitalize">{e.data.author_role}</span>
-              </div>
-            )}
-            {e.data.lede && <p class="mt-3 text-slate leading-relaxed">{e.data.lede}</p>}
-          </article>
+          <WaxEntryRow entry={e} density="index" />
         ))}
-      </div>
+      </Ledger>
     )}
   </ProseColumn>
 </InnerPageLayout>
