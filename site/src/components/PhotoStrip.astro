@@ -18,7 +18,9 @@ interface Props {
   cols: 2 | 3 | 5;
   mobileCols?: 1 | 2 | 3;
   aspect: Aspect;
+  secondaryAspect?: Aspect;
   mobileAspect?: Aspect;
+  layout?: 'equal' | 'seven-five';
   captions?: boolean;
   captionRole?: 'caption' | 'label';
   /** Let the first photo lead a two-column mobile strip without leaving an
@@ -32,14 +34,16 @@ const {
   cols,
   mobileCols = cols === 5 ? 2 : cols,
   aspect,
+  secondaryAspect,
   mobileAspect,
+  layout = 'equal',
   captions = false,
   captionRole = 'caption',
   mobileLead = false,
   class: className,
 }: Props = Astro.props;
 
-const desktopCols = {
+const desktopCols = layout === 'seven-five' ? 'md:grid-cols-12' : {
   2: 'md:grid-cols-2',
   3: 'md:grid-cols-3',
   5: 'md:grid-cols-5',
@@ -49,49 +53,64 @@ const smallCols = {
   2: 'grid-cols-2',
   3: 'grid-cols-3',
 }[mobileCols];
-const aspectClass = {
+const aspectClasses = {
   '4/3': 'aspect-[4/3]',
   '4/5': 'aspect-[4/5]',
   '3/4': 'aspect-[3/4]',
-}[aspect];
+};
 const mobileAspectClass = mobileAspect && {
   '4/3': 'aspect-[4/3]',
   '4/5': 'aspect-[4/5]',
   '3/4': 'aspect-[3/4]',
 }[mobileAspect];
-const desktopAspectClass = mobileAspect && {
-  '4/3': 'md:aspect-[4/3]',
-  '4/5': 'md:aspect-[4/5]',
-  '3/4': 'md:aspect-[3/4]',
-}[aspect];
-const desktopWidth = cols === 5 ? '20vw' : cols === 3 ? '33vw' : '50vw';
 const mobileWidth = mobileCols === 3 ? '33vw' : mobileCols === 2 ? '50vw' : '100vw';
-const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
+const cropRatios = { '4/3': 3 / 4, '4/5': 5 / 4, '3/4': 4 / 3 };
 ---
 
 <div class:list={['photo-strip rule grid gap-px', smallCols, desktopCols, className]}>
   {photos.map((photo, index) => {
     const isMobileLead = mobileLead && index === 0;
+    const tileAspect = secondaryAspect && index > 0 ? secondaryAspect : aspect;
+    const tileAspectClass = aspectClasses[tileAspect];
+    const tileDesktopAspectClass = mobileAspect && {
+      '4/3': 'md:aspect-[4/3]',
+      '4/5': 'md:aspect-[4/5]',
+      '3/4': 'md:aspect-[3/4]',
+    }[tileAspect];
+    const desktopWidth = layout === 'seven-five'
+      ? index === 0 ? '58vw' : '42vw'
+      : cols === 5 ? '20vw' : cols === 3 ? '33vw' : '50vw';
+    const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
     const photoSizes = isMobileLead
       ? `(min-width: 768px) ${desktopWidth}, 100vw`
       : sizes;
+    const imageWidth = Math.min(1600, photo.src.width);
+    const imageHeight = Math.round(imageWidth * cropRatios[tileAspect]);
 
     return (
-      <figure class:list={['bg-paper', isMobileLead && 'max-md:col-span-2']}>
+      <figure
+        class:list={[
+          'bg-paper',
+          isMobileLead && 'max-md:col-span-2',
+          layout === 'seven-five' && (index === 0 ? 'md:col-span-7' : 'md:col-span-5'),
+        ]}
+      >
         <div
           class:list={[
           'relative overflow-hidden',
           isMobileLead
             ? 'max-md:aspect-[3/2] md:aspect-[3/4]'
             : mobileAspect
-              ? [mobileAspectClass, desktopAspectClass]
-              : aspectClass,
+              ? [mobileAspectClass, tileDesktopAspectClass]
+              : tileAspectClass,
           ]}
         >
           <Image
             src={photo.src}
             alt={photo.alt}
             widths={MOSAIC}
+            width={imageWidth}
+            height={photo.attention ? imageHeight : undefined}
             sizes={photoSizes}
             fit={photo.attention ? 'cover' : undefined}
             position={photo.attention ? 'attention' : undefined}

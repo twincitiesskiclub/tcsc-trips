@@ -17,9 +17,9 @@ if (!page) throw new Error('extra_training singleton missing (src/content/pages/
 const { Content } = await render(page);
 const d = page.data;
 const photos = [
-  { src: d.photo_1, alt: d.photo_1_alt ?? '', caption: d.photo_1_caption },
-  { src: d.photo_2, alt: d.photo_2_alt ?? '', caption: d.photo_2_caption },
-].filter((photo): photo is { src: ImageMetadata; alt: string; caption: string | undefined } => Boolean(photo.src));
+  { src: d.photo_1, alt: d.photo_1_alt ?? '', caption: d.photo_1_caption, attention: true as const },
+  { src: d.photo_2, alt: d.photo_2_alt ?? '', caption: d.photo_2_caption, attention: true as const },
+].filter((photo): photo is typeof photo & { src: ImageMetadata } => Boolean(photo.src));
 ---
 <InnerPageLayout
   title="Extra training fun · Twin Cities Ski Club"
@@ -44,7 +44,15 @@ const photos = [
   )}
   {photos.length > 0 && (
     <section class="gutter mx-auto max-w-site band-y-sm" aria-label="Photos">
-      <PhotoStrip photos={photos} cols={2} mobileCols={1} aspect="4/3" captions />
+      <PhotoStrip
+        photos={photos}
+        cols={2}
+        mobileCols={1}
+        aspect="4/3"
+        secondaryAspect="4/5"
+        layout="seven-five"
+        captions
+      />
     </section>
   )}
   {d.annuals.length > 0 && (
