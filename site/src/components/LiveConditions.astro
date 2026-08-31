@@ -130,6 +130,11 @@ const locations = [
     opacity: 0;
     transform: translateY(4px);
   }
+  /* Coral means the fetch succeeded. Loading, unavailable, and off-season
+     copy never carries the live-state signal. */
+  [data-live-conditions]:not([data-updated-at]) [data-updated] {
+    color: theme(colors.paper / 75%);
+  }
 </style>
 
 <script>
