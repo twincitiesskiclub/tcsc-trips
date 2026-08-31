@@ -18,6 +18,9 @@ interface Props {
   mobileCols?: 1 | 2 | 3;
   aspect: Aspect;
   captions?: boolean;
+  /** Let the first photo lead a two-column mobile strip without leaving an
+      orphan cell when the collection count is odd. */
+  mobileLead?: boolean;
   class?: string;
 }
 
@@ -27,6 +30,7 @@ const {
   mobileCols = cols === 5 ? 2 : cols,
   aspect,
   captions = false,
+  mobileLead = false,
   class: className,
 }: Props = Astro.props;
 
@@ -51,23 +55,35 @@ const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
 ---
 
 <div class:list={['photo-strip rule grid gap-px', smallCols, desktopCols, className]}>
-  {photos.map((photo) => (
-    <figure class="bg-paper">
-      <div class:list={['relative overflow-hidden', aspectClass]}>
-        <Image
-          src={photo.src}
-          alt={photo.alt}
-          widths={MOSAIC}
-          sizes={sizes}
-          class="absolute inset-0 h-full w-full object-cover"
-          style={photo.position ? `object-position: ${photo.position}` : undefined}
-          loading={photo.loading ?? 'lazy'}
-          decoding="async"
-        />
-      </div>
-      {captions && photo.caption && (
-        <figcaption class="type-caption pt-2 text-slate">{photo.caption}</figcaption>
-      )}
-    </figure>
-  ))}
+  {photos.map((photo, index) => {
+    const isMobileLead = mobileLead && index === 0;
+    const photoSizes = isMobileLead
+      ? `(min-width: 768px) ${desktopWidth}, 100vw`
+      : sizes;
+
+    return (
+      <figure class:list={['bg-paper', isMobileLead && 'max-md:col-span-2']}>
+        <div
+          class:list={[
+            'relative overflow-hidden',
+            isMobileLead ? 'max-md:aspect-[3/2] md:aspect-[3/4]' : aspectClass,
+          ]}
+        >
+          <Image
+            src={photo.src}
+            alt={photo.alt}
+            widths={MOSAIC}
+            sizes={photoSizes}
+            class="absolute inset-0 h-full w-full object-cover"
+            style={photo.position ? `object-position: ${photo.position}` : undefined}
+            loading={photo.loading ?? 'lazy'}
+            decoding="async"
+          />
+        </div>
+        {captions && photo.caption && (
+          <figcaption class="type-caption pt-2 text-slate">{photo.caption}</figcaption>
+        )}
+      </figure>
+    );
+  })}
 </div>
