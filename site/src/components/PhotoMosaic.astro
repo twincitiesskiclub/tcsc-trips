@@ -135,6 +135,11 @@ const tiles = await Promise.all(
     // grid flow closes the vacated span rather than forcing a portrait wide.
     const span = portrait && proposedSpan.includes('md:col-span-2') ? '' : proposedSpan;
     const squareCrop = (!sparse && !span.includes('md:aspect-auto')) || (composed && i >= 3);
+    // Sharp's attention crop locks onto the runner's high-contrast torso and
+    // removes her face. Keep the full portrait rendition for this known miss,
+    // then apply the same upper-quarter browser focal point used by portrait
+    // sources in landscape slots.
+    const focalFallback = squareCrop && photo.id === 'dry-tri-runner';
     const fillsMobileTail = i === mobileTailFillIndex;
     const mobileWide = span.includes('max-md:col-span-2') || fillsMobileTail;
     // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
@@ -173,6 +178,7 @@ const tiles = await Promise.all(
       span,
       portrait,
       squareCrop,
+      focalFallback,
       fillsMobileTail,
       sizesAttr,
       fullSrc: largest?.url ?? full.src,
@@ -209,7 +215,7 @@ const tiles = await Promise.all(
           ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
           : 'rule grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
     >
-      {tiles.map(({ photo, span, portrait, squareCrop, fillsMobileTail, sizesAttr, fullSrc, fullSrcset }, i) => (
+      {tiles.map(({ photo, span, portrait, squareCrop, focalFallback, fillsMobileTail, sizesAttr, fullSrc, fullSrcset }, i) => (
         <button
           type="button"
           class:list={[
@@ -234,16 +240,16 @@ const tiles = await Promise.all(
             src={photo.data.image}
             alt={photo.data.alt_text}
             width={Math.min(composed && i === 0 ? 1920 : 1600, photo.data.image.width)}
-            height={squareCrop ? Math.min(1600, photo.data.image.width) : undefined}
-            fit={squareCrop ? 'cover' : undefined}
-            position={squareCrop ? 'attention' : undefined}
+            height={squareCrop && !focalFallback ? Math.min(1600, photo.data.image.width) : undefined}
+            fit={squareCrop && !focalFallback ? 'cover' : undefined}
+            position={squareCrop && !focalFallback ? 'attention' : undefined}
             widths={MOSAIC}
             sizes={sizesAttr}
             class:list={[
               'absolute inset-0 h-full w-full object-cover',
               composed && i === 0
                 ? 'object-[center_65%]'
-                : portrait && !squareCrop
+                : portrait && (!squareCrop || focalFallback)
                   ? 'object-[center_25%]'
                   : 'object-center',
             ]}
