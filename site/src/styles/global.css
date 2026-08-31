@@ -1,6 +1,12 @@
 @import 'tailwindcss';
 @config '../../tailwind.config.ts';
 
+@theme {
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --default-transition-timing-function: var(--ease-out);
+  --default-transition-duration: 150ms;
+}
+
 :root {
   color-scheme: light;
   --gutter: clamp(1.5rem, 4vw, 2.5rem);
@@ -335,7 +341,7 @@ html {
   .link-ledger [class^='ledger-'] {
     transition-property: color, text-decoration-color;
     transition-duration: 150ms;
-    transition-timing-function: var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+    transition-timing-function: var(--ease-out);
   }
 
   .link-inline {
