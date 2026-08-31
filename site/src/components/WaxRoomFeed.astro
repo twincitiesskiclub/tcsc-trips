@@ -24,14 +24,14 @@ const entries = (await getCollection('wax_entries'))
     {/* Seam: hairline running to the right edge (one device family
         site-wide); no label text, the h2 below names the section. */}
     <div class="pt-12 md:pt-16 flex items-center gap-4">
-      <span class="h-px flex-1 bg-ink/15" aria-hidden="true"></span>
+      <span class="rule h-px flex-1" aria-hidden="true"></span>
     </div>
     <div class="pt-8 pb-16 md:pb-20">
       <div class="flex items-end justify-between mb-8">
         <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
         <a href="/wax-room" class="shrink-0 text-mint-deep text-sm hover:text-navy">All entries</a>
       </div>
-      <ul class="border-y border-ink/10 divide-y divide-ink/10">
+      <ul class="border-y hairline-soft divide-hairline">
         {entries.map((e) => (
           <li>
             <a

@@ -19,7 +19,7 @@ const entries = (await getCollection('wax_entries')).sort(
     {entries.length === 0 ? (
       <p class="text-slate">No entries yet.</p>
     ) : (
-      <div class="divide-y divide-ink/10">
+      <div class="divide-hairline">
         {entries.map((e) => (
           <article class="py-10 first:pt-0 last:pb-0">
             <div class="text-sm text-slate">

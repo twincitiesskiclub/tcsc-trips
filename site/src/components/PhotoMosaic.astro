@@ -126,7 +126,7 @@ const composed = sparse && photos.length >= 3;
             running to the right edge (one device family site-wide). */}
         <div class="flex items-center gap-4">
           {number && <span class="seam">{number}</span>}
-          <span class="h-px flex-1 bg-mint/20" aria-hidden="true"></span>
+          <span class="rule h-px flex-1" aria-hidden="true"></span>
         </div>
         <div class="mb-8 mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
           <h2 class="type-h2 text-paper">{heading}</h2>
@@ -141,10 +141,10 @@ const composed = sparse && photos.length >= 3;
         filtering planned in the spec. */}
     <div
       class={composed
-        ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
+        ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
         : sparse
-          ? 'grid grid-cols-2 md:grid-cols-3 gap-px'
-          : 'grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
+          ? 'rule grid grid-cols-2 md:grid-cols-3 gap-px'
+          : 'rule grid grid-cols-2 md:grid-cols-4 grid-flow-row-dense auto-rows-fr gap-px'}
     >
       {tiles.map(({ photo, span, sizesAttr, fullSrc, fullSrcset }, i) => (
         <button

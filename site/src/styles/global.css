@@ -72,16 +72,22 @@ html {
   :root {
     --body-lh: 1.65;
     --focus-ring-color: theme(colors.navy);
+    --hairline-color: color-mix(in oklab, theme(colors.ink) 15%, transparent);
+    --hairline-soft-color: color-mix(in oklab, theme(colors.ink) 10%, transparent);
     --label-color: theme(colors.mint-deep);
   }
   .bg-navy, .bg-navy-deep, [data-photo-mosaic], [data-lightbox] {
     --body-lh: 1.7;
     --focus-ring-color: theme(colors.mint);
+    --hairline-color: color-mix(in oklab, theme(colors.mint) 20%, transparent);
+    --hairline-soft-color: color-mix(in oklab, theme(colors.mint) 15%, transparent);
     --label-color: theme(colors.mint);
   }
   .bg-paper, .bg-paper-card {
     --body-lh: 1.65;
     --focus-ring-color: theme(colors.navy);
+    --hairline-color: color-mix(in oklab, theme(colors.ink) 15%, transparent);
+    --hairline-soft-color: color-mix(in oklab, theme(colors.ink) 10%, transparent);
     --label-color: theme(colors.mint-deep);
   }
   :focus-visible {
@@ -195,6 +201,27 @@ html {
 
   .seam {
     letter-spacing: 0.18em;
+  }
+
+  .hairline {
+    border-color: var(--hairline-color);
+  }
+
+  .hairline-soft {
+    border-color: var(--hairline-soft-color);
+  }
+
+  .rule {
+    background-color: var(--hairline-color);
+  }
+
+  .rule-soft {
+    background-color: var(--hairline-soft-color);
+  }
+
+  .divide-hairline > :not(:last-child) {
+    border-bottom-width: 1px;
+    border-color: var(--hairline-soft-color);
   }
 
   .font-display {

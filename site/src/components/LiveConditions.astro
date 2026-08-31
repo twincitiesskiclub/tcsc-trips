@@ -20,11 +20,11 @@ const locations = [
 ---
 <section
   class={variant === 'prominent'
-    ? 'bg-navy-deep text-paper border-y border-mint/10'
+    ? 'bg-navy-deep text-paper border-y hairline-soft'
     // Compact strip: solid navy-deep (like prominent), NOT bg-navy/40: the
     // translucent navy over the paper page background landed text-paper/70
     // at 1.91:1 (axe fail); on solid navy-deep it measures 9.1:1 (AA pass).
-    : 'bg-navy-deep text-paper text-xs border-t border-mint/10'}
+    : 'bg-navy-deep text-paper text-xs border-t hairline-soft'}
   data-live-conditions
   data-api-url={apiUrl}
   aria-label="Current ski conditions"
@@ -45,7 +45,7 @@ const locations = [
             data-location={id}
             class={id === 'wirth'
               ? 'py-1 col-span-2 md:col-span-1 md:pr-5'
-              : 'max-md:hidden py-1 border-l border-mint/15 pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5'}
+              : 'max-md:hidden py-1 border-l hairline-soft pl-4 md:first:border-l-0 md:first:pl-0 md:pr-5'}
           >
             <div class="label-caps" data-name>{name}</div>
             <div class="mt-1 flex items-baseline gap-2">
@@ -73,7 +73,7 @@ const locations = [
           data-birkie-audio="/audio/birkie-fever.mp3"
           aria-pressed="false"
           aria-label="Birkie fever. Press to play the song."
-          class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l md:border-mint/15 md:pl-4"
+          class="group py-1 text-left max-md:hidden col-span-2 border-l-0 pl-0 md:col-span-1 md:border-l hairline-soft md:pl-4"
         >
           <div class="label-caps">
             Birkie fever

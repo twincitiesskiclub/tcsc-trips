@@ -72,7 +72,6 @@ const dollar = (cents: number) => {
 // no extra perimeter). The last-child:nth-child(odd) rule stretches an odd
 // trailing season across both columns so the empty grid cell never exposes
 // a half-width tint panel.
-const hairline = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
 const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
 const accent = variant === 'navy' ? 'text-mint' : 'text-mint-deep';
 const muted = variant === 'navy' ? 'text-paper/75' : 'text-slate';
@@ -82,7 +81,7 @@ const muted = variant === 'navy' ? 'text-paper/75' : 'text-slate';
     <div
       class:list={[
         'grid md:grid-cols-2 gap-px md:[&>:last-child:nth-child(odd)]:col-span-2',
-        hairline,
+        'rule',
       ]}
     >
       {seasons.map((s) => (
