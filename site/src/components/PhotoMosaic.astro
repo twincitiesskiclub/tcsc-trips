@@ -178,7 +178,7 @@ const composed = sparse && photos.length >= 3;
           <Image
             src={photo.data.image}
             alt={photo.data.alt_text}
-            width={Math.min(1600, photo.data.image.width)}
+            width={Math.min(composed && i === 0 ? 1920 : 1600, photo.data.image.width)}
             widths={MOSAIC}
             sizes={sizesAttr}
             class="absolute inset-0 w-full h-full object-cover"
