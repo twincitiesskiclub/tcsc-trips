@@ -21,7 +21,11 @@ const rhythms = {
 };
 const band = rhythms[rhythm];
 
-const surface = variant === 'navy' ? 'bg-navy text-paper' : 'bg-paper text-ink';
+// Navy headings stay paper. Mint is reserved for the home hero, CTA strip,
+// live data, labels, links, and fills.
+const surface = variant === 'navy'
+  ? 'bg-navy text-paper [&_h2]:text-paper [&_h3]:text-paper'
+  : 'bg-paper text-ink';
 const padding = seam ? `pt-8 ${band.b}` : band.y;
 ---
 <section class={surface}>
