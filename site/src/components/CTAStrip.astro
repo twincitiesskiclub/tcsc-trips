@@ -62,7 +62,7 @@ const subheadBaked = state ? {
   <div class:list={['gutter mx-auto max-w-site flex flex-col md:flex-row md:items-center md:justify-between gap-6', rhythmClass]}>
     <div>
       <h2 class="type-h2 text-mint">{heading}</h2>
-      {subhead && <p class="type-body mt-2 text-paper/75 max-w-xl" {...subheadBaked}>{subhead}</p>}
+      {subhead && <p class="type-body mt-2 text-paper/75 max-w-prose-narrow" {...subheadBaked}>{subhead}</p>}
     </div>
     <a
       href={cta_url}

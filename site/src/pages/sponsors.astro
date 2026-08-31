@@ -43,7 +43,7 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         <h2 class="type-h2 text-mint">
           {page.data.impact_heading}
         </h2>
-        <p class="mt-5 max-w-[56ch] text-lg leading-relaxed text-paper/85">
+        <p class="mt-5 max-w-prose-narrow text-lg leading-relaxed text-paper/85">
           {page.data.impact_intro}
         </p>
         <div class="mt-10 border-y hairline divide-hairline">
@@ -78,7 +78,7 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         <h2 class="type-h2 text-navy">
           {page.data.recognition_heading}
         </h2>
-        <p class="mt-6 max-w-[62ch] text-xl leading-relaxed text-ink">
+        <p class="mt-6 max-w-prose text-xl leading-relaxed text-ink">
           {page.data.recognition_body}
         </p>
       </div>
@@ -89,7 +89,7 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         <h2 class="type-h2 text-navy">
           {page.data.priorities_heading}
         </h2>
-        <p class="mt-5 max-w-[52ch] text-lg leading-relaxed text-slate">
+        <p class="mt-5 max-w-prose text-lg leading-relaxed text-slate">
           {page.data.priorities_intro}
         </p>
       </div>
@@ -97,7 +97,7 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         {page.data.priority_items.map((item) => (
           <article class="py-6">
             <h3 class="type-h3 text-navy">{item.title}</h3>
-            <p class="type-body mt-2 max-w-[62ch] text-slate">{item.detail}</p>
+            <p class="type-body mt-2 max-w-prose text-slate">{item.detail}</p>
           </article>
         ))}
       </div>
