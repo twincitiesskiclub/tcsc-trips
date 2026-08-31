@@ -23,6 +23,9 @@ const palette = {
 const alpha = (color: keyof typeof palette, a: number) =>
   palette[color].replace(')', ` / ${a})`);
 
+const fontSans = "'ArchivoVariable', system-ui, sans-serif";
+const fontDisplay = "'PolySansBulkyWide', 'ArchivoVariable', system-ui, sans-serif";
+
 export default {
   content: ['./src/**/*.{astro,html,ts,tsx,md,mdx}'],
   theme: {
@@ -57,6 +60,29 @@ export default {
             '--tw-prose-pre-bg': palette['navy-deep'],
             '--tw-prose-th-borders': alpha('ink', 0.15),
             '--tw-prose-td-borders': alpha('ink', 0.1),
+            h2: {
+              color: palette.navy,
+              fontFamily: fontDisplay,
+              fontSize: 'clamp(1.75rem, 1.5rem + 1vw, 2.25rem)',
+              fontWeight: '700',
+              letterSpacing: '-0.02em',
+              lineHeight: '1.1',
+              textWrap: 'balance',
+            },
+            h3: {
+              color: palette.navy,
+              fontFamily: fontSans,
+              fontSize: 'clamp(1.375rem, 1.25rem + 0.5vw, 1.625rem)',
+              fontWeight: '600',
+              lineHeight: '1.2',
+            },
+            h4: {
+              color: palette.navy,
+              fontFamily: fontSans,
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              lineHeight: '1.3',
+            },
           },
         },
       },
