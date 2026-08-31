@@ -56,7 +56,11 @@ const locations = [
                 the post-hydration wax label can wrap without pushing the hero
                 down (CLS guard). */}
             <div class="text-xs text-paper/70 mt-1 min-h-8 flex items-start gap-1.5">
-              <span class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0" data-wax-chip hidden></span>
+              <span
+                class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0 data-[band=green]:bg-wax-green data-[band=blue]:bg-wax-blue data-[band=purple]:bg-wax-purple data-[band=red]:bg-wax-red"
+                data-wax-chip
+                hidden
+              ></span>
               <span data-wax>·</span>
             </div>
           </div>
@@ -124,15 +128,6 @@ const locations = [
     opacity: 0;
     transform: translateY(4px);
   }
-
-  /* Wax chips: the dot's color IS the recommendation (the literal color of
-     the glide wax for the band), set per-render via data-band. Deliberate
-     non-token colors: this is data encoding, not palette decoration, muted
-     to sit quietly on navy-deep. */
-  .wax-chip[data-band='green'] { background: oklch(0.62 0.13 150); }
-  .wax-chip[data-band='blue'] { background: oklch(0.62 0.12 245); }
-  .wax-chip[data-band='purple'] { background: oklch(0.62 0.12 300); }
-  .wax-chip[data-band='red'] { background: oklch(0.62 0.15 25); }
 </style>
 
 <script>

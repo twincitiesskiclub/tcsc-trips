@@ -17,6 +17,12 @@ const palette = {
   'paper-card': 'oklch(0.97 0.004 90)',
   ink: 'oklch(0.18 0.04 260)',
   slate: 'oklch(0.50 0.02 260)',
+  // Data colors: these encode the recommended glide-wax band and are used
+  // only by the live-conditions wax chip.
+  'wax-green': 'oklch(0.62 0.13 150)',
+  'wax-blue': 'oklch(0.62 0.12 245)',
+  'wax-purple': 'oklch(0.62 0.12 300)',
+  'wax-red': 'oklch(0.62 0.15 25)',
 };
 
 /** Palette color with a fixed alpha (for prose rules/borders). */
