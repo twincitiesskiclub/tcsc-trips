@@ -61,26 +61,26 @@ const hasConditions =
     </div>
   )}
   {hasConditions && (
-    <aside class="mt-6 bg-paper-card p-4 rounded-md text-sm flex gap-6 flex-wrap">
+    <dl class="mt-6 grid gap-6 border-y hairline py-4 sm:grid-cols-3">
       {conditions_snapshot.location && (
         <div>
-          <div class="label-caps">Location</div>
-          <div>{conditions_snapshot.location}</div>
+          <dt class="label-caps text-mint-deep">Location</dt>
+          <dd class="type-body mt-1 text-ink">{conditions_snapshot.location}</dd>
         </div>
       )}
       {conditions_snapshot.temp_f != null && (
         <div>
-          <div class="label-caps">Temp</div>
-          <div>{conditions_snapshot.temp_f}°F</div>
+          <dt class="label-caps text-mint-deep">Temp</dt>
+          <dd class="type-body mt-1 text-ink">{conditions_snapshot.temp_f}°F</dd>
         </div>
       )}
       {conditions_snapshot.wax_used && (
         <div>
-          <div class="label-caps">Wax used</div>
-          <div>{conditions_snapshot.wax_used}</div>
+          <dt class="label-caps text-mint-deep">Wax used</dt>
+          <dd class="type-body mt-1 text-ink">{conditions_snapshot.wax_used}</dd>
         </div>
       )}
-    </aside>
+    </dl>
   )}
   {photo && (
     <div class="my-8 aspect-video overflow-hidden">
