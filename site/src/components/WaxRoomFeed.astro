@@ -1,13 +1,9 @@
 ---
-// WaxRoomFeed: home-page strip of the three newest Wax Room entries, set as
-// a full-bleed PAPER band: with the mission panel it gives the home scroll
-// its navy/paper rhythm (the spine fix from the UI debate; the teaser also
-// shares a surface with its paper destination page, so the rhythm is
-// truthful). Logbook grammar, not tiles: each entry is a dated field-log
-// line (date · author / title / one line of trail truth); the form is the
-// design, so every future club-written entry inherits the voice. The home
-// teaser stays hidden until at least one published entry exists; the Wax
-// Room index owns the empty state.
+// WaxRoomFeed: the home page's closing paper chapter. Wax Room entries and
+// sponsors share one surface so paper remains a deliberate moment rather
+// than an alternating stripe. Logbook grammar, not tiles: each entry is a
+// dated field-log line, and the sponsor row closes the chapter even when no
+// entries have been published yet.
 //
 // entry.id = filename slug (url), entry.data.slug = display title
 // (see content.config.ts header).
@@ -17,6 +13,7 @@ import WaxEntryRow from '@/components/WaxEntryRow.astro';
 import BandContainer from '@/components/BandContainer.astro';
 import Seam from '@/components/Seam.astro';
 import SectionHeader from '@/components/SectionHeader.astro';
+import SponsorWall from '@/components/SponsorWall.astro';
 
 interface Props {
   rhythm?: 'sm' | 'md' | 'lg';
@@ -33,24 +30,42 @@ const entries = (await getCollection('wax_entries'))
   .sort((a, b) => +b.data.date - +a.data.date || a.id.localeCompare(b.id))
   .slice(0, 3);
 ---
-{entries.length > 0 && (
-  <section class="bg-paper text-ink">
-    <BandContainer>
-      <Seam surface="paper" class={band.t} />
-      <div class:list={['pt-8', band.b]}>
+<section class="bg-paper text-ink">
+  <BandContainer>
+    <Seam
+      label={entries.length > 0 ? 'Wax room' : 'Our sponsors'}
+      surface="paper"
+      as={entries.length > 0 ? 'span' : 'h2'}
+      class={band.t}
+    />
+    <div class:list={['pt-8', band.b]}>
+      {entries.length > 0 && (
+        <div>
+          <SectionHeader
+            more_href="/wax-room"
+            more_label="All entries"
+            class="mb-8"
+          >
+            <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
+          </SectionHeader>
+          <Ledger cols="three" surface="paper">
+            {entries.map((e) => (
+              <WaxEntryRow entry={e} density="feed" />
+            ))}
+          </Ledger>
+        </div>
+      )}
+
+      <div class:list={[entries.length > 0 && 'mt-12 pt-12 border-t hairline-soft']}>
+        {entries.length > 0 && <Seam label="Our sponsors" surface="paper" />}
         <SectionHeader
-          more_href="/wax-room"
-          more_label="All entries"
-          class="mb-8"
+          more_href="/sponsors"
+          more_label="Sponsor the club"
+          class={entries.length > 0 ? 'mt-8' : undefined}
         >
-          <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
+          <SponsorWall variant="strip" />
         </SectionHeader>
-        <Ledger cols="three" surface="paper">
-          {entries.map((e) => (
-            <WaxEntryRow entry={e} density="feed" />
-          ))}
-        </Ledger>
       </div>
-    </BandContainer>
-  </section>
-)}
+    </div>
+  </BandContainer>
+</section>
