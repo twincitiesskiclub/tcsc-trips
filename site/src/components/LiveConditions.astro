@@ -93,13 +93,13 @@ const locations = [
       {locations.map(({ id, name }) => (
         <div data-location={id} class={id === 'wirth' ? 'flex items-baseline gap-1.5' : 'max-md:hidden flex items-baseline gap-1.5'}>
           <span class="tracking-widest uppercase text-mint" data-name>{name}</span>
-          <span class="font-display text-paper" data-temp>·</span>
+          <span class="text-sm font-bold tabular-nums text-paper" data-temp>·</span>
           <span data-wax>·</span>
         </div>
       ))}
       <div data-birkie class="max-md:hidden flex items-baseline gap-1.5">
         <span class="tracking-widest uppercase text-mint">Birkie fever</span>
-        <span class="font-display text-paper" data-birkie-word>·</span>
+        <span class="text-sm font-bold tabular-nums text-paper" data-birkie-word>·</span>
       </div>
     </div>
   )}
