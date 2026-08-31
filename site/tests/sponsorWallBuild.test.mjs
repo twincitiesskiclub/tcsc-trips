@@ -60,7 +60,7 @@ function attribute(attributes, name) {
 }
 
 const sponsorsMain = elementStartingAt(sponsorsHtml, '<main id="main"', 'main');
-const homeSponsorSection = elementContaining(homeHtml, '<section', 'About our sponsors');
+const homeSponsorSection = elementContaining(homeHtml, '<section', 'Sponsor the club');
 const allLinkedLogos = [...linkedLogos(sponsorsMain), ...linkedLogos(homeSponsorSection)];
 
 test('renders the Trailblazer heading when it is the only populated wall tier', () => {
