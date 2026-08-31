@@ -12,6 +12,7 @@ import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import Ledger from '@/components/Ledger.astro';
 import LedgerRow from '@/components/LedgerRow.astro';
@@ -80,18 +81,13 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
     <Fragment slot="prose">
       <Content />
     </Fragment>
-    <div class="rule mt-10 grid grid-cols-2 gap-px">
-      {memberCluster.map((p) => (
-        <Image
-          src={p.src}
-          alt={p.alt}
-          widths={CARD}
-          sizes="(min-width: 768px) 360px, 50vw"
-          class="w-full h-48 md:h-64 object-cover"
-          loading="lazy"
-        />
-      ))}
-    </div>
+    <PhotoStrip
+      photos={memberCluster}
+      cols={2}
+      mobileCols={2}
+      aspect="4/3"
+      class="mt-10"
+    />
   </ProseColumn>
   {takeaways.length > 0 && (
     <SectionBand

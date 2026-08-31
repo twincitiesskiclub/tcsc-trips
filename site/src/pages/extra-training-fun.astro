@@ -4,13 +4,12 @@
 // the navy band lists current standing fixtures; the paper band lists the
 // annual traditions; two consented pool photos sit between them.
 import { getEntry, render } from 'astro:content';
-import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
 import SectionBand from '@/components/SectionBand.astro';
 import Ledger from '@/components/Ledger.astro';
 import LedgerRow from '@/components/LedgerRow.astro';
-import { MOSAIC } from '@/components/imageWidths';
 import { metaDescription } from '@/lib/metaDescription';
 
 const page = await getEntry('extra_training', 'extra_training');
@@ -18,9 +17,9 @@ if (!page) throw new Error('extra_training singleton missing (src/content/pages/
 const { Content } = await render(page);
 const d = page.data;
 const photos = [
-  { src: d.photo_1, alt: d.photo_1_alt, caption: d.photo_1_caption },
-  { src: d.photo_2, alt: d.photo_2_alt, caption: d.photo_2_caption },
-].filter((p) => p.src);
+  { src: d.photo_1, alt: d.photo_1_alt ?? '', caption: d.photo_1_caption },
+  { src: d.photo_2, alt: d.photo_2_alt ?? '', caption: d.photo_2_caption },
+].filter((photo): photo is { src: ImageMetadata; alt: string; caption: string | undefined } => Boolean(photo.src));
 ---
 <InnerPageLayout
   title="Extra training fun · Twin Cities Ski Club"
@@ -45,28 +44,7 @@ const photos = [
   )}
   {photos.length > 0 && (
     <section class="gutter mx-auto max-w-site band-y-sm" aria-label="Photos">
-      <div class="grid gap-6 md:grid-cols-2">
-        {photos.map((p) => (
-          <figure>
-            <div class="relative aspect-[4/3] overflow-hidden">
-              <Image
-                src={p.src!}
-                alt={p.alt ?? ''}
-                widths={MOSAIC}
-                width={Math.min(1600, p.src!.width)}
-                height={Math.round((Math.min(1600, p.src!.width) * 3) / 4)}
-                fit="cover"
-                position="attention"
-                sizes="(min-width: 768px) 50vw, 100vw"
-                class="absolute inset-0 w-full h-full object-cover"
-                loading="lazy"
-                decoding="async"
-              />
-            </div>
-            {p.caption && <figcaption class="mt-2 text-sm text-slate">{p.caption}</figcaption>}
-          </figure>
-        ))}
-      </div>
+      <PhotoStrip photos={photos} cols={2} mobileCols={1} aspect="4/3" captions />
     </section>
   )}
   {d.annuals.length > 0 && (

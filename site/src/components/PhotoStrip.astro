@@ -1,0 +1,73 @@
+---
+import { Image } from 'astro:assets';
+import { MOSAIC } from '@/components/imageWidths';
+
+type Aspect = '4/3' | '4/5' | '3/4';
+
+interface Photo {
+  src: ImageMetadata;
+  alt: string;
+  caption?: string;
+  position?: string;
+  loading?: 'eager' | 'lazy';
+}
+
+interface Props {
+  photos: Photo[];
+  cols: 2 | 3 | 5;
+  mobileCols?: 1 | 2 | 3;
+  aspect: Aspect;
+  captions?: boolean;
+  class?: string;
+}
+
+const {
+  photos,
+  cols,
+  mobileCols = cols === 5 ? 2 : cols,
+  aspect,
+  captions = false,
+  class: className,
+}: Props = Astro.props;
+
+const desktopCols = {
+  2: 'md:grid-cols-2',
+  3: 'md:grid-cols-3',
+  5: 'md:grid-cols-5',
+}[cols];
+const smallCols = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+}[mobileCols];
+const aspectClass = {
+  '4/3': 'aspect-[4/3]',
+  '4/5': 'aspect-[4/5]',
+  '3/4': 'aspect-[3/4]',
+}[aspect];
+const desktopWidth = cols === 5 ? '20vw' : cols === 3 ? '33vw' : '50vw';
+const mobileWidth = mobileCols === 3 ? '33vw' : mobileCols === 2 ? '50vw' : '100vw';
+const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
+---
+
+<div class:list={['photo-strip rule grid gap-px', smallCols, desktopCols, className]}>
+  {photos.map((photo) => (
+    <figure class="bg-paper">
+      <div class:list={['relative overflow-hidden', aspectClass]}>
+        <Image
+          src={photo.src}
+          alt={photo.alt}
+          widths={MOSAIC}
+          sizes={sizes}
+          class="absolute inset-0 h-full w-full object-cover"
+          style={photo.position ? `object-position: ${photo.position}` : undefined}
+          loading={photo.loading ?? 'lazy'}
+          decoding="async"
+        />
+      </div>
+      {captions && photo.caption && (
+        <figcaption class="type-caption pt-2 text-slate">{photo.caption}</figcaption>
+      )}
+    </figure>
+  ))}
+</div>
