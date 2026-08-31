@@ -1,5 +1,4 @@
 import type { Config } from 'tailwindcss';
-import forms from '@tailwindcss/forms';
 import typography from '@tailwindcss/typography';
 
 // Raw oklch values, shared between the color tokens (which append
@@ -62,11 +61,8 @@ export default {
             '--tw-prose-bullets': palette['mint-deep'],
             '--tw-prose-hr': alpha('ink', 0.1),
             '--tw-prose-quotes': palette.ink,
-            '--tw-prose-quote-borders': palette.mint,
+            '--tw-prose-quote-borders': alpha('ink', 0.15),
             '--tw-prose-captions': palette.slate,
-            '--tw-prose-code': palette.ink,
-            '--tw-prose-pre-code': palette.paper,
-            '--tw-prose-pre-bg': palette['navy-deep'],
             '--tw-prose-th-borders': alpha('ink', 0.15),
             '--tw-prose-td-borders': alpha('ink', 0.1),
             h2: {
@@ -112,5 +108,5 @@ export default {
       },
     },
   },
-  plugins: [forms, typography],
+  plugins: [typography],
 } satisfies Config;
