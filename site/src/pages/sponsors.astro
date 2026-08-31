@@ -50,7 +50,7 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
           {page.data.impact_items.map((item) => (
             <article class="py-6 grid gap-2 sm:grid-cols-[minmax(12rem,16rem)_1fr] sm:gap-8">
               <h3 class="font-semibold text-lg leading-snug text-mint">{item.title}</h3>
-              <p class="leading-relaxed text-paper/80">{item.detail}</p>
+              <p class="type-body text-paper/80">{item.detail}</p>
             </article>
           ))}
         </div>
@@ -97,7 +97,7 @@ const mailtoHref = `mailto:${page.data.contact_email}`;
         {page.data.priority_items.map((item) => (
           <article class="py-6">
             <h3 class="font-semibold text-xl text-navy">{item.title}</h3>
-            <p class="mt-2 max-w-[62ch] leading-relaxed text-slate">{item.detail}</p>
+            <p class="type-body mt-2 max-w-[62ch] text-slate">{item.detail}</p>
           </article>
         ))}
       </div>

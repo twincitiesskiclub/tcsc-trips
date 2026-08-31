@@ -103,7 +103,7 @@ const muted = variant === 'navy' ? 'text-paper/75' : 'text-slate';
               {cardLines.get(s.id)!.note}
             </p>
           </div>
-          <p class="mt-4 max-w-prose">{s.data.summary}</p>
+          <p class="type-body mt-4 max-w-prose">{s.data.summary}</p>
           <dl class="mt-6 space-y-2.5 text-sm">
             {[
               ['When', s.data.when],
@@ -124,7 +124,7 @@ const muted = variant === 'navy' ? 'text-paper/75' : 'text-slate';
     {/* Dues transparency and shared practice details, rendered once below
         both season columns. */}
     <div class:list={['px-8 md:px-10 py-6', surface]}>
-      <p class:list={['text-sm', muted]}>
+      <p class:list={['type-body', muted]}>
         Practices run twice a week with KJ, Greg, Rebecca, and Michael. Dues cover coaching and reserved workout space.
       </p>
     </div>

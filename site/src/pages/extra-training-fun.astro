@@ -40,7 +40,7 @@ const photos = [
               <div class="font-semibold text-paper">{f.name}</div>
               {f.when && <div class="mt-1 text-sm text-mint/90">{f.when}</div>}
             </div>
-            {f.what && <p class="text-paper/80 max-w-prose">{f.what}</p>}
+            {f.what && <p class="type-body text-paper/80 max-w-prose">{f.what}</p>}
           </div>
         ))}
       </div>
@@ -78,11 +78,11 @@ const photos = [
         {d.annuals.map((a) => (
           <div class="py-6 grid gap-x-8 gap-y-1 md:grid-cols-[16rem_1fr]">
             <div class="font-semibold text-navy">{a.name}</div>
-            {a.detail && <p class="text-slate max-w-prose">{a.detail}</p>}
+            {a.detail && <p class="type-body text-slate max-w-prose">{a.detail}</p>}
           </div>
         ))}
       </div>
-      <p class="mt-10 text-slate">
+      <p class="type-body mt-10 text-slate">
         The club also puts on its own fall race:{' '}
         <a
           href="/dry-tri"
