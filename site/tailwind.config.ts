@@ -91,9 +91,8 @@ export default {
           },
         },
       },
-      // One family, two voices: weight separates the display cut from body
-      // (headings add font-semibold; global.css pins .font-display to normal
-      // width after the expanded cut was retired 2026-06-10).
+      // One family, two voices: the licensed display face is a single 700
+      // cut, while Archivo carries the variable body weights.
       fontFamily: {
         sans: ['ArchivoVariable', 'system-ui', 'sans-serif'],
         // Licensed PolySans BulkyWide subset for display moments. Archivo
