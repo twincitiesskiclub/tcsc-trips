@@ -1,21 +1,17 @@
 ---
 // CoachEntry: asymmetric editorial split (NOT a card, per the design
-// system). Photo holds a constrained 5-column 4:5 portrait; name + bio take
-// the wide column; entries alternate sides via `flip`. Bio body comes
-// through the slot (render(entry) Content at the call site).
+// system). Photo holds its native square in four site-grid columns; name and
+// bio take the seven-column reading slot. Bio body comes through the slot
+// (render(entry) Content at the call site).
 //
 // WHY CONSTRAINED, NOT FULL-BLEED: coach source photos are modest quality
-// (KJ's is visibly soft at full size). A 21:9 full-bleed mount magnified
-// that softness across 1440+ px; at ~460px CSS (920 device px at 2x) the
-// same sources read sharp. If crisp 3000px+ portraits ever arrive, the
-// full-bleed treatment can come back.
+// (KJ's is visibly soft at full size). Keeping the source at or above 1x in
+// a four-column square makes that softness recede without inventing a crop.
 //
-// CROP STRATEGY: sources are square-ish, the slot is 4:5. The crop happens
-// server-side (width + 4:5-derived height makes sharp emit true 4:5
-// renditions) and position="attention" uses sharp's saliency crop, which
-// chases faces instead of the geometric center. `object_position` remains
-// as a CSS fallback for rounding slack, biased ~30% from top where heads
-// live.
+// CROP STRATEGY: the square slot is emitted server-side and
+// position="attention" uses sharp's saliency crop, which chases faces instead
+// of the geometric center. `object_position` remains as a CSS fallback for
+// rounding slack, biased ~30% from top where heads live.
 import { Image } from 'astro:assets';
 import { CARD } from '@/components/imageWidths';
 
@@ -50,47 +46,48 @@ const {
 } = Astro.props;
 const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 
-const width = Math.min(1200, photo.width);
-const height = Math.round((width * 5) / 4);
+const cropSize = Math.min(1200, photo.width, photo.height);
 ---
 <article id={anchor} class="border-b hairline-soft last:border-b-0 scroll-mt-24">
   {/* All photos sit left: a steady column instead of an alternator
       performing fake variety. */}
-  <div class:list={['gutter mx-auto max-w-site grid gap-8 md:gap-14 md:grid-cols-12 items-start', rhythmClass]}>
-    <div class="md:col-span-5">
-      <div class="relative aspect-[4/5] overflow-hidden">
-        <Image
-          src={photo}
-          alt={photoAlt}
-          widths={CARD}
-          width={width}
-          height={height}
-          fit="cover"
-          position="attention"
-          sizes="(min-width: 768px) 40vw, 100vw"
-          class="absolute inset-0 w-full h-full object-cover"
-          style={`object-position: ${object_position}`}
-          loading={loading}
-          fetchpriority={loading === 'eager' ? 'high' : 'auto'}
-          decoding="async"
-        />
-      </div>
+  <div class:list={['gutter mx-auto max-w-site grid grid-cols-1 gap-x-4 gap-y-6 min-[360px]:grid-cols-[15rem_minmax(0,1fr)] md:grid-cols-12 md:gap-x-14 md:gap-y-0 items-start', rhythmClass]}>
+    <div class="relative aspect-square w-full max-w-60 overflow-hidden md:col-span-4 md:max-w-none">
+      <Image
+        src={photo}
+        alt={photoAlt}
+        widths={CARD}
+        width={cropSize}
+        height={cropSize}
+        fit="cover"
+        position="attention"
+        sizes="(min-width: 768px) 33vw, 240px"
+        class="absolute inset-0 w-full h-full object-cover"
+        style={`object-position: ${object_position}`}
+        loading={loading}
+        fetchpriority={loading === 'eager' ? 'high' : 'auto'}
+        decoding="async"
+      />
     </div>
-    <div class="md:col-span-7">
-      {/* Plain sentence-case role: uppercase tracked labels repeated four
-          times down the page read as scaffolding, not information. */}
-      <h2 class="type-h2 text-navy">{name}</h2>
-      <p class="mt-2 text-mint-deep font-semibold">{role}</p>
-      <div class="mt-6 prose max-w-prose text-ink">
-        <slot />
+    <div class="contents md:block md:col-start-6 md:col-span-7 md:self-start">
+      <header class="min-[360px]:col-start-2 min-[360px]:row-start-1 self-start md:block">
+        {/* Plain sentence-case role: uppercase tracked labels repeated four
+            times down the page read as scaffolding, not information. */}
+        <h2 class="type-h2 text-navy">{name}</h2>
+        <p class="mt-2 text-mint-deep font-semibold">{role}</p>
+      </header>
+      <div class="min-[360px]:col-span-2 min-[360px]:col-start-1 md:block">
+        <div class="md:mt-6 prose max-w-prose text-ink">
+          <slot />
+        </div>
+        {credentials.length > 0 && (
+          <ul class="mt-6 text-sm text-slate space-y-1">
+            {credentials.map((c) => (
+              <li class="before:content-['·'] before:mr-2">{c}</li>
+            ))}
+          </ul>
+        )}
       </div>
-      {credentials.length > 0 && (
-        <ul class="mt-6 text-sm text-slate space-y-1">
-          {credentials.map((c) => (
-            <li class="before:content-['·'] before:mr-2">{c}</li>
-          ))}
-        </ul>
-      )}
     </div>
   </div>
 </article>
