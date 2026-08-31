@@ -102,6 +102,13 @@ if (!sparse) {
   }
 }
 
+// Composed sparse fallback: under 12 photos, the first three form one
+// deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
+// stacked side tiles) and the rest run as a uniform grid, so the degraded
+// state reads as composed, not abandoned. Keyed only on photo count (never
+// on homeOnly), so every consumer inherits it.
+const composed = sparse && photos.length >= 3;
+
 const tiles = await Promise.all(
   arrangedPhotos.map(async (photo, i) => {
     const proposedSpan = sparse ? '' : sizeClasses[i % sizeClasses.length];
@@ -109,7 +116,7 @@ const tiles = await Promise.all(
     // The fallback guards collections with too few landscape sources. Dense
     // grid flow closes the vacated span rather than forcing a portrait wide.
     const span = portrait && proposedSpan.includes('md:col-span-2') ? '' : proposedSpan;
-    const squareCrop = !sparse && !span.includes('md:aspect-auto');
+    const squareCrop = (!sparse && !span.includes('md:aspect-auto')) || (composed && i >= 3);
     // Per-tile sizes. The grid is FULL-BLEED (no max-w container), so cells
     // are true viewport fractions at every width: 1x1 is 25vw on md+ (50vw
     // mobile), spans are 50vw. Sparse/composed: the lead tile is ~66vw, the
@@ -148,13 +155,6 @@ const tiles = await Promise.all(
     };
   }),
 );
-
-// Composed sparse fallback: under 12 photos, the first three form one
-// deliberate full-bleed row (a 16:9 lead spanning two thirds plus two
-// stacked side tiles) and the rest run as a uniform grid, so the degraded
-// state reads as composed, not abandoned. Keyed only on photo count (never
-// on homeOnly), so every consumer inherits it.
-const composed = sparse && photos.length >= 3;
 ---
 {photos.length > 0 && (
   <section class:list={['bg-navy', band.b]} data-photo-mosaic>
@@ -192,7 +192,7 @@ const composed = sparse && photos.length >= 3;
             composed && i === 0
               ? 'col-span-2 md:row-span-2 aspect-video'
               : composed && i < 3
-                ? 'aspect-auto max-md:aspect-square'
+                ? 'aspect-auto max-md:aspect-[4/3]'
                 : 'aspect-square',
             !composed && span,
           ]}
@@ -214,8 +214,12 @@ const composed = sparse && photos.length >= 3;
             widths={MOSAIC}
             sizes={sizesAttr}
             class:list={[
-              'absolute inset-0 h-full w-full object-cover object-center',
-              portrait && !squareCrop && 'object-[center_25%]',
+              'absolute inset-0 h-full w-full object-cover',
+              composed && i === 0
+                ? 'object-[center_65%]'
+                : portrait && !squareCrop
+                  ? 'object-[center_25%]'
+                  : 'object-center',
             ]}
             loading="lazy"
             decoding="async"
