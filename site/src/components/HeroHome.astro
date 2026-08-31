@@ -63,7 +63,7 @@ const datesBaked = {
       {props.subline && (
         <p class="hero-headline type-lede mt-4 text-paper max-w-prose-narrow">{props.subline}</p>
       )}
-      <div class="mt-8">
+      <div class="hero-headline hero-cta mt-8">
         <CtaForState
           state={props.state}
           windows={props.windows}
@@ -107,5 +107,8 @@ const datesBaked = {
   }
   .hero-headline {
     animation: hero-headline-in 250ms var(--ease-out) 120ms both;
+  }
+  .hero-cta {
+    animation-delay: 200ms;
   }
 </style>
