@@ -11,6 +11,11 @@
   color-scheme: light;
   --gutter: clamp(1.5rem, 4vw, 2.5rem);
   --color-paper-muted: theme(colors.paper / 75%);
+  /* Desktop home chrome: 77px nav plus the 152px prominent trail report.
+     HeroHome consumes the sum so its bottom edge is the viewport fold. */
+  --nav-h: 4.8125rem;
+  --conditions-prominent-h: 9.5rem;
+  --chrome-h: calc(var(--nav-h) + var(--conditions-prominent-h));
 }
 
 /* Body: Archivo Variable (full character set, all weights).

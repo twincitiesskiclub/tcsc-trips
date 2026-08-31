@@ -93,6 +93,17 @@ const datesBaked = {
       min-height: min(540px, 100svh);
     }
   }
+  @media (min-width: 64rem) {
+    .hero-frame {
+      height: calc(100vh - var(--chrome-h));
+      min-height: 540px;
+    }
+    @supports (height: 100svh) {
+      .hero-frame {
+        height: calc(100svh - var(--chrome-h));
+      }
+    }
+  }
 
   /* The single orchestrated page-load: photo fades in, headline rises 8px
      just behind it. One entrance per load, then total stillness (no scroll

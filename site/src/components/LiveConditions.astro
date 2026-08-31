@@ -38,7 +38,7 @@ const locations = [
         <Seam label="Trail report" surface="navy" as="h2" class="w-full md:min-w-0 md:flex-1" />
         <span class="type-caption text-coral text-left min-w-0 md:ml-auto md:text-right" data-updated>Loading conditions…</span>
       </div>
-      <div data-conditions-grid class="pb-4 grid grid-cols-2 md:grid-cols-5 gap-y-4">
+      <div data-conditions-grid class="pb-3 grid grid-cols-2 md:grid-cols-5 gap-y-4">
         {/* On a phone the full grid is overwhelming, so mobile leads with just
             the Theodore Wirth cell (the club's home venue); the other three
             venues and the fever cell are desktop-only. */}
@@ -54,10 +54,8 @@ const locations = [
               <span class="font-display text-2xl md:text-3xl text-mint" data-temp>·</span>
               <span class="type-caption text-paper/75" data-feels></span>
             </div>
-            {/* min-h-8 reserves two text-xs lines (line-height 1rem each) so
-                the post-hydration wax label can wrap without pushing the hero
-                down (CLS guard). */}
-            <div class="text-xs text-paper/75 mt-1 min-h-8 flex items-start gap-1.5">
+            {/* One caption line is reserved so hydration cannot move the hero. */}
+            <div class="type-caption text-paper/75 mt-1 min-h-4 flex items-start gap-1.5">
               <span
                 class="wax-chip mt-1 h-2 w-2 rounded-full shrink-0 data-[band=green]:bg-wax-green data-[band=blue]:bg-wax-blue data-[band=purple]:bg-wax-purple data-[band=red]:bg-wax-red"
                 data-wax-chip
@@ -88,7 +86,7 @@ const locations = [
           <div class="mt-1">
             <span class="font-display text-2xl md:text-3xl text-mint transition-colors group-hover:text-paper" data-birkie-word>·</span>
           </div>
-          <div class="text-xs text-paper/75 mt-1 min-h-8 transition-colors group-hover:text-paper" data-birkie-detail>·</div>
+          <div class="type-caption text-paper/75 mt-1 min-h-4 transition-colors group-hover:text-paper" data-birkie-detail>·</div>
         </button>
       </div>
     </div>
