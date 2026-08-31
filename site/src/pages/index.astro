@@ -18,6 +18,7 @@ import PhotoMosaic from '@/components/PhotoMosaic.astro';
 import WaxRoomFeed from '@/components/WaxRoomFeed.astro';
 import SponsorWall from '@/components/SponsorWall.astro';
 import CTAStrip from '@/components/CTAStrip.astro';
+import SectionHeader from '@/components/SectionHeader.astro';
 import Footer from '@/components/Footer.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
 import { isSamePageAnchor } from '@/lib/samePageAnchor';
@@ -113,13 +114,9 @@ const ctaStripSubhead = {
   />
   <WaxRoomFeed />
   <SectionBand variant="paper" seam="Our sponsors">
-    <div class="flex flex-wrap items-center justify-between gap-x-12 gap-y-8">
+    <SectionHeader more_href="/sponsors" more_label="Sponsor the club">
       <SponsorWall variant="strip" />
-      <a
-        href="/sponsors"
-        class="link-inline inline-flex min-h-11 items-center text-sm"
-      >Sponsor the club</a>
-    </div>
+    </SectionHeader>
   </SectionBand>
   <CTAStrip
     id="registration"

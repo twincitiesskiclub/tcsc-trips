@@ -16,6 +16,7 @@ import Ledger from '@/components/Ledger.astro';
 import WaxEntryRow from '@/components/WaxEntryRow.astro';
 import BandContainer from '@/components/BandContainer.astro';
 import Seam from '@/components/Seam.astro';
+import SectionHeader from '@/components/SectionHeader.astro';
 
 interface Props {
   rhythm?: 'sm' | 'md' | 'lg';
@@ -33,20 +34,23 @@ const entries = (await getCollection('wax_entries'))
   .slice(0, 3);
 ---
 {entries.length > 0 && (
-<section class="bg-paper text-ink">
-  <BandContainer>
-    <Seam surface="paper" class={band.t} />
-    <div class:list={['pt-8', band.b]}>
-      <div class="flex items-end justify-between mb-8">
-        <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
-        <a href="/wax-room" class="link-inline inline-flex min-h-11 shrink-0 items-center text-sm">All entries</a>
+  <section class="bg-paper text-ink">
+    <BandContainer>
+      <Seam surface="paper" class={band.t} />
+      <div class:list={['pt-8', band.b]}>
+        <SectionHeader
+          more_href="/wax-room"
+          more_label="All entries"
+          class="mb-8"
+        >
+          <h2 class="type-h2-longform text-navy">From the Wax Room</h2>
+        </SectionHeader>
+        <Ledger cols="three" surface="paper">
+          {entries.map((e) => (
+            <WaxEntryRow entry={e} density="feed" />
+          ))}
+        </Ledger>
       </div>
-      <Ledger cols="three" surface="paper">
-        {entries.map((e) => (
-          <WaxEntryRow entry={e} density="feed" />
-        ))}
-      </Ledger>
-    </div>
-  </BandContainer>
-</section>
+    </BandContainer>
+  </section>
 )}

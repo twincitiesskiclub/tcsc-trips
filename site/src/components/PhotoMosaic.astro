@@ -21,6 +21,7 @@ import { Image, getImage } from 'astro:assets';
 import { MOSAIC, LIGHTBOX } from '@/components/imageWidths';
 import BandContainer from '@/components/BandContainer.astro';
 import Seam from '@/components/Seam.astro';
+import SectionHeader from '@/components/SectionHeader.astro';
 
 interface Props {
   limit?: number;
@@ -136,12 +137,13 @@ const composed = sparse && photos.length >= 3;
         as={heading ? 'span' : 'h2'}
       />
       {heading && (
-        <div class="mb-8 mt-8 flex flex-wrap items-end justify-between gap-x-6 gap-y-2">
-          <h2 class="type-h2 text-paper">{heading}</h2>
-          {more_href && more_label && (
-            <a href={more_href} class="link-inline ml-auto inline-flex min-h-11 shrink-0 items-center text-sm">{more_label}</a>
-          )}
-        </div>
+        <SectionHeader
+          heading={heading}
+          more_href={more_href}
+          more_label={more_label}
+          surface="navy"
+          class="mb-8 mt-8"
+        />
       )}
     </BandContainer>
     {/* The grid runs edge to edge with hairline gaps: the one section that
