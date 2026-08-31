@@ -9,6 +9,7 @@ interface Photo {
   alt: string;
   caption?: string;
   position?: string;
+  attention?: boolean;
   loading?: 'eager' | 'lazy';
 }
 
@@ -17,7 +18,9 @@ interface Props {
   cols: 2 | 3 | 5;
   mobileCols?: 1 | 2 | 3;
   aspect: Aspect;
+  mobileAspect?: Aspect;
   captions?: boolean;
+  captionRole?: 'caption' | 'label';
   /** Let the first photo lead a two-column mobile strip without leaving an
       orphan cell when the collection count is odd. */
   mobileLead?: boolean;
@@ -29,7 +32,9 @@ const {
   cols,
   mobileCols = cols === 5 ? 2 : cols,
   aspect,
+  mobileAspect,
   captions = false,
+  captionRole = 'caption',
   mobileLead = false,
   class: className,
 }: Props = Astro.props;
@@ -49,6 +54,16 @@ const aspectClass = {
   '4/5': 'aspect-[4/5]',
   '3/4': 'aspect-[3/4]',
 }[aspect];
+const mobileAspectClass = mobileAspect && {
+  '4/3': 'aspect-[4/3]',
+  '4/5': 'aspect-[4/5]',
+  '3/4': 'aspect-[3/4]',
+}[mobileAspect];
+const desktopAspectClass = mobileAspect && {
+  '4/3': 'md:aspect-[4/3]',
+  '4/5': 'md:aspect-[4/5]',
+  '3/4': 'md:aspect-[3/4]',
+}[aspect];
 const desktopWidth = cols === 5 ? '20vw' : cols === 3 ? '33vw' : '50vw';
 const mobileWidth = mobileCols === 3 ? '33vw' : mobileCols === 2 ? '50vw' : '100vw';
 const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
@@ -65,8 +80,12 @@ const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
       <figure class:list={['bg-paper', isMobileLead && 'max-md:col-span-2']}>
         <div
           class:list={[
-            'relative overflow-hidden',
-            isMobileLead ? 'max-md:aspect-[3/2] md:aspect-[3/4]' : aspectClass,
+          'relative overflow-hidden',
+          isMobileLead
+            ? 'max-md:aspect-[3/2] md:aspect-[3/4]'
+            : mobileAspect
+              ? [mobileAspectClass, desktopAspectClass]
+              : aspectClass,
           ]}
         >
           <Image
@@ -74,6 +93,8 @@ const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
             alt={photo.alt}
             widths={MOSAIC}
             sizes={photoSizes}
+            fit={photo.attention ? 'cover' : undefined}
+            position={photo.attention ? 'attention' : undefined}
             class="absolute inset-0 h-full w-full object-cover"
             style={photo.position ? `object-position: ${photo.position}` : undefined}
             loading={photo.loading ?? 'lazy'}
@@ -81,7 +102,12 @@ const sizes = `(min-width: 768px) ${desktopWidth}, ${mobileWidth}`;
           />
         </div>
         {captions && photo.caption && (
-          <figcaption class="type-caption pt-2 text-slate">{photo.caption}</figcaption>
+          <figcaption
+            class:list={[
+              'pt-2',
+              captionRole === 'label' ? 'label-caps text-mint-deep' : 'type-caption text-slate',
+            ]}
+          >{photo.caption}</figcaption>
         )}
       </figure>
     );
