@@ -4,6 +4,7 @@
 :root {
   color-scheme: light;
   --gutter: clamp(1.5rem, 4vw, 2.5rem);
+  --color-paper-muted: theme(colors.paper / 75%);
 }
 
 /* Body: Archivo Variable (full character set, all weights).
