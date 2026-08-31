@@ -29,28 +29,18 @@ function openingDays(w: RegistrationWindows) {
   };
 }
 
-/** "Returning members Aug 28; new members Sep 3" — null when no dates. */
+/** "Returning members Aug 28 · new members Sep 3". Null when no dates. */
 export function datesSentence(w: RegistrationWindows): string | null {
   const { returning, fresh } = openingDays(w);
   const parts: string[] = [];
   if (returning) parts.push(`Returning members ${returning}`);
   if (fresh) parts.push(returning ? `new members ${fresh}` : `New members ${fresh}`);
-  return parts.length ? parts.join('; ') : null;
+  return parts.length ? parts.join(' · ') : null;
 }
 
-/**
- * "Returning members Aug 28 · New members Sep 3" — null when no dates.
- *
- * Standalone display line (hero, under the CTA button): each clause reads on
- * its own rather than as a sentence fragment, so both start with a capital
- * and a middle dot separates them instead of a semicolon.
- */
+/** The shared opening-date format for the hero and registration strip. */
 export function datesLine(w: RegistrationWindows): string | null {
-  const { returning, fresh } = openingDays(w);
-  const parts: string[] = [];
-  if (returning) parts.push(`Returning members ${returning}`);
-  if (fresh) parts.push(`New members ${fresh}`);
-  return parts.length ? parts.join(' · ') : null;
+  return datesSentence(w);
 }
 
 export function stripSubhead(state: RegistrationState, w: RegistrationWindows): string {

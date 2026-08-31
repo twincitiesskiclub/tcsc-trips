@@ -39,7 +39,7 @@ test('returns null for missing or unparseable input', () => {
 });
 
 test('builds the dates sentence from both windows', () => {
-  assert.equal(datesSentence(WINDOWS), 'Returning members Aug 28; new members Sep 3');
+  assert.equal(datesSentence(WINDOWS), 'Returning members Aug 28 · new members Sep 3');
 });
 
 test('builds a partial dates sentence when only one window exists', () => {
@@ -56,7 +56,7 @@ test('has no dates sentence when no window exists', () => {
 test('the coming_soon subhead leads with the real dates', () => {
   assert.equal(
     stripSubhead('coming_soon', WINDOWS),
-    'Returning members Aug 28; new members Sep 3. Intermediate ability and up, no racing required.',
+    'Returning members Aug 28 · new members Sep 3. Intermediate ability and up, no racing required.',
   );
 });
 
