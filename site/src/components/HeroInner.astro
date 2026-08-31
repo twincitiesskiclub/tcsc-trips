@@ -37,7 +37,7 @@ const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
       <FactStack
         facts={facts}
         size="md"
-        align="end"
+        align={facts.length > 1 ? 'end' : 'start'}
         class="md:col-span-3 md:col-start-10"
       />
     )}

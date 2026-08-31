@@ -442,6 +442,11 @@ html {
       align-self: center;
     }
 
+    .fact-stack[data-fact-align='start'] {
+      align-self: start;
+      padding-top: 0.75rem;
+    }
+
     .fact-stack[data-fact-align='end'] {
       align-self: end;
     }
