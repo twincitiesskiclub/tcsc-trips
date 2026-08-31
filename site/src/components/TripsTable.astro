@@ -18,7 +18,10 @@ trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b
     <LedgerRow title="No trips posted yet.">
       <Fragment slot="note">
         Trips go up here once dates are set. Questions in the meantime:{' '}
-        <a href="mailto:contact@twincitiesskiclub.org" class="text-mint-deep underline">contact@twincitiesskiclub.org</a>.
+        <a
+          href="mailto:contact@twincitiesskiclub.org"
+          class="link-inline"
+        >contact@twincitiesskiclub.org</a>.
       </Fragment>
     </LedgerRow>
   ) : (

@@ -63,6 +63,12 @@ html {
     --hairline-color: color-mix(in oklab, theme(colors.ink) 15%, transparent);
     --hairline-soft-color: color-mix(in oklab, theme(colors.ink) 10%, transparent);
     --label-color: theme(colors.mint-deep);
+    --link-inline-color: theme(colors.mint-deep);
+    --link-inline-decoration: theme(colors.mint-deep / 40%);
+    --link-ledger-color: theme(colors.navy);
+    --link-ledger-decoration: theme(colors.ink / 30%);
+    --link-ledger-hover: theme(colors.mint-deep);
+    --link-nav-hover: theme(colors.mint-deep);
   }
   .bg-navy, .bg-navy-deep, [data-photo-mosaic], [data-lightbox] {
     --body-lh: 1.7;
@@ -70,6 +76,12 @@ html {
     --hairline-color: color-mix(in oklab, theme(colors.mint) 20%, transparent);
     --hairline-soft-color: color-mix(in oklab, theme(colors.mint) 15%, transparent);
     --label-color: theme(colors.mint);
+    --link-inline-color: theme(colors.mint);
+    --link-inline-decoration: theme(colors.mint / 40%);
+    --link-ledger-color: theme(colors.paper);
+    --link-ledger-decoration: theme(colors.mint / 40%);
+    --link-ledger-hover: theme(colors.mint);
+    --link-nav-hover: theme(colors.mint);
   }
   .bg-paper, .bg-paper-card {
     --body-lh: 1.65;
@@ -77,6 +89,12 @@ html {
     --hairline-color: color-mix(in oklab, theme(colors.ink) 15%, transparent);
     --hairline-soft-color: color-mix(in oklab, theme(colors.ink) 10%, transparent);
     --label-color: theme(colors.mint-deep);
+    --link-inline-color: theme(colors.mint-deep);
+    --link-inline-decoration: theme(colors.mint-deep / 40%);
+    --link-ledger-color: theme(colors.navy);
+    --link-ledger-decoration: theme(colors.ink / 30%);
+    --link-ledger-hover: theme(colors.mint-deep);
+    --link-nav-hover: theme(colors.mint-deep);
   }
   :focus-visible {
     outline: 2px solid var(--focus-ring-color);
@@ -304,6 +322,48 @@ html {
 }
 
 @layer components {
+  .link-inline,
+  .link-nav,
+  .link-ledger:not([data-ledger-row]),
+  .link-ledger [class^='ledger-'] {
+    transition-property: color, text-decoration-color;
+    transition-duration: 150ms;
+    transition-timing-function: var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
+  }
+
+  .link-inline {
+    color: var(--link-inline-color);
+    font-weight: 600;
+    text-decoration-line: underline;
+    text-decoration-color: var(--link-inline-decoration);
+    text-decoration-thickness: from-font;
+    text-underline-offset: 4px;
+  }
+
+  .link-inline:hover {
+    text-decoration-color: currentColor;
+  }
+
+  .link-nav {
+    text-decoration: none;
+  }
+
+  .link-nav:hover {
+    color: var(--link-nav-hover);
+  }
+
+  .link-ledger:not([data-ledger-row]) {
+    color: var(--link-ledger-color);
+    text-decoration-line: underline;
+    text-decoration-color: var(--link-ledger-decoration);
+    text-decoration-thickness: from-font;
+    text-underline-offset: 4px;
+  }
+
+  .link-ledger:not([data-ledger-row]):hover {
+    color: var(--link-ledger-hover);
+  }
+
   .btn {
     font-family: 'ArchivoVariable', system-ui, sans-serif;
     font-size: 1rem;
@@ -368,14 +428,12 @@ html {
     --ledger-rule-color: theme(colors.ink / 10%);
     --ledger-title-color: theme(colors.navy);
     --ledger-detail-color: theme(colors.slate);
-    --ledger-link-hover-color: theme(colors.mint-deep);
   }
 
   .ledger[data-ledger-surface='navy'] {
     --ledger-rule-color: theme(colors.mint / 15%);
     --ledger-title-color: theme(colors.paper);
     --ledger-detail-color: theme(colors.paper / 75%);
-    --ledger-link-hover-color: theme(colors.mint);
   }
 
   .ledger[data-ledger-rule='top'] {
@@ -433,28 +491,18 @@ html {
     text-decoration: none;
   }
 
-  .link-ledger [class^='ledger-'] {
-    transition-property: color, text-decoration-color;
-    transition-duration: 150ms;
-    transition-timing-function: var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1));
-  }
-
   .link-ledger[data-link-target='title'] .ledger-title,
   .link-ledger[data-link-target='label'] .ledger-label {
+    color: var(--link-ledger-color);
     text-decoration-line: underline;
-    text-decoration-color: theme(colors.ink / 30%);
+    text-decoration-color: var(--link-ledger-decoration);
     text-decoration-thickness: from-font;
     text-underline-offset: 4px;
   }
 
-  .ledger[data-ledger-surface='navy'] .link-ledger[data-link-target='title'] .ledger-title,
-  .ledger[data-ledger-surface='navy'] .link-ledger[data-link-target='label'] .ledger-label {
-    text-decoration-color: theme(colors.mint / 40%);
-  }
-
   .link-ledger[data-link-target='title']:hover .ledger-title,
   .link-ledger[data-link-target='label']:hover .ledger-label {
-    color: var(--ledger-link-hover-color);
+    color: var(--link-ledger-hover);
   }
 
   @media (min-width: 48rem) {

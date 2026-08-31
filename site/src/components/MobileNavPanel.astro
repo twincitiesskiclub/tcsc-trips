@@ -28,7 +28,7 @@ const pathname = Astro.url.pathname;
         <a
           href={l.href}
           aria-current={active ? 'page' : undefined}
-          class:list={['flex min-h-11 items-center hover:text-mint', active && 'text-mint']}
+          class:list={['link-nav flex min-h-11 items-center', active && 'text-mint']}
         >{l.label}</a>
       );
     })}

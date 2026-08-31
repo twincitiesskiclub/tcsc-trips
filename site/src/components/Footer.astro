@@ -39,15 +39,15 @@ const colB = [
     </div>
     <nav aria-label="Footer" class="text-sm grid grid-cols-2 gap-x-6 content-start">
       <div class="md:space-y-2">
-        {colA.map((l) => <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={l.href}>{l.label}</a>)}
+        {colA.map((l) => <a class="link-nav flex min-h-11 items-center md:min-h-0 md:block" href={l.href}>{l.label}</a>)}
       </div>
       <div class="md:space-y-2">
-        {colB.map((l) => <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={l.href}>{l.label}</a>)}
+        {colB.map((l) => <a class="link-nav flex min-h-11 items-center md:min-h-0 md:block" href={l.href}>{l.label}</a>)}
       </div>
     </nav>
     <div class="text-sm space-y-2">
-      <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={'mailto:' + email}>{email}</a>
-      <a class="flex min-h-11 items-center hover:text-mint md:min-h-0 md:block" href={ig}>Instagram</a>
+      <a class="link-nav flex min-h-11 items-center md:min-h-0 md:block" href={'mailto:' + email}>{email}</a>
+      <a class="link-nav flex min-h-11 items-center md:min-h-0 md:block" href={ig}>Instagram</a>
       <p class="text-paper/75 pt-3">All photos by club members.</p>
       <p class="text-paper/75">© {new Date().getFullYear()} Twin Cities Ski Club</p>
     </div>

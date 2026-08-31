@@ -27,7 +27,7 @@ const entries = (await getCollection('wax_entries')).sort(
               {longDate(e.data.date)}
             </div>
             <h2 class="type-h2-longform text-navy mt-2">
-              <a href={'/wax-room/' + e.id} class="hover:text-mint-deep transition-colors">
+              <a href={'/wax-room/' + e.id} class="link-ledger">
                 {e.data.slug}
               </a>
             </h2>
