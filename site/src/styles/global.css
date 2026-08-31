@@ -224,6 +224,62 @@ html {
     border-color: var(--hairline-soft-color);
   }
 
+  .band-y-sm,
+  .band-t-sm,
+  .band-b-sm {
+    --band-space: 3rem;
+  }
+
+  .band-y,
+  .band-t,
+  .band-b {
+    --band-space: 4rem;
+  }
+
+  .band-y-lg,
+  .band-t-lg,
+  .band-b-lg {
+    --band-space: 5rem;
+  }
+
+  .band-y-sm,
+  .band-y,
+  .band-y-lg {
+    padding-block: var(--band-space);
+  }
+
+  .band-t-sm,
+  .band-t,
+  .band-t-lg {
+    padding-top: var(--band-space);
+  }
+
+  .band-b-sm,
+  .band-b,
+  .band-b-lg {
+    padding-bottom: var(--band-space);
+  }
+
+  @media (min-width: 48rem) {
+    .band-y-sm,
+    .band-t-sm,
+    .band-b-sm {
+      --band-space: 4rem;
+    }
+
+    .band-y,
+    .band-t,
+    .band-b {
+      --band-space: 6rem;
+    }
+
+    .band-y-lg,
+    .band-t-lg,
+    .band-b-lg {
+      --band-space: 8rem;
+    }
+  }
+
   .font-display {
     font-stretch: 100%;
     letter-spacing: -0.02em;

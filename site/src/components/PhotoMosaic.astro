@@ -31,8 +31,15 @@ interface Props {
   heading?: string;
   more_href?: string;
   more_label?: string;
+  rhythm?: 'sm' | 'md' | 'lg';
 }
-const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label } = Astro.props;
+const { limit, homeOnly = false, number = 'Community', heading, more_href, more_label, rhythm = 'md' } = Astro.props;
+const rhythms = {
+  sm: { t: 'band-t-sm', b: 'band-b-sm' },
+  md: { t: 'band-t', b: 'band-b' },
+  lg: { t: 'band-t-lg', b: 'band-b-lg' },
+};
+const band = rhythms[rhythm];
 
 const all = await getCollection(
   'photos',
@@ -119,9 +126,9 @@ const tiles = await Promise.all(
 const composed = sparse && photos.length >= 3;
 ---
 {photos.length > 0 && (
-  <section class:list={['bg-navy pb-20', !heading && 'pt-20']} data-photo-mosaic>
+  <section class:list={['bg-navy', band.b, !heading && band.t]} data-photo-mosaic>
     {heading && (
-      <div class="safe-inline-6-10 max-w-7xl mx-auto px-6 md:px-10 pt-12 md:pt-16">
+      <div class:list={['safe-inline-6-10 max-w-7xl mx-auto px-6 md:px-10', band.t]}>
         {/* Seam: section name in the Trail Report label voice, hairline
             running to the right edge (one device family site-wide). */}
         <div class="flex items-center gap-4">

@@ -4,17 +4,26 @@
 // scale, plus a stat stack of org facts behind a vertical hairline for the
 // sponsor doing 20-second due diligence. The facts deliberately avoid
 // repeating the mission text's own "501(c)(3)" line.
-interface Props { body: string; }
-const { body } = Astro.props;
+interface Props {
+  body: string;
+  rhythm?: 'sm' | 'md' | 'lg';
+}
+const { body, rhythm = 'md' } = Astro.props;
+const rhythms = {
+  sm: { y: 'band-y-sm', t: 'band-t-sm' },
+  md: { y: 'band-y', t: 'band-t' },
+  lg: { y: 'band-y-lg', t: 'band-t-lg' },
+};
+const band = rhythms[rhythm];
 const facts: Array<{ value: string; label: string }> = [
   { value: '2020', label: 'Founded' },
   { value: 'Minneapolis · St. Paul', label: 'Based in' },
   { value: '80+', label: 'Skiers at the 2026 Birkie' },
 ];
 ---
-<section class="bg-navy pt-14 md:pt-20">
+<section class:list={['bg-navy', band.t]}>
   <div class="bg-paper text-ink">
-    <div class="safe-inline-6 mx-auto max-w-7xl px-6 py-14 md:py-20 grid gap-10 md:grid-cols-12">
+    <div class:list={['safe-inline-6 mx-auto max-w-7xl px-6 grid gap-10 md:grid-cols-12', band.y]}>
       <p class="type-statement md:col-span-8 text-navy">{body}</p>
       <ul class="md:col-span-3 md:col-start-10 self-center md:border-l hairline md:pl-7 space-y-5">
         {facts.map((f) => (

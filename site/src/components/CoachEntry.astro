@@ -35,6 +35,7 @@ interface Props {
    * lcp-lazy-loaded audit. Entries below the fold stay lazy.
    */
   loading?: 'eager' | 'lazy';
+  rhythm?: 'sm' | 'md' | 'lg';
 }
 const {
   name,
@@ -45,7 +46,9 @@ const {
   anchor,
   object_position = 'center 30%',
   loading = 'lazy',
+  rhythm = 'sm',
 } = Astro.props;
+const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
 
 const width = Math.min(1200, photo.width);
 const height = Math.round((width * 5) / 4);
@@ -53,7 +56,7 @@ const height = Math.round((width * 5) / 4);
 <article id={anchor} class="border-b hairline-soft last:border-b-0 scroll-mt-24">
   {/* All photos sit left: a steady column instead of an alternator
       performing fake variety. */}
-  <div class="safe-inline-6 mx-auto max-w-6xl px-6 py-12 md:py-16 grid gap-8 md:gap-14 md:grid-cols-12 items-start">
+  <div class:list={['safe-inline-6 mx-auto max-w-6xl px-6 grid gap-8 md:gap-14 md:grid-cols-12 items-start', rhythmClass]}>
     <div class="md:col-span-5">
       <div class="relative aspect-[4/5] overflow-hidden">
         <Image

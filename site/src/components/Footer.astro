@@ -7,6 +7,12 @@
 const email = 'contact@twincitiesskiclub.org';
 const ig = 'https://www.instagram.com/twincitiesskiclub/';
 
+interface Props {
+  rhythm?: 'sm' | 'md' | 'lg';
+}
+const { rhythm = 'sm' } = Astro.props;
+const rhythmClass = { sm: 'band-y-sm', md: 'band-y', lg: 'band-y-lg' }[rhythm];
+
 // Two columns reading top-to-bottom in nav order: the six top-nav
 // destinations plus Trips, Extra Training & Fun, and Dry Tri.
 const colA = [
@@ -24,7 +30,7 @@ const colB = [
 ];
 ---
 <footer class="bg-navy text-paper border-t hairline-soft">
-  <div class="footer-inner safe-inline-6 mx-auto max-w-7xl px-6 pt-14 pb-14 grid gap-10 md:grid-cols-3">
+  <div class:list={['footer-inner safe-inline-6 mx-auto max-w-7xl px-6 grid gap-10 md:grid-cols-3', rhythmClass]}>
     <div>
       <div class="text-sm font-bold text-mint">Twin Cities Ski Club</div>
       <p class="type-body mt-3 text-paper/70 max-w-xs">
@@ -50,6 +56,6 @@ const colB = [
 
 <style>
   .footer-inner {
-    padding-bottom: calc(3.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(var(--band-space, 3rem) + env(safe-area-inset-bottom, 0px));
   }
 </style>
