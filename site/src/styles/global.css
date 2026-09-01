@@ -159,7 +159,7 @@ html {
 
   @media (min-width: 48rem) {
     .reading-column {
-      grid-column: span 8 / span 8;
+      grid-column: 3 / span 8;
     }
   }
 

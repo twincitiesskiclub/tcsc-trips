@@ -170,7 +170,7 @@ Every band has a heading element; SectionBand renders its seam as the h2 when no
 ## Layout
 
 - **Gutter:** one gutter token, `--gutter: clamp(1.5rem, 4vw, 2.5rem)`, applied by one `.gutter` utility that folds in the safe-area `max()`. Call sites never add `px-*` beside it. Every container shares one left edge per viewport (120px at 1440).
-- **Container:** one container, `max-w-site` (1280px), for every band, masthead, ledger, strip, and footer on every page. There is no separate inner-page width. The reading column sits left-aligned on the 12-col grid (columns 1 to 8) capped at `max-w-prose`; no centered `max-w-3xl/4xl/5xl/6xl` wrappers. Long-form prose mounts through `ProseColumn`.
+- **Container:** one container, `max-w-site` (1280px), for every band, masthead, ledger, strip, and footer on every page. There is no separate inner-page width. The reading column sits centered on the 12-col grid (columns 3 to 10) capped at `max-w-prose`; no centered `max-w-3xl/4xl/5xl/6xl` wrappers. Long-form prose mounts through `ProseColumn`.
 - **Vertical rhythm:** three band rhythms, defined once in `global.css` as `band-sm` (48/64px), `band` (64/96px), and `band-lg` (80/128px), mobile/desktop. Home uses `band` and `band-lg`; inner pages use `band-sm` and `band`. A page uses at least two of the three. Same-surface neighbors share one gap owned by the incoming section; the outgoing band drops its bottom padding (`flush="bottom"`). Seam-to-content gap is one value (2rem). The mission panel sits in navy on both sides (`band` above and below). A prose column that opens with an h2 zeroes that h2's top margin.
 - **Asymmetric defaults.** Two-up grids prefer 7/5 or 5/7 splits rather than 6/6, except the seasons grid, where parity is the point. Photo pairs are 7/5 with mixed aspects.
 - **Photo groups:** one photo-group grammar: flush tiles, hairline gaps (`gap-px` on the structural hairline color), no perimeter border, optional caption line in slate below the group. A group never leaves an empty cell; odd counts get a spanning lead tile. Below `md`, a strip runs full-bleed or 1 + n; the mosaic keeps rhythm with 2x1 tiles. A portrait source never receives a wide slot.
@@ -192,7 +192,7 @@ Built in `site/src/components/`. Each takes typed props; story-doc'd inline. The
 | `<Button variant href size?>` | The one button (see Color, Buttons). |
 | `<PhotoStrip photos cols aspect captions?>` | The photo-group grammar (see Layout). Used by the community cluster, the racing strip, the dry-tri legs, the extra-training pair. |
 | `<SectionHeader heading more_href? more_label?>` | Heading plus optional closer link; `flex-col items-start gap-2 md:flex-row md:items-end md:justify-between`; the closer link is `.link-inline` with a 44px hit area. |
-| `<ProseColumn rhythm flush?>` | Long-form content on inner pages mounts in one ProseColumn: the reading column on the grid (columns 1 to 8, `max-w-prose`), `prose` (not `prose-lg`), `band-sm` by default. |
+| `<ProseColumn rhythm flush?>` | Long-form content on inner pages mounts in one ProseColumn: the reading column centered on the grid (columns 3 to 10, `max-w-prose`), `prose` (not `prose-lg`), `band-sm` by default. |
 | `<WaxEntryRow entry density>` | One row grammar for wax entries on the home feed (`feed`) and the index (`index`): date · author, title (Archivo 600 1.125rem), lede as its own caption line, conditions meta right. |
 
 ### Site components
@@ -397,7 +397,7 @@ The brand primitives are guarded by a small dist-grep build test (`tests/brandPr
 - Typography, labels and seams: the eyebrow clause rewritten as two utilities, seams once per band and at most three per page, data labels do not count, uppercase banned on headings/buttons/dates/times, floor 0.75rem: the June and July rounds accepted small-caps seams and the site shipped nine specs (TY-7, TY-8, TY-9, CS-5, GM-6, GM-31, GD-27, SP-24, TY-28, TY-32)
 - Typography, outline: every band has a heading; seam becomes the h2 when no heading is passed (TY-26)
 - Layout, gutter: one clamp token and one utility, no px-* beside it: two gutter systems staggered every page by 16px (SP-4, CS-10)
-- Layout, container: one 1280 container and a left-aligned reading column on the grid; the 1080 inner width dropped: the site had five widths and the reading column was centered like a blog (SP-5, CS-31, GD-13)
+- Layout, container: one 1280 container and one reading column on the grid, centered at columns 3 to 10 after the preview walk (left-aligned left the right half of about, community, and racing empty at desktop); the 1080 inner width dropped: the site had five widths (SP-5, CS-31, GD-13)
 - Layout, rhythm: three named band rhythms, adjacency rule, seam gap, mission panel padding, prose first-h2 rule: twenty-one paddings and 210px holes between same-surface bands (SP-2, SP-3, SP-8, SP-28, CS-30, GD-5, GM-11, GM-23)
 - Layout, photo groups: one grammar (flush, hairline gaps, no border, no empty cell, portrait never wide, mobile rhythm): four hand-built grammars (SP-14, SP-15, SP-27, SP-29, CS-34, GD-29, GM-21, GM-22, GM-18, MO-12, MO-13)
 - Components, primitives: added Seam, Ledger, FactStack, Button, PhotoStrip, SectionHeader, ProseColumn, WaxEntryRow with fixed values: every good decision was made by hand ten times (CS-1, CS-2, CS-3, CS-7, CS-9, CS-16, CS-29, CS-34, SP-12, SP-13, GD-23, GD-30, GM-32)

@@ -46,12 +46,12 @@ const html = {
 };
 
 const MISSION =
-  'Twin Cities Ski Club is a 501(c)(3) nonprofit. Cross-country skiers ages 21-35 train together year-round at coached practices twice a week, race when they want to, and stick around after.';
+  'Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a supportive community for young adults (ages 21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.';
 const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
 const APP_ORIGIN = 'https://tcsc.ski';
 // The dates now come from the database, so only the ability line is a
 // fixed string worth pinning here.
-const ABILITY_LINE = 'Intermediate ability and up, no racing required.';
+const ABILITY_LINE = 'You should be comfortable on skis. Racing is optional.';
 const DRY_TRI_2026 =
   'Planning for 2026 is underway. The date and registration details will be posted here when confirmed.';
 const DRY_TRI_RESULTS = 'https://my.raceresult.com/361087/results';

@@ -22,7 +22,7 @@ check a line to approve it. the fixed identity items (nine tokens, two families,
 - [ ] typography, labels and seams: the eyebrow clause becomes two utilities (`.seam`, `.label-caps`), seams once per band and at most three per page, data labels do not count, uppercase banned on headings, buttons, dates, times, floor 0.75rem (unlocks L-014, L-126, L-135, L-041)
 - [ ] typography, outline: every band has a heading element; the seam becomes the h2 when no heading is passed (unlocks L-125)
 - [ ] layout, gutter: one clamp token and one `.gutter` utility, no `px-*` beside it (unlocks L-023)
-- [ ] layout, container: one 1280 container everywhere and a left-aligned reading column on the grid; the 1080 inner width is dropped (unlocks L-024, L-054)
+- [ ] layout, container: one 1280 container everywhere and one reading column on the grid, centered at columns 3 to 10 (left-aligned was reverted after the preview walk); the 1080 inner width is dropped (unlocks L-024, L-054)
 - [ ] layout, rhythm: three named band rhythms, the same-surface adjacency rule, one seam gap, mission panel padded both sides, prose first-h2 rule (unlocks L-022, L-053, L-142)
 - [ ] layout, photo groups: one grammar (flush, hairline gaps, no border, no empty cell, portrait never wide, mobile rhythm) (unlocks L-059, L-060, L-062, L-063, L-064, L-106, L-136, L-137)
 - [ ] components, primitives: add Seam, Ledger, FactStack, Button, PhotoStrip, SectionHeader, ProseColumn, WaxEntryRow with fixed values (unlocks L-040, L-041, L-042, L-043, L-044, L-046, L-106, L-107)

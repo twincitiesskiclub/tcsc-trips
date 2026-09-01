@@ -7,7 +7,7 @@
 import type { RegistrationState, RegistrationWindows } from './registrationState';
 
 const CENTRAL = 'America/Chicago';
-const ABILITY = 'Intermediate ability and up, no racing required.';
+const ABILITY = 'You should be comfortable on skis. Racing is optional.';
 const FALL_WINTER_REOPENS = 'Aug/Sep';
 const SPRING_SUMMER_REOPENS = 'Apr/May';
 

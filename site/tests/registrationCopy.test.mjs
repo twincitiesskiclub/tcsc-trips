@@ -69,25 +69,25 @@ test('shows the new-member date only before that window opens', () => {
 test('the coming_soon subhead leads with the real dates', () => {
   assert.equal(
     stripSubhead('coming_soon', WINDOWS),
-    'Returning members Aug 28 · new members Sep 3. Intermediate ability and up, no racing required.',
+    'Returning members Aug 28 · new members Sep 3. You should be comfortable on skis. Racing is optional.',
   );
 });
 
 test('the coming_soon subhead omits dates rather than inventing them', () => {
   assert.equal(
     stripSubhead('coming_soon', {}),
-    'Registration opens soon. Intermediate ability and up, no racing required.',
+    'Registration opens soon. You should be comfortable on skis. Racing is optional.',
   );
 });
 
 test('the open and closed subheads do not carry dates', () => {
   assert.equal(
     stripSubhead('open', WINDOWS),
-    'Registration is open. Intermediate ability and up, no racing required.',
+    'Registration is open. You should be comfortable on skis. Racing is optional.',
   );
   assert.equal(
     stripSubhead('closed', WINDOWS),
-    'Registration is closed. Fall/Winter reopens Aug/Sep, Spring/Summer Apr/May. Intermediate ability and up, no racing required.',
+    'Registration is closed. Fall/Winter reopens Aug/Sep, Spring/Summer Apr/May. You should be comfortable on skis. Racing is optional.',
   );
 });
 
