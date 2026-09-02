@@ -196,6 +196,9 @@ class TestPaymentIntentInviteBypass:
                 'season_id': closed_season.id,
                 'email': 'walkup@example.com',
                 'name': 'Walk Up',
+                # No session identity: take the "Can't receive texts?" hatch so
+                # the window gate, not the identity gate, decides.
+                'continue_unverified': True,
             },
         )
         assert response.status_code == 400
@@ -218,6 +221,9 @@ class TestPaymentIntentInviteBypass:
                     'email': 'invited@example.com',
                     'name': 'Invited Person',
                     'invite': token,
+                    # No session identity: take the "Can't receive texts?" hatch so
+                    # the window gate, not the identity gate, decides.
+                    'continue_unverified': True,
                 },
             )
         assert response.status_code == 200, response.data
@@ -235,6 +241,9 @@ class TestPaymentIntentInviteBypass:
                 'email': 'different@example.com',
                 'name': 'Different',
                 'invite': token,
+                # No session identity: take the "Can't receive texts?" hatch so
+                # the window gate, not the identity gate, decides.
+                'continue_unverified': True,
             },
         )
         assert response.status_code == 400

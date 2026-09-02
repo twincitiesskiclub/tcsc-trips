@@ -462,6 +462,12 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   // --- End Get Involved ---
 
+  // Set by step 0. The payment step calls it when the server refuses to
+  // create an intent for a reason step 0 owns (expired identity, an
+  // unverified email that matches an account). Returns true when the
+  // member was sent back to step 0.
+  let onPaymentRefused = null;
+
   // --- Step 0: verify phone (email fallback) ahead of the wizard ---
   const verifySection = document.getElementById('section-verify');
   if (verifySection) {
@@ -816,6 +822,25 @@ document.addEventListener('DOMContentLoaded', () => {
       setPaymentStatusLine('new');
     });
 
+    onPaymentRefused = async (code, message) => {
+      if (code === 'verification_expired') {
+        // The wizard answers stay in sessionStorage; only the identity
+        // died. Re-ask the server so the phone panel comes back.
+        applyVerdict(await resolveAndRender());
+        showVerifyError(message);
+        return true;
+      }
+      if (code === 'email_unverified') {
+        collisionCodeEmail = null;
+        hide('email-collision-code-row');
+        show('email-collision-send');
+        show('email-collision');
+        byId('email-collision').scrollIntoView({behavior: 'smooth', block: 'center'});
+        return false;
+      }
+      return false;
+    };
+
     async function resolveAndRender() {
       const invite = new URLSearchParams(window.location.search).get('invite');
       const seasonId = registrationForm.dataset.seasonId;
@@ -1126,6 +1151,8 @@ document.addEventListener('DOMContentLoaded', () => {
       return response.json();
     }
 
+    const continueUnverifiedInput = document.getElementById('continue-unverified');
+
     async function createPaymentIntent(name, email) {
       idempotencyKey = generateIdempotencyKey();
       const invite = new URLSearchParams(window.location.search).get('invite');
@@ -1139,13 +1166,19 @@ document.addEventListener('DOMContentLoaded', () => {
           season_id: registrationForm.dataset.seasonId,
           email,
           name,
-          invite
+          invite,
+          continue_unverified: continueUnverifiedInput
+            ? continueUnverifiedInput.value === '1'
+            : false
         })
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        return { error: errorData.error || `Server error: ${response.status}` };
+        return {
+          error: errorData.error || `Server error: ${response.status}`,
+          code: errorData.code
+        };
       }
 
       return response.json();
@@ -1251,6 +1284,11 @@ document.addEventListener('DOMContentLoaded', () => {
           showError(paymentIntentData.error);
           isSubmitting = false;
           toggleLoadingState(false);
+          if (paymentIntentData.code && onPaymentRefused) {
+            const bounced = await onPaymentRefused(
+              paymentIntentData.code, paymentIntentData.error);
+            if (bounced) showError('');
+          }
           return;
         }
         clientSecret = paymentIntentData.clientSecret;

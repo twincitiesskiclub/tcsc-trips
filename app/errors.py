@@ -59,17 +59,21 @@ def flash_info(message):
 # JSON Response Helpers (for API routes)
 # =============================================================================
 
-def json_error(message, status_code=400):
+def json_error(message, status_code=400, code=None):
     """Return a standardized JSON error response.
 
     Args:
         message: Error message string
         status_code: HTTP status code (default 400)
+        code: optional machine-readable reason the client can branch on
 
     Returns:
         Tuple of (response, status_code)
     """
-    return jsonify({'error': message}), status_code
+    payload = {'error': message}
+    if code:
+        payload['code'] = code
+    return jsonify(payload), status_code
 
 
 def json_success(data=None):
