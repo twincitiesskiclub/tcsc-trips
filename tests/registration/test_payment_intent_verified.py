@@ -160,9 +160,12 @@ def test_verified_returning_gets_automatic_capture(mock_create, client, fixtures
 @patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
 def test_unverified_is_always_manual_new(mock_create, client, fixtures):
     # No session identity: even though EMAIL belongs to a returning member,
-    # the typed email must not grant automatic capture.
+    # the typed email must not grant automatic capture. Without the
+    # "Can't receive texts?" hatch this is now refused outright (see
+    # test_payment_intent_gates), so take the hatch.
     resp = client.post("/create-season-payment-intent", json={
-        "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer"})
+        "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer",
+        "continue_unverified": True})
     assert resp.status_code == 200
     kwargs = mock_create.call_args.kwargs
     assert kwargs["capture_method"] == "manual"
@@ -211,8 +214,10 @@ def test_verified_member_cannot_charge_email_owned_by_another_member(
 
 @patch("app.routes.payments.stripe.PaymentIntent.create", return_value=_intent_mock())
 def test_unverified_intent_carries_no_user_id(mock_create, client, fixtures):
+    # No identity is only allowed through the "Can't receive texts?" hatch.
     resp = client.post("/create-season-payment-intent", json={
-        "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer"})
+        "season_id": fixtures["season_id"], "email": EMAIL, "name": "Pat Payer",
+        "continue_unverified": True})
     assert resp.status_code == 200
     assert mock_create.call_args.kwargs["metadata"]["user_id"] == ""
 

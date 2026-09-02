@@ -14,6 +14,7 @@ from app.slack import trips as trip_slack
 from ..security import csrf
 from .. import late_link
 from app.verify.service import get_verified_identity
+from app.seasons.resolution import HOLDS_A_SPOT
 
 payments = Blueprint('payments', __name__)
 
@@ -43,6 +44,26 @@ def _season_email_fallback_user(email, payment_intent_id):
         candidate.id,
     )
     return None, True
+
+
+def _is_orphaned_hold(payment):
+    """True when a requires_capture season payment has no registration.
+
+    A hold that belongs to a row in HOLDS_A_SPOT is a real lottery entry
+    and must keep blocking duplicates. One with no such row is the residue
+    of a POST that failed after Stripe authorized the card.
+    """
+    if payment.status != 'requires_capture':
+        return False
+    owner = None
+    if payment.user_id:
+        owner = User.query.get(payment.user_id)
+    if owner is None:
+        owner = User.get_by_email(payment.email)
+    if owner is None:
+        return True
+    user_season = UserSeason.get_for_user_season(owner.id, payment.season_id)
+    return user_season is None or user_season.status not in HOLDS_A_SPOT
 
 
 def _event_registration_from_metadata(metadata):
@@ -741,6 +762,28 @@ def create_season_payment_intent():
         verified_user = None
         if identity and identity.get('user_id'):
             verified_user = User.query.get(identity['user_id'])
+        continue_unverified = bool(data.get('continue_unverified'))
+        # Everything the registration POST would bounce on AFTER the card
+        # is authorized has to be refused here, BEFORE it. Otherwise the
+        # member ends up with a hold, no registration, no confirmation
+        # text, and a payment row that blocks every retry (2026-08-31).
+        if identity is None and not continue_unverified:
+            return json_error(
+                'Your verification expired. Please verify your number '
+                'again. Your answers are saved.',
+                code='verification_expired',
+            )
+        if (
+            verified_user is None
+            and not continue_unverified
+            and User.get_by_email(email) is not None
+        ):
+            return json_error(
+                'That email already has a member account. Verify it with '
+                'the emailed code, or choose "Can\'t reach that inbox?" '
+                'if you can no longer receive mail there.',
+                code='email_unverified',
+            )
         if (
             verified_user is not None
             and email != normalize_email(verified_user.email)
@@ -782,6 +825,25 @@ def create_season_payment_intent():
             Payment.season_id == int(season_id),
             Payment.status.notin_(['canceled', 'refunded'])
         ).first()
+        if existing_payment and _is_orphaned_hold(existing_payment):
+            # An earlier attempt authorized the card and then the POST
+            # bounced. Nothing holds a spot, so nobody will ever capture
+            # it. Release it and let this attempt proceed.
+            try:
+                stripe.PaymentIntent.cancel(existing_payment.payment_intent_id)
+            except stripe.error.StripeError as exc:
+                current_app.logger.warning(
+                    "Could not cancel orphaned hold %s: %s",
+                    existing_payment.payment_intent_id, exc)
+                return json_error(
+                    "We couldn't clear an earlier payment attempt. "
+                    "Please try again in a minute.")
+            existing_payment.status = 'canceled'
+            db.session.commit()
+            current_app.logger.info(
+                "Canceled orphaned hold %s for %s before a new intent",
+                existing_payment.payment_intent_id, email)
+            existing_payment = None
         if existing_payment:
             return json_error('You have already registered for this season.')
         # Returning members are guaranteed a spot: charge immediately.
