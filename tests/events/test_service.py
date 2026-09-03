@@ -104,6 +104,7 @@ def _payload(option, participant_count=None):
             "unknown": "drop me",
         },
         "discount_code": None,
+        "waiver_accepted": True,
     }
 
 
@@ -289,6 +290,38 @@ def test_create_registration_collects_required_field_errors(
         "emergency_contact_phone",
         "participants",
     } <= exc_info.value.errors.keys()
+
+
+@pytest.mark.parametrize("submitted", [None, False, "true", 1, "yes"])
+def test_create_registration_requires_explicit_waiver_acceptance(
+    registration_setup,
+    submitted,
+):
+    event, individual, _team = registration_setup
+    payload = _payload(individual)
+    if submitted is None:
+        del payload["waiver_accepted"]
+    else:
+        payload["waiver_accepted"] = submitted
+
+    with pytest.raises(RegistrationError) as exc_info:
+        create_registration(event, payload)
+
+    assert exc_info.value.errors == {
+        "waiver_accepted": "You must accept the waiver to register."
+    }
+    assert EventRegistration.query.filter_by(event_id=event.id).count() == 0
+
+
+def test_create_registration_records_when_the_waiver_was_accepted(
+    registration_setup,
+):
+    event, individual, _team = registration_setup
+    before = datetime.utcnow()
+
+    registration = create_registration(event, _payload(individual))
+
+    assert before <= registration.waiver_accepted_at <= datetime.utcnow()
 
 
 def test_create_registration_rejects_unparseable_participant_dob(

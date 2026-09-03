@@ -401,7 +401,8 @@
         ).value,
         participants,
         answers,
-        discount_code: document.getElementById('discount-code').value
+        discount_code: document.getElementById('discount-code').value,
+        waiver_accepted: document.getElementById('waiver-accepted').checked
       };
     }
 
@@ -503,7 +504,10 @@
         const fieldId = {
           team_name: 'team-name',
           emergency_contact_name: 'emergency-contact-name',
-          emergency_contact_phone: 'emergency-contact-phone'
+          emergency_contact_phone: 'emergency-contact-phone',
+          // The wrapper, not the checkbox: a red border on an 18px box is
+          // easy to miss.
+          waiver_accepted: 'waiver-field'
         }[key];
         const questionKey = key.startsWith('answers.')
           ? key.slice('answers.'.length)

@@ -83,6 +83,7 @@ function load(questions, priceOptions = OPTIONS) {
         ${questionMarkup(questions)}
       </section>
       <input type="text" id="discount-code">
+      <button type="button" id="discount-apply">Apply</button>
       <div id="card-field"><div id="card-element"></div></div>
       <div class="card-error" id="form-errors" role="alert"></div>
       <button id="submit" type="submit">

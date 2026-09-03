@@ -170,6 +170,9 @@ class EventRegistration(db.Model):
         default=RegistrationStatus.PENDING_PAYMENT,
     )
     payment_intent_id = db.Column(db.String(255))
+    # UTC moment the registrant ticked the waiver box. Null only on rows
+    # created before the waiver existed; every new registration sets it.
+    waiver_accepted_at = db.Column(db.DateTime)
     created_at = db.Column(
         db.DateTime,
         nullable=False,

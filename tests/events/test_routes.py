@@ -107,6 +107,7 @@ def _payload(option, participant_count=None):
         ],
         "answers": {"course": "Long", "club": "TCSC"},
         "discount_code": "",
+        "waiver_accepted": True,
     }
 
 
@@ -380,6 +381,44 @@ def test_get_event_page_drops_the_registration_contact_section(
     # Emergency contact and team name stay.
     assert 'id="emergency-contact-name"' in page
     assert 'id="team-name"' in page
+
+
+def test_get_event_page_renders_the_waiver_before_payment(
+    client,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    assert "Assumption of Risk, Release of Liability" in page
+    assert "By checking the box below" in page
+    assert "Participants under 18 must complete this waiver" in page
+    assert 'id="waiver-accepted"' in page
+    assert "required" in page[page.index('id="waiver-accepted"'):][:200]
+    # The copied text named another club; every reference now points at us.
+    assert "COLNSF" not in page
+    assert "Competitor" not in page
+    waiver_heading = page.index('id="waiver-title"')
+    questions_heading = page.index('id="event-questions-title"')
+    payment_heading = page.index('id="payment-title"')
+    assert questions_heading < waiver_heading < payment_heading
+
+
+def test_post_without_waiver_acceptance_is_rejected(
+    client,
+    db_session,
+    public_event,
+):
+    event, individual, _team, _free = public_event
+    payload = _payload(individual)
+    payload["waiver_accepted"] = False
+
+    response = client.post(f"/events/{event.slug}/register", json=payload)
+
+    assert response.status_code == 400
+    assert "waiver_accepted" in response.get_json()["error"]
+    assert EventRegistration.query.filter_by(event_id=event.id).count() == 0
 
 
 def test_get_event_page_puts_team_name_with_participant_details(
