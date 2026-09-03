@@ -73,6 +73,7 @@ def _registration(event, status=RegistrationStatus.CONFIRMED):
         discount_applied=True,
         status=status,
         created_at=datetime(2026, 7, 24, 15, 30),
+        waiver_accepted_at=datetime(2026, 7, 24, 15, 29),
     )
     registration.participants.extend(
         [
@@ -309,6 +310,8 @@ def test_registration_csv_contains_flattened_headers_and_values(
     assert "price_option_name" in csv_text.splitlines()[0]
     assert "participant_1" in csv_text.splitlines()[0]
     assert "course" in csv_text.splitlines()[0]
+    assert "waiver_accepted_at" in csv_text.splitlines()[0]
+    assert "2026-07-24T15:29:00" in csv_text
     assert "Nordic Rockets" in csv_text
     assert "Rollerskier: Ada Skier" in csv_text
     assert "Long course" in csv_text

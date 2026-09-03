@@ -190,6 +190,11 @@ def create_registration(
     )
     errors.update(answer_errors)
 
+    # Only a literal true counts. The browser blocks submit on the required
+    # checkbox; this is the check that matters for anyone posting directly.
+    if payload.get("waiver_accepted") is not True:
+        errors["waiver_accepted"] = "You must accept the waiver to register."
+
     if not capacity_available(event):
         errors["capacity"] = "This event is at capacity."
 
@@ -216,6 +221,7 @@ def create_registration(
         amount_cents=amount_cents,
         discount_applied=discount_applied,
         status=RegistrationStatus.PENDING_PAYMENT,
+        waiver_accepted_at=now,
     )
 
     roles = option.participant_roles or ["Participant"]
