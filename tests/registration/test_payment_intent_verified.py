@@ -264,6 +264,9 @@ def test_capturable_webhook_prefers_metadata_user_id_over_email(app, fixtures):
         user_season = UserSeason.get_for_user_season(
             uid, fixtures["season_id"])
         assert user_season.status == UserSeasonStatus.PENDING_LOTTERY
+        # Metadata says 'NEW'; the row must match the POST path's spelling
+        # or the review page and recap silently skip a webhook-first member.
+        assert user_season.registration_type == 'new'
 
 
 def test_capturable_webhook_does_not_link_existing_member_without_user_id(
