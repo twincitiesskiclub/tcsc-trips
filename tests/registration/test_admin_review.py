@@ -46,8 +46,11 @@ def fixtures(app):
                        registration_type="new", registration_date=date.today(),
                        status=UserSeasonStatus.PENDING_LOTTERY, needs_review=True,
                        review_note="no verified phone"),
+            # Uppercase on purpose: rows written by the Stripe webhook before
+            # the fix carried metadata spelling. The review page must still
+            # see them.
             UserSeason(user_id=dupe_new.id, season_id=s.id,
-                       registration_type="new", registration_date=date.today(),
+                       registration_type="NEW", registration_date=date.today(),
                        status=UserSeasonStatus.PENDING_LOTTERY),
             UserSeason(user_id=dupe_old.id, season_id=old.id,
                        registration_type="new", registration_date=date(2087, 10, 1),

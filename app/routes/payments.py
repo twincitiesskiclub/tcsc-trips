@@ -10,6 +10,7 @@ from ..constants import MemberType, StripeEvent, UserStatus, UserSeasonStatus, P
 from ..errors import json_error, json_success
 from ..utils import normalize_email, today_central
 from ..notifications.slack import send_payment_notification
+from ..notifications.sms import send_sms
 from app.slack import trips as trip_slack
 from ..security import csrf
 from .. import late_link
@@ -378,10 +379,13 @@ def webhook_received():
             if user and payment_type == PaymentType.SEASON and season_id:
                 user_season = UserSeason.get_for_user_season(user.id, season_id)
                 if not user_season:
+                    # The POST path stores 'new'/'returning'; the review page,
+                    # recap and exports filter on that spelling. Metadata is
+                    # uppercase, so normalize here or a webhook-first row hides.
                     user_season = UserSeason(
                         user_id=user.id,
                         season_id=season_id,
-                        registration_type=member_type,
+                        registration_type=member_type.lower(),
                         registration_date=today_central(),
                         status=UserSeasonStatus.PENDING_LOTTERY
                     )
@@ -477,7 +481,7 @@ def webhook_received():
                     user_season = UserSeason(
                         user_id=user.id,
                         season_id=season_id,
-                        registration_type=member_type,
+                        registration_type=member_type.lower(),
                         registration_date=today_central(),
                         payment_date=today_central(),
                         status=UserSeasonStatus.ACTIVE
@@ -549,6 +553,49 @@ def webhook_received():
     except Exception as e:
         return json_error('Webhook processing failed', 500)
 
+def _season_hold_is_pending(payment):
+    """True when capturing this hold is what gets the member their spot.
+
+    Read BEFORE calling Stripe: the payment_intent.succeeded webhook can
+    flip the UserSeason to ACTIVE between our capture call and our own
+    read, and then nobody would know this member still needs telling.
+    """
+    if payment.payment_type != PaymentType.SEASON or not payment.season_id:
+        return False
+    user = User.get_by_email(payment.email)
+    if not user:
+        return False
+    user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+    return (user_season is not None
+            and user_season.status == UserSeasonStatus.PENDING_LOTTERY)
+
+
+def _finalize_season_capture(payment):
+    """Activate the UserSeason behind a captured season hold and link the
+    payment to its user. Returns the user, or None for non-season payments."""
+    if payment.payment_type != PaymentType.SEASON or not payment.season_id:
+        return None
+    user = User.get_by_email(payment.email)
+    if not user:
+        return None
+    user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
+    if user_season:
+        user_season.status = UserSeasonStatus.ACTIVE
+        user_season.payment_date = today_central()
+        user.sync_status()
+    if not payment.user_id:
+        payment.user_id = user.id
+    return user
+
+
+def _text_accepted(user, payment):
+    """Tell a lottery member their hold became a charge. Never raises."""
+    season_name = payment.season.name if payment.season else 'upcoming'
+    send_sms(user, 'accepted', season_name=season_name,
+             amount=f"${payment.amount / 100:.2f}")
+
+
+
 @payments.route('/admin/payments/<int:payment_id>/capture', methods=['POST'])
 @admin_required
 def capture_payment(payment_id):
@@ -562,6 +609,8 @@ def capture_payment(payment_id):
         if intent.status != 'requires_capture':
             return json_error(f'Payment cannot be captured - current status: {intent.status}')
 
+        was_pending = _season_hold_is_pending(payment)
+
         # Attempt to capture the payment
         captured_intent = stripe.PaymentIntent.capture(payment.payment_intent_id)
 
@@ -571,21 +620,13 @@ def capture_payment(payment_id):
 
         # Update payment status in database
         payment.status = captured_intent.status
-
-        # Auto-sync: Update UserSeason status for season payments
-        if payment.payment_type == PaymentType.SEASON and payment.season_id:
-            user = User.get_by_email(payment.email)
-            if user:
-                user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
-                if user_season:
-                    user_season.status = UserSeasonStatus.ACTIVE
-                    user_season.payment_date = today_central()
-                    user.sync_status()
-                # Link payment to user if not already linked
-                if not payment.user_id:
-                    payment.user_id = user.id
+        user = _finalize_season_capture(payment)
 
         db.session.commit()
+
+        # Text after commit so a failed write never follows a sent "you're in".
+        if was_pending and user is not None:
+            _text_accepted(user, payment)
 
         # Slack notification will be sent by the webhook handler
         # when Stripe fires payment_intent.succeeded event
@@ -646,6 +687,7 @@ def bulk_capture_payments():
             return json_error('No payment IDs provided')
 
         results = []
+        to_notify = []
         for payment_id in payment_ids:
             try:
                 payment = Payment.query.get(payment_id)
@@ -660,6 +702,8 @@ def bulk_capture_payments():
                     results.append({'id': payment_id, 'success': False, 'error': f'Cannot capture - status: {intent.status}'})
                     continue
 
+                was_pending = _season_hold_is_pending(payment)
+
                 # Capture the payment
                 captured_intent = stripe.PaymentIntent.capture(payment.payment_intent_id)
 
@@ -669,18 +713,9 @@ def bulk_capture_payments():
 
                 # Update payment status
                 payment.status = captured_intent.status
-
-                # Auto-sync: Update UserSeason status for season payments
-                if payment.payment_type == PaymentType.SEASON and payment.season_id:
-                    user = User.get_by_email(payment.email)
-                    if user:
-                        user_season = UserSeason.get_for_user_season(user.id, payment.season_id)
-                        if user_season:
-                            user_season.status = UserSeasonStatus.ACTIVE
-                            user_season.payment_date = today_central()
-                            user.sync_status()
-                        if not payment.user_id:
-                            payment.user_id = user.id
+                user = _finalize_season_capture(payment)
+                if was_pending and user is not None:
+                    to_notify.append((user, payment))
 
                 results.append({'id': payment_id, 'success': True})
 
@@ -690,6 +725,10 @@ def bulk_capture_payments():
                 results.append({'id': payment_id, 'success': False, 'error': str(e)})
 
         db.session.commit()
+
+        # Text after commit so a failed write never follows a sent "you're in".
+        for user, payment in to_notify:
+            _text_accepted(user, payment)
 
         return json_success({'results': results})
 

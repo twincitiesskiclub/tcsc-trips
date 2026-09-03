@@ -2,3 +2,4 @@ templates:
   confirmation_returning: "TCSC: You're registered for the {season_name} season! Your card was charged {amount}. See you out there. Reply STOP to opt out"
   confirmation_lottery: "TCSC: You're in the lottery for the {season_name} season! Your card has a hold and is only charged if you get a spot. Reply STOP to opt out"
   slack_invite: "TCSC: Welcome to the club! Your Slack invite just landed in your email. That's where everything happens, so come say hi. Reply STOP to opt out"
+  accepted: "TCSC: You're in! You have a spot for the {season_name} season and your card was charged {amount}. A Slack invite is headed to your email. Reply STOP to opt out"

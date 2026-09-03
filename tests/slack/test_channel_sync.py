@@ -254,7 +254,7 @@ class TestSyncSingleUserStableTierChannelRepair:
             managed_channel_ids={C_REACTIVATE},
             channel_id_to_properties={
                 C_REACTIVATE: {'name': 'tcsc-reactivate-me', 'is_public': False},
-                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_WELCOME: {'name': 'a-welcome-to-tcsc', 'is_public': True},
             },
             team_id='T_TEST',
             dry_run=True,
@@ -306,7 +306,7 @@ class TestSyncSingleUserStableTierChannelRepair:
             full_member_channel_ids=set(),
             managed_channel_ids=managed,
             channel_id_to_properties={
-                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_WELCOME: {'name': 'a-welcome-to-tcsc', 'is_public': True},
                 C_CHAT: {'name': 'general-chat', 'is_public': False},
                 C_ALUMNI: {'name': 'alumni-corner', 'is_public': False},
                 C_BOOKCLUB: {'name': 'book-club', 'is_public': False},
@@ -363,7 +363,7 @@ class TestSyncSingleUserStableTierChannelRepair:
             managed_channel_ids={C_REACTIVATE},
             channel_id_to_properties={
                 C_REACTIVATE: {'name': 'tcsc-reactivate-me', 'is_public': False},
-                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_WELCOME: {'name': 'a-welcome-to-tcsc', 'is_public': True},
             },
             team_id='T_TEST',
             dry_run=True,
@@ -413,7 +413,7 @@ class TestSyncSingleUserStableTierChannelRepair:
             full_member_channel_ids=set(),
             managed_channel_ids=managed,
             channel_id_to_properties={
-                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_WELCOME: {'name': 'a-welcome-to-tcsc', 'is_public': True},
                 C_CHAT: {'name': 'general-chat', 'is_public': False},
                 C_ALUMNI: {'name': 'alumni-corner', 'is_public': False},
                 C_BOOKCLUB: {'name': 'book-club', 'is_public': False},
@@ -469,7 +469,7 @@ class TestSyncSingleUserStableTierChannelRepair:
             full_member_channel_ids=set(),
             managed_channel_ids=managed,
             channel_id_to_properties={
-                C_WELCOME: {'name': 'welcome-to-tcsc', 'is_public': True},
+                C_WELCOME: {'name': 'a-welcome-to-tcsc', 'is_public': True},
                 C_CHAT: {'name': 'general-chat', 'is_public': False},
                 C_ALUMNI: {'name': 'alumni-corner', 'is_public': False},
                 C_FRESHTRACKS: {'name': 'fresh-tracks', 'is_public': False},

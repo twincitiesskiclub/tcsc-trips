@@ -778,7 +778,8 @@ def registration_review():
     # user who has actually been ACTIVE before — the "returning member who
     # registered as new" trap.
     new_regs = (UserSeason.query
-                .filter_by(season_id=season.id, registration_type='new')
+                .filter(UserSeason.season_id == season.id,
+                        func.lower(UserSeason.registration_type) == 'new')
                 .join(User).all())
     suspects = []
     for us in new_regs:
