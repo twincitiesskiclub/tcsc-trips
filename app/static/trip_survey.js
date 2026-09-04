@@ -10,12 +10,25 @@ export function initTripSurvey(form, showError) {
   const dietaryBox = form.querySelector('#dietary-options');
   DIETARY_OPTIONS.forEach(function (option) {
     const label = document.createElement('label');
+    label.className = 'trip-option';
     const box = document.createElement('input');
     box.type = 'checkbox';
+    box.className = 'sr-only';
     box.value = option;
     box.dataset.dietary = 'true';
+    box.setAttribute('aria-describedby', 'dietary-options-error');
+    const mark = document.createElement('span');
+    mark.className = 'trip-choice-mark';
+    mark.dataset.choiceMark = '';
+    mark.setAttribute('aria-hidden', 'true');
+    mark.innerHTML = '<svg viewBox="0 0 16 16" fill="none" class="h-3.5 w-3.5"'
+      + ' stroke="currentColor" stroke-width="2"><path d="m3 8 3 3 7-7"'
+      + ' stroke-linecap="round" stroke-linejoin="round"/></svg>';
+    const text = document.createElement('span');
+    text.textContent = option;
     label.appendChild(box);
-    label.appendChild(document.createTextNode(' ' + option));
+    label.appendChild(mark);
+    label.appendChild(text);
     dietaryBox.appendChild(label);
   });
 
@@ -29,7 +42,7 @@ export function initTripSurvey(form, showError) {
       if (type === 'multi_choice') {
         answers[key] = Array.from(
           node.querySelectorAll('input:checked')).map(function (i) { return i.value; });
-      } else if (type === 'yes_no') {
+      } else if (type === 'yes_no' || (type === 'choice' && node.matches('[role="radiogroup"]'))) {
         const checked = node.querySelector('input:checked');
         answers[key] = checked ? checked.value : '';
       } else {
@@ -59,18 +72,26 @@ export function initTripSurvey(form, showError) {
       input.disabled = driverDetailsHidden;
     });
   }
-  form.addEventListener('change', applyVisibility);
-  applyVisibility();
-
-  // multi-choice caps
+  // Count after enforcing the cap, so the count always matches the payload.
+  function updateCounter(group) {
+    const counter = group.querySelector('[data-selection-counter]');
+    if (counter) {
+      counter.textContent = group.querySelectorAll('input:checked').length
+        + ' of ' + group.dataset.maxSelections + ' selected';
+    }
+  }
+  form.querySelectorAll('[data-max-selections]').forEach(updateCounter);
   form.addEventListener('change', function (event) {
     const group = event.target.closest('[data-max-selections]');
-    if (!group) return;
-    const cap = Number(group.dataset.maxSelections);
-    const checked = group.querySelectorAll('input:checked');
-    if (checked.length > cap) {
-      event.target.checked = false;
-      showError('Pick at most ' + cap + ' options.');
+    if (group) {
+      const cap = Number(group.dataset.maxSelections);
+      if (group.querySelectorAll('input:checked').length > cap) {
+        event.target.checked = false;
+        showError('Pick at most ' + cap + ' options.', group);
+      }
+      updateCounter(group);
     }
+    applyVisibility();
   });
+  applyVisibility();
 }

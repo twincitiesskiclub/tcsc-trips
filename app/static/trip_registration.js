@@ -5,32 +5,131 @@ import {initTripSurvey} from './trip_survey.js';
   const form = document.getElementById('trip-registration-form');
   if (!dataNode || !form) return;
   const tripData = JSON.parse(dataNode.textContent);
+  const scrollBehavior = window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth';
+  let globalError = '';
 
   // --- email gate -------------------------------------------------------
   const gateButton = document.getElementById('gate-check');
   const gateMessage = document.getElementById('gate-message');
   const emailInput = document.getElementById('member-email');
   const formBody = document.getElementById('form-body');
+  let memberConfirmed = false;
   gateButton.addEventListener('click', async function () {
+    if (gateButton.disabled) return;
     gateMessage.classList.add('hidden');
-    const response = await fetch('/api/trips/member-check', {
-      method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email: emailInput.value }),
-    });
-    const result = await response.json();
-    if (result.eligible) {
-      formBody.classList.remove('hidden');
-      document.getElementById('gate-section').classList.add('opacity-60');
-      emailInput.readOnly = true;
-      gateButton.classList.add('hidden');
-    } else {
-      gateMessage.textContent = "We couldn't find a current member with that "
-        + 'email. Trips are open to registered members - see tcsc.ski to join.';
-      gateMessage.classList.remove('hidden');
+    clearFieldError(emailInput);
+    if (!emailInput.checkValidity()) {
+      showGateError('Enter a valid email address to continue.');
+      emailInput.focus();
+      return;
     }
+    gateButton.disabled = true;
+    // Freeze the checked address while the request is in flight.
+    emailInput.readOnly = true;
+    try {
+      const response = await fetch('/api/trips/member-check', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailInput.value }),
+      });
+      if (!response.ok) throw new Error('Member check failed');
+      const result = await response.json();
+      if (result.eligible) {
+        memberConfirmed = true;
+        formBody.classList.remove('hidden');
+        document.getElementById('gate-entry').classList.add('hidden');
+        document.getElementById('confirmed-email').textContent = emailInput.value;
+        document.getElementById('gate-confirmed').classList.remove('hidden');
+        stepLinks.forEach(function (link) { link.removeAttribute('aria-disabled'); });
+        setCurrentStep('getting-there');
+        focusField(document.getElementById('profile-can-drive-group'));
+      } else {
+        showGateError("We couldn't find a current member with that "
+          + 'email. Trips are open to registered members. See tcsc.ski to join.');
+      }
+    } catch (err) {
+      showGateError('We could not check your membership. Please try again.');
+    } finally {
+      gateButton.disabled = false;
+      emailInput.readOnly = memberConfirmed;
+    }
+  });
+  emailInput.addEventListener('keydown', function (event) {
+    if (event.key === 'Enter') { event.preventDefault(); gateButton.click(); }
+  });
+
+  function showGateError(message) {
+    emailInput.setAttribute('aria-invalid', 'true');
+    gateMessage.textContent = message;
+    gateMessage.classList.remove('hidden');
+  }
+
+  // A small scroll indicator also follows keyboard focus within the form.
+  const stepLinks = Array.from(form.querySelectorAll('[data-step-link]'));
+  const sections = Array.from(form.querySelectorAll('[data-step-section]'));
+  function setCurrentStep(id) {
+    stepLinks.forEach(function (link) {
+      if (link.hash === '#' + id) link.setAttribute('aria-current', 'step');
+      else link.removeAttribute('aria-current');
+      link.toggleAttribute('data-complete', memberConfirmed && link.hash === '#gate-section');
+    });
+  }
+  stepLinks.forEach(function (link) {
+    link.addEventListener('click', function (event) {
+      event.preventDefault();
+      if (link.getAttribute('aria-disabled') === 'true') return;
+      const section = document.getElementById(link.hash.slice(1));
+      section.scrollIntoView({behavior: scrollBehavior, block: 'start'});
+      setCurrentStep(section.id);
+    });
+  });
+  let scrollPending = false;
+  window.addEventListener('scroll', function () {
+    if (scrollPending || !memberConfirmed) return;
+    scrollPending = true;
+    window.requestAnimationFrame(function () {
+      let current = sections[0];
+      sections.forEach(function (section) {
+        if (!section.closest('.hidden') && section.getBoundingClientRect().top <= window.innerHeight * 0.4) current = section;
+      });
+      setCurrentStep(current.id);
+      scrollPending = false;
+    });
+  }, {passive: true});
+  form.addEventListener('focusin', function (event) {
+    const section = event.target.closest('[data-step-section]');
+    if (section) setCurrentStep(section.id);
+  });
+
+  function errorFieldForControl(input) {
+    return input.closest('[data-question-key], #dietary-options, fieldset[id]') || input;
+  }
+  form.addEventListener('input', function (event) {
+    clearFieldError(errorFieldForControl(event.target));
+    if (event.target === emailInput) {
+      gateMessage.classList.add('hidden');
+      emailInput.removeAttribute('aria-invalid');
+    }
+    globalError = '';
+    refreshErrorSummary();
   });
 
   initTripSurvey(form, showError);
+
+  const buttonText = document.getElementById('button-text');
+  function updateHoldAmount() {
+    const tier = form.querySelector('input[name="price-tier"]:checked');
+    const cents = tier && tier.value === 'high' ? tripData.priceHigh : tripData.priceLow;
+    buttonText.textContent = 'Place hold for $' + (cents / 100).toFixed(2);
+  }
+  form.addEventListener('change', function (event) {
+    // The survey's change handler has already hidden inapplicable fields.
+    form.querySelectorAll('.field-error').forEach(function (field) {
+      if (field.closest('.hidden')) clearFieldError(field);
+    });
+    refreshErrorSummary();
+    if (event.target.name === 'price-tier') updateHoldAmount();
+  });
+  updateHoldAmount();
 
   // --- Stripe -----------------------------------------------------------
   let stripe = null;
@@ -40,14 +139,18 @@ import {initTripSurvey} from './trip_survey.js';
     const keyResponse = await fetch('/get-stripe-key');
     const { publicKey } = await keyResponse.json();
     stripe = window.Stripe(publicKey);
-    card = stripe.elements().create('card');
+    card = stripe.elements().create('card', {style: {
+      base: {fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif', fontSize: '16px', color: '#1c2c44', '::placeholder': {color: '#71717a'}},
+      invalid: {color: '#b91c1c'},
+    }});
     card.mount('#card-element');
     card.on('change', function (event) {
-      showError(event.error ? event.error.message : '');
+      const field = document.getElementById('card-element');
+      showError(event.error ? event.error.message : '', field);
     });
   }
   ensureStripe().catch(function () {
-    showError('The payment form failed to load. Refresh the page to try again.');
+    showError('The payment form failed to load. Refresh the page to try again.', document.getElementById('card-element'));
   });
 
   // --- submit -----------------------------------------------------------
@@ -67,7 +170,7 @@ import {initTripSurvey} from './trip_survey.js';
       if (type === 'multi_choice') {
         answers[key] = Array.from(
           node.querySelectorAll('input:checked')).map(function (i) { return i.value; });
-      } else if (type === 'yes_no') {
+      } else if (type === 'yes_no' || (type === 'choice' && node.matches('[role="radiogroup"]'))) {
         const checked = node.querySelector('input:checked');
         if (checked) answers[key] = checked.value;
       } else if (node.value) {
@@ -92,8 +195,69 @@ import {initTripSurvey} from './trip_survey.js';
     };
   }
 
-  function showError(message) {
-    document.getElementById('form-errors').textContent = message || '';
+  function showError(message, field) {
+    if (field) {
+      clearFieldError(field);
+      if (message) markFieldError(field, message);
+    } else {
+      globalError = message || '';
+    }
+    refreshErrorSummary();
+  }
+
+  function refreshErrorSummary() {
+    const messages = Array.from(form.querySelectorAll('[data-error-for]')).map(function (slot) {
+      return slot.textContent;
+    }).filter(Boolean);
+    const summary = document.getElementById('form-errors');
+    summary.textContent = [globalError].concat(messages).filter(Boolean).join(' ');
+    summary.classList.toggle('hidden', !summary.textContent);
+  }
+
+  function errorSlot(field) {
+    return form.querySelector('[data-error-for="' + field.id + '"]');
+  }
+
+  function clearFieldError(field) {
+    field.classList.remove('field-error', 'ring-2', 'ring-red-500');
+    field.removeAttribute('aria-invalid');
+    field.querySelectorAll('[aria-invalid]').forEach(function (input) { input.removeAttribute('aria-invalid'); });
+    const slot = errorSlot(field);
+    if (slot) { slot.textContent = ''; slot.classList.add('hidden'); }
+  }
+
+  function markFieldError(field, message) {
+    field.classList.add('field-error', 'ring-2', 'ring-red-500');
+    field.setAttribute('aria-invalid', 'true');
+    field.querySelectorAll('input, select').forEach(function (input) { input.setAttribute('aria-invalid', 'true'); });
+    const slot = errorSlot(field);
+    if (slot) { slot.textContent = message; slot.classList.remove('hidden'); }
+  }
+
+  function focusField(field) {
+    const control = field.matches('input, select') ? field : field.querySelector('input:not(:disabled), select:not(:disabled)');
+    if (control) control.focus({preventScroll: true});
+    field.scrollIntoView({behavior: scrollBehavior, block: 'center'});
+  }
+
+  function validateFields() {
+    form.querySelectorAll('.field-error').forEach(clearFieldError);
+    const invalid = new Map();
+    form.querySelectorAll('input, select').forEach(function (input) {
+      if (!input.disabled && !input.closest('.hidden') && !input.checkValidity()) {
+        invalid.set(errorFieldForControl(input), input.validationMessage);
+      }
+    });
+    form.querySelectorAll('[data-question-type="multi_choice"][data-required]').forEach(function (group) {
+      if (!group.closest('.hidden') && !group.querySelector('input:checked')) {
+        invalid.set(group, 'Select at least one option.');
+      }
+    });
+    invalid.forEach(function (message, field) { markFieldError(field, message); });
+    globalError = '';
+    refreshErrorSummary();
+    if (invalid.size) focusField(invalid.keys().next().value);
+    return invalid.size === 0;
   }
 
   var PROFILE_ERROR_FIELDS = {
@@ -103,8 +267,10 @@ import {initTripSurvey} from './trip_survey.js';
     'profile.hitch_size': 'profile-hitch-group',
     'profile.region_code': 'profile-region',
     'profile.dietary_restrictions': 'dietary-options',
+    'profile.dietary_other': 'profile-dietary-other',
     'profile.has_tent': 'profile-tent-group',
     'email': 'member-email',
+    'price_tier': 'price-tiers',
   };
 
   function findErrorField(key) {
@@ -117,29 +283,38 @@ import {initTripSurvey} from './trip_survey.js';
   }
 
   function showServerErrors(errors) {
-    form.querySelectorAll('.field-error').forEach(function (node) {
-      node.classList.remove('field-error', 'ring-2', 'ring-red-500');
-    });
+    form.querySelectorAll('.field-error').forEach(clearFieldError);
     if (typeof errors === 'string') { showError(errors); return; }
+    const generalMessages = [];
     var firstField = null;
     Object.keys(errors).forEach(function (key) {
       var field = findErrorField(key);
       if (field) {
-        field.classList.add('field-error', 'ring-2', 'ring-red-500');
+        markFieldError(field, errors[key]);
+        if (field === emailInput) {
+          memberConfirmed = false;
+          emailInput.readOnly = false;
+          document.getElementById('gate-entry').classList.remove('hidden');
+          document.getElementById('gate-confirmed').classList.add('hidden');
+          formBody.classList.add('hidden');
+          stepLinks.slice(1).forEach(function (link) { link.setAttribute('aria-disabled', 'true'); });
+          firstField = emailInput;
+        }
         if (!firstField) firstField = field;
+      } else {
+        generalMessages.push(errors[key]);
       }
     });
-    showError(Object.values(errors).join(' '));
-    if (firstField) {
-      firstField.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    showError(generalMessages.join(' '));
+    if (firstField) focusField(firstField);
   }
 
   let isSubmitting = false;
   form.addEventListener('submit', async function (event) {
     event.preventDefault();
     if (isSubmitting) return;
-    if (!form.checkValidity()) { form.reportValidity(); return; }
+    if (!memberConfirmed) { gateButton.click(); return; }
+    if (!validateFields()) return;
     isSubmitting = true;
     const button = document.getElementById('submit');
     button.disabled = true;
@@ -164,15 +339,17 @@ import {initTripSurvey} from './trip_survey.js';
           billing_details: { email: emailInput.value },
         },
       });
-      if (confirmation.error) { showError(confirmation.error.message); return; }
+      if (confirmation.error) { showError(confirmation.error.message, document.getElementById('card-element')); return; }
       form.classList.add('hidden');
       const completed = document.querySelector('.completed-view');
       document.getElementById('confirmation-message').textContent =
         'Your card hold of $' + (result.amountCents / 100).toFixed(2)
         + ' is placed. You will be charged when the roster is confirmed.';
       completed.classList.remove('hidden');
+      document.getElementById('confirmation-title').focus({preventScroll: true});
+      completed.scrollIntoView({behavior: scrollBehavior, block: 'center'});
     } catch (err) {
-      showError('Something went wrong placing the hold — you have not been charged. Please try again.');
+      showError('Something went wrong placing the hold. You have not been charged. Please try again.');
     } finally {
       isSubmitting = false;
       button.disabled = false;

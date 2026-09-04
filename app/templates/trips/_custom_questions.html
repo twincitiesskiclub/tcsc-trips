@@ -1,40 +1,66 @@
-      {% if custom_questions %}
-      <section class="rounded-tcsc bg-white p-5 shadow-sm" id="trip-questions">
-        {% set steps.n = steps.n + 1 %}
-        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> This trip</h2>
-        {% for question in custom_questions %}
-        <div class="form-field mt-3" data-question-field="{{ loop.index0 }}"
-             {% if question.visible_if %}data-visible-if='{{ question.visible_if|tojson }}'{% endif %}>
-          <label class="block text-sm font-medium" for="question-{{ loop.index0 }}">
-            {{ question.label }}{% if question.required %} *{% endif %}</label>
-          {% if question.type == 'choice' %}
-            <select id="question-{{ loop.index0 }}" class="mt-1 w-full rounded-tcsc border-tcsc-gray-400"
-                    data-question-key="{{ question.key }}" data-question-type="choice"
-                    {% if question.required %}required{% endif %}>
-              <option value="">Select an option</option>
-              {% for option in question.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
-            </select>
-          {% elif question.type == 'multi_choice' %}
-            <div class="mt-1 space-y-1" data-question-key="{{ question.key }}" data-question-type="multi_choice"
-                 {% if question.max_selections %}data-max-selections="{{ question.max_selections }}"{% endif %}
-                 {% if question.required %}data-required="true"{% endif %}>
-              {% for option in question.options %}
-              <label class="block text-sm"><input type="checkbox" value="{{ option }}"> {{ option }}</label>
-              {% endfor %}
-            </div>
-          {% elif question.type == 'yes_no' %}
-            <div class="mt-1 flex gap-4" data-question-key="{{ question.key }}" data-question-type="yes_no"
-                 {% if question.required %}data-required="true"{% endif %}>
-              <label><input type="radio" name="question-{{ loop.index0 }}-yn" value="yes"> Yes</label>
-              <label><input type="radio" name="question-{{ loop.index0 }}-yn" value="no"> No</label>
-            </div>
-          {% else %}
-            <input id="question-{{ loop.index0 }}" type="text" class="mt-1 w-full rounded-tcsc border-tcsc-gray-400"
-                   data-question-key="{{ question.key }}" data-question-type="text"
-                   {% if question.required %}required{% endif %}>
-          {% endif %}
-          {% if question.help_text %}<p class="text-sm text-tcsc-gray-600 mt-1">{{ question.help_text }}</p>{% endif %}
-        </div>
-        {% endfor %}
-      </section>
+{% from 'trips/_form_ui.html' import section_heading, required_badge, error_slot, pill, choice_mark %}
+{% if custom_questions %}
+<section id="trip-questions" data-step-section class="trip-card">
+  {% set steps.n = steps.n + 1 %}
+  {{ section_heading(steps.n, 'This trip') }}
+  <div class="space-y-6">
+  {% for question in custom_questions %}
+    {% set qid = 'question-' ~ loop.index0 %}
+    {% set is_pills = question.type == 'yes_no' or (question.type == 'choice' and question.options|length <= 5) %}
+    {% set is_group = is_pills or question.type == 'multi_choice' %}
+    {% set description = qid ~ '-error' ~ (' ' ~ qid ~ '-help' if question.help_text else '') %}
+    <div class="form-field" data-question-field="{{ loop.index0 }}"
+         {% if question.visible_if %}data-visible-if='{{ question.visible_if|tojson }}'{% endif %}>
+      {% if is_group %}
+      <p id="{{ qid }}-label" class="trip-label">{{ question.label }}{% if question.required %} {{ required_badge() }}{% endif %}</p>
+      {% else %}
+      <label class="trip-label" for="{{ qid }}">{{ question.label }}{% if question.required %} {{ required_badge() }}{% endif %}</label>
       {% endif %}
+      {% if question.help_text %}<p id="{{ qid }}-help" class="mt-1 text-sm text-zinc-600">{{ question.help_text }}</p>{% endif %}
+      {% if is_pills %}
+      <div id="{{ qid }}" class="mt-3 flex flex-wrap gap-2 rounded-xl" role="radiogroup"
+           aria-labelledby="{{ qid }}-label" aria-describedby="{{ description }}"
+           data-question-key="{{ question.key }}" data-question-type="{{ question.type }}"
+           {% if question.required %}data-required="true" aria-required="true"{% endif %}>
+        {% if question.type == 'yes_no' %}
+          {{ pill(qid ~ '-yn', 'yes', 'Yes', description, required=question.required) }}
+          {{ pill(qid ~ '-yn', 'no', 'No', description, required=question.required) }}
+        {% else %}
+          {% for option in question.options %}{{ pill(qid, option, option, description, required=question.required) }}{% endfor %}
+        {% endif %}
+      </div>
+      {% elif question.type == 'choice' %}
+      <select id="{{ qid }}" class="trip-input mt-2 pr-10" aria-describedby="{{ description }}"
+              data-question-key="{{ question.key }}" data-question-type="choice"
+              {% if question.required %}required{% endif %}>
+        <option value="">Select an option</option>
+        {% for option in question.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
+      </select>
+      {% elif question.type == 'multi_choice' %}
+      <div id="{{ qid }}" class="mt-3 rounded-xl" role="group" aria-labelledby="{{ qid }}-label"
+           aria-describedby="{{ description }}{% if question.max_selections %} {{ qid }}-counter{% endif %}"
+           data-question-key="{{ question.key }}" data-question-type="multi_choice"
+           {% if question.max_selections %}data-max-selections="{{ question.max_selections }}"{% endif %}
+           {% if question.required %}data-required="true"{% endif %}>
+        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          {% for option in question.options %}
+          <label class="trip-option">
+            <input type="checkbox" class="sr-only" value="{{ option }}" aria-describedby="{{ description }}">
+            {{ choice_mark() }}
+            <span>{{ option }}</span>
+          </label>
+          {% endfor %}
+        </div>
+        {% if question.max_selections %}<p id="{{ qid }}-counter" data-selection-counter class="mt-2 text-sm text-zinc-600" aria-live="polite" aria-atomic="true">0 of {{ question.max_selections }} selected</p>{% endif %}
+      </div>
+      {% else %}
+      <input id="{{ qid }}" type="text" class="trip-input mt-2" aria-describedby="{{ description }}"
+             data-question-key="{{ question.key }}" data-question-type="text"
+             {% if question.required %}required{% endif %}>
+      {% endif %}
+      {{ error_slot(qid) }}
+    </div>
+  {% endfor %}
+  </div>
+</section>
+{% endif %}

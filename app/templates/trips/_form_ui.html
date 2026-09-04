@@ -1,0 +1,49 @@
+{% macro required_badge() -%}
+<span class="ml-1.5 inline-block rounded-full bg-tcsc-gray-50 px-2 py-0.5 align-middle text-xs font-medium text-zinc-600">Required</span>
+{%- endmacro %}
+
+{% macro section_heading(number, title) -%}
+<div class="mb-6 flex items-center gap-3">
+  <span data-step-number class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-tcsc-navy text-sm font-medium text-white" aria-hidden="true">{{ number }}</span>
+  <h2 class="text-lg font-semibold text-tcsc-navy">{{ title }}</h2>
+</div>
+{%- endmacro %}
+
+{% macro error_slot(id) -%}
+<p id="{{ id }}-error" data-error-for="{{ id }}" class="hidden mt-2 text-sm text-red-700"></p>
+{%- endmacro %}
+
+{% macro choice_mark() -%}
+<span data-choice-mark class="trip-choice-mark" aria-hidden="true">
+  <svg viewBox="0 0 16 16" fill="none" class="h-3.5 w-3.5" stroke="currentColor" stroke-width="2"><path d="m3 8 3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</span>
+{%- endmacro %}
+
+{% macro pill(name, value, label, describedby, required=false, checked=false) -%}
+<label class="trip-pill">
+  <input type="radio" class="sr-only" name="{{ name }}" value="{{ value }}" aria-describedby="{{ describedby }}"{% if required %} required{% endif %}{% if checked %} checked{% endif %}>
+  <span>{{ label }}</span>
+</label>
+{%- endmacro %}
+
+{% macro logo_header() -%}
+<header class="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-6 sm:px-6 sm:py-8">
+  <a href="/" class="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tcsc-navy focus-visible:ring-offset-4">
+    <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="Twin Cities Ski Club home" class="h-8 w-auto sm:h-10">
+  </a>
+  <span class="shrink-0 text-sm font-medium text-zinc-600">Club trips</span>
+</header>
+{%- endmacro %}
+
+{% macro trip_meta(trip) -%}
+<div class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-zinc-600">
+  <span class="flex items-center gap-2">
+    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
+    {{ trip.destination }}
+  </span>
+  <span class="flex items-center gap-2">
+    <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 11h18" stroke-linecap="round"/></svg>
+    {{ trip.formatted_date_range }}
+  </span>
+</div>
+{%- endmacro %}

@@ -1,40 +1,68 @@
-      <section class="rounded-tcsc bg-white p-5 shadow-sm">
-        {% set steps.n = steps.n + 1 %}
-        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Getting there</h2>
-        <fieldset id="profile-can-drive-group">
-          <legend class="text-sm font-medium">Can you drive a carpool? *</legend>
-          <div class="mt-1 flex gap-4">
-            <label><input type="radio" name="profile-can-drive" value="yes"> Yes</label>
-            <label><input type="radio" name="profile-can-drive" value="no"> No</label>
-          </div>
-        </fieldset>
-        <div id="driver-details" class="hidden mt-3 space-y-3 border-l-2 border-tcsc-mint pl-4">
-          <div><label class="block text-sm font-medium" for="profile-seats">How many people can you accommodate (besides yourself)?</label>
-            <input id="profile-seats" type="number" min="0" max="99" class="mt-1 w-24 rounded-tcsc border-tcsc-gray-400"></div>
-          <div><label class="block text-sm font-medium" for="profile-bikes">How many bikes can you accommodate?</label>
-            <input id="profile-bikes" type="number" min="0" max="99" class="mt-1 w-24 rounded-tcsc border-tcsc-gray-400"></div>
-          <fieldset id="profile-hitch-group"><legend class="text-sm font-medium">Do you have a trailer hitch?</legend>
-            <div class="mt-1 flex gap-4">
-              <label><input type="radio" name="profile-hitch" value="" checked> No</label>
-              <label><input type="radio" name="profile-hitch" value="1.25"> 1.25&Prime;</label>
-              <label><input type="radio" name="profile-hitch" value="2"> 2&Prime;</label>
-            </div></fieldset>
+{% from 'trips/_form_ui.html' import section_heading, required_badge, error_slot, pill %}
+<section id="getting-there" data-step-section class="trip-card">
+  {% set steps.n = steps.n + 1 %}
+  {{ section_heading(steps.n, 'Getting there') }}
+  <div class="space-y-6">
+    <fieldset id="profile-can-drive-group" class="rounded-xl" aria-describedby="profile-can-drive-group-error">
+      <legend class="trip-label">Can you drive a carpool? {{ required_badge() }}</legend>
+      <div class="mt-3 flex flex-wrap gap-2">
+        {{ pill('profile-can-drive', 'yes', 'Yes', 'profile-can-drive-group-error', required=true) }}
+        {{ pill('profile-can-drive', 'no', 'No', 'profile-can-drive-group-error', required=true) }}
+      </div>
+      {{ error_slot('profile-can-drive-group') }}
+    </fieldset>
+    <div id="driver-details" class="hidden space-y-5 border-l-2 border-tcsc-mint pl-4 sm:pl-6">
+      <div>
+        <label class="trip-label" for="profile-seats">How many people can you accommodate (besides yourself)?</label>
+        <input id="profile-seats" type="number" min="0" max="99" inputmode="numeric" class="trip-input mt-2 max-w-[8rem]" aria-describedby="profile-seats-error">
+        {{ error_slot('profile-seats') }}
+      </div>
+      <div>
+        <label class="trip-label" for="profile-bikes">How many bikes can you accommodate?</label>
+        <input id="profile-bikes" type="number" min="0" max="99" inputmode="numeric" class="trip-input mt-2 max-w-[8rem]" aria-describedby="profile-bikes-error">
+        {{ error_slot('profile-bikes') }}
+      </div>
+      <fieldset id="profile-hitch-group" class="rounded-xl" aria-describedby="profile-hitch-group-error">
+        <legend class="trip-label">Do you have a trailer hitch?</legend>
+        <div class="mt-3 flex flex-wrap gap-2">
+          {{ pill('profile-hitch', '', 'No', 'profile-hitch-group-error', checked=true) }}
+          {{ pill('profile-hitch', '1.25', '1.25″', 'profile-hitch-group-error') }}
+          {{ pill('profile-hitch', '2', '2″', 'profile-hitch-group-error') }}
         </div>
-        <div class="mt-3"><label class="block text-sm font-medium" for="profile-region">What is your region code? *</label>
-          <input id="profile-region" type="text" maxlength="10" class="mt-1 w-24 rounded-tcsc border-tcsc-gray-400">
-          <p class="text-sm text-tcsc-gray-600 mt-1">See the map: <a class="underline" href="https://bit.ly/TCSCmap" target="_blank" rel="noopener">bit.ly/TCSCmap</a></p></div>
-      </section>
+        {{ error_slot('profile-hitch-group') }}
+      </fieldset>
+    </div>
+    <div>
+      <label class="trip-label" for="profile-region">What is your region code? {{ required_badge() }}</label>
+      <input id="profile-region" type="text" maxlength="10" required class="trip-input mt-2 max-w-[8rem]" aria-describedby="region-help profile-region-error">
+      <p id="region-help" class="mt-2 text-sm text-zinc-600">Find your code on the <a class="trip-link" href="https://bit.ly/TCSCmap" target="_blank" rel="noopener">TCSC region map<span class="sr-only"> (opens in a new tab)</span></a>.</p>
+      {{ error_slot('profile-region') }}
+    </div>
+  </div>
+</section>
 
-      <section class="rounded-tcsc bg-white p-5 shadow-sm">
-        {% set steps.n = steps.n + 1 %}
-        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Food &amp; sleeping</h2>
-        <fieldset><legend class="text-sm font-medium">Dietary restrictions</legend>
-          <div id="dietary-options" class="mt-1 grid grid-cols-2 gap-1 text-sm"></div></fieldset>
-        <div class="mt-3"><label class="block text-sm font-medium" for="profile-dietary-other">Other dietary restriction(s)?</label>
-          <input id="profile-dietary-other" type="text" maxlength="255" class="mt-1 w-full rounded-tcsc border-tcsc-gray-400"></div>
-        <fieldset id="profile-tent-group" class="mt-3"><legend class="text-sm font-medium">Do you have a 2+ person tent?</legend>
-          <div class="mt-1 flex gap-4">
-            <label><input type="radio" name="profile-tent" value="yes"> Yes</label>
-            <label><input type="radio" name="profile-tent" value="no"> No</label>
-          </div></fieldset>
-      </section>
+<section id="food-sleeping" data-step-section class="trip-card">
+  {% set steps.n = steps.n + 1 %}
+  {{ section_heading(steps.n, 'Food and sleeping') }}
+  <div class="space-y-6">
+    <fieldset>
+      <legend class="trip-label">Dietary restrictions</legend>
+      <p class="mt-1 text-sm text-zinc-600">Select all that apply.</p>
+      <div id="dietary-options" class="mt-3 grid grid-cols-1 gap-3 rounded-xl sm:grid-cols-2" aria-describedby="dietary-options-error"></div>
+      {{ error_slot('dietary-options') }}
+    </fieldset>
+    <div>
+      <label class="trip-label" for="profile-dietary-other">Other dietary restriction(s)?</label>
+      <input id="profile-dietary-other" type="text" maxlength="255" class="trip-input mt-2" aria-describedby="profile-dietary-other-error">
+      {{ error_slot('profile-dietary-other') }}
+    </div>
+    <fieldset id="profile-tent-group" class="rounded-xl" aria-describedby="profile-tent-group-error">
+      <legend class="trip-label">Do you have a 2+ person tent?</legend>
+      <div class="mt-3 flex flex-wrap gap-2">
+        {{ pill('profile-tent', 'yes', 'Yes', 'profile-tent-group-error') }}
+        {{ pill('profile-tent', 'no', 'No', 'profile-tent-group-error') }}
+      </div>
+      {{ error_slot('profile-tent-group') }}
+    </fieldset>
+  </div>
+</section>

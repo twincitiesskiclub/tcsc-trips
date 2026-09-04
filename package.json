@@ -7,7 +7,7 @@
     "tailwind:build": "tailwindcss -i ./app/static/css/tailwind-input.css -o ./app/static/css/tailwind-output.css --minify",
     "test:practice-reactions": "node --test tests/js/practice_plan_reactions.test.js tests/js/practice_plan_reaction_editor.test.js tests/js/toast.test.js tests/js/lead_picker.test.js tests/js/draft_publish.test.js",
     "test:events": "node --test tests/js/event_registration_scopes.test.js tests/js/event_registration_waiver.test.js tests/js/admin_event_scopes.test.js",
-    "test:trips": "node --test tests/js/admin_trip_questions.test.js",
+    "test:trips": "node --test tests/js/admin_trip_questions.test.js tests/js/trip_survey.test.js tests/js/trip_registration.test.js",
     "test:registration": "node --test tests/js/volunteer_section.test.js tests/js/season_verify.test.js tests/js/payment_gates.test.js"
   },
   "devDependencies": {

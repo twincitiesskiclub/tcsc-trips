@@ -2,6 +2,89 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Public trip pages need a reset while the admin keeps preflight disabled.
+   In particular, forms' appearance:none needs an explicit solid border. */
+@layer base {
+  .trip-page,
+  .trip-page *,
+  .trip-page ::before,
+  .trip-page ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: theme('colors.zinc.200');
+  }
+
+  .trip-page { margin: 0; overflow-wrap: anywhere; }
+  .trip-page :where(h1, h2, h3, p, ol, fieldset) { margin: 0; }
+  .trip-page :where(ol, fieldset, legend) { padding: 0; }
+  .trip-page fieldset { min-width: 0; }
+  .trip-page ol { list-style: none; }
+  .trip-page :where(a) { color: inherit; text-decoration: inherit; }
+  .trip-page :where(button, input, select) { font: inherit; color: inherit; margin: 0; }
+  .trip-page :where(button, label, a) { -webkit-tap-highlight-color: transparent; }
+  .trip-page :where(img, svg) { display: block; }
+  .trip-page img { max-width: 100%; }
+  .trip-page :where(input[type='checkbox'], input[type='radio']):not(.sr-only) {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1px solid theme('colors.zinc.400');
+    color: theme('colors.tcsc-navy');
+  }
+}
+
+@layer components {
+  .trip-page :where(.trip-card) {
+    @apply rounded-2xl bg-white p-6 shadow-sm sm:p-8;
+    scroll-margin-top: 7rem;
+  }
+  .trip-page :where(.trip-label) { @apply block text-sm font-medium text-tcsc-navy; }
+  .trip-page :where(.trip-input) {
+    @apply block h-12 w-full rounded-xl border border-zinc-200 bg-white px-4 text-base
+           focus:outline-none focus:border-tcsc-navy focus:ring-2 focus:ring-tcsc-mint/50;
+  }
+  .trip-page :where(.trip-pill),
+  .trip-page :where(.trip-option) {
+    @apply relative flex min-h-12 min-w-0 cursor-pointer items-center gap-3 border border-zinc-200
+           bg-white px-4 py-3 text-sm font-medium hover:border-zinc-400
+           has-[:checked]:border-tcsc-navy has-[:checked]:bg-tcsc-mint/10
+           has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2
+           has-[:focus-visible]:outline-tcsc-navy has-[:focus-visible]:ring-4 has-[:focus-visible]:ring-tcsc-mint/50
+           motion-safe:transition-colors;
+  }
+  .trip-page :where(.trip-pill) { @apply min-w-[5rem] justify-center rounded-full px-5; }
+  .trip-page :where(.trip-option) { @apply rounded-xl; }
+  .trip-page :where(.trip-price) { @apply border-2 p-4; }
+  .trip-page :where(.trip-choice-mark) {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded border border-zinc-400 bg-white text-white;
+  }
+  .trip-page .trip-choice-mark svg { visibility: hidden; }
+  .trip-page .trip-option:has(:checked) .trip-choice-mark { @apply border-tcsc-navy bg-tcsc-navy; }
+  .trip-page .trip-option:has(:checked) .trip-choice-mark svg { visibility: visible; }
+  .trip-page :where(.trip-button) {
+    @apply inline-flex min-h-14 w-full cursor-pointer items-center justify-center gap-3 rounded-xl
+           bg-tcsc-navy px-5 py-3 text-base font-semibold text-white hover:bg-tcsc-navy/90
+           focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-tcsc-mint focus-visible:ring-offset-2
+           disabled:cursor-wait disabled:opacity-50 motion-safe:transition-colors;
+  }
+  .trip-page :where(.trip-link) {
+    @apply rounded-sm font-medium underline decoration-tcsc-gray-400 underline-offset-4
+           hover:decoration-tcsc-navy focus-visible:outline-2 focus-visible:outline-tcsc-navy focus-visible:outline-offset-4;
+  }
+  .trip-page :where(.trip-notice) { @apply rounded-xl border border-tcsc-mint bg-tcsc-mint/10 p-4; }
+  .trip-page :where(.trip-step) {
+    @apply flex min-h-11 flex-col gap-2 rounded px-1 text-center text-[10px] font-medium leading-tight text-zinc-600
+           focus-visible:outline-2 focus-visible:outline-tcsc-navy sm:px-2 sm:text-xs;
+  }
+  .trip-page :where(.trip-step-bar) { @apply h-1 w-full rounded-full bg-zinc-200; }
+  .trip-page .trip-step[aria-current='step'] { @apply text-tcsc-navy; }
+  .trip-page .trip-step[aria-current='step'] .trip-step-bar { @apply bg-tcsc-navy; }
+  .trip-page .trip-step[data-complete] .trip-step-bar { @apply bg-tcsc-mint; }
+  .trip-page .field-error { @apply border-red-500; }
+  .trip-page .field-error:focus { @apply ring-red-500; }
+  .trip-page #card-element > div { width: 100%; }
+}
+
 /* Custom component classes using @apply */
 @layer components {
   /* Primary button */

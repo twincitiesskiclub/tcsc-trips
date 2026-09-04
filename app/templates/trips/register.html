@@ -1,9 +1,10 @@
+{% from 'trips/_form_ui.html' import logo_header, trip_meta, section_heading, required_badge, error_slot, choice_mark %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{{ trip.name }} — Registration — Twin Cities Ski Club</title>
+  <title>{{ trip.name }} registration | Twin Cities Ski Club</title>
   {{ csrf_meta_tag() }}
   <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
@@ -12,63 +13,102 @@
   <script id="trip-registration-data" type="application/json">{{ registration_data|tojson }}</script>
   <script src="{{ url_for('static', filename='trip_registration.js') }}" type="module"></script>
 </head>
-<body class="bg-tcsc-gray-50 text-tcsc-navy">
-<div class="mx-auto max-w-form-lg px-4 py-8">
-  <header class="mb-6">
-    <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="Twin Cities Ski Club" class="h-10 mb-4">
-    <h1 class="text-2xl font-bold">{{ trip.name }}</h1>
-    <p class="text-tcsc-gray-600">{{ trip.destination }} · {{ trip.formatted_date_range }}</p>
-  </header>
+<body class="trip-page min-h-screen bg-tcsc-gray-50 font-sans leading-relaxed text-tcsc-navy antialiased">
+{{ logo_header() }}
+<main class="mx-auto max-w-3xl px-4 pb-16 sm:px-6">
+  <div class="mb-6 pt-2 sm:pt-4">
+    <a href="/{{ series.slug }}" class="trip-link text-sm"><span aria-hidden="true">&larr;</span> Trip details</a>
+    <h1 class="mb-3 mt-4 text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{{ trip.name }}</h1>
+    {{ trip_meta(trip) }}
+  </div>
 
   {% if not registration_open %}
-    <div class="rounded-tcsc bg-tcsc-gray-100 p-4">{{ registration_message }}</div>
+  <div class="trip-notice" role="status">{{ registration_message }}</div>
   {% else %}
-  <form id="trip-registration-form" class="payment-view space-y-8" novalidate
-        data-trip-slug="{{ series.slug }}">
-    {% set steps = namespace(n=0) %}
-
-    <section class="rounded-tcsc bg-white p-5 shadow-sm" id="gate-section">
-      {% set steps.n = steps.n + 1 %}
-      <h2 class="font-semibold mb-1"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Member check</h2>
-      <p class="text-sm text-tcsc-gray-600 mb-3">Trips are for current members. Enter the email you registered with.</p>
-      <label class="block text-sm font-medium" for="member-email">Email</label>
-      <input id="member-email" type="email" required autocomplete="email"
-             class="mt-1 w-full rounded-tcsc border-tcsc-gray-400">
-      <p id="gate-message" class="mt-2 text-sm hidden"></p>
-      <button type="button" id="gate-check"
-              class="mt-3 rounded-tcsc bg-tcsc-navy px-4 py-2 text-tcsc-white">Continue</button>
+  <form id="trip-registration-form" class="payment-view space-y-6" novalidate data-trip-slug="{{ series.slug }}">
+    {% set step_links = [('gate-section', 'Member check'), ('getting-there', 'Getting there'), ('food-sleeping', 'Food and sleeping')] %}
+    {% if trip.custom_questions %}{% set step_links = step_links + [('trip-questions', 'This trip')] %}{% endif %}
+    {% set step_links = step_links + [('payment-section', 'Payment')] %}
+    <nav id="registration-steps" class="sticky top-0 z-10 rounded-xl bg-white/95 px-2 py-3 shadow-sm backdrop-blur" aria-label="Registration progress">
+      <ol class="flex">
+        {% for target, label in step_links %}
+        <li class="min-w-0 flex-1">
+          <a href="#{{ target }}" data-step-link class="trip-step"{% if loop.first %} aria-current="step"{% else %} aria-disabled="true"{% endif %}>
+            <span class="trip-step-bar" aria-hidden="true"></span>
+            <span>{{ label }}</span>
+          </a>
+        </li>
+        {% endfor %}
+      </ol>
+    </nav>
+    {% set steps = namespace(n=1) %}
+    <section id="gate-section" data-step-section class="trip-card">
+      <div id="gate-entry">
+        {{ section_heading(steps.n, 'Member check') }}
+        <p class="mb-5 text-sm text-zinc-600">Trips are for current members. Enter the email you registered with.</p>
+        <label class="trip-label" for="member-email">Email {{ required_badge() }}</label>
+        <div class="mt-2 flex flex-col gap-3 sm:flex-row sm:items-start">
+          <input id="member-email" type="email" required autocomplete="email" class="trip-input min-w-0 shrink-0 sm:flex-1" aria-describedby="gate-message member-email-error">
+          <button type="button" id="gate-check" class="trip-button min-h-12 sm:w-auto">Continue <span aria-hidden="true">&rarr;</span></button>
+        </div>
+        <p id="gate-message" class="hidden mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert"></p>
+        {{ error_slot('member-email') }}
+      </div>
+      <div id="gate-confirmed" class="hidden flex items-center gap-3" role="status">
+        <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-tcsc-mint/30 text-tcsc-navy" aria-hidden="true">✓</span>
+        <div class="min-w-0"><h2 class="font-semibold">Member confirmed</h2><p id="confirmed-email" class="break-words text-sm text-zinc-600"></p></div>
+      </div>
     </section>
 
-    <div id="form-body" class="hidden space-y-8">
-
+    <div id="form-body" class="hidden space-y-6">
 {% include 'trips/_profile_sections.html' %}
-
 {% with custom_questions=trip.custom_questions %}{% include 'trips/_custom_questions.html' %}{% endwith %}
 
-      <section class="rounded-tcsc bg-white p-5 shadow-sm">
+      <section id="payment-section" data-step-section class="trip-card">
         {% set steps.n = steps.n + 1 %}
-        <h2 class="font-semibold mb-3"><span class="text-tcsc-gray-400 mr-1">{{ steps.n }}.</span> Payment</h2>
-        <div id="price-tiers" class="space-y-2 {% if trip.price_low == trip.price_high %}hidden{% endif %}">
-          <label class="flex items-center gap-2"><input type="radio" name="price-tier" value="low" checked>
-            Standard — <span>{{ trip.price_low|format_price }}</span></label>
-          <label class="flex items-center gap-2"><input type="radio" name="price-tier" value="high">
-            Supporter — <span>{{ trip.price_high|format_price }}</span></label>
+        {{ section_heading(steps.n, 'Payment') }}
+        <fieldset id="price-tiers" class="rounded-xl" aria-describedby="price-tiers-error">
+          <legend class="trip-label">{% if trip.price_low != trip.price_high %}Choose your price{% else %}Trip price{% endif %}</legend>
+          <div class="mt-3 grid gap-3 {% if trip.price_low != trip.price_high %}sm:grid-cols-2{% endif %}">
+            <label class="trip-option trip-price">
+              <input type="radio" class="sr-only" name="price-tier" value="low" checked aria-describedby="price-tiers-error">
+              {{ choice_mark() }}
+              <span class="min-w-0"><span class="block text-sm font-medium">Standard</span><span class="mt-1 block text-2xl font-bold tracking-tight">{{ trip.price_low|format_price }}</span></span>
+            </label>
+            {% if trip.price_low != trip.price_high %}
+            <label class="trip-option trip-price">
+              <input type="radio" class="sr-only" name="price-tier" value="high" aria-describedby="price-tiers-error">
+              {{ choice_mark() }}
+              <span class="min-w-0"><span class="block text-sm font-medium">Supporter</span><span class="mt-1 block text-2xl font-bold tracking-tight">{{ trip.price_high|format_price }}</span></span>
+            </label>
+            {% endif %}
+          </div>
+          {{ error_slot('price-tiers') }}
+        </fieldset>
+        <div class="trip-notice my-6">
+          <p class="font-semibold">A hold now, a charge later</p>
+          <p class="mt-1 text-sm">Your card is authorized now and only charged when the roster is confirmed.</p>
         </div>
-        <p class="text-sm text-tcsc-gray-600 my-3">Your card is <strong>authorized now and only charged when the roster is confirmed</strong>.</p>
-        <div id="card-element" class="rounded-tcsc border border-tcsc-gray-400 p-3 bg-white"></div>
-        <p id="form-errors" class="mt-3 text-sm text-red-700"></p>
-        <button type="submit" id="submit"
-                class="mt-4 w-full rounded-tcsc bg-tcsc-navy px-4 py-3 font-semibold text-tcsc-white">
-          <span id="button-text">Register &amp; place hold</span></button>
+        <p id="card-label" class="trip-label mb-2">Card details {{ required_badge() }}</p>
+        <div id="card-element" class="flex min-h-12 items-center rounded-xl border border-zinc-200 bg-white px-4 py-3 focus-within:border-tcsc-navy focus-within:ring-2 focus-within:ring-tcsc-mint/50" role="group" aria-labelledby="card-label" aria-describedby="card-element-error"></div>
+        {{ error_slot('card-element') }}
+        <p id="form-errors" class="hidden mt-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert" tabindex="-1"></p>
+        <button type="submit" id="submit" class="trip-button mt-6">
+          <span id="button-text" aria-live="polite">Place hold for {{ trip.price_low|format_price }}</span>
+        </button>
       </section>
     </div>
   </form>
 
-  <div class="completed-view hidden rounded-tcsc bg-tcsc-mint p-6">
-    <h2 class="font-bold text-lg">You're signed up! 🎿</h2>
-    <p id="confirmation-message" class="mt-2"></p>
+  <div class="completed-view trip-card hidden py-12 text-center" role="region" aria-labelledby="confirmation-title">
+    <div class="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-tcsc-mint/30">
+      <svg class="h-8 w-8 text-tcsc-navy" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m5 12 4 4L19 6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    </div>
+    <h2 id="confirmation-title" class="text-2xl font-bold" tabindex="-1">You're signed up!</h2>
+    <p id="confirmation-message" class="mx-auto mt-3 max-w-md text-zinc-600"></p>
+    <a href="/" class="trip-button mx-auto mt-8 max-w-xs">Back to Twin Cities Ski Club</a>
   </div>
   {% endif %}
-</div>
+</main>
 </body>
 </html>
