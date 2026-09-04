@@ -7,24 +7,8 @@
 #price-high-group[style*="display: block"] > label {
     margin-bottom: var(--admin-row-gap);
 }
-#trip-editor-form .trip-builder-section{border-top:1px solid #e4e4e7;padding-top:var(--admin-section-gap);margin-top:var(--admin-section-gap)}
-#trip-editor-form #trip-question-rows{display:flex;flex-direction:column;gap:var(--admin-space-3);margin-bottom:var(--admin-space-3)}
-#trip-editor-form .aef-editor-row{border:1px solid #e4e4e7;border-radius:10px;padding:var(--admin-space-3);background:#fcfefd}
-#trip-editor-form .aef-editor-grid{display:grid;grid-template-columns:repeat(12,minmax(0,1fr));gap:var(--admin-space-3)}
-#trip-editor-form .aef-field{grid-column:span 4;display:flex;flex-direction:column;gap:var(--admin-space-1)}
-#trip-editor-form .aef-field label{font-size:12px;font-weight:650;color:#475569}
-#trip-editor-form .aef-field input:not([type="checkbox"]),#trip-editor-form .aef-field select,#trip-editor-form .aef-field textarea{width:100%;min-height:40px;border:1px solid #d4d4d8;border-radius:7px;padding:var(--admin-space-2) var(--admin-space-3);color:#1c2c44;font:inherit;font-size:13px;background:#fcfefd;box-sizing:border-box}
-#trip-editor-form .aef-field textarea{resize:vertical}
-#trip-editor-form .aef-remove{margin-top:var(--admin-space-3);min-height:36px;border:1px solid #fecaca;border-radius:7px;background:#fcfefd;color:#991b1b;padding:0 var(--admin-space-3);font-size:12px;font-weight:650;cursor:pointer}
-#trip-editor-form .aef-add{min-height:40px;border:1px solid #cbd5e1;border-radius:8px;background:#fcfefd;color:#1c2c44;padding:0 var(--admin-space-3);font-size:13px;font-weight:650;cursor:pointer}
-#trip-editor-form .aef-add:focus-visible,#trip-editor-form .aef-remove:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
-#trip-editor-form .form-field{display:flex;flex-direction:column;gap:var(--admin-space-2);margin-bottom:var(--admin-space-4)}
-#trip-editor-form .form-field label{font-size:14px;font-weight:600;color:#475569}
-#trip-editor-form .form-field select{width:100%;min-height:44px;border:1px solid #d4d4d8;border-radius:7px;padding:var(--admin-space-2) var(--admin-space-3);background:#fff;color:#1c2c44}
-@media(max-width:780px){
-  #trip-editor-form .aef-field{grid-column:1/-1}
-}
 </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/admin_trip_questions.css') }}">
 {% endblock %}
 
 {% block content %}
@@ -186,22 +170,31 @@
     </div>
 
     <section class="trip-builder-section" aria-labelledby="trip-questions-heading">
-        {% if not trip %}
-        <div class="form-field"><label for="template_key">Start from template</label>
-          <select id="template_key" name="template_key">
-            {% for key, template in templates.items() %}
-            <option value="{{ key }}">{{ template.name }}</option>
-            {% endfor %}
-          </select></div>
-        {% endif %}
         <h3 id="trip-questions-heading">Trip questions</h3>
+        <p class="tq-intro">Ask about departure times, room sharing or anything else for this trip. Select a question to edit it.</p>
+        <div class="form-field"><label for="template_key">Add from a template</label>
+          <select id="template_key" aria-describedby="trip-template-hint" aria-controls="trip-template-preview">
+            <option value="">Choose a template</option>
+            {% for key, template in templates.items() %}
+            {% if key != 'blank' %}
+            <option value="{{ key }}">{{ template.name }}</option>
+            {% endif %}
+            {% endfor %}
+          </select>
+          <p id="trip-template-hint" class="tq-hint">Review the questions, then choose how to add them.</p>
+        </div>
+        <input type="hidden" id="applied-trip-template" name="template_key"
+               value="{{ request.form.get('template_key', 'blank') }}">
+        <div id="trip-template-preview" class="tq-template-preview" hidden></div>
         <div id="trip-question-rows"></div>
         <button type="button" id="add-trip-question" class="aef-add">Add question</button>
+        <p id="trip-question-status" class="tq-hint" role="status"></p>
         <textarea name="custom_questions_json" id="custom_questions_json" hidden>{{ questions_json }}</textarea>
         <script type="application/json" id="trip-template-data">{{ template_editor_data|tojson }}</script>
         <script src="{{ url_for('static', filename='admin_trip_questions.js') }}" defer></script>
     </section>
 
+    <div id="trip-question-errors" class="tq-error-summary" role="alert" hidden></div>
     <div class="flex gap-3 mt-6">
         <button type="submit" class="bg-tcsc-navy text-white px-6 py-3 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Trip</button>
         <a href="{{ url_for('admin.get_admin_trips') }}" class="bg-gray-200 text-gray-600 px-6 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Cancel</a>
