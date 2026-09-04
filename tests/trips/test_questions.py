@@ -65,7 +65,7 @@ def test_templates_load_and_validate():
     tq._reset_cache()
     templates = tq.load_trip_templates()
     for expected in ("race_weekend", "cuyuna_camping", "pre_birkie",
-                     "sisu", "birkie", "gbc", "hayward", "blank"):
+                     "sisu", "birkie", "gbc", "hayward", "north_shore", "blank"):
         assert expected in templates
     for template in templates.values():
         tq.validate_questions(template["custom_questions"])

@@ -170,3 +170,30 @@ templates:
           - Canoe / Kayak
           - Sauna
           - Exploring town
+
+  north_shore:
+    name: North Shore fall training trip
+    custom_questions:
+      - <<: *race_departure
+        options:
+          - Thursday morning (7am - 10am)
+          - Thursday midday (10am - 1pm)
+          - Thursday afternoon (1pm - 4pm)
+          - Thursday evening (4pm - 7pm)
+          - Friday morning (7am - 10am)
+          - Friday midday (10am - 1pm)
+          - Friday afternoon (1pm - 4pm)
+          - Friday evening (4pm - 7pm)
+      - *chore
+      - *bed_share
+      - *room_share
+      - key: activities
+        label: Which of the following activities do you hope to partake in during the weekend?
+        type: multi_choice
+        required: true
+        options:
+          - Mountain biking
+          - Road / gravel biking
+          - Rollerskiing
+          - Trail running
+          - Hiking
