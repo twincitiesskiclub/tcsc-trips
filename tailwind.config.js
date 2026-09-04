@@ -7,6 +7,16 @@ module.exports = {
   theme: {
     extend: {
       colors: {
+        // Marketing site palette. Keep the existing admin tokens independent.
+        'brand-navy': 'oklch(0.25 0.06 260 / <alpha-value>)',
+        'brand-navy-deep': 'oklch(0.18 0.05 260 / <alpha-value>)',
+        'brand-mint': 'oklch(0.91 0.12 155 / <alpha-value>)',
+        'brand-mint-deep': 'oklch(0.52 0.13 155 / <alpha-value>)',
+        'brand-coral': 'oklch(0.74 0.16 15 / <alpha-value>)',
+        'brand-paper': 'oklch(0.985 0.003 90 / <alpha-value>)',
+        'brand-paper-card': 'oklch(0.97 0.004 90 / <alpha-value>)',
+        'brand-ink': 'oklch(0.18 0.04 260 / <alpha-value>)',
+        'brand-slate': 'oklch(0.50 0.02 260 / <alpha-value>)',
         // Brand colors (from _tokens.css)
         'tcsc-navy': '#1c2c44',      // --p (primary)
         'tcsc-mint': '#acf3c4',      // --s (secondary)
@@ -40,6 +50,8 @@ module.exports = {
 
       fontFamily: {
         'sans': ['-apple-system', 'BlinkMacSystemFont', 'sans-serif'],
+        'brand': ['ArchivoVariable', 'system-ui', 'sans-serif'],
+        'display': ['PolySansBulkyWide', 'ArchivoVariable', 'system-ui', 'sans-serif'],
       },
 
       borderRadius: {

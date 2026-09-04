@@ -1,16 +1,16 @@
 {% macro required_badge() -%}
-<span class="ml-1.5 inline-block rounded-full bg-tcsc-gray-50 px-2 py-0.5 align-middle text-xs font-medium text-zinc-600">Required</span>
+<span class="ml-2 inline-block whitespace-nowrap align-baseline text-xs font-normal text-brand-slate">Required</span>
 {%- endmacro %}
 
 {% macro section_heading(number, title) -%}
 <div class="mb-6 flex items-center gap-3">
-  <span data-step-number class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-tcsc-navy text-sm font-medium text-white" aria-hidden="true">{{ number }}</span>
-  <h2 class="text-lg font-semibold text-tcsc-navy">{{ title }}</h2>
+  <span data-step-number class="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-navy text-sm font-semibold text-brand-mint" aria-hidden="true">{{ number }}</span>
+  <h2 class="text-lg font-semibold text-brand-navy sm:text-xl">{{ title }}</h2>
 </div>
 {%- endmacro %}
 
 {% macro error_slot(id) -%}
-<p id="{{ id }}-error" data-error-for="{{ id }}" class="hidden mt-2 text-sm text-red-700"></p>
+<p id="{{ id }}-error" data-error-for="{{ id }}" class="trip-error hidden"></p>
 {%- endmacro %}
 
 {% macro choice_mark() -%}
@@ -27,16 +27,49 @@
 {%- endmacro %}
 
 {% macro logo_header() -%}
-<header class="mx-auto flex max-w-3xl items-center justify-between gap-4 px-4 py-6 sm:px-6 sm:py-8">
-  <a href="/" class="rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-tcsc-navy focus-visible:ring-offset-4">
-    <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="Twin Cities Ski Club home" class="h-8 w-auto sm:h-10">
-  </a>
-  <span class="shrink-0 text-sm font-medium text-zinc-600">Club trips</span>
+<header class="border-b border-brand-mint/10 bg-brand-navy text-brand-paper">
+  <div class="mx-auto flex max-w-7xl items-center justify-between gap-6 px-6 py-4">
+    <a href="https://twincitiesskiclub.org" class="flex min-h-11 shrink-0 items-center" aria-label="Twin Cities Ski Club home">
+      <svg width="145" height="22" viewBox="0 0 358.78 54.47" aria-hidden="true">
+<g fill="#aaf0c1">
+          <polygon points="105.53 42.42 107.8 35.26 77.36 35.26 74.61 42.42 105.53 42.42"/>
+          <path d="M22.82,35.26c-2.2,0-20.29,0-21.74,1s-1.44,4.3,0,5.26,19.54,1,21.74,1H45l2-7.16Z"/>
+          <polygon points="173.35 35.26 163.99 35.26 161.65 42.42 173.35 42.42 180.19 42.47 182.49 35.2 173.35 35.26"/>
+          <polygon points="237.75 35.02 235.25 42.65 255.83 42.74 258.31 34.93 237.75 35.02"/>
+          <path d="M357.69,37.57c-4.46-3.44-24.53-2.9-26.73-2.9l-17,.08-2.67,8.17L331,43c2.2,0,22.27-.06,26.73-2.9C359.14,39.15,359.14,38.53,357.69,37.57Z"/>
+          <polygon points="261 20.56 263.48 12.74 236.5 12.84 234.01 20.45 261 20.56"/>
+          <path d="M331,20.82c2.2,0,22.27-.06,26.73-2.9,1.45-1,1.45-1.58,0-2.54-4.46-3.44-24.53-2.9-26.73-2.9l-13,.07-2.68,8.19Z"/>
+          <polygon points="173.35 20.23 185.91 20.28 188.22 13.01 173.35 13.07 162.31 13.07 159.97 20.23 173.35 20.23"/>
+          <path d="M22.82,13.07c-2.2,0-20.29,0-21.74.95s-1.44,4.3,0,5.26,19.54.95,21.74.95h9.1l2-7.16Z"/>
+          <polygon points="88.23 13.07 85.54 20.23 110.43 20.23 112.7 13.07 88.23 13.07"/>
+        </g>
+        <g fill="#fbfbfa">
+          <path d="M53.13,14.06H38.33V1.33H80.66V14.06H65.86V53.14H53.13Z"/>
+          <path d="M130.39,32.56c0,5.7.37,9.18,5.84,9.18s6.07-2.89,6.37-8l12.28,2.73c0,4.89-1.11,18-18.65,18s-18.57-13.1-18.57-18V18c0-4.88,1-18,18.57-18s18.65,13.1,18.65,18L142.6,20.72c-.3-5.1-.89-8-6.37-8s-5.84,3.48-5.84,9.18Z"/>
+          <path d="M217.26,18.65c-.59-4.52-3.18-5.77-6.81-5.77-2.88,0-4.66,1.7-4.36,3.4,1,5.77,24.79,5.63,24.79,22.65,0,2.22-2.52,15.32-20.06,15.32-15.83,0-19.31-10-19.31-16.51L204.09,35c.37,5.33,3.11,6.52,6.73,6.52s6.29-2.15,5.85-4.15c-1.41-6.29-24-4.88-24-21.9C192.54,13.25,193.88.15,210.45.15c15.54,0,19.32,9.25,19.32,15.76Z"/>
+          <path d="M281.23,32.56c0,5.7.37,9.18,5.85,9.18s6.07-2.89,6.36-8l12.29,2.73c0,4.89-1.11,18-18.65,18s-18.58-13.1-18.58-18V18c0-4.88,1-18,18.58-18s18.65,13.1,18.65,18l-12.29,2.74c-.29-5.1-.89-8-6.36-8s-5.85,3.48-5.85,9.18Z"/>
+        </g>
+      </svg>
+    </a>
+    <a href="https://twincitiesskiclub.org" class="flex min-h-11 items-center gap-2 text-sm text-brand-mint underline underline-offset-4 hover:decoration-brand-mint/50">Club home <span aria-hidden="true">↗</span></a>
+  </div>
 </header>
 {%- endmacro %}
 
+{% macro trip_footer() -%}
+<footer class="mt-auto border-t border-brand-mint/10 bg-brand-navy text-brand-paper">
+  <div class="mx-auto flex max-w-7xl flex-col gap-4 px-6 py-6 sm:flex-row sm:items-center sm:justify-between sm:gap-8 sm:py-8">
+    <div>
+      <p class="font-display text-xs font-bold uppercase text-brand-mint">Twin Cities Ski Club</p>
+      <p class="mt-2 max-w-xl text-sm text-brand-paper/70">A 501(c)(3) nonprofit for young adults (21-35) in Minneapolis · St. Paul.</p>
+    </div>
+    <a href="mailto:contact@twincitiesskiclub.org" class="flex min-h-11 items-center text-sm underline underline-offset-4 hover:text-brand-mint">contact@twincitiesskiclub.org</a>
+  </div>
+</footer>
+{%- endmacro %}
+
 {% macro trip_meta(trip) -%}
-<div class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-zinc-600">
+<div class="flex flex-wrap gap-x-6 gap-y-2 text-sm text-brand-slate sm:text-base">
   <span class="flex items-center gap-2">
     <svg class="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M20 10c0 6-8 11-8 11S4 16 4 10a8 8 0 1 1 16 0Z"/><circle cx="12" cy="10" r="2.5"/></svg>
     {{ trip.destination }}

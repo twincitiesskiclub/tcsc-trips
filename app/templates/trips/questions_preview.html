@@ -8,21 +8,22 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
   <script src="{{ url_for('static', filename='trip_questions_preview.js') }}" type="module"></script>
 </head>
-<body class="trip-page min-h-screen bg-tcsc-gray-50 font-sans leading-relaxed text-tcsc-navy antialiased">
-<main class="mx-auto max-w-3xl px-4 py-6 sm:px-6 sm:py-8">
+<body class="trip-page min-h-screen bg-brand-paper font-brand leading-relaxed text-brand-ink antialiased">
+<main class="mx-auto max-w-4xl px-6 py-6 sm:px-6 sm:py-8">
+  <h1 class="mb-6 font-display text-3xl font-bold leading-tight text-brand-navy">Trip survey</h1>
   <div class="trip-notice mb-6 flex items-start gap-3" role="status">
     <svg class="mt-0.5 h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1" stroke-linecap="round"/></svg>
     <p class="text-sm">Preview only. Nothing is saved or submitted.</p>
   </div>
   {% if error %}
-  <p class="rounded-xl border border-red-200 bg-red-50 p-5 text-red-700" role="alert">{{ error }}</p>
+  <p class="trip-error" role="alert">{{ error }}</p>
   {% else %}
   <div id="trip-survey-preview" class="space-y-6">
     {% set steps = namespace(n=0) %}
 {% include 'trips/_profile_sections.html' %}
 {% include 'trips/_custom_questions.html' %}
-    <p id="survey-errors" class="text-sm text-red-700" role="alert"></p>
   </div>
+  <p id="survey-errors" class="trip-error" role="alert"></p>
   {% endif %}
 </main>
 </body>
