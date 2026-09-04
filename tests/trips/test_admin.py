@@ -1,16 +1,20 @@
 import json
 import csv
+import re
+from copy import deepcopy
 from datetime import datetime, timedelta
 from io import StringIO
 from unittest.mock import MagicMock, patch
 
 import pytest
+from markupsafe import escape
 
 from app.constants import UserStatus
 from app.models import db, Trip
 from app.models import Payment, User
 from app.trips.models import TripProfile, TripRegistration, TripRegistrationStatus
 from app.trips.models import TripSeries
+from app.trips.questions import load_trip_templates
 
 
 @pytest.fixture
@@ -148,6 +152,160 @@ def test_edit_rejects_invalid_question_json(admin_client, db_session):
     assert response.status_code == 400
     db_session.session.expire_all()
     assert trip.custom_questions[0]["key"] == "chore_preference"
+
+
+@pytest.fixture
+def preview_questions():
+    return deepcopy(load_trip_templates()["north_shore"]["custom_questions"]) + [
+        {"key": "sharing", "label": "Will you share a bed?", "type": "yes_no",
+         "required": True},
+        {"key": "share_with", "label": "Who will you share with?", "type": "text",
+         "required": False, "visible_if": {"question": "sharing", "equals": "yes"}},
+    ]
+
+
+@pytest.mark.parametrize("email", [None, "trip-member@example.com"])
+def test_questions_preview_requires_admin(client, email):
+    if email:
+        with client.session_transaction() as session:
+            session["user"] = {"email": email}
+    response = client.post("/admin/trips/questions-preview",
+                           data={"custom_questions_json": "[]"})
+    assert response.status_code == 302
+    assert b"Preview only" not in response.data
+
+
+@pytest.mark.parametrize(("raw", "message"), [
+    ("not-json", "Custom questions must contain valid JSON."),
+    ("{}", "Custom questions must be a list"),
+    ('[{"key":"broken"}]', "Question 'broken' is missing 'label'"),
+])
+def test_questions_preview_renders_validation_errors(admin_client, raw, message):
+    response = admin_client.post("/admin/trips/questions-preview",
+                                 data={"custom_questions_json": raw})
+    assert response.status_code == 400
+    html = response.get_data(as_text=True)
+    assert str(escape(message)) in html
+    assert 'role="alert"' in html
+    assert "Preview only. Nothing is saved or submitted." in html
+    assert "css/tailwind-output.css" in html
+    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+
+
+def _assert_preview_profile(html):
+    for label in ("Getting there", "Food &amp; sleeping", "Can you drive a carpool?",
+                  "How many people can you accommodate (besides yourself)?",
+                  "How many bikes can you accommodate?", "Do you have a trailer hitch?",
+                  "What is your region code?", "Dietary restrictions",
+                  "Other dietary restriction(s)?", "Do you have a 2+ person tent?"):
+        assert label in html
+    assert 'id="dietary-options"' in html
+
+
+def test_questions_preview_renders_unsaved_survey_without_saving(
+        admin_client, db_session, preview_questions):
+    _, trip = _series_with_edition(db_session)
+    saved_questions = deepcopy(trip.custom_questions)
+    trip_count = Trip.query.count()
+    response = admin_client.post("/admin/trips/questions-preview", data={
+        "custom_questions_json": json.dumps(preview_questions),
+    })
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert "Preview only. Nothing is saved or submitted." in html
+    assert "css/tailwind-output.css" in html
+    assert "trip_questions_preview.js" in html
+    _assert_preview_profile(html)
+    assert re.findall(r'data-question-key="([^"]+)"', html) == [
+        q["key"] for q in preview_questions]
+    for question in preview_questions:
+        assert str(escape(question["label"])) in html
+        if question.get("help_text"):
+            assert str(escape(question["help_text"])) in html
+        for option in question.get("options", []):
+            assert str(escape(option)) in html
+    assert 'data-visible-if=\'{"equals": "yes", "question": "sharing"}\'' in html
+    assert 'data-max-selections="8"' in html
+    assert 'data-question-type="yes_no"' in html
+    for excluded in ('id="gate-section"', 'id="card-element"', '<form',
+                     'type="submit"', 'stripe.com', 'trip_registration.js'):
+        assert excluded not in html
+    db.session.expire_all()
+    assert trip.custom_questions == saved_questions
+    assert Trip.query.count() == trip_count
+    assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
+    csp = response.headers["Content-Security-Policy"]
+    assert "frame-ancestors 'self'" in csp
+    assert "frame-src 'none'" in csp
+    assert "'unsafe-inline'" not in csp.split("script-src ")[1].split(";")[0]
+
+
+def test_questions_preview_without_custom_questions_still_shows_profile(admin_client):
+    response = admin_client.post("/admin/trips/questions-preview",
+                                 data={"custom_questions_json": "[]"})
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    _assert_preview_profile(html)
+    assert 'id="trip-questions"' not in html
+
+
+def test_registration_and_preview_render_identical_survey_sections(
+        admin_client, db_session, preview_questions):
+    series, trip = _series_with_edition(db_session)
+    trip.custom_questions = preview_questions
+    trip.signup_start = datetime.utcnow() - timedelta(days=1)
+    trip.signup_end = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+    registration = admin_client.get(f"/{series.slug}/register")
+    preview = admin_client.post("/admin/trips/questions-preview", data={
+        "custom_questions_json": json.dumps(preview_questions),
+    })
+    assert registration.status_code == preview.status_code == 200
+
+    def sections(response):
+        html = response.get_data(as_text=True)
+        # The preview omits the member check, so its step numbers start at one.
+        return [re.sub(r'\d+\.</span>', '.</span>', section) for section in
+                re.findall(r'<section\b[^>]*>.*?</section>', html, re.S)]
+
+    # Compare every byte of the survey markup, including labels and the
+    # data-question-key, data-visible-if and data-max-selections attributes.
+    assert len(sections(preview)) == 3
+    assert sections(registration)[1:4] == sections(preview)
+    assert 'type="module"' in registration.get_data(as_text=True)
+    assert registration.headers["X-Frame-Options"] == "DENY"
+
+
+def test_trip_editors_include_preview_and_allow_only_same_origin_frames(admin_client, db_session):
+    _, trip = _series_with_edition(db_session)
+    for url in ("/admin/trips/new", f"/admin/trips/{trip.id}/edit"):
+        response = admin_client.get(url)
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'id="preview-trip-survey"' in html
+        assert '<dialog id="trip-survey-dialog"' in html
+        assert 'action="/admin/trips/questions-preview"' in html
+        assert 'target="trip-survey-preview-frame"' in html
+        assert "frame-src 'self'" in response.headers["Content-Security-Policy"]
+        assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+        assert response.headers["X-Frame-Options"] == "DENY"
+    response = admin_client.get("/admin/trips")
+    assert "frame-src 'none'" in response.headers["Content-Security-Policy"]
+    assert response.headers["X-Frame-Options"] == "DENY"
+
+
+def test_questions_preview_requires_the_admin_form_csrf_token(admin_client, app):
+    app.config["TESTING"] = False
+    missing = admin_client.post("/admin/trips/questions-preview",
+                                data={"custom_questions_json": "[]"})
+    assert missing.status_code == 400
+    assert b"security token" in missing.data
+    editor = admin_client.get("/admin/trips/new").get_data(as_text=True)
+    token = re.search(r'name="csrf_token" value="([^"]+)"', editor)[1]
+    accepted = admin_client.post("/admin/trips/questions-preview", data={
+        "csrf_token": token, "custom_questions_json": "[]",
+    })
+    assert accepted.status_code == 200
 
 
 def _registered_member(db_session, trip, email="trip-member@example.com"):

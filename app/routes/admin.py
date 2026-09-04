@@ -457,6 +457,17 @@ def new_trip():
 
     return _render_trip_form()
 
+@admin.route('/admin/trips/questions-preview', methods=['POST'])
+@admin_required
+def questions_preview():
+    try:
+        questions = _parse_trip_questions(
+            request.form.get('custom_questions_json', ''))
+    except ValueError as exc:
+        return render_template('trips/questions_preview.html', error=str(exc)), 400
+    return render_template('trips/questions_preview.html',
+                           custom_questions=questions)
+
 @admin.route('/admin/trips/<int:trip_id>/edit', methods=['GET', 'POST'])
 @admin_required
 def edit_trip(trip_id):
