@@ -6,6 +6,7 @@
   if (!hidden || !container) return;
   var form = hidden.closest('form');
   var addButton = document.getElementById('add-trip-question');
+  var previewButton = document.getElementById('preview-trip-survey');
   var templateSelect = document.getElementById('template_key');
   var templatePanel = document.getElementById('trip-template-preview');
   var templateNode = document.getElementById('trip-template-data');
@@ -205,7 +206,7 @@
     errorSummary.hidden = !visible.length;
     if (visible.length) {
       errorSummary.appendChild(el('p', '', 'Fix ' + visible.length
-        + (visible.length === 1 ? ' issue' : ' issues') + ' in Trip questions before saving.'));
+        + (visible.length === 1 ? ' issue' : ' issues') + ' in Trip questions before saving or previewing.'));
       var list = el('ul');
       visible.forEach(function (error) {
         var item = el('li');
@@ -216,6 +217,14 @@
       errorSummary.appendChild(list);
     }
     return errors;
+  }
+
+  function validateEditor() {
+    submitted = true;
+    sync();
+    var errors = showErrors();
+    if (errors.length) focusField(errors[0].row, errors[0].field);
+    return !errors.length;
   }
 
   function field(row, name, labelText, control, hintText) {
@@ -572,6 +581,7 @@
     errorSummary.hidden = false;
     errorSummary.textContent = 'The saved questions could not be loaded. Reload this page before editing.';
     addButton.disabled = true;
+    if (previewButton) previewButton.disabled = true;
     if (templateSelect) templateSelect.disabled = true;
     form.addEventListener('submit', function (event) { event.preventDefault(); });
     return;
@@ -587,13 +597,33 @@
   });
   if (templateSelect) templateSelect.addEventListener('change', showTemplate);
   form.addEventListener('submit', function (event) {
-    submitted = true;
-    sync();
-    var errors = showErrors();
-    if (errors.length) {
-      event.preventDefault();
-      focusField(errors[0].row, errors[0].field);
-    }
+    if (!validateEditor()) event.preventDefault();
   });
+  if (previewButton) {
+    var previewDialog = document.getElementById('trip-survey-dialog');
+    var previewForm = document.getElementById('trip-survey-preview-form');
+    previewButton.addEventListener('click', function () {
+      if (!validateEditor()) return;
+      document.getElementById('trip-survey-preview-json').value = hidden.value;
+      previewDialog.showModal();
+      previewForm.submit();
+    });
+    document.getElementById('close-trip-survey').addEventListener('click', function () {
+      previewDialog.close();
+    });
+    previewDialog.addEventListener('close', function () { previewButton.focus(); });
+    var previewFrame = previewDialog.querySelector('iframe');
+    previewFrame.addEventListener('load', function () {
+      // Key events inside the iframe do not reach the dialog's document.
+      var previewDocument = previewFrame.contentDocument;
+      if (!previewDocument) return;
+      previewDocument.addEventListener('keydown', function (event) {
+        if (event.key === 'Escape') {
+          event.preventDefault();
+          previewDialog.close();
+        }
+      });
+    });
+  }
   render();
 })();

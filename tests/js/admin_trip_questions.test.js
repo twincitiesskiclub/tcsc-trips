@@ -32,11 +32,21 @@ function load(questions = [], extraTemplates = {}) {
     <div id="trip-template-preview" hidden></div>
     <div id="trip-question-rows"></div>
     <button type="button" id="add-trip-question">Add question</button>
+    <button type="button" id="preview-trip-survey">Preview survey</button>
+    <dialog id="trip-survey-dialog">
+      <button type="button" id="close-trip-survey">Close</button>
+      <iframe name="trip-survey-preview-frame"></iframe>
+    </dialog>
     <p id="trip-question-status" role="status"></p>
     <textarea name="custom_questions_json" id="custom_questions_json" hidden></textarea>
     <div id="trip-question-errors" role="alert" hidden></div>
     <button type="submit">Save trip</button>
     <script type="application/json" id="trip-template-data"></script>
+  </form>
+  <form id="trip-survey-preview-form" method="POST" action="/admin/trips/questions-preview"
+        target="trip-survey-preview-frame" hidden>
+    <input type="hidden" name="csrf_token" value="test-csrf-token">
+    <input type="hidden" name="custom_questions_json" id="trip-survey-preview-json">
   </form></body>`);
   const document = dom.window.document;
   document.getElementById('custom_questions_json').value = JSON.stringify(questions);
@@ -401,4 +411,145 @@ test('registrant preview shows plain text, help, choices and limits without cont
   assert.match(preview.textContent, /<img src=x onerror=alert\(1\)>/);
   const data = new dom.window.FormData(dom.window.document.getElementById('trip-editor-form'));
   assert.deepEqual(Array.from(data.keys()), ['template_key', 'custom_questions_json']);
+});
+
+function previewControls(dom) {
+  const document = dom.window.document;
+  const dialog = document.getElementById('trip-survey-dialog');
+  const form = document.getElementById('trip-survey-preview-form');
+  dialog.showModal = test.mock.fn(() => { dialog.open = true; });
+  dialog.close = () => {
+    dialog.open = false;
+    dialog.dispatchEvent(new dom.window.Event('close'));
+  };
+  form.submit = test.mock.fn();
+  return {dialog, form, button: document.getElementById('preview-trip-survey'),
+    payload: document.getElementById('trip-survey-preview-json')};
+}
+
+test('Preview survey runs inline validation and does not open or submit invalid questions', () => {
+  const dom = load([{...TEXT, label: ''}]);
+  const {dialog, form, button, payload} = previewControls(dom);
+  button.click();
+  assert.equal(dialog.showModal.mock.callCount(), 0);
+  assert.equal(dialog.open, false);
+  assert.equal(form.submit.mock.callCount(), 0);
+  assert.equal(payload.value, '');
+  const summary = dom.window.document.getElementById('trip-question-errors');
+  assert.equal(summary.hidden, false);
+  assert.match(summary.textContent, /Enter a question for registrants to answer/);
+  assert.equal(field(dom, 0, 'label').getAttribute('aria-invalid'), 'true');
+  assert.equal(dom.window.document.activeElement, field(dom, 0, 'label'));
+});
+
+test('Preview survey posts the exact current sync payload and restores focus on close', () => {
+  const dom = load([...NORTH_SHORE, PARENT, FOLLOW_UP]);
+  const {dialog, form, button, payload} = previewControls(dom);
+  edit(dom, 0, 'label', '  Unsaved departure question  ');
+  edit(dom, 0, 'options', '  First window\n\nSecond window  \n');
+  edit(dom, 0, 'max-selections', '1');
+  edit(dom, 5, 'key', 'unsaved_parent');
+  const editorPayload = dom.window.document.getElementById('custom_questions_json');
+  const expected = editorPayload.value;
+  // Preview must call sync(), even if the hidden editor field is stale.
+  editorPayload.value = '[]';
+  button.click();
+  assert.equal(dialog.showModal.mock.callCount(), 1);
+  assert.equal(dialog.open, true);
+  assert.equal(form.submit.mock.callCount(), 1);
+  assert.equal(payload.value, expected);
+  assert.equal(payload.value, editorPayload.value);
+  const questions = JSON.parse(payload.value);
+  assert.equal(questions[0].label, 'Unsaved departure question');
+  assert.deepEqual(questions[0].options, ['First window', 'Second window']);
+  assert.deepEqual(questions[6].visible_if, {question: 'unsaved_parent', equals: 'yes'});
+  assert.deepEqual(Array.from(new dom.window.FormData(form)), [
+    ['csrf_token', 'test-csrf-token'], ['custom_questions_json', expected]
+  ]);
+  assertServerAccepts(questions);
+  dom.window.document.getElementById('close-trip-survey').click();
+  assert.equal(dialog.open, false);
+  assert.equal(dom.window.document.activeElement, button);
+  edit(dom, 0, 'label', 'Another unsaved edit');
+  button.click();
+  assert.equal(JSON.parse(payload.value)[0].label, 'Another unsaved edit');
+  assert.equal(form.submit.mock.callCount(), 2);
+  const frame = dialog.querySelector('iframe');
+  frame.dispatchEvent(new dom.window.Event('load'));
+  frame.contentDocument.dispatchEvent(new dom.window.KeyboardEvent('keydown', {key: 'Escape'}));
+  assert.equal(dialog.open, false);
+  assert.equal(dom.window.document.activeElement, button);
+});
+
+async function loadSurvey() {
+  const source = fs.readFileSync(path.join(ROOT, 'app/static/trip_survey.js'), 'utf8');
+  const {initTripSurvey} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
+  const dom = new JSDOM(`<div id="survey">
+    <div id="dietary-options"></div>
+    <input type="radio" name="profile-can-drive" value="yes">
+    <input type="radio" name="profile-can-drive" value="no">
+    <div id="driver-details"><input id="profile-seats" type="number"></div>
+    <div data-question-field="0">
+      <div data-question-key="sharing" data-question-type="yes_no">
+        <input type="radio" name="sharing" value="yes">
+        <input type="radio" name="sharing" value="no">
+      </div>
+    </div>
+    <div data-question-field="1" data-visible-if='{"question":"sharing","equals":"yes"}'>
+      <input data-question-key="share_with" data-question-type="text" value="A friend">
+    </div>
+    <div data-question-field="2" data-visible-if='{"question":"sharing","equals":"no"}'>
+      <select data-question-key="alternative" data-question-type="choice"><option>Tent</option></select>
+    </div>
+    <div data-question-field="3">
+      <div data-question-key="times" data-question-type="multi_choice" data-max-selections="2">
+        <input type="checkbox" value="Morning"><input type="checkbox" value="Afternoon">
+        <input type="checkbox" value="Evening">
+      </div>
+    </div>
+  </div>`);
+  const survey = dom.window.document.getElementById('survey');
+  const errors = [];
+  initTripSurvey(survey, message => errors.push(message));
+  return {dom, survey, errors};
+}
+
+test('shared survey logic toggles follow-up visibility and disabled state for yes and no', async () => {
+  const {survey} = await loadSurvey();
+  const yesFollowUp = survey.querySelector('[data-question-field="1"]');
+  const noFollowUp = survey.querySelector('[data-question-field="2"]');
+  function assertState(wrapper, hidden) {
+    assert.equal(wrapper.classList.contains('hidden'), hidden);
+    assert.equal(wrapper.querySelector('input, select').disabled, hidden);
+  }
+  assertState(yesFollowUp, true);
+  assertState(noFollowUp, true);
+  survey.querySelector('[name="sharing"][value="yes"]').click();
+  assertState(yesFollowUp, false);
+  assertState(noFollowUp, true);
+  survey.querySelector('[name="sharing"][value="no"]').click();
+  assertState(yesFollowUp, true);
+  assertState(noFollowUp, false);
+  assert.equal(yesFollowUp.querySelector('input').value, 'A friend');
+  assert.equal(survey.querySelectorAll('[data-dietary]').length, 10);
+  const driverDetails = survey.querySelector('#driver-details');
+  assertState(driverDetails, true);
+  survey.querySelector('[name="profile-can-drive"][value="yes"]').click();
+  assertState(driverDetails, false);
+  survey.querySelector('[name="profile-can-drive"][value="no"]').click();
+  assertState(driverDetails, true);
+});
+
+test('shared survey cap unchecks only the excess box and reports the limit', async () => {
+  const {survey, errors} = await loadSurvey();
+  const boxes = survey.querySelectorAll('[data-max-selections] input');
+  boxes[0].click();
+  boxes[1].click();
+  assert.deepEqual(errors, []);
+  boxes[2].click();
+  assert.deepEqual(Array.from(boxes, box => box.checked), [true, true, false]);
+  assert.deepEqual(errors, ['Pick at most 2 options.']);
+  boxes[0].click();
+  boxes[2].click();
+  assert.deepEqual(Array.from(boxes, box => box.checked), [false, true, true]);
 });

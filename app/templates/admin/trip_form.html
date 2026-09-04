@@ -187,7 +187,18 @@
                value="{{ request.form.get('template_key', 'blank') }}">
         <div id="trip-template-preview" class="tq-template-preview" hidden></div>
         <div id="trip-question-rows"></div>
-        <button type="button" id="add-trip-question" class="aef-add">Add question</button>
+        <div class="tq-question-actions">
+          <button type="button" id="add-trip-question" class="aef-add">Add question</button>
+          <button type="button" id="preview-trip-survey" class="aef-add"
+                  aria-haspopup="dialog" aria-controls="trip-survey-dialog">Preview survey</button>
+        </div>
+        <dialog id="trip-survey-dialog" class="tq-survey-dialog" aria-labelledby="trip-survey-title">
+          <div class="tq-survey-header">
+            <h2 id="trip-survey-title">Preview survey</h2>
+            <button type="button" id="close-trip-survey" class="aef-add" autofocus>Close</button>
+          </div>
+          <iframe name="trip-survey-preview-frame" title="Survey as a registrant sees it"></iframe>
+        </dialog>
         <p id="trip-question-status" class="tq-hint" role="status"></p>
         <textarea name="custom_questions_json" id="custom_questions_json" hidden>{{ questions_json }}</textarea>
         <script type="application/json" id="trip-template-data">{{ template_editor_data|tojson }}</script>
@@ -199,5 +210,10 @@
         <button type="submit" class="bg-tcsc-navy text-white px-6 py-3 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Save Trip</button>
         <a href="{{ url_for('admin.get_admin_trips') }}" class="bg-gray-200 text-gray-600 px-6 py-3 rounded-tcsc text-sm font-medium hover:bg-gray-300 transition-all">Cancel</a>
     </div>
+</form>
+<form id="trip-survey-preview-form" method="POST" action="{{ url_for('admin.questions_preview') }}"
+      target="trip-survey-preview-frame" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <input type="hidden" name="custom_questions_json" id="trip-survey-preview-json">
 </form>
 {% endblock %}

@@ -75,6 +75,22 @@
 #trip-editor-form .tq-template-preview li + li { margin-top: var(--admin-space-2); }
 #trip-editor-form .tq-template-actions { display: flex; flex-wrap: wrap; gap: var(--admin-space-2); margin-top: var(--admin-space-3); }
 #trip-question-status { margin-top: var(--admin-space-2); }
+#trip-editor-form .tq-question-actions { display: flex; flex-wrap: wrap; gap: var(--admin-space-2); }
+#trip-editor-form .tq-survey-dialog {
+  width: min(800px, calc(100vw - 32px)); max-width: none;
+  height: min(900px, calc(100vh - 32px)); height: min(900px, calc(100dvh - 32px));
+  max-height: none; margin: auto; padding: 0; overflow: hidden;
+  border: 1px solid #cbd5e1; border-radius: 10px; background: #fcfefd; color: #1c2c44;
+}
+#trip-editor-form .tq-survey-dialog[open] { display: flex; flex-direction: column; }
+#trip-editor-form .tq-survey-dialog::backdrop { background: rgba(28, 44, 68, .55); }
+#trip-editor-form .tq-survey-header {
+  display: flex; align-items: center; justify-content: space-between; flex-shrink: 0;
+  gap: var(--admin-space-3); padding: var(--admin-space-3) var(--admin-space-4);
+  border-bottom: 1px solid #e4e4e7;
+}
+#trip-editor-form .tq-survey-header h2 { margin: 0; font-size: 18px; font-weight: 650; }
+#trip-editor-form .tq-survey-dialog iframe { display: block; flex: 1; width: 100%; min-height: 0; border: 0; }
 #trip-editor-form .tq-error { color: #991b1b; font-size: 12px; overflow-wrap: anywhere; }
 #trip-editor-form [aria-invalid="true"] { border-color: #b91c1c; }
 #trip-editor-form .tq-error-summary { border: 1px solid #fecaca; border-radius: 8px; padding: var(--admin-space-3); margin-top: var(--admin-space-4); color: #991b1b; background: #fef2f2; font-size: 14px; }
