@@ -1,0 +1,20 @@
+{% from 'trips/_form_ui.html' import question_hint, question_help, optional_hint, error_slot, pill, choice_mark %}
+  <fieldset class="form-field">
+    <legend class="form-field__label">{{ question.label }} {{ question_hint(question) }}</legend>
+    {{ question_help(question, 'dietary-help') }}
+    <div id="dietary-options" class="pill-group trip-choice-grid trip-choice-grid--compact" role="group" aria-label="{{ question.label }}" aria-describedby="dietary-options-error{% if question.help_text %} dietary-help{% endif %}" {% if question.required %}data-required="true"{% endif %}>
+      {% for option in question.options %}
+      <label class="pill trip-option">
+        <input type="checkbox" value="{{ option }}" data-dietary="true" aria-describedby="dietary-options-error">
+        {{ choice_mark() }}
+        <span>{{ option }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    {{ error_slot('dietary-options') }}
+  </fieldset>
+  <div class="form-field">
+    <label class="form-field__label" for="profile-dietary-other">Other dietary restriction(s)? {{ optional_hint() }}</label>
+    <input id="profile-dietary-other" type="text" maxlength="255" placeholder="Any other dietary needs" class="form-input" aria-describedby="profile-dietary-other-error">
+    {{ error_slot('profile-dietary-other') }}
+  </div>

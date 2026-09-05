@@ -1,7 +1,6 @@
 # Trip question templates, seeded from the 2025-26 Slack Workflow Builder
-# forms so trip admins start from done. Profile facts (driving, region,
-# dietary, tent) are NOT here - the registration form asks them in a fixed
-# section that writes to TripProfile.
+# forms so trip admins start from done. Built-ins and custom questions share
+# one ordered list. Built-in shorthand expands from app/trips/questions.py.
 shared:
   race_departure: &race_departure
     key: departure_time
@@ -52,11 +51,19 @@ shared:
 templates:
   blank:
     name: Blank
-    custom_questions: []
+    custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
 
   race_weekend:
     name: Race weekend (generic base)
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - *race_departure
       - *chore
       - *bed_share
@@ -65,6 +72,10 @@ templates:
   gbc:
     name: Great Bear Chase
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - <<: *race_departure
         help_text: If you select a Wednesday time, W dinner, Thu breakfast, and Thu lunch are on your own.
       - *chore
@@ -74,6 +85,10 @@ templates:
   pre_birkie:
     name: Pre-Birkie
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - *race_departure
       - *chore
       - *bed_share
@@ -91,6 +106,10 @@ templates:
   sisu:
     name: Sisu Ski Fest
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - <<: *race_departure
         max_selections: 12
         help_text: If you select a Wednesday time, W dinner, Thu breakfast, and Thu lunch are on your own.
@@ -112,6 +131,10 @@ templates:
   birkie:
     name: Birkie
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - *race_departure
       - *chore
       - *bed_share
@@ -130,6 +153,10 @@ templates:
   hayward:
     name: Hayward training weekend
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - *race_departure
       - *chore
       - *bed_share
@@ -139,6 +166,10 @@ templates:
   cuyuna_camping:
     name: Cuyuna camping
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - key: departure_time
         label: Approximately what time would you like to leave the Twin Cities?
         type: choice
@@ -174,6 +205,10 @@ templates:
   north_shore:
     name: North Shore fall training trip
     custom_questions:
+      - builtin: carpool
+      - builtin: region_code
+      - builtin: dietary
+      - builtin: tent
       - <<: *race_departure
         options:
           - Thursday morning (7am - 10am)

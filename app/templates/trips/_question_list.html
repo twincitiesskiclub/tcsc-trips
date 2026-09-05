@@ -1,0 +1,18 @@
+{% from 'trips/_form_ui.html' import section_heading %}
+{% if questions %}
+<hr class="form-divider">
+<section id="trip-questions" data-step-section class="form-section">
+  {% set steps.n = steps.n + 1 %}
+  {{ section_heading(steps.n, 'About your trip', 'A few details to help the trip organizers') }}
+  {% for question in questions %}
+    {% set question_index = loop.index0 %}
+    {% if question.builtin %}
+      <div data-builtin="{{ question.builtin }}">
+        {% include 'trips/_profile_sections.html' %}
+      </div>
+    {% else %}
+      {% include 'trips/_custom_questions.html' %}
+    {% endif %}
+  {% endfor %}
+</section>
+{% endif %}

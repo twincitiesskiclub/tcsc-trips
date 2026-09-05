@@ -40,8 +40,9 @@ import {initTripSurvey} from './trip_survey.js';
         document.getElementById('confirmed-email').textContent = emailInput.value;
         document.getElementById('gate-confirmed').hidden = false;
         stepLinks.forEach(function (link) { link.removeAttribute('aria-disabled'); });
-        setCurrentStep('getting-there');
-        focusField(document.getElementById('profile-can-drive-group'));
+        const nextSection = formBody.querySelector('[data-step-section]');
+        setCurrentStep(nextSection.id);
+        focusField(nextSection);
       } else {
         showGateError("We couldn't find a current member with that "
           + 'email. Trips are open to registered members. See tcsc.ski to join.');
@@ -163,6 +164,23 @@ import {initTripSurvey} from './trip_survey.js';
     const seats = document.getElementById('profile-seats');
     const bikes = document.getElementById('profile-bikes');
     const tier = form.querySelector('input[name="price-tier"]:checked');
+    const profile = {};
+    if (form.querySelector('#profile-can-drive-group')) {
+      Object.assign(profile, {
+        can_drive: drive ? drive.value : '',
+        seat_capacity: seats && !seats.disabled ? seats.value : '',
+        bike_capacity: bikes && !bikes.disabled ? bikes.value : '',
+        hitch_size: hitch && !hitch.disabled ? hitch.value : '',
+      });
+    }
+    const region = form.querySelector('#profile-region');
+    if (region) profile.region_code = region.value;
+    if (form.querySelector('#dietary-options')) {
+      profile.dietary_restrictions = Array.from(
+        form.querySelectorAll('[data-dietary]:checked')).map(function (i) { return i.value; });
+      profile.dietary_other = form.querySelector('#profile-dietary-other').value;
+    }
+    if (form.querySelector('#profile-tent-group')) profile.has_tent = tent ? tent.value : '';
     const answers = {};
     form.querySelectorAll('[data-question-key]').forEach(function (node) {
       const wrapper = node.closest('[data-question-field]');
@@ -182,17 +200,7 @@ import {initTripSurvey} from './trip_survey.js';
     return {
       email: emailInput.value,
       price_tier: tier ? tier.value : 'low',
-      profile: {
-        can_drive: drive ? drive.value : '',
-        seat_capacity: seats.disabled ? '' : seats.value,
-        bike_capacity: bikes.disabled ? '' : bikes.value,
-        hitch_size: hitch && !hitch.disabled ? hitch.value : '',
-        region_code: document.getElementById('profile-region').value,
-        dietary_restrictions: Array.from(
-          form.querySelectorAll('[data-dietary]:checked')).map(function (i) { return i.value; }),
-        dietary_other: document.getElementById('profile-dietary-other').value,
-        has_tent: tent ? tent.value : '',
-      },
+      profile: profile,
       answers: answers,
     };
   }
@@ -250,7 +258,7 @@ import {initTripSurvey} from './trip_survey.js';
         invalid.set(errorFieldForControl(input), input.validationMessage);
       }
     });
-    form.querySelectorAll('[data-question-type="multi_choice"][data-required]').forEach(function (group) {
+    form.querySelectorAll('[data-question-type="multi_choice"][data-required], #dietary-options[data-required]').forEach(function (group) {
       if (!group.closest('[hidden]') && !group.querySelector('input:checked')) {
         invalid.set(group, 'Select at least one option.');
       }

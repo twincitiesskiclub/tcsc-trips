@@ -12,6 +12,7 @@ from app.slack.blocks.trips import (
     trip_announcement_fallback,
 )
 from app.slack import trips as slack_trips
+from app.trips.questions import default_builtin_questions
 from app.trips.models import TripRegistration, TripRegistrationStatus, TripSeries
 
 
@@ -30,7 +31,7 @@ def linked_registration(db_session):
         signup_start=datetime.utcnow() - timedelta(days=1),
         signup_end=datetime.utcnow() + timedelta(days=30),
         price_low=10000, price_high=15000, status="active",
-        custom_questions=[{
+        custom_questions=default_builtin_questions() + [{
             "key": "chore_preference", "label": "Chore preference",
         }],
     )

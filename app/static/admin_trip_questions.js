@@ -13,7 +13,12 @@
   var appliedTemplate = document.getElementById('applied-trip-template');
   var errorSummary = document.getElementById('trip-question-errors');
   var status = document.getElementById('trip-question-status');
-  var templates = templateNode ? JSON.parse(templateNode.textContent) : {};
+  var editorData = templateNode ? JSON.parse(templateNode.textContent) : {};
+  var templates = editorData.templates || {};
+  var builtins = editorData.builtins || {};
+  var builtinAnswerTypes = editorData.builtinAnswerTypes || {};
+  var dietaryOther = editorData.dietaryOther;
+  var BUILTIN_TYPES = {carpool: 'yes_no', region_code: 'text', dietary: 'multi_choice', tent: 'yes_no'};
   var submitted = false;
   var nextId = 0;
   var rows = [];
@@ -58,9 +63,13 @@
   }
 
   function optionsFor(row) {
-    return row.optionsText.split(/\r?\n/).map(function (line) {
+    var options = row.optionsText.split(/\r?\n/).map(function (line) {
       return line.trim();
     }).filter(Boolean);
+    if (row.data.builtin === 'dietary') {
+      options.splice(Math.min(row.otherIndex, options.length), 0, dietaryOther);
+    }
+    return options;
   }
 
   function hasOptions(row) {
@@ -68,9 +77,14 @@
   }
 
   function makeRow(question, isNew) {
+    var builtin = Object.hasOwn(question, 'builtin');
+    var options = (question.options || []).slice();
+    var otherIndex = options.indexOf(dietaryOther);
+    if (question.builtin === 'dietary' && otherIndex >= 0) options.splice(otherIndex, 1);
     return {
-      id: 'tq-' + nextId++, data: Object.assign({key: '', label: '', type: '', required: false}, question),
-      optionsText: (question.options || []).join('\n'),
+      id: 'tq-' + nextId++, data: Object.assign({key: '', label: '', type: '', required: false}, question,
+        builtin ? {key: question.builtin, type: BUILTIN_TYPES[question.builtin]} : {}),
+      optionsText: options.join('\n'), otherIndex: otherIndex < 0 ? options.length : otherIndex,
       capText: question.max_selections == null ? '' : String(question.max_selections),
       autoKey: Boolean(isNew), open: Boolean(isNew),
       advancedOpen: false, previewOpen: false, touched: new Set()
@@ -79,6 +93,12 @@
 
   function questionFor(row) {
     var data = row.data;
+    if (Object.hasOwn(data, 'builtin')) {
+      var builtin = {builtin: data.builtin, label: data.label.trim(),
+        help_text: (data.help_text || '').trim(), required: data.required, enabled: data.enabled};
+      if (data.builtin === 'dietary') builtin.options = optionsFor(row);
+      return builtin;
+    }
     var question = {
       key: data.key.trim(), label: data.label.trim(),
       type: data.type, required: Boolean(data.required)
@@ -100,7 +120,7 @@
 
   function earlierParents(row, order) {
     return order.slice(0, order.indexOf(row)).filter(function (parent) {
-      return parent.data.type === 'yes_no' && parent.data.key;
+      return !Object.hasOwn(parent.data, 'builtin') && parent.data.type === 'yes_no' && parent.data.key;
     });
   }
 
@@ -148,6 +168,23 @@
       var question = questionFor(row);
       function error(field, message) { errors.push({row: row, field: field, message: message}); }
       if (!question.label) error('label', 'Enter a question for registrants to answer.');
+      if (Object.hasOwn(question, 'builtin')) {
+        if (!Object.hasOwn(builtins, question.builtin)) error('key', 'Unknown built-in question.');
+        if (rows.some(function (other) { return other !== row && other.data.builtin === question.builtin; })) {
+          error('key', 'Each built-in question can appear only once.');
+        }
+        ['required', 'enabled'].forEach(function (field) {
+          if (typeof question[field] !== 'boolean') error(field, 'Choose a valid ' + field + ' setting.');
+        });
+        if (question.builtin === 'dietary') {
+          if (question.options.filter(function (o) { return o === dietaryOther; }).length !== 1) {
+            error('options', 'The protected other option is already included. Remove it from the editable options.');
+          } else if (new Set(question.options).size !== question.options.length) {
+            error('options', 'Use each dietary option only once.');
+          }
+        }
+        return;
+      }
       if (!/^[a-z0-9_]+$/.test(question.key)) {
         error('key', 'Use lowercase letters, numbers and underscores for the key.');
       } else if (RESERVED_KEYS.has(question.key)) {
@@ -179,8 +216,9 @@
 
   function focusField(row, field) {
     setOpen(row, true);
-    if (field === 'key') row.refs.advanced.open = true;
-    row.refs.fields[field].control.focus();
+    if (field === 'key' && !row.data.builtin) row.refs.advanced.open = true;
+    var control = row.refs.fields[field].control;
+    (control.disabled ? row.refs.toggle : control).focus();
   }
 
   function showErrors() {
@@ -265,6 +303,10 @@
   }
 
   function updateConditionChoices(row) {
+    if (Object.hasOwn(row.data, 'builtin')) {
+      row.refs.fields['visible-if'].wrap.hidden = true;
+      return;
+    }
     var select = row.refs.fields['visible-if'].control;
     var condition = row.data.visible_if;
     select.replaceChildren();
@@ -290,26 +332,35 @@
   function renderPreview(row) {
     var preview = row.refs.previewBody;
     var question = questionFor(row);
+    var type = row.data.type;
     preview.replaceChildren();
     preview.appendChild(el('legend', '', (question.label || 'Your question')
       + (question.required ? ' *' : '')));
     if (question.help_text) preview.appendChild(el('p', 'tq-hint', question.help_text));
-    if (question.type === 'multi_choice' && question.max_selections > 0) {
+    if (type === 'multi_choice' && question.max_selections > 0) {
       preview.appendChild(el('p', 'tq-hint', 'Pick up to ' + question.max_selections + '.'));
     }
-    if (question.type === 'text') {
+    if (type === 'text') {
       var text = input('');
       text.placeholder = 'Type your answer';
       text.setAttribute('aria-label', question.label || 'Your answer');
       preview.appendChild(text);
     } else {
-      var options = question.type === 'yes_no' ? ['Yes', 'No'] : (question.options || []);
+      var options = type === 'yes_no' ? ['Yes', 'No'] : (question.options || []);
       options.forEach(function (label) {
         var choice = el('label', 'tq-check');
-        choice.append(input('', question.type === 'multi_choice' ? 'checkbox' : 'radio'),
+        choice.append(input('', type === 'multi_choice' ? 'checkbox' : 'radio'),
           document.createTextNode(label));
         preview.appendChild(choice);
       });
+    }
+    if (question.builtin === 'carpool') preview.appendChild(el('p', 'tq-hint',
+      'Drivers can add passenger and bike capacity and hitch size.'));
+    if (question.builtin === 'dietary') {
+      var other = input('');
+      other.placeholder = 'Any other dietary needs';
+      other.setAttribute('aria-label', dietaryOther);
+      preview.appendChild(other);
     }
   }
 
@@ -320,19 +371,21 @@
       var label = row.data.label.trim() || 'Untitled question';
       refs.title.textContent = (index + 1) + '. ' + label;
       refs.title.title = label;
-      refs.type.textContent = TYPES[row.data.type] || 'Choose a type';
+      var builtin = Object.hasOwn(row.data, 'builtin');
+      refs.type.textContent = builtin ? (builtinAnswerTypes[row.data.builtin] || 'Unknown built-in') : (TYPES[row.data.type] || 'Choose a type');
+      refs.disabled.hidden = !builtin || row.data.enabled;
       refs.required.hidden = !row.data.required;
       var count = optionsFor(row).length;
       refs.count.textContent = count + (count === 1 ? ' option' : ' options');
       refs.count.hidden = !hasOptions(row);
       if (refs.optionCount.textContent !== refs.count.textContent) refs.optionCount.textContent = refs.count.textContent;
       refs.fields.options.wrap.hidden = !hasOptions(row);
-      refs.fields['max-selections'].wrap.hidden = row.data.type !== 'multi_choice';
+      refs.fields['max-selections'].wrap.hidden = builtin || row.data.type !== 'multi_choice';
       if (refs.fields.key.control.value.trim() !== row.data.key) refs.fields.key.control.value = row.data.key;
       updateConditionChoices(row);
       var hasDependents = dependents(row).length > 0;
-      refs.remove.disabled = hasDependents;
-      refs.fields.type.control.disabled = hasDependents;
+      if (refs.remove) refs.remove.disabled = hasDependents;
+      refs.fields.type.control.disabled = builtin || hasDependents;
       refs.dependencyHint.hidden = !hasDependents;
       var orderBlocked = false;
       [-1, 1].forEach(function (offset) {
@@ -355,11 +408,12 @@
     var control = event.target;
     var name = control.dataset.field;
     if (!name) return;
+    if (Object.hasOwn(row.data, 'builtin') && ['key', 'type', 'visible-if', 'max-selections', 'other-option'].includes(name)) return;
     var oldKey = row.data.key;
     row.touched.add(name);
     if (name === 'options') row.optionsText = control.value;
     else if (name === 'max-selections') row.capText = control.value;
-    else if (name === 'required') row.data.required = control.checked;
+    else if (name === 'required' || name === 'enabled') row.data[name] = control.checked;
     else if (name === 'visible-if') {
       row.data.visible_if = control.value ? JSON.parse(control.value) : null;
       bindParent(row);
@@ -397,6 +451,8 @@
 
   function renderCard(row) {
     var card = el('article', 'tq-card');
+    var builtin = Object.hasOwn(row.data, 'builtin');
+    if (builtin) card.dataset.builtin = row.data.builtin;
     var refs = row.refs = {fields: {}};
     var header = el('div', 'tq-card-header');
     refs.toggle = button('', 'tq-toggle', function () { setOpen(row, !row.open); });
@@ -407,9 +463,14 @@
     refs.title = el('span', 'tq-title');
     refs.type = el('span', 'tq-badge');
     refs.required = el('span', 'tq-badge tq-required', 'Required');
+    refs.disabled = el('span', 'tq-badge', 'Disabled');
     refs.count = el('span', 'tq-hint');
     refs.invalid = el('span', 'tq-error', 'Needs attention');
-    summary.append(refs.title, refs.type, refs.required, refs.count, refs.invalid);
+    summary.appendChild(refs.title);
+    if (builtin) summary.appendChild(el('span', 'tq-badge', 'Built in'));
+    summary.append(refs.type, refs.required);
+    if (builtin) summary.appendChild(refs.disabled);
+    summary.append(refs.count, refs.invalid);
     refs.toggle.append(refs.chevron, summary);
     var moves = el('div', 'tq-moves');
     refs.up = button('\u2191', 'aef-add', function () { move(row, -1); });
@@ -430,12 +491,24 @@
     Object.entries(TYPES).forEach(function (pair) { option(type, pair[0], pair[1]); });
     if (!Object.hasOwn(TYPES, row.data.type)) option(type, row.data.type, 'Choose an answer type');
     type.value = row.data.type;
+    if (builtin) {
+      type.replaceChildren();
+      option(type, row.data.type, TYPES[row.data.type] || 'Unknown built-in');
+      type.title = builtinAnswerTypes[row.data.builtin] || 'Unknown built-in';
+    }
     grid.append(label, field(row, 'type', 'Answer type', type));
     var required = input('', 'checkbox');
     required.checked = Boolean(row.data.required);
     var requiredWrap = field(row, 'required', 'Required', required);
     requiredWrap.classList.add('tq-check-field');
     grid.appendChild(requiredWrap);
+    if (builtin) {
+      var enabled = input('', 'checkbox');
+      enabled.checked = Boolean(row.data.enabled);
+      var enabledWrap = field(row, 'enabled', 'Enabled', enabled);
+      enabledWrap.classList.add('tq-check-field');
+      grid.appendChild(enabledWrap);
+    }
     var options = el('textarea');
     options.rows = 4;
     options.value = row.optionsText;
@@ -446,11 +519,18 @@
     refs.optionCount = el('p', 'tq-hint');
     refs.optionCount.setAttribute('aria-live', 'polite');
     optionsWrap.appendChild(refs.optionCount);
+    if (row.data.builtin === 'dietary') {
+      var otherOption = input(dietaryOther);
+      otherOption.disabled = true;
+      optionsWrap.appendChild(field(row, 'other-option', 'Other text option (always included)', otherOption,
+        'This option cannot be removed. Members can describe other dietary needs below the choices.'));
+    }
     var cap = input(row.capText);
     cap.inputMode = 'numeric';
     grid.append(optionsWrap, field(row, 'max-selections', 'Pick up to', cap,
       'Leave blank to allow any number of options.'));
-    var help = field(row, 'help-text', 'Help text (optional)', input(row.data.help_text));
+    var help = field(row, 'help-text', 'Help text (optional)', input(row.data.help_text),
+      row.data.builtin === 'region_code' ? 'Use "TCSC region map" in the help text to link to the map.' : '');
     help.classList.add('tq-full');
     var visible = field(row, 'visible-if', 'Show when', el('select'));
     visible.classList.add('tq-full');
@@ -471,11 +551,15 @@
     var key = input(row.data.key);
     key.spellcheck = false;
     key.autocapitalize = 'none';
-    refs.advanced.appendChild(field(row, 'key', 'Question key', key,
-      'Generated from the question. Saved keys stay the same when you edit the wording. '
-      + 'Changing a saved key can disconnect existing answers.'));
+    var keyField = field(row, 'key', 'Question key', key, builtin
+      ? 'Built-in keys and answer types are fixed.'
+      : 'Generated from the question. Saved keys stay the same when you edit the wording. '
+        + 'Changing a saved key can disconnect existing answers.');
+    key.disabled = builtin;
+    (builtin ? grid : refs.advanced).appendChild(keyField);
+    refs.advanced.hidden = builtin;
     refs.advanced.addEventListener('toggle', function () { row.advancedOpen = refs.advanced.open; });
-    refs.remove = button('Remove question', 'aef-remove', function () {
+    refs.remove = builtin ? null : button('Remove question', 'aef-remove', function () {
       if (dependents(row).length) return;
       var index = rows.indexOf(row);
       rows.splice(index, 1);
@@ -487,9 +571,11 @@
       'Used by a follow-up question. Change its Show when rule before removing this question '
       + 'or changing its answer type.');
     refs.dependencyHint.id = row.id + '-dependency-hint';
-    refs.remove.setAttribute('aria-describedby', refs.dependencyHint.id);
+    if (refs.remove) refs.remove.setAttribute('aria-describedby', refs.dependencyHint.id);
     type.setAttribute('aria-describedby', type.getAttribute('aria-describedby') + ' ' + refs.dependencyHint.id);
-    refs.body.append(grid, refs.preview, refs.advanced, refs.remove, refs.dependencyHint);
+    refs.body.append(grid, refs.preview, refs.advanced);
+    if (refs.remove) refs.body.appendChild(refs.remove);
+    refs.body.appendChild(refs.dependencyHint);
     card.append(header, refs.orderHint, refs.body);
     card.addEventListener('input', function (event) { updateRow(row, event); });
     card.addEventListener('change', function (event) { updateRow(row, event); });
@@ -516,11 +602,20 @@
   function applyTemplate(append) {
     var source = templates[templateSelect.value].custom_questions;
     var existing = append ? rows : [];
+    var seenBuiltins = new Set(existing.filter(function (row) { return row.data.builtin; })
+      .map(function (row) { return row.data.builtin; }));
+    source = source.filter(function (question) {
+      if (!question.builtin) return true;
+      if (seenBuiltins.has(question.builtin)) return false;
+      seenBuiltins.add(question.builtin);
+      return true;
+    });
     var used = new Set(existing.map(function (row) { return row.data.key; }));
     var reserved = new Set(Array.from(used).concat(source.map(function (q) { return q.key; })));
     var renamed = new Map();
     var additions = source.map(function (question) {
       var copy = JSON.parse(JSON.stringify(question));
+      if (copy.builtin) return makeRow(copy, false);
       if (used.has(copy.key) || RESERVED_KEYS.has(copy.key)) {
         copy.key = uniqueKey(slugify(copy.key), reserved);
       }
@@ -555,8 +650,11 @@
     templatePanel.appendChild(list);
     var actions = el('div', 'tq-template-actions');
     if (rows.length) {
-      templatePanel.appendChild(el('p', 'tq-hint', 'Replace removes your ' + rows.length
-        + ' current questions. Append keeps them and adds ' + questions.length + ' more.'));
+      var appendCount = questions.filter(function (question) {
+        return !question.builtin || !rows.some(function (row) { return row.data.builtin === question.builtin; });
+      }).length;
+      templatePanel.appendChild(el('p', 'tq-hint', 'Replace loads the template settings and questions. '
+        + 'Append keeps your questions and built-in settings, and adds ' + appendCount + ' more questions.'));
       actions.appendChild(button('Replace questions', 'aef-remove', function () { applyTemplate(false); }));
       actions.appendChild(button('Append questions', 'aef-add', function () { applyTemplate(true); }));
     } else {

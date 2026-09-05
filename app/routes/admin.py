@@ -19,7 +19,9 @@ from ..errors import flash_error, flash_success
 from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email, normalize_phone_e164
 from ..trips.models import TripSeries
 from ..trips.questions import (
+    BUILTIN_QUESTIONS, BUILTIN_ANSWER_TYPES, DIETARY_OTHER,
     apply_template, get_template, load_trip_templates, validate_questions,
+    default_builtin_questions, enabled_questions,
 )
 from .. import late_link
 from datetime import datetime, timedelta
@@ -170,8 +172,13 @@ def _parse_trip_questions(raw_value):
 def _trip_editor_template_data(templates):
     from copy import deepcopy
     return {
-        key: {"custom_questions": deepcopy(template["custom_questions"])}
-        for key, template in templates.items()
+        "builtins": deepcopy(BUILTIN_QUESTIONS),
+        "builtinAnswerTypes": BUILTIN_ANSWER_TYPES,
+        "dietaryOther": DIETARY_OTHER,
+        "templates": {
+            key: {"custom_questions": deepcopy(template["custom_questions"])}
+            for key, template in templates.items()
+        },
     }
 
 
@@ -181,7 +188,7 @@ def _render_trip_form(trip=None, error=None, status_code=200):
     questions_json = (
         submitted_questions
         if submitted_questions is not None
-        else json.dumps(trip.custom_questions if trip else [])
+        else json.dumps(trip.custom_questions if trip else default_builtin_questions())
     )
     return (
         render_template(
@@ -305,6 +312,8 @@ def _trip_registration_columns(trip):
                                + _TRIP_REG_TRAILING_COLUMNS)
     }
     for question in trip.custom_questions or []:
+        if "builtin" in question:
+            continue
         key = question["key"]
         if key in seen:
             continue
@@ -466,7 +475,7 @@ def questions_preview():
     except ValueError as exc:
         return render_template('trips/questions_preview.html', error=str(exc)), 400
     return render_template('trips/questions_preview.html',
-                           custom_questions=questions)
+                           questions=enabled_questions(questions))
 
 @admin.route('/admin/trips/<int:trip_id>/edit', methods=['GET', 'POST'])
 @admin_required

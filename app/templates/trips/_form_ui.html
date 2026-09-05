@@ -6,6 +6,18 @@
 <span class="form-field__hint">(optional)</span>
 {%- endmacro %}
 
+{% macro question_hint(question) -%}
+{% if question.required %}{{ required_hint() }}{% else %}{{ optional_hint() }}{% endif %}
+{%- endmacro %}
+
+{% macro region_map() -%}
+<a href="https://bit.ly/TCSCmap" target="_blank" rel="noopener">TCSC region map<span class="trip-visually-hidden"> (opens in a new tab)</span></a>
+{%- endmacro %}
+
+{% macro question_help(question, id) -%}
+{% if question.help_text %}<p id="{{ id }}" class="form-field__hint trip-help">{% if question.builtin == 'region_code' %}{{ question.help_text|e|replace('TCSC region map', region_map()) }}{% else %}{{ question.help_text }}{% endif %}</p>{% endif %}
+{%- endmacro %}
+
 {% macro section_heading(number, title, subtitle) -%}
 <h2 class="form-section__title"><span data-step-number hidden aria-hidden="true">{{ number }}</span>{{ title }}</h2>
 <p class="form-section__subtitle">{{ subtitle }}</p>

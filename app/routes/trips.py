@@ -8,6 +8,7 @@ from ..errors import json_error
 from ..models import Trip
 from ..trips import service
 from ..trips.models import TripSeries
+from ..trips.questions import enabled_questions
 from ..utils import format_datetime_central, normalize_email
 from .payments import build_statement_descriptor, stripe_idempotency_options
 
@@ -75,6 +76,7 @@ def get_trip_register_page(slug):
         registration_open=registration_open,
         registration_message=registration_message,
         registration_data=registration_data,
+        questions=enabled_questions(trip.custom_questions),
     )
 
 

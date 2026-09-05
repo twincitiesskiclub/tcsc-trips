@@ -93,7 +93,10 @@ class TripRegistration(db.Model):
 class TripProfile(db.Model):
     """Semi-stable per-member trip facts. Real columns because carpool and
     logistics queries filter on them. Updated (upserted) on every
-    registration submit; never pre-filled into forms until the auth project.
+    registration submit for enabled built-ins in Trip.custom_questions only.
+    Disabled or absent built-ins leave previous values untouched; new profiles
+    retain nulls (or the empty dietary defaults). Never pre-filled into forms
+    until the auth project.
     """
 
     __tablename__ = "trip_profiles"

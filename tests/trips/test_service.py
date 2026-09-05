@@ -5,6 +5,7 @@ import pytest
 from app.constants import UserStatus
 from app.models import db, Trip, User
 from app.trips import service
+from app.trips.questions import default_builtin_questions
 from app.trips.models import TripRegistration, TripRegistrationStatus, TripSeries
 
 
@@ -41,7 +42,7 @@ def _edition(series, slug="test-trip-service-2027", **overrides):
         signup_start=datetime.utcnow() - timedelta(days=1),
         signup_end=datetime.utcnow() + timedelta(days=30),
         price_low=10000, price_high=15000, status="active",
-        custom_questions=QUESTIONS,
+        custom_questions=default_builtin_questions() + QUESTIONS,
     )
     fields.update(overrides)
     trip = Trip(**fields)
@@ -195,3 +196,37 @@ def test_window_closed_rejected(db_session):
     with pytest.raises(service.TripRegistrationError) as excinfo:
         service.create_registration(trip, _payload())
     assert "trip" in excinfo.value.errors
+
+
+def test_all_optional_builtins_accept_blanks():
+    questions = [q | {"required": False} for q in default_builtin_questions()]
+    clean, errors = service.validate_profile(questions, {})
+    assert errors == {}
+    assert clean == dict(can_drive=None, has_tent=None, region_code="",
+                         seat_capacity=None, bike_capacity=None, hitch_size="",
+                         dietary_restrictions=[], dietary_other="")
+
+
+@pytest.mark.parametrize("field, value", [
+    ("can_drive", "maybe"), ("has_tent", "maybe"), ("region_code", "x" * 11),
+    ("seat_capacity", -1), ("bike_capacity", 100), ("hitch_size", "3"),
+])
+def test_optional_builtins_still_validate_nonblank_answers(field, value):
+    questions = [q | {"required": False} for q in default_builtin_questions()]
+    _, errors = service.validate_profile(questions, PROFILE | {field: value})
+    assert f"profile.{field}" in errors
+
+
+def test_required_carpool_region_and_tent():
+    questions = [q | {"required": True} for q in default_builtin_questions()]
+    _, errors = service.validate_profile(questions, {})
+    assert set(errors) == {"profile.can_drive", "profile.region_code",
+                           "profile.dietary_restrictions", "profile.has_tent"}
+
+
+def test_non_driver_details_ignored():
+    clean, errors = service.validate_profile(default_builtin_questions(), PROFILE | {
+        "can_drive": "no", "seat_capacity": "bad", "bike_capacity": "bad", "hitch_size": "bad"})
+    assert errors == {}
+    assert clean["seat_capacity"] is clean["bike_capacity"] is None
+    assert clean["hitch_size"] == ""

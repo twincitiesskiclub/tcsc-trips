@@ -1,16 +1,10 @@
 {% from 'trips/_form_ui.html' import section_heading, required_hint, optional_hint, error_slot, pill, choice_mark %}
-{% if custom_questions %}
-<hr class="form-divider">
-<section id="trip-questions" data-step-section class="form-section">
-  {% set steps.n = steps.n + 1 %}
-  {{ section_heading(steps.n, 'This trip', 'A few details to help the trip organizers') }}
-  {% for question in custom_questions %}
-    {% set qid = 'question-' ~ loop.index0 %}
+    {% set qid = 'question-' ~ question_index %}
     {% set is_pills = question.type == 'yes_no' or (question.type == 'choice' and question.options|length <= 5) %}
     {% set is_group = is_pills or question.type == 'multi_choice' %}
     {% set compact_choices = question.options and question.options|map('length')|max <= 24 %}
     {% set description = qid ~ '-error' ~ (' ' ~ qid ~ '-help' if question.help_text else '') %}
-    <div class="form-field" data-question-field="{{ loop.index0 }}"
+    <div class="form-field" data-question-field="{{ question_index }}"
          {% if question.visible_if %}data-visible-if='{{ question.visible_if|tojson }}'{% endif %}>
       {% if is_group %}
       <p id="{{ qid }}-label" class="form-field__label">{{ question.label }} {% if question.required %}{{ required_hint() }}{% else %}{{ optional_hint() }}{% endif %}</p>
@@ -61,6 +55,3 @@
       {% endif %}
       {{ error_slot(qid) }}
     </div>
-  {% endfor %}
-</section>
-{% endif %}

@@ -5,13 +5,14 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
 const {JSDOM} = require('jsdom');
+const {dietaryHtml} = require('./trip_question_fixtures.cjs');
 
 const source = fs.readFileSync(path.join(__dirname, '../../app/static/trip_survey.js'), 'utf8');
 const surveyModule = import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
 
 async function load(questions = '') {
   const dom = new JSDOM(`<form>
-    <div id="dietary-options"></div>
+    ${dietaryHtml}
     <label><input type="radio" name="profile-can-drive" value="yes">Yes</label>
     <label><input type="radio" name="profile-can-drive" value="no">No</label>
     <div id="driver-details"><input id="profile-seats" type="number"></div>
