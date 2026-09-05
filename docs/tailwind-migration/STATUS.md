@@ -5,7 +5,7 @@
 | Area | Status | Notes |
 |------|--------|-------|
 | **Admin UI** | Complete | Minor CSS quirks to clean up |
-| **Public Frontend** | In progress | Trip landing, registration, and survey preview migrated |
+| **Public Frontend** | Pending | Trip pages use the shared registration CSS |
 
 ---
 
@@ -19,7 +19,7 @@ All admin pages migrated to Tailwind with sidebar layout.
 
 ---
 
-## Public Frontend (In Progress)
+## Public Frontend (Pending)
 
 ### Priority Order
 
@@ -27,7 +27,7 @@ All admin pages migrated to Tailwind with sidebar layout.
 |---|------|--------|-------|
 | 1 | `season_register.html` | pending | Primary conversion path |
 | 2 | `index.html` | pending | Homepage cards |
-| 3 | `trips/base_trip.html`, `trips/register.html`, `trips/questions_preview.html` | complete | Shared public shell, accessible pills/cards, scoped reset, field errors and progress |
+| 3 | `trips/base_trip.html`, `trips/register.html`, `trips/questions_preview.html` | legacy components | Season registration theme, accessible checkbox pills, inline errors and progress |
 | 4 | `socials/registration.html` | pending | Social events |
 | 5 | `season_detail.html` | pending | |
 | 6 | `season_success.html` | pending | |
@@ -39,6 +39,12 @@ See `.claude/skills/tailwind-migrate/references/public-frontend.md`
 ---
 
 ## Session Log
+
+### 2026-09-05 - Trip registration theme
+
+- Trip pages now reuse `normalize.css` and `styles/main.css`, following the season and event registration pages.
+- Removed trip Tailwind utilities, marketing fonts and palette. Trip-only additions live in `components/_trips.css`.
+- The admin survey iframe shares the registration partials. Its parent admin pages retain Tailwind.
 
 ### 2026-09-04 - Trip registration flow
 

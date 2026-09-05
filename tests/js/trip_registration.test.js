@@ -90,7 +90,7 @@ async function load({eligible = true, gateFails = false, serverError = null, str
   return {window, document, form, posts, confirmations, gate, click, fill, submit, stripeChange};
 }
 
-function visible(node) { return !node.classList.contains('hidden'); }
+function visible(node) { return !node.hidden; }
 
 test('member check collapses to the confirmed email and unlocks the next step', async () => {
   const page = await load();

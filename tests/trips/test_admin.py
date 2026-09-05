@@ -188,7 +188,7 @@ def test_questions_preview_renders_validation_errors(admin_client, raw, message)
     assert str(escape(message)) in html
     assert 'role="alert"' in html
     assert "Preview only. Nothing is saved or submitted." in html
-    assert "css/tailwind-output.css" in html
+    assert "css/styles/main.css" in html
     assert response.headers["X-Frame-Options"] == "SAMEORIGIN"
 
 
@@ -213,7 +213,7 @@ def test_questions_preview_renders_unsaved_survey_without_saving(
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert "Preview only. Nothing is saved or submitted." in html
-    assert "css/tailwind-output.css" in html
+    assert "css/styles/main.css" in html
     assert "trip_questions_preview.js" in html
     _assert_preview_profile(html)
     assert re.findall(r'data-question-key="([^"]+)"', html) == [
