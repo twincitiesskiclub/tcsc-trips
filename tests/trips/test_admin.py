@@ -193,7 +193,7 @@ def test_questions_preview_renders_validation_errors(admin_client, raw, message)
 
 
 def _assert_preview_profile(html):
-    for label in ("Getting there", "Food &amp; sleeping", "Can you drive a carpool?",
+    for label in ("Getting there", "Food and sleeping", "Can you drive a carpool?",
                   "How many people can you accommodate (besides yourself)?",
                   "How many bikes can you accommodate?", "Do you have a trailer hitch?",
                   "What is your region code?", "Dietary restrictions",
@@ -265,7 +265,7 @@ def test_registration_and_preview_render_identical_survey_sections(
     def sections(response):
         html = response.get_data(as_text=True)
         # The preview omits the member check, so its step numbers start at one.
-        return [re.sub(r'\d+\.</span>', '.</span>', section) for section in
+        return [re.sub(r'(<span data-step-number\b[^>]*>)\d+', r'\1', section) for section in
                 re.findall(r'<section\b[^>]*>.*?</section>', html, re.S)]
 
     # Compare every byte of the survey markup, including labels and the

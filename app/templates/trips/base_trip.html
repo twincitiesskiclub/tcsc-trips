@@ -1,63 +1,57 @@
+{% from 'trips/_form_ui.html' import logo_header, trip_meta, trip_footer %}
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <title>{% block title %}TCSC Trip Registration{% endblock %}</title>
-    <meta name="description" content="{% block meta_description %}TCSC Trip Registration and Payment{% endblock %}" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    {{ csrf_meta_tag() }}
-    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}" />
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}" />
-    <script src="{{ url_for('static', filename='csrf.js') }}"></script>
-    <script src="{{ url_for('static', filename='script.js') }}" defer></script>
-  </head>
-  <body>
-    <div class="page">
-      <header class="page-header">
-        <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="TCSC Logo" class="page-header__logo">
-      </header>
-
-      <div class="page-content page-content--narrow">
-        <div class="form-header payment-view">
-          <h1 class="form-header__title">{{ trip.name }} Registration</h1>
-          <div class="form-header__meta">
-            <span>📍 {{ trip.destination }}</span>
-            <span>📅 {{ trip.formatted_date_range }}</span>
-          </div>
-        </div>
-
-        {% if registration_open %}
-        {% if trip.price_low != trip.price_high %}
-          <div class="payment-view">
-            <div class="pill-group__label">Select Price</div>
-            <div class="price-selector">
-              <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_low/100) }}">
-                <input type="radio" id="price-low" name="price-choice" value="{{ "%.2f"|format(trip.price_low/100) }}" data-tier="low">
-                <div class="price-option__label">Lower Price</div>
-                <div class="price-option__amount">${{ "%.2f"|format(trip.price_low/100) }}</div>
-              </div>
-              <div class="price-option-container" data-value="{{ "%.2f"|format(trip.price_high/100) }}">
-                <input type="radio" id="price-high" name="price-choice" value="{{ "%.2f"|format(trip.price_high/100) }}" data-tier="high">
-                <div class="price-option__label">Higher Price</div>
-                <div class="price-option__amount">${{ "%.2f"|format(trip.price_high/100) }}</div>
-              </div>
-            </div>
-          </div>
-        {% else %}
-          <div class="price-summary payment-view">
-            <span class="price-summary__label">Trip Price</span>
-            <span class="price-summary__amount price-amount">${{ "%.2f"|format(trip.price_low/100) }}</span>
-          </div>
-        {% endif %}
-
-        <a class="btn btn--full" href="/{{ series.slug }}/register">Sign up for {{ trip.name }}</a>
-        {% else %}
-          <div class="notice notice--info" role="status">
-            {{ registration_message }}
-          </div>
-        {% endif %}
+<head>
+  <meta charset="utf-8">
+  <title>{% block title %}TCSC Trip Registration{% endblock %}</title>
+  <meta name="description" content="{% block meta_description %}TCSC Trip Registration and Payment{% endblock %}">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" type="image/x-icon">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/tailwind-output.css') }}">
+</head>
+<body class="trip-page flex min-h-screen flex-col bg-brand-paper font-brand leading-relaxed text-brand-ink antialiased">
+  {{ logo_header() }}
+  <main class="flex-1">
+    <div class="trip-hero">
+      <div class="trip-shell">
+        <p class="trip-eyebrow mb-4">Club trip</p>
+        <h1 class="trip-title mb-6">{{ trip.name }}</h1>
+        {{ trip_meta(trip) }}
       </div>
     </div>
-  </body>
+    <div class="trip-shell py-6">
+      <article class="trip-card">
+        {% if trip.description %}
+        <p class="mb-6 max-w-prose whitespace-pre-line text-base">{{ trip.description }}</p>
+        {% endif %}
+        {% if trip.price_low != trip.price_high %}
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div class="rounded-md border border-brand-ink/10 bg-brand-paper-card p-6 sm:p-8">
+            <h2 class="text-sm font-medium text-brand-slate">Standard</h2>
+            <p class="mt-2 font-display text-3xl font-bold leading-tight text-brand-navy">{{ trip.price_low|format_price }}</p>
+            <p class="mt-2 text-sm text-brand-slate">Per person</p>
+          </div>
+          <div class="rounded-md border border-brand-ink/10 bg-brand-paper-card p-6 sm:p-8">
+            <h2 class="text-sm font-medium text-brand-slate">Supporter</h2>
+            <p class="mt-2 font-display text-3xl font-bold leading-tight text-brand-navy">{{ trip.price_high|format_price }}</p>
+            <p class="mt-2 text-sm text-brand-slate">Per person</p>
+          </div>
+        </div>
+        {% else %}
+        <div class="flex flex-wrap items-center justify-between gap-4 rounded-md border border-brand-ink/10 bg-brand-paper-card p-6 sm:p-8">
+          <div><h2 class="font-semibold">Trip price</h2><p class="mt-2 text-sm text-brand-slate">Per person</p></div>
+          <p class="font-display text-3xl font-bold text-brand-navy">{{ trip.price_low|format_price }}</p>
+        </div>
+        {% endif %}
+        {% if registration_open %}
+        <a class="trip-button mt-6" href="/{{ series.slug }}/register">Sign up<span class="sr-only"> for {{ trip.name }}</span><span aria-hidden="true">&rarr;</span></a>
+        <p class="mt-2 text-center text-sm text-brand-slate">Open to current TCSC members.</p>
+        {% else %}
+        <div class="trip-notice mt-6" role="status">{{ registration_message }}</div>
+        {% endif %}
+      </article>
+    </div>
+  </main>
+  {{ trip_footer() }}
+</body>
 </html>

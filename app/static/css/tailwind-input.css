@@ -1,6 +1,153 @@
+@font-face {
+  font-family: 'ArchivoVariable';
+  src: url('/static/fonts/archivo/ArchivoVariable.woff2') format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: normal;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'ArchivoVariable';
+  src: url('/static/fonts/archivo/ArchivoVariable-Italic.woff2') format('woff2');
+  font-weight: 100 900;
+  font-stretch: 62% 125%;
+  font-style: italic;
+  font-display: swap;
+}
+@font-face {
+  font-family: 'PolySansBulkyWide';
+  src: url('/static/fonts/polysans/PolySansBulkyWide.woff2') format('woff2');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Public trips use the marketing brand without enabling global preflight. */
+@layer base {
+  .trip-page,
+  .trip-page *,
+  .trip-page ::before,
+  .trip-page ::after {
+    box-sizing: border-box;
+    border-width: 0;
+    border-style: solid;
+    border-color: theme('colors.brand-ink / 10%');
+  }
+
+  .trip-page {
+    margin: 0;
+    overflow-wrap: anywhere;
+    color-scheme: light;
+    --focus-ring-color: theme('colors.brand-navy');
+  }
+  .trip-page :where(h1, h2, h3, p, ol, fieldset) { margin: 0; }
+  .trip-page :where(ol, fieldset, legend) { padding: 0; }
+  .trip-page fieldset { min-width: 0; }
+  .trip-page ol { list-style: none; }
+  .trip-page :where(a) { color: inherit; text-decoration: inherit; }
+  .trip-page :where(button, input, select) { font: inherit; color: inherit; margin: 0; }
+  .trip-page :where(button, label, a) { -webkit-tap-highlight-color: transparent; }
+  .trip-page :where(img, svg) { display: block; }
+  .trip-page img { max-width: 100%; }
+  .trip-page :where(input[type='checkbox'], input[type='radio']):not(.sr-only) {
+    width: 1.25rem;
+    height: 1.25rem;
+    border: 1px solid theme('colors.brand-ink / 15%');
+    color: theme('colors.brand-mint-deep');
+  }
+  .trip-page :where(.bg-brand-navy, .bg-brand-navy-deep) {
+    --focus-ring-color: theme('colors.brand-mint');
+  }
+  .trip-page :where(.bg-brand-paper, .bg-brand-paper-card, .trip-card) {
+    --focus-ring-color: theme('colors.brand-navy');
+  }
+  .trip-page :focus-visible {
+    outline: 2px solid var(--focus-ring-color);
+    outline-offset: 2px;
+  }
+}
+
+@layer components {
+  .trip-page :where(.trip-shell) { @apply mx-auto w-full max-w-4xl px-6; }
+  .trip-page :where(.trip-hero) { @apply border-b border-brand-ink/10 bg-brand-paper py-8 sm:py-10; }
+  .trip-page :where(.trip-eyebrow) { @apply text-xs font-medium uppercase tracking-[0.14em] text-brand-mint-deep; }
+  .trip-page :where(.trip-title) { @apply text-4xl font-bold leading-[1.05] text-brand-navy sm:text-5xl md:text-6xl;
+    font-family: theme('fontFamily.display');
+    font-stretch: 100%;
+    letter-spacing: -0.02em;
+    text-wrap: balance;
+  }
+  .trip-page :where(.trip-card) {
+    @apply rounded-lg border border-brand-ink/10 bg-white p-6 sm:p-8;
+    scroll-margin-top: 7rem;
+  }
+  .trip-page :where(.trip-label) { @apply block text-sm font-medium leading-relaxed text-brand-ink; }
+  .trip-page :where(.trip-input) {
+    @apply block h-12 w-full rounded-md border border-brand-ink/15 bg-brand-paper px-4 text-base
+           placeholder:text-brand-slate focus:border-brand-navy focus:ring-0;
+  }
+  .trip-page :where(.trip-number) { @apply w-48 max-w-full; }
+  .trip-page :where(.trip-pill),
+  .trip-page :where(.trip-option) {
+    @apply relative flex min-h-12 min-w-0 cursor-pointer items-center gap-3 border border-brand-ink/15
+           bg-brand-paper px-4 py-3 text-sm font-medium hover:border-brand-navy
+           has-[:checked]:border-brand-navy
+           has-[:focus-visible]:outline has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2
+           has-[:focus-visible]:outline-brand-navy motion-safe:transition-colors;
+  }
+  .trip-page :where(.trip-pill) {
+    @apply min-w-16 justify-center rounded-md
+           has-[:checked]:bg-brand-navy has-[:checked]:text-brand-mint;
+  }
+  .trip-page :where(.trip-option) { @apply rounded-md has-[:checked]:bg-white; }
+  .trip-page :where(.trip-price) { @apply p-6 sm:p-8; }
+  .trip-page :where(.trip-choice-mark) {
+    @apply flex h-5 w-5 shrink-0 items-center justify-center rounded-sm border border-brand-ink/15 bg-white text-white;
+  }
+  .trip-page .trip-choice-mark svg { visibility: hidden; }
+  .trip-page .trip-option:has(:checked) .trip-choice-mark { @apply border-brand-mint-deep bg-brand-mint-deep; }
+  .trip-page .trip-option:has(:checked) .trip-choice-mark svg { visibility: visible; }
+  .trip-page :where(.trip-button) {
+    @apply inline-flex min-h-12 w-full cursor-pointer items-center justify-center gap-3 rounded-md
+           bg-brand-mint px-5 py-3 text-base font-semibold leading-6 text-brand-navy hover:bg-brand-paper active:bg-brand-mint/90
+           disabled:cursor-wait disabled:opacity-50 motion-safe:transition-colors;
+  }
+  .trip-page :where(.trip-button-secondary) { @apply bg-brand-navy text-brand-mint hover:bg-brand-navy-deep active:bg-brand-navy/90; }
+  .trip-page :where(.trip-link) {
+    @apply rounded-sm font-medium text-brand-mint-deep underline underline-offset-4
+           hover:decoration-brand-mint-deep/50;
+  }
+  .trip-page :where(.trip-notice) { @apply rounded-md border border-brand-ink/10 bg-brand-paper-card p-6 sm:p-8; }
+  .trip-page :where(.trip-error) {
+    @apply mt-2 rounded-md bg-brand-navy px-3 py-2 text-sm text-brand-coral;
+    --focus-ring-color: theme('colors.brand-mint');
+  }
+  .trip-page .trip-error:empty { display: none; }
+  .trip-page :where(.trip-step) {
+    @apply flex min-h-12 flex-col-reverse justify-between gap-3 py-2 text-xs font-medium
+           uppercase leading-relaxed tracking-[0.1em] text-brand-slate sm:flex-col sm:gap-2 sm:px-2 sm:text-center;
+  }
+  .trip-page :where(.trip-step-track) { @apply block h-1 w-full bg-brand-ink/10; }
+  .trip-page :where(.trip-step-bar) { @apply block h-1 bg-transparent; }
+  .trip-page .trip-step[aria-current='step'] { @apply text-brand-navy; }
+  .trip-page .trip-step[aria-current='step'] .trip-step-bar { @apply bg-brand-mint; }
+  .trip-page .trip-step[data-complete]:not([aria-current='step']) .trip-step-bar { @apply bg-brand-navy; }
+  .trip-page .field-error { border-color: theme('colors.brand-coral'); --tw-ring-color: theme('colors.brand-coral'); }
+  .trip-page .field-error:focus { --tw-ring-color: theme('colors.brand-coral'); }
+  .trip-page #card-element > div { width: 100%; }
+  @media (max-width: 639px) {
+    .trip-page .trip-step-item { display: none; }
+    .trip-page .trip-step-item:has([aria-current='step']) { display: block; }
+  }
+}
+
+@layer utilities {
+  .trip-page .font-display { font-stretch: 100%; letter-spacing: -0.02em; }
+}
 
 /* Custom component classes using @apply */
 @layer components {
