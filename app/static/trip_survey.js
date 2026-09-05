@@ -10,10 +10,9 @@ export function initTripSurvey(form, showError) {
   const dietaryBox = form.querySelector('#dietary-options');
   DIETARY_OPTIONS.forEach(function (option) {
     const label = document.createElement('label');
-    label.className = 'trip-option';
+    label.className = 'pill trip-option';
     const box = document.createElement('input');
     box.type = 'checkbox';
-    box.className = 'sr-only';
     box.value = option;
     box.dataset.dietary = 'true';
     box.setAttribute('aria-describedby', 'dietary-options-error');
@@ -21,7 +20,7 @@ export function initTripSurvey(form, showError) {
     mark.className = 'trip-choice-mark';
     mark.dataset.choiceMark = '';
     mark.setAttribute('aria-hidden', 'true');
-    mark.innerHTML = '<svg viewBox="0 0 16 16" fill="none" class="h-3.5 w-3.5"'
+    mark.innerHTML = '<svg viewBox="0 0 16 16" fill="none" width="14" height="14"'
       + ' stroke="currentColor" stroke-width="2"><path d="m3 8 3 3 7-7"'
       + ' stroke-linecap="round" stroke-linejoin="round"/></svg>';
     const text = document.createElement('span');
@@ -59,7 +58,7 @@ export function initTripSurvey(form, showError) {
       if (!raw) return;
       const condition = JSON.parse(raw);
       const applies = answers[condition.question] === condition.equals;
-      wrapper.classList.toggle('hidden', !applies);
+      wrapper.hidden = !applies;
       wrapper.querySelectorAll('input, select').forEach(function (input) {
         input.disabled = !applies;
       });
@@ -67,7 +66,7 @@ export function initTripSurvey(form, showError) {
     const driver = form.querySelector('input[name="profile-can-drive"]:checked');
     const driverDetails = form.querySelector('#driver-details');
     const driverDetailsHidden = !driver || driver.value !== 'yes';
-    driverDetails.classList.toggle('hidden', driverDetailsHidden);
+    driverDetails.hidden = driverDetailsHidden;
     driverDetails.querySelectorAll('input').forEach(function (input) {
       input.disabled = driverDetailsHidden;
     });

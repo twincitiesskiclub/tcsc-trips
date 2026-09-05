@@ -16,7 +16,7 @@ import {initTripSurvey} from './trip_survey.js';
   let memberConfirmed = false;
   gateButton.addEventListener('click', async function () {
     if (gateButton.disabled) return;
-    gateMessage.classList.add('hidden');
+    gateMessage.hidden = true;
     clearFieldError(emailInput);
     if (!emailInput.checkValidity()) {
       showGateError('Enter a valid email address to continue.');
@@ -35,10 +35,10 @@ import {initTripSurvey} from './trip_survey.js';
       const result = await response.json();
       if (result.eligible) {
         memberConfirmed = true;
-        formBody.classList.remove('hidden');
-        document.getElementById('gate-entry').classList.add('hidden');
+        formBody.hidden = false;
+        document.getElementById('gate-entry').hidden = true;
         document.getElementById('confirmed-email').textContent = emailInput.value;
-        document.getElementById('gate-confirmed').classList.remove('hidden');
+        document.getElementById('gate-confirmed').hidden = false;
         stepLinks.forEach(function (link) { link.removeAttribute('aria-disabled'); });
         setCurrentStep('getting-there');
         focusField(document.getElementById('profile-can-drive-group'));
@@ -60,7 +60,7 @@ import {initTripSurvey} from './trip_survey.js';
   function showGateError(message) {
     emailInput.setAttribute('aria-invalid', 'true');
     gateMessage.textContent = message;
-    gateMessage.classList.remove('hidden');
+    gateMessage.hidden = false;
   }
 
   // A small scroll indicator also follows keyboard focus within the form.
@@ -71,6 +71,8 @@ import {initTripSurvey} from './trip_survey.js';
       if (link.hash === '#' + id) link.setAttribute('aria-current', 'step');
       else link.removeAttribute('aria-current');
       link.toggleAttribute('data-complete', memberConfirmed && link.hash === '#gate-section');
+      link.classList.toggle('progress-step--active', link.hash === '#' + id);
+      link.classList.toggle('progress-step--completed', memberConfirmed && link.hash === '#gate-section');
     });
   }
   stepLinks.forEach(function (link) {
@@ -89,7 +91,7 @@ import {initTripSurvey} from './trip_survey.js';
     window.requestAnimationFrame(function () {
       let current = sections[0];
       sections.forEach(function (section) {
-        if (!section.closest('.hidden') && section.getBoundingClientRect().top <= window.innerHeight * 0.4) current = section;
+        if (!section.closest('[hidden]') && section.getBoundingClientRect().top <= window.innerHeight * 0.4) current = section;
       });
       setCurrentStep(current.id);
       scrollPending = false;
@@ -106,7 +108,7 @@ import {initTripSurvey} from './trip_survey.js';
   form.addEventListener('input', function (event) {
     clearFieldError(errorFieldForControl(event.target));
     if (event.target === emailInput) {
-      gateMessage.classList.add('hidden');
+      gateMessage.hidden = true;
       emailInput.removeAttribute('aria-invalid');
     }
     globalError = '';
@@ -124,7 +126,7 @@ import {initTripSurvey} from './trip_survey.js';
   form.addEventListener('change', function (event) {
     // The survey's change handler has already hidden inapplicable fields.
     form.querySelectorAll('.field-error').forEach(function (field) {
-      if (field.closest('.hidden')) clearFieldError(field);
+      if (field.closest('[hidden]')) clearFieldError(field);
     });
     refreshErrorSummary();
     if (event.target.name === 'price-tier') updateHoldAmount();
@@ -164,7 +166,7 @@ import {initTripSurvey} from './trip_survey.js';
     const answers = {};
     form.querySelectorAll('[data-question-key]').forEach(function (node) {
       const wrapper = node.closest('[data-question-field]');
-      if (wrapper && wrapper.classList.contains('hidden')) return;
+      if (wrapper && wrapper.hidden) return;
       const key = node.dataset.questionKey;
       const type = node.dataset.questionType;
       if (type === 'multi_choice') {
@@ -211,7 +213,7 @@ import {initTripSurvey} from './trip_survey.js';
     }).filter(Boolean);
     const summary = document.getElementById('form-errors');
     summary.textContent = [globalError].concat(messages).filter(Boolean).join(' ');
-    summary.classList.toggle('hidden', !summary.textContent);
+    summary.hidden = !summary.textContent;
   }
 
   function errorSlot(field) {
@@ -219,19 +221,19 @@ import {initTripSurvey} from './trip_survey.js';
   }
 
   function clearFieldError(field) {
-    field.classList.remove('field-error', 'ring-2', 'ring-red-500');
+    field.classList.remove('field-error');
     field.removeAttribute('aria-invalid');
     field.querySelectorAll('[aria-invalid]').forEach(function (input) { input.removeAttribute('aria-invalid'); });
     const slot = errorSlot(field);
-    if (slot) { slot.textContent = ''; slot.classList.add('hidden'); }
+    if (slot) { slot.textContent = ''; slot.hidden = true; }
   }
 
   function markFieldError(field, message) {
-    field.classList.add('field-error', 'ring-2', 'ring-red-500');
+    field.classList.add('field-error');
     field.setAttribute('aria-invalid', 'true');
     field.querySelectorAll('input, select').forEach(function (input) { input.setAttribute('aria-invalid', 'true'); });
     const slot = errorSlot(field);
-    if (slot) { slot.textContent = message; slot.classList.remove('hidden'); }
+    if (slot) { slot.textContent = message; slot.hidden = false; }
   }
 
   function focusField(field) {
@@ -244,12 +246,12 @@ import {initTripSurvey} from './trip_survey.js';
     form.querySelectorAll('.field-error').forEach(clearFieldError);
     const invalid = new Map();
     form.querySelectorAll('input, select').forEach(function (input) {
-      if (!input.disabled && !input.closest('.hidden') && !input.checkValidity()) {
+      if (!input.disabled && !input.closest('[hidden]') && !input.checkValidity()) {
         invalid.set(errorFieldForControl(input), input.validationMessage);
       }
     });
     form.querySelectorAll('[data-question-type="multi_choice"][data-required]').forEach(function (group) {
-      if (!group.closest('.hidden') && !group.querySelector('input:checked')) {
+      if (!group.closest('[hidden]') && !group.querySelector('input:checked')) {
         invalid.set(group, 'Select at least one option.');
       }
     });
@@ -294,9 +296,9 @@ import {initTripSurvey} from './trip_survey.js';
         if (field === emailInput) {
           memberConfirmed = false;
           emailInput.readOnly = false;
-          document.getElementById('gate-entry').classList.remove('hidden');
-          document.getElementById('gate-confirmed').classList.add('hidden');
-          formBody.classList.add('hidden');
+          document.getElementById('gate-entry').hidden = false;
+          document.getElementById('gate-confirmed').hidden = true;
+          formBody.hidden = true;
           stepLinks.slice(1).forEach(function (link) { link.setAttribute('aria-disabled', 'true'); });
           firstField = emailInput;
         }
@@ -340,12 +342,12 @@ import {initTripSurvey} from './trip_survey.js';
         },
       });
       if (confirmation.error) { showError(confirmation.error.message, document.getElementById('card-element')); return; }
-      form.classList.add('hidden');
+      form.hidden = true;
       const completed = document.querySelector('.completed-view');
       document.getElementById('confirmation-message').textContent =
         'Your card hold of $' + (result.amountCents / 100).toFixed(2)
         + ' is placed. You will be charged when the roster is confirmed.';
-      completed.classList.remove('hidden');
+      completed.hidden = false;
       document.getElementById('confirmation-title').focus({preventScroll: true});
       completed.scrollIntoView({behavior: scrollBehavior, block: 'center'});
     } catch (err) {

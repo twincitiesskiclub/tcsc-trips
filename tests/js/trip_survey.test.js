@@ -84,7 +84,7 @@ for (const type of ['yes_no', 'choice', 'select']) {
     const dependent = form.querySelector('#dependent');
     const wrapper = dependent.closest('[data-question-field]');
     const controls = [...wrapper.querySelectorAll('input, select')];
-    assert.equal(wrapper.classList.contains('hidden'), true);
+    assert.equal(wrapper.hidden, true);
     assert.ok(controls.every(i => i.disabled));
     function choose(value) {
       if (type === 'select') {
@@ -94,10 +94,10 @@ for (const type of ['yes_no', 'choice', 'select']) {
       } else form.querySelector(`input[name="sharing"][value="${value}"]`).click();
     }
     choose('yes');
-    assert.equal(wrapper.classList.contains('hidden'), false);
+    assert.equal(wrapper.hidden, false);
     assert.ok(controls.every(i => !i.disabled));
     choose('no');
-    assert.equal(wrapper.classList.contains('hidden'), true);
+    assert.equal(wrapper.hidden, true);
     assert.ok(controls.every(i => i.disabled));
     assert.equal(dependent.value, 'Sam', 'Hiding preserves the answer for a later reveal');
   });
@@ -107,13 +107,13 @@ test('driver details reveal for drivers and disable when switching to a passenge
   const {form} = await load();
   const details = form.querySelector('#driver-details');
   const seats = form.querySelector('#profile-seats');
-  assert.equal(details.classList.contains('hidden'), true);
+  assert.equal(details.hidden, true);
   assert.equal(seats.disabled, true);
   form.querySelector('[name="profile-can-drive"][value="yes"]').click();
-  assert.equal(details.classList.contains('hidden'), false);
+  assert.equal(details.hidden, false);
   assert.equal(seats.disabled, false);
   seats.value = '3';
   form.querySelector('[name="profile-can-drive"][value="no"]').click();
-  assert.equal(details.classList.contains('hidden'), true);
+  assert.equal(details.hidden, true);
   assert.equal(seats.disabled, true);
 });

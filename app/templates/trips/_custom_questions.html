@@ -1,9 +1,9 @@
 {% from 'trips/_form_ui.html' import section_heading, required_badge, error_slot, pill, choice_mark %}
 {% if custom_questions %}
-<section id="trip-questions" data-step-section class="trip-card">
+<hr class="form-divider">
+<section id="trip-questions" data-step-section class="form-section">
   {% set steps.n = steps.n + 1 %}
-  {{ section_heading(steps.n, 'This trip') }}
-  <div class="space-y-4">
+  {{ section_heading(steps.n, 'This trip', 'A few details to help the trip organizers') }}
   {% for question in custom_questions %}
     {% set qid = 'question-' ~ loop.index0 %}
     {% set is_pills = question.type == 'yes_no' or (question.type == 'choice' and question.options|length <= 5) %}
@@ -12,13 +12,13 @@
     <div class="form-field" data-question-field="{{ loop.index0 }}"
          {% if question.visible_if %}data-visible-if='{{ question.visible_if|tojson }}'{% endif %}>
       {% if is_group %}
-      <p id="{{ qid }}-label" class="trip-label">{{ question.label }}{% if question.required %} {{ required_badge() }}{% endif %}</p>
+      <p id="{{ qid }}-label" class="form-field__label">{{ question.label }}{% if question.required %} {{ required_badge() }}{% endif %}</p>
       {% else %}
-      <label class="trip-label" for="{{ qid }}">{{ question.label }}{% if question.required %} {{ required_badge() }}{% endif %}</label>
+      <label class="form-field__label" for="{{ qid }}">{{ question.label }}{% if question.required %} {{ required_badge() }}{% endif %}</label>
       {% endif %}
-      {% if question.help_text %}<p id="{{ qid }}-help" class="mt-2 text-sm text-brand-slate">{{ question.help_text }}</p>{% endif %}
+      {% if question.help_text %}<p id="{{ qid }}-help" class="form-field__hint trip-help">{{ question.help_text }}</p>{% endif %}
       {% if is_pills %}
-      <div id="{{ qid }}" class="mt-2 flex flex-wrap gap-3 rounded-md" role="radiogroup"
+      <div id="{{ qid }}" class="pill-group" role="radiogroup"
            aria-labelledby="{{ qid }}-label" aria-describedby="{{ description }}"
            data-question-key="{{ question.key }}" data-question-type="{{ question.type }}"
            {% if question.required %}data-required="true" aria-required="true"{% endif %}>
@@ -30,37 +30,36 @@
         {% endif %}
       </div>
       {% elif question.type == 'choice' %}
-      <select id="{{ qid }}" class="trip-input mt-2 pr-10" aria-describedby="{{ description }}"
+      <select id="{{ qid }}" class="form-input" aria-describedby="{{ description }}"
               data-question-key="{{ question.key }}" data-question-type="choice"
               {% if question.required %}required{% endif %}>
         <option value="">Select an option</option>
         {% for option in question.options %}<option value="{{ option }}">{{ option }}</option>{% endfor %}
       </select>
       {% elif question.type == 'multi_choice' %}
-      <div id="{{ qid }}" class="mt-2 rounded-md" role="group" aria-labelledby="{{ qid }}-label"
+      <div id="{{ qid }}" class="trip-choices" role="group" aria-labelledby="{{ qid }}-label"
            aria-describedby="{{ description }}{% if question.max_selections %} {{ qid }}-counter{% endif %}"
            data-question-key="{{ question.key }}" data-question-type="multi_choice"
            {% if question.max_selections %}data-max-selections="{{ question.max_selections }}"{% endif %}
            {% if question.required %}data-required="true"{% endif %}>
-        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div class="pill-group">
           {% for option in question.options %}
-          <label class="trip-option">
-            <input type="checkbox" class="sr-only" value="{{ option }}" aria-describedby="{{ description }}">
+          <label class="pill trip-option">
+            <input type="checkbox" value="{{ option }}" aria-describedby="{{ description }}">
             {{ choice_mark() }}
             <span>{{ option }}</span>
           </label>
           {% endfor %}
         </div>
-        {% if question.max_selections %}<p id="{{ qid }}-counter" data-selection-counter class="mt-2 text-sm text-brand-slate" aria-live="polite" aria-atomic="true">0 of {{ question.max_selections }} selected</p>{% endif %}
+        {% if question.max_selections %}<p id="{{ qid }}-counter" data-selection-counter class="form-field__hint trip-counter" aria-live="polite" aria-atomic="true">0 of {{ question.max_selections }} selected</p>{% endif %}
       </div>
       {% else %}
-      <input id="{{ qid }}" type="text" class="trip-input mt-2" aria-describedby="{{ description }}"
+      <input id="{{ qid }}" type="text" class="form-input" placeholder="Your answer" aria-describedby="{{ description }}"
              data-question-key="{{ question.key }}" data-question-type="text"
              {% if question.required %}required{% endif %}>
       {% endif %}
       {{ error_slot(qid) }}
     </div>
   {% endfor %}
-  </div>
 </section>
 {% endif %}

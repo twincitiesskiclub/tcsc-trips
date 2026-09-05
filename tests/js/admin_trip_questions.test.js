@@ -519,7 +519,7 @@ test('shared survey logic toggles follow-up visibility and disabled state for ye
   const yesFollowUp = survey.querySelector('[data-question-field="1"]');
   const noFollowUp = survey.querySelector('[data-question-field="2"]');
   function assertState(wrapper, hidden) {
-    assert.equal(wrapper.classList.contains('hidden'), hidden);
+    assert.equal(wrapper.hidden, hidden);
     assert.equal(wrapper.querySelector('input, select').disabled, hidden);
   }
   assertState(yesFollowUp, true);

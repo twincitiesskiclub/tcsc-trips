@@ -115,7 +115,7 @@ def test_register_validation_error_returns_field_errors(
 def test_register_page_renders_questions_and_gate(client, public_trip):
     response = client.get("/test-trip-routes/register")
     html = response.get_data(as_text=True)
-    assert "css/tailwind-output.css" in html
+    assert "css/styles/main.css" in html
     assert 'id="gate-section"' in html
     assert "Member check" in html
     assert "TEST Trip 2027 registration | Twin Cities Ski Club" in html
@@ -154,5 +154,5 @@ def test_trip_page_renders_closed_registration_notice(client, db_session):
     response = client.get("/test-trip-routes")
     html = response.get_data(as_text=True)
     assert "Trip registration has closed." in html
-    assert 'class="trip-notice mt-6"' in html
+    assert 'class="notice notice--info"' in html
     assert 'role="status"' in html
