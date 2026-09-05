@@ -13,19 +13,45 @@
 
 .trip-content .form-header__title {
   margin-top: 8px;
+  margin-bottom: 8px;
+}
+
+.trip-content .form-header {
+  margin-bottom: 32px;
+}
+
+.trip-content .form-header__meta {
+  gap: 8px 12px;
+  line-height: 20px;
+}
+
+.trip-content .form-header__meta > span + span {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.trip-content .form-header__meta > span + span::before {
+  content: '';
+  width: 3px;
+  height: 3px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--text-faint);
 }
 
 .trip-description {
-  margin: 0 0 28px;
+  max-width: 62ch;
+  margin: 0 0 32px;
   color: var(--text-secondary);
-  line-height: 1.6;
+  font: inherit;
   white-space: pre-line;
 }
 
 .trip-caption {
-  margin: 12px 0 28px;
+  margin: 8px 0 32px;
   text-align: center;
-  font-size: 13px;
+  font: 13px/20px var(--font-stack);
 }
 
 /* Fieldsets retain their semantics without the browser's default frame. */
@@ -40,12 +66,28 @@
   padding: 0;
 }
 
-.trip-content .form-row > .form-field {
-  min-width: 0;
+.trip-content .form-field {
+  margin: 0 0 24px;
 }
 
-.trip-content p.form-field__label {
-  margin-top: 0;
+.trip-content .form-section > .form-field:last-child {
+  margin-bottom: 0;
+}
+
+.trip-content .form-row {
+  gap: 24px 12px;
+  margin-bottom: 24px;
+}
+
+.trip-content .form-row > .form-field {
+  min-width: 0;
+  margin-bottom: 0;
+}
+
+.trip-content .form-field__label {
+  font: 600 13px/20px var(--font-stack);
+  color: var(--text-primary);
+  margin: 0 0 8px;
 }
 
 .trip-content [data-step-section] {
@@ -54,25 +96,124 @@
 
 .trip-help,
 .trip-counter {
-  margin: 8px 0;
-  font: 13px/1.5 var(--font-stack);
+  margin: 8px 0 0;
+  font: 13px/20px var(--font-stack);
+  color: var(--text-muted);
+}
+
+/* A hint above a control gets the same gap as a hint below it. */
+.trip-content .form-field__label + .trip-help {
+  margin-top: 0;
+}
+
+.trip-help + :is(.form-input, .pill-group, .trip-choices) {
+  margin-top: 8px;
+}
+
+.trip-content .notice {
+  padding: 16px;
+  margin: 0 0 24px;
+}
+
+.trip-content .price-selector,
+.trip-content .price-summary {
+  margin-bottom: 0;
+}
+
+.trip-content #payment-section {
+  margin-bottom: 32px;
+}
+
+.trip-content #form-errors {
+  margin: 0 0 16px;
+}
+
+.trip-counter {
+  font: 12px/16px var(--font-stack);
+  color: var(--text-faint);
 }
 
 .trip-error {
   margin: 8px 0 0;
   color: var(--notice-error-text);
-  font: 13px/1.5 var(--font-stack);
+  font: 13px/20px var(--font-stack);
 }
 
 .trip-content .notice:empty {
   display: none;
 }
 
+/* Keep all local error text and borders on the same shared error token. */
+.trip-content .notice--error {
+  border-color: var(--notice-error-text);
+}
+
+.trip-content :is(.form-input, .card-element-wrapper)[aria-invalid='true'],
+.trip-content .field-error,
+.trip-content .field-error .pill {
+  border-color: var(--notice-error-text) !important;
+  box-shadow: none;
+}
+
 /* Checkbox pills add a visible mark to the season form's selected fill. */
+.trip-content .pill-group {
+  gap: 12px;
+}
+
+.trip-content .trip-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 216px), 1fr));
+  grid-auto-rows: 1fr;
+}
+
+.trip-content .trip-choice-grid--compact {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: auto;
+}
+
+.trip-choice-grid--compact > .pill:last-child:nth-child(odd) {
+  grid-column: 1 / -1;
+}
+
 .trip-content .pill {
   position: relative;
+  min-width: 64px;
   max-width: 100%;
   min-height: 44px;
+  justify-content: center;
+  padding: 10px 16px;
+  line-height: 20px;
+}
+
+.trip-choice-grid .pill {
+  min-width: 0;
+  justify-content: flex-start;
+}
+
+.trip-choice-grid--compact .pill {
+  padding-inline: 12px;
+}
+
+.trip-content .pill:has(:checked):hover {
+  border-color: var(--text-muted);
+}
+
+.trip-content :is(.pill, .price-option-container):has(:disabled) {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.trip-content .pill:has(:disabled):not(:has(:checked)):hover {
+  background: var(--status-closed-bg);
+  border-color: var(--border);
+}
+
+.trip-content :is(.pill, .price-option-container):has(:disabled:checked):hover {
+  border-color: var(--color-primary);
+}
+
+.trip-content .price-option-container:has(:disabled):not(:has(:checked)):hover {
+  border-color: var(--border);
 }
 
 .trip-option {
@@ -85,9 +226,8 @@
   justify-content: center;
   flex: 0 0 16px;
   height: 16px;
-  border: 1.5px solid var(--text-faint);
-  border-radius: 3px;
-  background: var(--bg-card);
+  border: 1.5px solid currentColor;
+  border-radius: 4px;
 }
 
 .trip-choice-mark svg {
@@ -95,8 +235,9 @@
 }
 
 .trip-option:has(:checked) .trip-choice-mark {
-  background: var(--color-primary);
-  border-color: currentColor;
+  background: var(--bg-card);
+  border-color: var(--bg-card);
+  color: var(--color-primary);
 }
 
 .trip-option:has(:checked) .trip-choice-mark svg {
@@ -106,6 +247,13 @@
 .trip-content .price-option-container {
   position: relative;
   min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.trip-content .price-selector {
+  align-items: stretch;
 }
 
 .trip-content .price-option__label,
@@ -139,9 +287,10 @@
 }
 
 .trip-confirmed {
-  display: flex;
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: center;
-  gap: 12px;
+  gap: 16px;
 }
 
 .trip-confirmed > div {
@@ -149,8 +298,9 @@
 }
 
 .trip-confirmed .form-field__hint {
-  margin: 4px 0 0;
-  font-size: 14px;
+  margin: 8px 0 0;
+  font: 13px/20px var(--font-stack);
+  color: var(--text-muted);
 }
 
 .trip-confirmed__mark {
@@ -158,11 +308,37 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  width: 36px;
-  height: 36px;
+  width: 44px;
+  height: 44px;
   border-radius: 50%;
   background: var(--color-mint);
   color: var(--color-primary);
+}
+
+/* Share one reserved grid cell between either existing gate error slot.
+   The hidden attributes still control visibility and announcements. */
+.trip-content .trip-gate-field {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.trip-gate-field .form-field__label {
+  margin-bottom: 0;
+}
+
+.trip-gate-field::after,
+.trip-gate-field .trip-error {
+  grid-column: 1;
+  grid-row: 3;
+  margin: 0;
+}
+
+.trip-gate-field::after {
+  content: '';
+  min-height: 60px;
+  pointer-events: none;
 }
 
 .trip-success {
@@ -202,21 +378,102 @@
 }
 
 @media (min-width: 640px) {
+  .trip-content [role='radiogroup'].trip-choice-grid--compact {
+    display: flex;
+  }
+
+  [role='radiogroup'].trip-choice-grid--compact > .pill {
+    flex: 1;
+    justify-content: center;
+  }
+
+  /* Shared label/control rows keep both inputs aligned even if one errors. */
   .trip-content .form-row--pair {
-    align-items: flex-end;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    row-gap: 8px;
+  }
+
+  .trip-content .form-row--pair > .form-field {
+    display: grid;
+    grid-template-rows: subgrid;
+    grid-row: span 2;
+  }
+
+  .trip-content .form-row--pair:has(.trip-error:not([hidden])) > .form-field {
+    grid-row: span 3;
+  }
+
+  .trip-content .form-row--pair :is(.form-field__label, .trip-error) {
+    margin: 0;
+  }
+
+  .trip-gate-field::after {
+    min-height: 40px;
   }
 }
 
 @media (max-width: 639px) {
+  .trip-progress {
+    padding: 4px 20px 8px;
+  }
+
+  .trip-progress .progress-bar__steps {
+    position: relative;
+    padding-bottom: 24px;
+    gap: 0;
+  }
+
+  .trip-progress .progress-step {
+    position: static;
+    min-width: 44px;
+    min-height: 44px;
+    justify-content: center;
+  }
+
+  .trip-progress .progress-step::after {
+    display: none;
+  }
+
+  .trip-progress .progress-bar__line {
+    margin: 0;
+  }
+
   .trip-progress .progress-step__label {
     display: none;
   }
+
+  .trip-progress .progress-step--active .progress-step__label {
+    display: block;
+    position: absolute;
+    inset: auto 0 0;
+    text-align: center;
+    line-height: 20px;
+  }
+
+  .trip-content [data-step-section] {
+    scroll-margin-top: 104px;
+  }
+}
+
+/* Match the shared controls' short state transitions, never layout. */
+.trip-content .trip-choice-mark {
+  transition: background-color 150ms, border-color 150ms, color 150ms;
+}
+
+.trip-content :is(.pill, .price-option-container) {
+  transition: background-color 150ms, border-color 150ms, color 150ms, opacity 150ms;
+}
+
+.trip-progress .progress-step__label {
+  transition: color 200ms;
 }
 
 @media (prefers-reduced-motion: reduce) {
   .page--trip *,
+  .page--trip *::before,
   .page--trip *::after {
-    transition: none;
+    transition: none !important;
   }
 
   .page--trip .btn {

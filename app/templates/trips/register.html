@@ -1,4 +1,4 @@
-{% from 'trips/_form_ui.html' import logo_header, trip_heading, section_heading, required_badge, error_slot %}
+{% from 'trips/_form_ui.html' import logo_header, trip_heading, section_heading, required_hint, error_slot %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -44,8 +44,8 @@
     <section id="gate-section" data-step-section class="form-section">
       <div id="gate-entry">
         {{ section_heading(steps.n, 'Member check', 'Trips are for current members. Enter the email you registered with.') }}
-        <div class="form-field">
-          <label class="form-field__label" for="member-email">Email {{ required_badge() }}</label>
+        <div class="form-field trip-gate-field">
+          <label class="form-field__label" for="member-email">Email {{ required_hint() }}</label>
           <input id="member-email" type="email" required autocomplete="email" placeholder="Your email address" class="form-input" aria-describedby="gate-message member-email-error">
           <p id="gate-message" class="trip-error" role="alert" hidden></p>
           {{ error_slot('member-email') }}
@@ -90,7 +90,7 @@
           Your card is authorized now and only charged when the roster is confirmed.
         </div>
         <div class="form-field">
-          <p id="card-label" class="form-field__label">Card details {{ required_badge() }}</p>
+          <p id="card-label" class="form-field__label">Card details {{ required_hint() }}</p>
           <div id="card-element" class="card-element-wrapper" role="group" aria-labelledby="card-label" aria-describedby="card-element-error"></div>
           {{ error_slot('card-element') }}
         </div>

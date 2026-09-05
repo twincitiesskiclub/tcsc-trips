@@ -1,5 +1,9 @@
-{% macro required_badge() -%}
-<span class="form-field__hint">Required</span>
+{% macro required_hint() -%}
+<span class="form-field__hint trip-visually-hidden">Required</span>
+{%- endmacro %}
+
+{% macro optional_hint() -%}
+<span class="form-field__hint">(optional)</span>
 {%- endmacro %}
 
 {% macro section_heading(number, title, subtitle) -%}
