@@ -18,8 +18,7 @@
   {% else %}
   <div id="trip-survey-preview">
     {% set steps = namespace(n=0) %}
-{% include 'trips/_profile_sections.html' %}
-{% include 'trips/_custom_questions.html' %}
+{% include 'trips/_question_list.html' %}
   </div>
   <p id="survey-errors" class="notice notice--error" role="alert"></p>
   {% endif %}

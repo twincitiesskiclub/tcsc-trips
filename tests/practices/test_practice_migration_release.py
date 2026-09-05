@@ -24,10 +24,8 @@ E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
-# Head as of the volunteer-interests migration (down_revision is
-# 8055e0305cc4, the phone_e164/verification-tables migration). Bump whenever
-# a new migration lands.
-HEAD_REVISION = "2b7e4c9d1f30"
+# Bump whenever a new migration lands.
+HEAD_REVISION = "9f3a1c7e5b20"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),

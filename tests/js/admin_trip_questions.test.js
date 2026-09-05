@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const {execFileSync} = require('node:child_process');
 const {JSDOM} = require('jsdom');
+const {dietaryHtml} = require('./trip_question_fixtures.cjs');
 
 const ROOT = path.resolve(__dirname, '../..');
 const SOURCE = fs.readFileSync(path.join(ROOT, 'app/static/admin_trip_questions.js'), 'utf8');
@@ -17,7 +18,10 @@ const FIXTURES = JSON.parse(execFileSync(PYTHON, ['-c', `
 import json, runpy
 schema = runpy.run_path('app/trips/questions.py')
 print(json.dumps({'templates': schema['load_trip_templates'](),
-                  'reserved': sorted(schema['RESERVED_QUESTION_KEYS'])}))
+                  'reserved': sorted(schema['RESERVED_QUESTION_KEYS']),
+                  'builtins': schema['BUILTIN_QUESTIONS'],
+                  'builtinAnswerTypes': schema['BUILTIN_ANSWER_TYPES'],
+                  'dietaryOther': schema['DIETARY_OTHER']}))
 `], {cwd: ROOT, encoding: 'utf8'}));
 const NORTH_SHORE = FIXTURES.templates.north_shore.custom_questions;
 const PARENT = {key: 'sharing', label: 'Will you share a bed?', type: 'yes_no', required: true};
@@ -51,7 +55,7 @@ function load(questions = [], extraTemplates = {}) {
   const document = dom.window.document;
   document.getElementById('custom_questions_json').value = JSON.stringify(questions);
   const templates = {...FIXTURES.templates, ...extraTemplates};
-  document.getElementById('trip-template-data').textContent = JSON.stringify(templates);
+  document.getElementById('trip-template-data').textContent = JSON.stringify({...FIXTURES, templates});
   for (const [key, template] of Object.entries(templates)) {
     const option = document.createElement('option');
     option.value = key;
@@ -162,7 +166,7 @@ test('new cards open and focus the question; existing cards start collapsed with
     assert.equal(card(dom, index).querySelector('.tq-toggle').getAttribute('aria-expanded'), 'false');
     assert.equal(card(dom, index).querySelector('.tq-card-body').hidden, true);
   }
-  assert.match(card(dom, 0).querySelector('.tq-summary').textContent, /Multiple choiceRequired8 options/);
+  assert.match(card(dom, 4).querySelector('.tq-summary').textContent, /Multiple choiceRequired8 options/);
   const index = add(dom);
   assert.equal(card(dom, index).querySelector('.tq-toggle').getAttribute('aria-expanded'), 'true');
   assert.equal(dom.window.document.activeElement, field(dom, index, 'label'));
@@ -378,7 +382,7 @@ test('an empty editor previews the template before explicitly adding its questio
   const dom = load();
   chooseTemplate(dom, 'north_shore');
   assert.deepEqual(saved(dom), []);
-  templateAction(dom, 'Add 5 questions');
+  templateAction(dom, 'Add 9 questions');
   assert.deepEqual(saved(dom), NORTH_SHORE);
 });
 
@@ -400,13 +404,13 @@ test('Append preserves existing questions and remaps template keys and condition
 
 test('registrant preview shows plain text, help, choices and limits without contributing form fields', () => {
   const dom = load(NORTH_SHORE);
-  const preview = card(dom, 0).querySelector('.tq-preview');
+  const preview = card(dom, 4).querySelector('.tq-preview');
   preview.open = true;
   preview.dispatchEvent(new dom.window.Event('toggle'));
   assert.match(preview.textContent, /Select every window that could work for you/);
   assert.match(preview.textContent, /Pick up to 8/);
   assert.equal(preview.querySelectorAll('input[type="checkbox"]').length, 8);
-  edit(dom, 0, 'label', '<img src=x onerror=alert(1)>');
+  edit(dom, 4, 'label', '<img src=x onerror=alert(1)>');
   assert.equal(preview.querySelector('img'), null);
   assert.match(preview.textContent, /<img src=x onerror=alert\(1\)>/);
   const data = new dom.window.FormData(dom.window.document.getElementById('trip-editor-form'));
@@ -445,10 +449,10 @@ test('Preview survey runs inline validation and does not open or submit invalid 
 test('Preview survey posts the exact current sync payload and restores focus on close', () => {
   const dom = load([...NORTH_SHORE, PARENT, FOLLOW_UP]);
   const {dialog, form, button, payload} = previewControls(dom);
-  edit(dom, 0, 'label', '  Unsaved departure question  ');
-  edit(dom, 0, 'options', '  First window\n\nSecond window  \n');
-  edit(dom, 0, 'max-selections', '1');
-  edit(dom, 5, 'key', 'unsaved_parent');
+  edit(dom, 4, 'label', '  Unsaved departure question  ');
+  edit(dom, 4, 'options', '  First window\n\nSecond window  \n');
+  edit(dom, 4, 'max-selections', '1');
+  edit(dom, 9, 'key', 'unsaved_parent');
   const editorPayload = dom.window.document.getElementById('custom_questions_json');
   const expected = editorPayload.value;
   // Preview must call sync(), even if the hidden editor field is stale.
@@ -460,9 +464,9 @@ test('Preview survey posts the exact current sync payload and restores focus on 
   assert.equal(payload.value, expected);
   assert.equal(payload.value, editorPayload.value);
   const questions = JSON.parse(payload.value);
-  assert.equal(questions[0].label, 'Unsaved departure question');
-  assert.deepEqual(questions[0].options, ['First window', 'Second window']);
-  assert.deepEqual(questions[6].visible_if, {question: 'unsaved_parent', equals: 'yes'});
+  assert.equal(questions[4].label, 'Unsaved departure question');
+  assert.deepEqual(questions[4].options, ['First window', 'Second window']);
+  assert.deepEqual(questions[10].visible_if, {question: 'unsaved_parent', equals: 'yes'});
   assert.deepEqual(Array.from(new dom.window.FormData(form)), [
     ['csrf_token', 'test-csrf-token'], ['custom_questions_json', expected]
   ]);
@@ -470,9 +474,9 @@ test('Preview survey posts the exact current sync payload and restores focus on 
   dom.window.document.getElementById('close-trip-survey').click();
   assert.equal(dialog.open, false);
   assert.equal(dom.window.document.activeElement, button);
-  edit(dom, 0, 'label', 'Another unsaved edit');
+  edit(dom, 4, 'label', 'Another unsaved edit');
   button.click();
-  assert.equal(JSON.parse(payload.value)[0].label, 'Another unsaved edit');
+  assert.equal(JSON.parse(payload.value)[4].label, 'Another unsaved edit');
   assert.equal(form.submit.mock.callCount(), 2);
   const frame = dialog.querySelector('iframe');
   frame.dispatchEvent(new dom.window.Event('load'));
@@ -485,7 +489,7 @@ async function loadSurvey() {
   const source = fs.readFileSync(path.join(ROOT, 'app/static/trip_survey.js'), 'utf8');
   const {initTripSurvey} = await import('data:text/javascript;base64,' + Buffer.from(source).toString('base64'));
   const dom = new JSDOM(`<div id="survey">
-    <div id="dietary-options"></div>
+    ${dietaryHtml}
     <input type="radio" name="profile-can-drive" value="yes">
     <input type="radio" name="profile-can-drive" value="no">
     <div id="driver-details"><input id="profile-seats" type="number"></div>
@@ -552,4 +556,104 @@ test('shared survey cap unchecks only the excess box and reports the limit', asy
   boxes[0].click();
   boxes[2].click();
   assert.deepEqual(Array.from(boxes, box => box.checked), [false, true, true]);
+});
+
+test('built-in cards lock key and answer type and offer Enabled in place of Remove', () => {
+  const dom = load(NORTH_SHORE);
+  for (let index = 0; index < 4; index++) {
+    assert.match(card(dom, index).querySelector('.tq-summary').textContent, /Built in/);
+    assert.equal(field(dom, index, 'key').disabled, true);
+    assert.equal(field(dom, index, 'type').disabled, true);
+    assert.equal(card(dom, index).querySelector('.aef-remove'), null);
+    for (const name of ['label', 'help-text', 'required', 'enabled']) {
+      assert.equal(field(dom, index, name).disabled, false);
+    }
+    assert.equal(field(dom, index, 'visible-if').closest('.aef-field').hidden, true);
+    assert.equal(field(dom, index, 'max-selections').closest('.aef-field').hidden, true);
+  }
+  assert.equal(field(dom, 4, 'key').disabled, false);
+  assert.ok(card(dom, 4).querySelector('.aef-remove'));
+  edit(dom, 0, 'key', 'tampered');
+  edit(dom, 0, 'type', 'text');
+  assert.equal(saved(dom)[0].builtin, 'carpool');
+  assert.equal('key' in saved(dom)[0], false);
+  assert.equal('type' in saved(dom)[0], false);
+});
+
+test('mixed sync payload round trips edited and disabled built-ins in stored order', () => {
+  const carpool = FIXTURES.builtins.carpool;
+  const region = FIXTURES.builtins.region_code;
+  const dom = load([carpool, TEXT, region, FIXTURES.builtins.dietary, FIXTURES.builtins.tent]);
+  edit(dom, 0, 'enabled', false);
+  edit(dom, 0, 'label', '  Able to drive?  ');
+  edit(dom, 0, 'help-text', '  Share a ride.  ');
+  edit(dom, 2, 'required', false);
+  move(dom, 0, 'down').click();
+  const expected = [TEXT, {...carpool, enabled: false, label: 'Able to drive?', help_text: 'Share a ride.'},
+    {...region, required: false}, FIXTURES.builtins.dietary, FIXTURES.builtins.tent];
+  assert.deepEqual(saved(dom), expected);
+  assert.equal(submit(dom), true);
+  assertServerAccepts(saved(dom));
+  const reloaded = load(saved(dom));
+  assert.equal(field(reloaded, 1, 'enabled').checked, false);
+  assert.match(card(reloaded, 1).querySelector('.tq-summary').textContent, /Disabled/);
+  edit(reloaded, 1, 'enabled', true);
+  assert.equal(saved(reloaded)[1].enabled, true);
+});
+
+test('dietary other is protected, unique, and retained when editable options are cleared', () => {
+  const dom = load([FIXTURES.builtins.dietary]);
+  assert.equal(field(dom, 0, 'other-option').value, FIXTURES.dietaryOther);
+  assert.equal(field(dom, 0, 'other-option').disabled, true);
+  assert.equal(field(dom, 0, 'options').value.includes(FIXTURES.dietaryOther), false);
+  edit(dom, 0, 'options', 'No restrictions\nSesame allergy');
+  assert.deepEqual(saved(dom)[0].options, ['No restrictions', 'Sesame allergy', FIXTURES.dietaryOther]);
+  assertServerAccepts(saved(dom));
+  edit(dom, 0, 'options', 'Sesame allergy\nSesame allergy');
+  assert.equal(submit(dom), false);
+  edit(dom, 0, 'options', FIXTURES.dietaryOther);
+  assert.equal(submit(dom), false);
+  assert.match(field(dom, 0, 'options').closest('.aef-field').textContent, /protected other option/);
+  edit(dom, 0, 'options', '');
+  assert.deepEqual(saved(dom)[0].options, [FIXTURES.dietaryOther]);
+  assert.equal(submit(dom), true);
+  assertServerAccepts(saved(dom));
+  const otherFirst = {...FIXTURES.builtins.dietary, options: [FIXTURES.dietaryOther, 'Sesame allergy']};
+  assert.deepEqual(saved(load([otherFirst])), [otherFirst]);
+});
+
+test('template Append retains built-in edits and Replace restores one of every built-in', () => {
+  const dom = load(NORTH_SHORE);
+  edit(dom, 0, 'enabled', false);
+  edit(dom, 1, 'required', false);
+  edit(dom, 2, 'options', 'Sesame allergy');
+  const existing = saved(dom);
+  for (const key of ['north_shore', 'north_shore', 'blank']) {
+    chooseTemplate(dom, key);
+    templateAction(dom, 'Append questions');
+    assert.deepEqual(saved(dom).slice(0, existing.length), existing);
+    assert.deepEqual(saved(dom).filter(q => q.builtin).map(q => q.builtin), ['carpool', 'region_code', 'dietary', 'tent']);
+    assertServerAccepts(saved(dom));
+  }
+  chooseTemplate(dom, 'north_shore');
+  templateAction(dom, 'Replace questions');
+  assert.deepEqual(saved(dom), NORTH_SHORE);
+  const partial = load([TEXT, FIXTURES.builtins.tent]);
+  chooseTemplate(partial, 'north_shore');
+  templateAction(partial, 'Append questions');
+  assert.equal(saved(partial).filter(q => q.builtin).length, 4);
+  assertServerAccepts(saved(partial));
+});
+
+test('built-in inline validation rejects duplicates, unknown ids and invalid booleans', () => {
+  for (const questions of [
+    [FIXTURES.builtins.tent, FIXTURES.builtins.tent],
+    [{...FIXTURES.builtins.tent, builtin: 'unknown'}],
+    [{...FIXTURES.builtins.tent, enabled: 'true'}],
+    [{...FIXTURES.builtins.tent, required: 1}],
+  ]) {
+    const dom = load(questions);
+    assert.equal(submit(dom), false);
+    assert.equal(dom.window.document.getElementById('trip-question-errors').hidden, false);
+  }
 });

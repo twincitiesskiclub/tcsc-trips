@@ -1,0 +1,10 @@
+{% from 'trips/_form_ui.html' import question_hint, question_help, optional_hint, error_slot, pill, choice_mark %}
+  <fieldset id="profile-tent-group" class="form-field" aria-describedby="profile-tent-group-error{% if question.help_text %} tent-help{% endif %}">
+    <legend class="form-field__label">{{ question.label }} {{ question_hint(question) }}</legend>
+    {{ question_help(question, 'tent-help') }}
+    <div class="pill-group">
+      {{ pill('profile-tent', 'yes', 'Yes', 'profile-tent-group-error', required=question.required) }}
+      {{ pill('profile-tent', 'no', 'No', 'profile-tent-group-error', required=question.required) }}
+    </div>
+    {{ error_slot('profile-tent-group') }}
+  </fieldset>

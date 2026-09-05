@@ -91,3 +91,87 @@ def test_apply_template_deep_copies():
     assert trip.template_key == "gbc"
     trip.custom_questions[0]["label"] = "mutated"
     assert tq.get_template("gbc")["custom_questions"][0]["label"] != "mutated"
+
+
+@pytest.mark.parametrize("builtin", tq.BUILTIN_QUESTIONS)
+def test_builtin_defaults_validate(builtin):
+    tq.validate_questions([tq.expand_builtin({"builtin": builtin})])
+
+
+@pytest.mark.parametrize("overrides, message", [
+    ({"builtin": "unknown"}, "unknown built-in"),
+    ({"builtin": []}, "unknown built-in"),
+    ({"required": "true"}, "required.*bool"),
+    ({"enabled": 1}, "enabled.*bool"),
+    ({"enabled": None}, "enabled.*bool"),
+    ({"label": " "}, "label"),
+    ({"help_text": []}, "help_text"),
+    ({"key": "can_drive"}, "fixed"),
+    ({"type": "text"}, "fixed"),
+    ({"visible_if": {"question": "chore", "equals": "yes"}}, "fixed"),
+    ({"options": ["yes", "no"]}, "fixed"),
+])
+def test_builtin_schema_rejects_invalid_fields(overrides, message):
+    question = tq.expand_builtin({"builtin": "carpool"}) | overrides
+    with pytest.raises(ValueError, match=message):
+        tq.validate_questions([question])
+
+
+def test_builtin_dupes_rejected_even_when_disabled():
+    question = tq.expand_builtin({"builtin": "carpool"})
+    with pytest.raises(ValueError, match="duplicated"):
+        tq.validate_questions([question, _q(), question | {"enabled": False}])
+
+
+@pytest.mark.parametrize("options", [
+    [], "Vegan", ["Vegan"], [tq.DIETARY_OTHER, tq.DIETARY_OTHER],
+    [tq.DIETARY_OTHER, "Vegan", "Vegan"], [tq.DIETARY_OTHER, ""],
+    [tq.DIETARY_OTHER, "  "], [tq.DIETARY_OTHER, " Vegan"],
+    [tq.DIETARY_OTHER, None], [tq.DIETARY_OTHER, {}],
+])
+def test_dietary_options_schema(options):
+    with pytest.raises(ValueError, match="dietary options"):
+        tq.validate_questions([tq.expand_builtin({"builtin": "dietary", "options": options})])
+
+
+def test_dietary_custom_options_and_sentinel_at_any_position():
+    tq.validate_questions([tq.expand_builtin({"builtin": "dietary", "options": [
+        tq.DIETARY_OTHER, "No restrictions", "Sesame allergy",
+    ]})])
+
+
+def test_builtin_cannot_be_a_custom_visibility_parent():
+    with pytest.raises(ValueError, match="earlier"):
+        tq.validate_questions([tq.expand_builtin({"builtin": "tent"}),
+                               _q(visible_if={"question": "tent", "equals": "yes"})])
+
+
+def test_every_template_expands_builtins_first_without_changing_custom_order():
+    templates = tq.load_trip_templates()
+    for template in templates.values():
+        assert template["custom_questions"][:4] == tq.default_builtin_questions()
+        assert all("builtin" not in q for q in template["custom_questions"][4:])
+    assert templates["blank"]["custom_questions"] == tq.default_builtin_questions()
+    assert [q["key"] for q in templates["north_shore"]["custom_questions"][4:]] == [
+        "departure_time", "chore_preference", "bed_share", "room_share", "activities"]
+
+
+def test_template_loader_expands_overrides_in_place(tmp_path, monkeypatch):
+    config = tmp_path / "templates.yaml"
+    config.write_text("""templates:
+  mixed:
+    name: Mixed
+    custom_questions:
+      - {key: note, label: Note, type: text, required: false}
+      - {builtin: region_code, label: Home region, required: false}
+      - {builtin: dietary, enabled: false, options: [Sesame allergy, Other (specify below)]}
+""")
+    monkeypatch.setattr(tq, "_CONFIG_PATH", config)
+    monkeypatch.setattr(tq, "_template_cache", None)
+    questions = tq.load_trip_templates()["mixed"]["custom_questions"]
+    assert questions[0]["key"] == "note"
+    assert questions[1] == tq.BUILTIN_QUESTIONS["region_code"] | {
+        "label": "Home region", "required": False}
+    assert questions[2]["enabled"] is False
+    assert questions[2]["options"] == ["Sesame allergy", tq.DIETARY_OTHER]
+    assert tq.BUILTIN_QUESTIONS["region_code"]["required"] is True

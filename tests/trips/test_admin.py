@@ -14,7 +14,7 @@ from app.models import db, Trip
 from app.models import Payment, User
 from app.trips.models import TripProfile, TripRegistration, TripRegistrationStatus
 from app.trips.models import TripSeries
-from app.trips.questions import load_trip_templates
+from app.trips.questions import default_builtin_questions, load_trip_templates
 
 
 @pytest.fixture
@@ -37,7 +37,7 @@ def _series_with_edition(db_session, slug="test-trip-admin",
         start_date=datetime(2099, 1, 10), end_date=datetime(2099, 1, 12),
         signup_start=datetime(2098, 11, 1), signup_end=datetime(2098, 12, 31),
         price_low=10000, price_high=15000, status="active",
-        custom_questions=[{"key": "chore_preference", "label": "Which task?",
+        custom_questions=default_builtin_questions() + [{"key": "chore_preference", "label": "Which task?",
                            "type": "choice",
                            "options": ["Cooking", "Cleaning"],
                            "required": True}],
@@ -151,7 +151,7 @@ def test_edit_rejects_invalid_question_json(admin_client, db_session):
     response = admin_client.post(f"/admin/trips/{trip.id}/edit", data=form)
     assert response.status_code == 400
     db_session.session.expire_all()
-    assert trip.custom_questions[0]["key"] == "chore_preference"
+    assert trip.custom_questions[4]["key"] == "chore_preference"
 
 
 @pytest.fixture
@@ -193,7 +193,7 @@ def test_questions_preview_renders_validation_errors(admin_client, raw, message)
 
 
 def _assert_preview_profile(html):
-    for label in ("Getting there", "Food and sleeping", "Can you drive a carpool?",
+    for label in ("About your trip", "Can you drive a carpool?",
                   "How many people can you accommodate (besides yourself)?",
                   "How many bikes can you accommodate?", "Do you have a trailer hitch?",
                   "What is your region code?", "Dietary restrictions",
@@ -217,10 +217,10 @@ def test_questions_preview_renders_unsaved_survey_without_saving(
     assert "trip_questions_preview.js" in html
     _assert_preview_profile(html)
     assert re.findall(r'data-question-key="([^"]+)"', html) == [
-        q["key"] for q in preview_questions]
+        q["key"] for q in preview_questions if "builtin" not in q]
     for question in preview_questions:
         assert str(escape(question["label"])) in html
-        if question.get("help_text"):
+        if question.get("help_text") and question.get("builtin") != "region_code":
             assert str(escape(question["help_text"])) in html
         for option in question.get("options", []):
             assert str(escape(option)) in html
@@ -240,13 +240,13 @@ def test_questions_preview_renders_unsaved_survey_without_saving(
     assert "'unsafe-inline'" not in csp.split("script-src ")[1].split(";")[0]
 
 
-def test_questions_preview_without_custom_questions_still_shows_profile(admin_client):
+def test_blank_template_preview_shows_only_builtins(admin_client):
     response = admin_client.post("/admin/trips/questions-preview",
-                                 data={"custom_questions_json": "[]"})
+                                 data={"custom_questions_json": json.dumps(default_builtin_questions())})
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     _assert_preview_profile(html)
-    assert 'id="trip-questions"' not in html
+    assert 'data-question-key=' not in html
 
 
 def test_registration_and_preview_render_identical_survey_sections(
@@ -270,8 +270,8 @@ def test_registration_and_preview_render_identical_survey_sections(
 
     # Compare every byte of the survey markup, including labels and the
     # data-question-key, data-visible-if and data-max-selections attributes.
-    assert len(sections(preview)) == 3
-    assert sections(registration)[1:4] == sections(preview)
+    assert len(sections(preview)) == 1
+    assert sections(registration)[1:2] == sections(preview)
     assert 'type="module"' in registration.get_data(as_text=True)
     assert registration.headers["X-Frame-Options"] == "DENY"
 
@@ -387,3 +387,87 @@ def test_roster_csv_export(admin_client, db_session):
     rows = list(reader)
     assert rows[0]["Member"] == "Test Member"
     assert rows[0]["Region"] == "4"
+
+
+@pytest.mark.parametrize("has_profile", [False, True])
+def test_roster_export_with_unasked_profile_fields(admin_client, db_session, has_profile):
+    _, trip = _series_with_edition(db_session)
+    trip.custom_questions = [q | {"enabled": False} if "builtin" in q else q
+                             for q in trip.custom_questions]
+    user, _ = _registered_member(db_session, trip)
+    db.session.delete(user.trip_profile)
+    db.session.flush()
+    if has_profile:
+        db.session.add(TripProfile(user_id=user.id))
+    db.session.commit()
+    response = admin_client.get(f"/admin/trips/{trip.id}/registrations/export.csv")
+    assert response.status_code == 200
+    row = next(csv.DictReader(StringIO(response.get_data(as_text=True))))
+    for label in ("Can drive", "Seats", "Bikes", "Hitch", "Region", "Dietary", "Tent"):
+        assert row[label] == ""
+    assert row["Which task?"] == "Cooking"
+
+
+def test_preview_obeys_builtin_order_options_and_enabled(admin_client):
+    carpool, region, dietary, tent = default_builtin_questions()
+    questions = [tent | {"label": "Bring a tent?", "required": True},
+                 {"key": "notes", "type": "text", "label": "Notes", "required": False},
+                 dietary | {"options": ["Sesame allergy", "Other (specify below)"]},
+                 carpool | {"enabled": False}, region | {"enabled": False}]
+    response = admin_client.post("/admin/trips/questions-preview",
+                                 data={"custom_questions_json": json.dumps(questions)})
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert re.findall(r'data-(?:builtin|question-key)="([^"]+)"', html) == ["tent", "notes", "dietary"]
+    assert "Bring a tent?" in html
+    assert "Sesame allergy" in html
+    assert "Vegetarian" not in html
+    assert 'id="profile-region"' not in html
+    assert 'id="driver-details"' not in html
+    assert re.search(r'<input[^>]+name="profile-tent"[^>]+required', html)
+
+
+def test_empty_survey_preview_does_not_add_defaults(admin_client):
+    response = admin_client.post("/admin/trips/questions-preview",
+                                 data={"custom_questions_json": "[]"})
+    assert response.status_code == 200
+    assert 'id="trip-questions"' not in response.get_data(as_text=True)
+
+
+def test_new_editor_starts_with_builtins_and_exports_python_defaults(admin_client):
+    html = admin_client.get("/admin/trips/new").get_data(as_text=True)
+    import html as html_module
+    raw = re.search(r'<textarea[^>]+id="custom_questions_json"[^>]*>(.*?)</textarea>', html, re.S)[1]
+    assert json.loads(html_module.unescape(raw)) == default_builtin_questions()
+    data = json.loads(re.search(r'<script[^>]+id="trip-template-data">(.*?)</script>', html, re.S)[1])
+    assert data["builtins"] == {q["builtin"]: q for q in default_builtin_questions()}
+    assert set(data["builtinAnswerTypes"]) == set(data["builtins"])
+
+
+def test_mixed_questions_round_trip_through_admin_save(admin_client, db_session):
+    _, trip = _series_with_edition(db_session)
+    builtins = default_builtin_questions()
+    custom = {"key": "note", "label": "Anything else?", "type": "text", "required": False}
+    questions = [builtins[1] | {"required": False, "label": "Home region"}, custom,
+                 builtins[0] | {"enabled": False}, *builtins[2:]]
+    response = admin_client.post(f"/admin/trips/{trip.id}/edit", data={
+        "name": trip.name, "destination": trip.destination,
+        "max_participants_standard": "20", "max_participants_extra": "5",
+        "start_date": "2099-01-10", "end_date": "2099-01-12",
+        "signup_start": "2098-11-01T00:00", "signup_end": "2098-12-31T00:00",
+        "price_low": "100", "price_high": "150", "description": "", "status": "active",
+        "custom_questions_json": json.dumps(questions),
+    })
+    assert response.status_code == 302
+    db.session.expire_all()
+    assert trip.custom_questions == questions
+
+
+def test_builtin_help_and_options_escape_admin_text(admin_client):
+    region = default_builtin_questions()[1] | {"help_text": '<script>alert(1)</script> TCSC region map'}
+    response = admin_client.post("/admin/trips/questions-preview",
+                                 data={"custom_questions_json": json.dumps([region])})
+    html = response.get_data(as_text=True)
+    assert "<script>alert(1)</script>" not in html
+    assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
+    assert 'href="https://bit.ly/TCSCmap"' in html

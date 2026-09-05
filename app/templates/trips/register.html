@@ -23,8 +23,8 @@
 </main>
 {% else %}
 <form id="trip-registration-form" class="payment-view" novalidate data-trip-slug="{{ series.slug }}">
-  {% set step_links = [('gate-section', 'Member check'), ('getting-there', 'Getting there'), ('food-sleeping', 'Food and sleeping')] %}
-  {% if trip.custom_questions %}{% set step_links = step_links + [('trip-questions', 'This trip')] %}{% endif %}
+  {% set step_links = [('gate-section', 'Member check')] %}
+  {% if questions %}{% set step_links = step_links + [('trip-questions', 'About your trip')] %}{% endif %}
   {% set step_links = step_links + [('payment-section', 'Payment')] %}
   <nav id="registration-steps" class="progress-bar trip-progress" aria-label="Registration progress">
     <div class="progress-bar__steps">
@@ -59,9 +59,7 @@
     </section>
 
     <div id="form-body" hidden>
-      <hr class="form-divider">
-{% include 'trips/_profile_sections.html' %}
-{% with custom_questions=trip.custom_questions %}{% include 'trips/_custom_questions.html' %}{% endwith %}
+{% include 'trips/_question_list.html' %}
 
       <hr class="form-divider">
       <section id="payment-section" data-step-section class="form-section">
