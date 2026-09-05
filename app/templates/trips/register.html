@@ -79,13 +79,13 @@
             <label class="trip-option trip-price">
               <input type="radio" class="sr-only" name="price-tier" value="low" checked aria-describedby="price-tiers-error">
               {{ choice_mark() }}
-              <span class="min-w-0"><span class="block text-sm font-medium">Standard</span><span class="mt-2 block font-display text-2xl font-bold text-brand-navy">{{ trip.price_low|format_price }}</span></span>
+              <span class="min-w-0"><span class="block text-sm font-medium">Lower price</span><span class="mt-2 block font-display text-2xl font-bold text-brand-navy">{{ trip.price_low|format_price }}</span></span>
             </label>
             {% if trip.price_low != trip.price_high %}
             <label class="trip-option trip-price">
               <input type="radio" class="sr-only" name="price-tier" value="high" aria-describedby="price-tiers-error">
               {{ choice_mark() }}
-              <span class="min-w-0"><span class="block text-sm font-medium">Supporter</span><span class="mt-2 block font-display text-2xl font-bold text-brand-navy">{{ trip.price_high|format_price }}</span></span>
+              <span class="min-w-0"><span class="block text-sm font-medium">Higher price</span><span class="mt-2 block font-display text-2xl font-bold text-brand-navy">{{ trip.price_high|format_price }}</span></span>
             </label>
             {% endif %}
           </div>
