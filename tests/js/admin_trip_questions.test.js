@@ -627,6 +627,9 @@ test('template Append retains built-in edits and Replace restores one of every b
   edit(dom, 0, 'enabled', false);
   edit(dom, 1, 'required', false);
   edit(dom, 2, 'options', 'Sesame allergy');
+  edit(dom, 0, 'followup-seats-label', 'Passenger seats?');
+  edit(dom, 0, 'followup-bikes-enabled', false);
+  edit(dom, 2, 'followup-other-label', 'Other food needs?');
   const existing = saved(dom);
   for (const key of ['north_shore', 'north_shore', 'blank']) {
     chooseTemplate(dom, key);
@@ -643,6 +646,75 @@ test('template Append retains built-in edits and Replace restores one of every b
   templateAction(partial, 'Append questions');
   assert.equal(saved(partial).filter(q => q.builtin).length, 4);
   assertServerAccepts(saved(partial));
+});
+
+test('carpool follow-up fields round trip labels, hints and enabled settings', () => {
+  const dom = load([FIXTURES.builtins.carpool]);
+  assert.match(card(dom, 0).querySelector('.tq-followups').textContent, /Follow-up questions/);
+  for (const key of ['seats', 'bikes', 'hitch']) {
+    assert.equal(field(dom, 0, `followup-${key}-label`).value, FIXTURES.builtins.carpool.followups[key].label);
+    assert.equal(field(dom, 0, `followup-${key}-help-text`).value, '');
+    assert.equal(field(dom, 0, `followup-${key}-enabled`).checked, true);
+    assert.ok(field(dom, 0, `followup-${key}-enabled`).closest('.tq-check-field'));
+  }
+  edit(dom, 0, 'followup-seats-label', '  Passenger seats?  ');
+  edit(dom, 0, 'followup-seats-help-text', '  Exclude the driver.  ');
+  edit(dom, 0, 'followup-bikes-enabled', false);
+  assert.deepEqual(saved(dom)[0].followups.seats, {
+    label: 'Passenger seats?', help_text: 'Exclude the driver.', enabled: true,
+  });
+  assert.equal(saved(dom)[0].followups.bikes.enabled, false);
+  assert.equal(submit(dom), true);
+  assertServerAccepts(saved(dom));
+  const reloaded = load(saved(dom));
+  assert.equal(field(reloaded, 0, 'followup-seats-label').value, 'Passenger seats?');
+  assert.equal(field(reloaded, 0, 'followup-bikes-enabled').checked, false);
+});
+
+test('follow-up validation focuses blank labels even when the follow-up is disabled', () => {
+  const dom = load([FIXTURES.builtins.carpool]);
+  edit(dom, 0, 'followup-bikes-enabled', false);
+  const label = edit(dom, 0, 'followup-bikes-label', '  ');
+  assert.equal(submit(dom), false);
+  assert.equal(dom.window.document.activeElement, label);
+  assert.equal(label.getAttribute('aria-invalid'), 'true');
+  assert.match(label.closest('.aef-field').textContent, /Enter a follow-up question/);
+  edit(dom, 0, 'followup-bikes-label', 'How many bikes?');
+  assert.equal(submit(dom), true);
+});
+
+test('carpool preview reflects edited follow-ups and hides disabled ones', () => {
+  const dom = load([FIXTURES.builtins.carpool]);
+  const preview = card(dom, 0).querySelector('.tq-preview');
+  preview.open = true;
+  edit(dom, 0, 'followup-seats-label', 'Passenger seats?');
+  edit(dom, 0, 'followup-seats-help-text', 'Exclude the driver.');
+  edit(dom, 0, 'followup-bikes-enabled', false);
+  assert.match(preview.textContent, /Passenger seats\?/);
+  assert.match(preview.textContent, /Exclude the driver/);
+  assert.equal(preview.textContent.includes(FIXTURES.builtins.carpool.followups.bikes.label), false);
+  assert.ok(preview.querySelector('input[type="number"][aria-label="Passenger seats?"]'));
+  assert.match(preview.textContent, /Do you have a trailer hitch/);
+  edit(dom, 0, 'followup-hitch-enabled', false);
+  assert.equal(preview.textContent.includes('Do you have a trailer hitch'), false);
+});
+
+test('dietary follow-up wording and help are editable and always included in preview', () => {
+  const dom = load([FIXTURES.builtins.dietary]);
+  assert.equal(field(dom, 0, 'followup-other-enabled'), null);
+  const preview = card(dom, 0).querySelector('.tq-preview');
+  preview.open = true;
+  edit(dom, 0, 'followup-other-label', 'Additional food needs?');
+  edit(dom, 0, 'followup-other-help-text', 'Tell the cook.');
+  assert.deepEqual(saved(dom)[0].followups.other, {
+    label: 'Additional food needs?', help_text: 'Tell the cook.',
+  });
+  assert.match(preview.textContent, /Additional food needs\?/);
+  assert.match(preview.textContent, /Tell the cook/);
+  assert.ok(preview.querySelector('input[aria-label="Additional food needs?"]'));
+  assertServerAccepts(saved(dom));
+  edit(dom, 0, 'followup-other-label', '');
+  assert.equal(submit(dom), false);
 });
 
 test('built-in inline validation rejects duplicates, unknown ids and invalid booleans', () => {

@@ -1,10 +1,10 @@
 """Trip registration domain logic. Parallel to app/events/service.py.
 
-Key rule inherited from the spec: a registration row is only meaningful
-with a payment attached. The row is committed PENDING_PAYMENT before the
-Stripe intent exists (same deliberate non-atomicity as events, with the
-same two mitigations: capacity ignores stale pendings after 1h, and a 24h
-sweep cancels them).
+Unpaid attempts reuse the member's registration row and restart its capacity
+hold. Only PENDING and CONFIRMED registrations block another attempt. Rows
+are committed PENDING_PAYMENT before Stripe; the route reconciles any previous
+intent before creating a new manual-capture hold. Capacity ignores unpaid
+attempts after 1h, and a 24h sweep cancels abandoned rows.
 """
 from datetime import datetime, timedelta
 
@@ -142,13 +142,16 @@ def validate_profile(questions, payload):
         if builtin == "carpool":
             # Driver details apply only to a yes answer, just like the reveal.
             driving = clean["can_drive"] is True
-            for field in ("seat_capacity", "bike_capacity"):
-                clean[field] = _parse_optional_int(
-                    payload.get(field) if driving else None, f"profile.{field}", errors)
-            hitch = str(payload.get("hitch_size") or "") if driving else ""
-            if hitch not in HITCH_SIZES:
-                errors["profile.hitch_size"] = "Choose a valid hitch size."
-            clean["hitch_size"] = hitch
+            followups = question["followups"]
+            for key, field in (("seats", "seat_capacity"), ("bikes", "bike_capacity")):
+                if followups[key]["enabled"]:
+                    clean[field] = _parse_optional_int(
+                        payload.get(field) if driving else None, f"profile.{field}", errors)
+            if followups["hitch"]["enabled"]:
+                hitch = str(payload.get("hitch_size") or "") if driving else ""
+                if hitch not in HITCH_SIZES:
+                    errors["profile.hitch_size"] = "Choose a valid hitch size."
+                clean["hitch_size"] = hitch
         elif builtin == "region_code":
             region = str(payload.get("region_code") or "").strip()
             if required and not region:
@@ -182,10 +185,12 @@ def upsert_profile(user, clean_profile):
     return profile
 
 
-def _active_count(trip):
+def _active_count(trip, *, exclude_registration_id=None):
     recent_cutoff = datetime.utcnow() - PENDING_HOLD_WINDOW
     count = 0
     for registration in trip.registrations:
+        if registration.id == exclude_registration_id:
+            continue
         if registration.status in (TripRegistrationStatus.PENDING,
                                    TripRegistrationStatus.CONFIRMED):
             count += 1
@@ -195,12 +200,12 @@ def _active_count(trip):
     return count
 
 
-def capacity_available(trip):
+def capacity_available(trip, *, exclude_registration_id=None):
     capacity = (trip.max_participants_standard or 0) + (
         trip.max_participants_extra or 0)
     if capacity <= 0:
         return True
-    return _active_count(trip) < capacity
+    return _active_count(trip, exclude_registration_id=exclude_registration_id) < capacity
 
 
 def expire_stale_pending(trip):
@@ -218,6 +223,7 @@ def expire_stale_pending(trip):
 
 
 def create_registration(trip, payload):
+    """Return the unpaid registration and any intent the route must reconcile."""
     if not isinstance(payload, dict):
         raise TripRegistrationError(
             {"payload": "Registration data must be an object."})
@@ -237,9 +243,9 @@ def create_registration(trip, payload):
     existing = TripRegistration.query.filter(
         TripRegistration.trip_id == trip.id,
         TripRegistration.user_id == user.id,
-        TripRegistration.status != TripRegistrationStatus.CANCELLED,
     ).first()
-    if existing:
+    if existing and existing.status in (
+            TripRegistrationStatus.PENDING, TripRegistrationStatus.CONFIRMED):
         raise TripRegistrationError(
             {"email": "You're already signed up for this trip."})
 
@@ -260,17 +266,19 @@ def create_registration(trip, payload):
     if errors:
         raise TripRegistrationError(errors)
 
-    if not capacity_available(trip):
+    if not capacity_available(trip, exclude_registration_id=existing.id if existing else None):
         raise TripRegistrationError(
             {"trip": "This trip is full."})
 
     upsert_profile(user, clean_profile)
-    registration = TripRegistration(
-        trip_id=trip.id, user_id=user.id,
-        status=TripRegistrationStatus.PENDING_PAYMENT,
-        answers=stored_answers, price_tier=price_tier,
-        amount_cents=amount_cents,
-    )
+    registration = existing or TripRegistration(trip_id=trip.id, user_id=user.id)
+    previous_intent_id = registration.payment_intent_id
+    registration.status = TripRegistrationStatus.PENDING_PAYMENT
+    registration.answers = stored_answers
+    registration.price_tier = price_tier
+    registration.amount_cents = amount_cents
+    registration.created_at = now
+    registration.payment_intent_id = None
     db.session.add(registration)
     db.session.commit()
-    return registration
+    return registration, previous_intent_id

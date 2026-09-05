@@ -137,6 +137,7 @@ import {initTripSurvey} from './trip_survey.js';
   // --- Stripe -----------------------------------------------------------
   let stripe = null;
   let card = null;
+  let cardComplete = false;
   async function ensureStripe() {
     if (card) return;
     const keyResponse = await fetch('/get-stripe-key');
@@ -148,6 +149,7 @@ import {initTripSurvey} from './trip_survey.js';
     }});
     card.mount('#card-element');
     card.on('change', function (event) {
+      cardComplete = event.complete === true;
       const field = document.getElementById('card-element');
       showError(event.error ? event.error.message : '', field);
     });
@@ -246,7 +248,8 @@ import {initTripSurvey} from './trip_survey.js';
 
   function focusField(field) {
     const control = field.matches('input, select') ? field : field.querySelector('input:not(:disabled), select:not(:disabled)');
-    if (control) control.focus({preventScroll: true});
+    if (field.id === 'card-element' && card) card.focus();
+    else if (control) control.focus({preventScroll: true});
     field.scrollIntoView({behavior: scrollBehavior, block: 'center'});
   }
 
@@ -263,6 +266,9 @@ import {initTripSurvey} from './trip_survey.js';
         invalid.set(group, 'Select at least one option.');
       }
     });
+    if (!card || !cardComplete) {
+      invalid.set(document.getElementById('card-element'), 'Enter your card details.');
+    }
     invalid.forEach(function (message, field) { markFieldError(field, message); });
     globalError = '';
     refreshErrorSummary();

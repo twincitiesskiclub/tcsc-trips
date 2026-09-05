@@ -19,6 +19,8 @@
   var builtinAnswerTypes = editorData.builtinAnswerTypes || {};
   var dietaryOther = editorData.dietaryOther;
   var BUILTIN_TYPES = {carpool: 'yes_no', region_code: 'text', dietary: 'multi_choice', tent: 'yes_no'};
+  var FOLLOWUP_LABELS = {seats: 'Passenger capacity', bikes: 'Bike capacity',
+    hitch: 'Trailer hitch', other: 'Other dietary restrictions'};
   var submitted = false;
   var nextId = 0;
   var rows = [];
@@ -97,6 +99,14 @@
       var builtin = {builtin: data.builtin, label: data.label.trim(),
         help_text: (data.help_text || '').trim(), required: data.required, enabled: data.enabled};
       if (data.builtin === 'dietary') builtin.options = optionsFor(row);
+      if (data.followups) {
+        builtin.followups = {};
+        Object.entries(data.followups).forEach(function ([key, followup]) {
+          var fields = {label: followup.label.trim(), help_text: followup.help_text.trim()};
+          if (data.builtin === 'carpool') fields.enabled = followup.enabled;
+          builtin.followups[key] = fields;
+        });
+      }
       return builtin;
     }
     var question = {
@@ -175,6 +185,9 @@
         }
         ['required', 'enabled'].forEach(function (field) {
           if (typeof question[field] !== 'boolean') error(field, 'Choose a valid ' + field + ' setting.');
+        });
+        Object.entries(question.followups || {}).forEach(function ([key, followup]) {
+          if (!followup.label) error('followup-' + key + '-label', 'Enter a follow-up question.');
         });
         if (question.builtin === 'dietary') {
           if (question.options.filter(function (o) { return o === dietaryOther; }).length !== 1) {
@@ -354,14 +367,31 @@
         preview.appendChild(choice);
       });
     }
-    if (question.builtin === 'carpool') preview.appendChild(el('p', 'tq-hint',
-      'Drivers can add passenger and bike capacity and hitch size.'));
-    if (question.builtin === 'dietary') {
-      var other = input('');
-      other.placeholder = 'Any other dietary needs';
-      other.setAttribute('aria-label', dietaryOther);
-      preview.appendChild(other);
-    }
+    Object.entries(question.followups || {}).forEach(function ([key, followup]) {
+      if (followup.enabled === false) return;
+      var group = el('fieldset');
+      group.appendChild(el('legend', '', followup.label));
+      if (followup.help_text) group.appendChild(el('p', 'tq-hint', followup.help_text));
+      if (key === 'hitch') {
+        ['No', '1.25\u2033', '2\u2033'].forEach(function (label) {
+          var choice = el('label', 'tq-check');
+          choice.append(input('', 'radio'), document.createTextNode(label));
+          group.appendChild(choice);
+        });
+      } else {
+        var answer = input('', key === 'other' ? 'text' : 'number');
+        answer.setAttribute('aria-label', followup.label);
+        if (key === 'other') {
+          answer.placeholder = 'Any other dietary needs';
+          answer.maxLength = 255;
+        } else {
+          answer.min = '0';
+          answer.max = '99';
+        }
+        group.appendChild(answer);
+      }
+      preview.appendChild(group);
+    });
   }
 
   function refresh() {
@@ -411,7 +441,11 @@
     if (Object.hasOwn(row.data, 'builtin') && ['key', 'type', 'visible-if', 'max-selections', 'other-option'].includes(name)) return;
     var oldKey = row.data.key;
     row.touched.add(name);
-    if (name === 'options') row.optionsText = control.value;
+    if (control.dataset.followupKey) {
+      row.data.followups[control.dataset.followupKey][control.dataset.followupField] =
+        control.type === 'checkbox' ? control.checked : control.value;
+    }
+    else if (name === 'options') row.optionsText = control.value;
     else if (name === 'max-selections') row.capText = control.value;
     else if (name === 'required' || name === 'enabled') row.data[name] = control.checked;
     else if (name === 'visible-if') {
@@ -535,6 +569,37 @@
     var visible = field(row, 'visible-if', 'Show when', el('select'));
     visible.classList.add('tq-full');
     grid.append(help, visible);
+    if (row.data.followups) {
+      var followups = el('section', 'tq-followups tq-full');
+      var heading = el('h3', 'tq-template-title', 'Follow-up questions');
+      heading.id = row.id + '-followups';
+      followups.setAttribute('aria-labelledby', heading.id);
+      followups.appendChild(heading);
+      Object.entries(row.data.followups).forEach(function ([key, followup]) {
+        var group = el('fieldset', 'tq-fields');
+        group.appendChild(el('legend', 'tq-hint', FOLLOWUP_LABELS[key]));
+        function followupField(name, label, control) {
+          control.dataset.followupKey = key;
+          control.dataset.followupField = name;
+          return field(row, 'followup-' + key + '-' + name.replace('_', '-'), label, control);
+        }
+        var labelField = followupField('label', 'Label', input(followup.label));
+        labelField.classList.add('tq-full');
+        group.appendChild(labelField);
+        var helpField = followupField('help_text', 'Help text', input(followup.help_text));
+        if (row.data.builtin === 'dietary') helpField.classList.add('tq-full');
+        group.appendChild(helpField);
+        if (row.data.builtin === 'carpool') {
+          var enabled = input('', 'checkbox');
+          enabled.checked = followup.enabled;
+          var enabledField = followupField('enabled', 'Enabled', enabled);
+          enabledField.classList.add('tq-check-field');
+          group.appendChild(enabledField);
+        }
+        followups.appendChild(group);
+      });
+      grid.appendChild(followups);
+    }
     refs.preview = el('details', 'tq-preview');
     refs.preview.open = row.previewOpen;
     refs.preview.appendChild(el('summary', '', 'Registrant preview'));

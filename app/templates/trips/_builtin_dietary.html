@@ -14,7 +14,8 @@
     {{ error_slot('dietary-options') }}
   </fieldset>
   <div class="form-field">
-    <label class="form-field__label" for="profile-dietary-other">Other dietary restriction(s)? {{ optional_hint() }}</label>
-    <input id="profile-dietary-other" type="text" maxlength="255" placeholder="Any other dietary needs" class="form-input" aria-describedby="profile-dietary-other-error">
+    <label class="form-field__label" for="profile-dietary-other">{{ question.followups.other.label }} {{ optional_hint() }}</label>
+    {{ question_help(question.followups.other, 'profile-dietary-other-help') }}
+    <input id="profile-dietary-other" type="text" maxlength="255" placeholder="Any other dietary needs" class="form-input" aria-describedby="profile-dietary-other-error{% if question.followups.other.help_text %} profile-dietary-other-help{% endif %}">
     {{ error_slot('profile-dietary-other') }}
   </div>
