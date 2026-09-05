@@ -161,6 +161,9 @@ def _transition_trip_registration(payment_intent, new_status):
     registration = _trip_registration_from_metadata(metadata)
     if registration is None:
         return
+    # A retry replaces the intent on the same row. Ignore events from older attempts.
+    if registration.payment_intent_id != _stripe_object_value(payment_intent, 'id'):
+        return
     if registration.status == new_status:
         return  # idempotent webhook redelivery - no re-DM
     if (new_status == TripRegistrationStatus.CANCELLED

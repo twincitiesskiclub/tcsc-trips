@@ -1,16 +1,18 @@
 from datetime import datetime
 
 import stripe
-from flask import Blueprint, render_template, request
+from flask import Blueprint, current_app, render_template, request
 
 from ..constants import PaymentType
 from ..errors import json_error
-from ..models import Trip
+from ..models import Trip, db
 from ..trips import service
-from ..trips.models import TripSeries
+from ..trips.models import TripRegistrationStatus, TripSeries
 from ..trips.questions import enabled_questions
 from ..utils import format_datetime_central, normalize_email
-from .payments import build_statement_descriptor, stripe_idempotency_options
+from .payments import (
+    _transition_trip_registration, build_statement_descriptor, stripe_idempotency_options,
+)
 
 trips = Blueprint('trips', __name__)
 
@@ -95,9 +97,26 @@ def register_for_trip(slug):
         return json_error('Trip not found', 404)
     payload = request.get_json(silent=True) or {}
     try:
-        registration = service.create_registration(trip, payload)
+        registration, previous_intent_id = service.create_registration(trip, payload)
     except service.TripRegistrationError as exc:
         return json_error(exc.errors)
+
+    if previous_intent_id:
+        try:
+            previous_intent = stripe.PaymentIntent.retrieve(previous_intent_id)
+        except Exception:
+            current_app.logger.warning(
+                "Could not retrieve previous trip intent %s", previous_intent_id, exc_info=True)
+        else:
+            if previous_intent.status in ('requires_capture', 'succeeded', 'processing'):
+                registration.payment_intent_id = previous_intent_id
+                _transition_trip_registration(previous_intent, TripRegistrationStatus.PENDING)
+                return json_error({'email': "You're already signed up for this trip."})
+            try:
+                stripe.PaymentIntent.cancel(previous_intent_id)
+            except Exception:
+                current_app.logger.warning(
+                    "Could not cancel previous trip intent %s", previous_intent_id, exc_info=True)
 
     try:
         intent = stripe.PaymentIntent.create(
@@ -123,7 +142,6 @@ def register_for_trip(slug):
         # (service.py) handle abandonment - mirrors events.
         return json_error(str(exc), 500)
 
-    from ..models import db
     registration.payment_intent_id = intent.id
     db.session.commit()
     return {

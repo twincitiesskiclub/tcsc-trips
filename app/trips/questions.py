@@ -24,6 +24,14 @@ BUILTIN_QUESTIONS = {
     "carpool": {
         "builtin": "carpool", "label": "Can you drive a carpool?",
         "help_text": "", "required": True, "enabled": True,
+        "followups": {
+            "seats": {"label": "How many people can you accommodate (besides yourself)?",
+                      "help_text": "", "enabled": True},
+            "bikes": {"label": "How many bikes can you accommodate?",
+                      "help_text": "", "enabled": True},
+            "hitch": {"label": "Do you have a trailer hitch?",
+                      "help_text": "", "enabled": True},
+        },
     },
     "region_code": {
         "builtin": "region_code", "label": "What is your region code?",
@@ -34,6 +42,9 @@ BUILTIN_QUESTIONS = {
         "builtin": "dietary", "label": "Dietary restrictions",
         "help_text": "Select all that apply.", "required": False,
         "enabled": True, "options": DIETARY_OPTIONS,
+        "followups": {
+            "other": {"label": "Other dietary restriction(s)?", "help_text": ""},
+        },
     },
     "tent": {
         "builtin": "tent", "label": "Do you have a 2+ person tent?",
@@ -56,7 +67,14 @@ def expand_builtin(question):
         builtin = question["builtin"]
         if not isinstance(builtin, str) or builtin not in BUILTIN_QUESTIONS:
             raise ValueError(f"Unknown built-in question {builtin!r}")
-        return deepcopy(BUILTIN_QUESTIONS[builtin] | question)
+        expanded = deepcopy(BUILTIN_QUESTIONS[builtin] | question)
+        defaults = BUILTIN_QUESTIONS[builtin].get("followups")
+        if defaults and isinstance(question.get("followups"), dict):
+            for key, fields in defaults.items():
+                override = expanded["followups"].get(key, {})
+                if isinstance(override, dict):
+                    expanded["followups"][key] = deepcopy(fields) | override
+        return expanded
     return deepcopy(question)
 
 
@@ -71,6 +89,8 @@ def _validate_builtin(question, name):
     allowed = {"builtin", "label", "help_text", "required", "enabled"}
     if builtin == "dietary":
         allowed.add("options")
+    if builtin in ("carpool", "dietary"):
+        allowed.add("followups")
     if set(question) - allowed:
         raise ValueError(f"{name}: built-in keys and answer types are fixed; "
                          "unsupported fields: " + ", ".join(sorted(set(question) - allowed)))
@@ -81,6 +101,28 @@ def _validate_builtin(question, name):
     for field in ("required", "enabled"):
         if not isinstance(question.get(field), bool):
             raise ValueError(f"{name} field '{field}' must be a bool")
+    if builtin in ("carpool", "dietary"):
+        followups = question.get("followups")
+        if not isinstance(followups, dict):
+            raise ValueError(f"{name}: followups must be a mapping")
+        keys = {"seats", "bikes", "hitch"} if builtin == "carpool" else {"other"}
+        if set(followups) != keys:
+            raise ValueError(f"{name}: {builtin} followups must contain exactly "
+                             + ", ".join(sorted(keys)))
+        fields = {"label", "help_text", "enabled"} if builtin == "carpool" else {"label", "help_text"}
+        for key, followup in followups.items():
+            followup_name = f"{name} followup '{key}'"
+            if not isinstance(followup, dict):
+                raise ValueError(f"{followup_name} must be a mapping")
+            if set(followup) != fields:
+                raise ValueError(f"{followup_name} must contain exactly "
+                                 + ", ".join(sorted(fields)))
+            if not isinstance(followup["label"], str) or not followup["label"].strip():
+                raise ValueError(f"{followup_name}: label must be non-empty text")
+            if not isinstance(followup["help_text"], str):
+                raise ValueError(f"{followup_name}: help_text must be text")
+            if builtin == "carpool" and not isinstance(followup["enabled"], bool):
+                raise ValueError(f"{followup_name} field 'enabled' must be a bool")
     if builtin == "dietary":
         options = question.get("options")
         if (not isinstance(options, list) or not options

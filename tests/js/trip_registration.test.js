@@ -38,7 +38,8 @@ const surveyModule = import('data:text/javascript;base64,' + Buffer.from(surveyS
 const flush = () => new Promise(resolve => setImmediate(resolve));
 
 async function load({eligible = true, gateFails = false, serverError = null, stripeError = null,
-  disabledBuiltins = [], optionalRegion = false, requiredDietary = false, noSurvey = false} = {}) {
+  disabledBuiltins = [], optionalRegion = false, requiredDietary = false, noSurvey = false,
+  completeCard = true, deferStripe = false} = {}) {
   const dom = new JSDOM(HTML, {url: 'http://localhost/north-shore/register', pretendToBeVisual: true});
   const {window} = dom;
   const {document} = window;
@@ -54,7 +55,18 @@ async function load({eligible = true, gateFails = false, serverError = null, str
   const posts = [];
   const confirmations = [];
   let stripeChange;
-  const card = {mount() {}, on(name, callback) { if (name === 'change') stripeChange = callback; }};
+  let resolveStripeKey;
+  const stripeKeyReady = deferStripe ? new Promise(resolve => { resolveStripeKey = resolve; }) : Promise.resolve();
+  const card = {
+    mount() {},
+    focus() { this.focused = true; },
+    on(name, callback) {
+      if (name === 'change') {
+        stripeChange = callback;
+        callback({complete: completeCard});
+      }
+    },
+  };
   window.Stripe = () => ({
     elements: () => ({create: () => card}),
     confirmCardPayment: async (...args) => {
@@ -63,7 +75,10 @@ async function load({eligible = true, gateFails = false, serverError = null, str
     },
   });
   const fetch = async (url, options) => {
-    if (url === '/get-stripe-key') return {ok: true, json: async () => ({publicKey: 'pk_test_stub'})};
+    if (url === '/get-stripe-key') {
+      await stripeKeyReady;
+      return {ok: true, json: async () => ({publicKey: 'pk_test_stub'})};
+    }
     if (url === '/api/trips/member-check') {
       if (gateFails) throw new Error('Network unavailable');
       return {ok: true, json: async () => ({eligible})};
@@ -97,7 +112,10 @@ async function load({eligible = true, gateFails = false, serverError = null, str
     form.dispatchEvent(new window.Event('submit', {bubbles: true, cancelable: true}));
     await flush();
   }
-  return {window, document, form, posts, confirmations, gate, click, fill, submit, stripeChange};
+  return {window, document, form, posts, confirmations, gate, click, fill, submit, card,
+    stripeChange(event) { stripeChange(event); },
+    async finishStripeLoading() { resolveStripeKey(); await flush(); },
+  };
 }
 
 function visible(node) { return !node.hidden; }
@@ -180,6 +198,43 @@ test('empty required fields, including checkbox groups, stop before a registrati
   await page.submit();
   assert.equal(page.posts.length, 0);
   assert.ok(page.document.getElementById('question-8-error').textContent);
+});
+
+test('an incomplete card blocks native form submission until Stripe reports it complete', async () => {
+  const page = await load({completeCard: false});
+  await page.gate();
+  page.fill();
+  await page.submit();
+  assert.equal(page.posts.length, 0);
+  assert.equal(page.confirmations.length, 0);
+  assert.equal(page.document.getElementById('card-element-error').textContent, 'Enter your card details.');
+  assert.equal(page.document.getElementById('card-element').getAttribute('aria-invalid'), 'true');
+  assert.equal(page.card.focused, true);
+
+  page.stripeChange({complete: true});
+  assert.equal(page.document.getElementById('card-element-error').hidden, true);
+  await page.submit();
+  assert.equal(page.posts.length, 1);
+  assert.equal(page.confirmations.length, 1);
+});
+
+test('submission waits for Stripe to load and for the card to become complete', async () => {
+  const page = await load({completeCard: false, deferStripe: true});
+  await page.gate();
+  page.fill();
+  await page.submit();
+  assert.equal(page.posts.length, 0);
+  assert.equal(page.document.getElementById('card-element-error').textContent, 'Enter your card details.');
+  await page.finishStripeLoading();
+  await page.submit();
+  assert.equal(page.posts.length, 0);
+  page.stripeChange({complete: true});
+  page.stripeChange({complete: false});
+  await page.submit();
+  assert.equal(page.posts.length, 0);
+  page.stripeChange({complete: true});
+  await page.submit();
+  assert.equal(page.posts.length, 1);
 });
 
 test('hiding driver details and conditional answers clears their obsolete errors', async () => {

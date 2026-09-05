@@ -276,6 +276,41 @@ def test_registration_and_preview_render_identical_survey_sections(
     assert registration.headers["X-Frame-Options"] == "DENY"
 
 
+@pytest.mark.parametrize("disabled, field_id", [
+    ("seats", "profile-seats"), ("bikes", "profile-bikes"), ("hitch", "profile-hitch-group"),
+])
+def test_registration_and_preview_use_stored_followups(admin_client, db_session, disabled, field_id):
+    series, trip = _series_with_edition(db_session)
+    questions = default_builtin_questions()
+    carpool, _, dietary, _ = questions
+    for key, followup in carpool["followups"].items():
+        followup.update(label=f"Custom {key} question?", help_text=f"Custom {key} hint.")
+    carpool["followups"][disabled]["enabled"] = False
+    dietary["followups"]["other"].update(label="Additional food needs?", help_text="Tell the cook.")
+    trip.custom_questions = questions
+    trip.signup_start = datetime.utcnow() - timedelta(days=1)
+    trip.signup_end = datetime.utcnow() + timedelta(days=30)
+    db.session.commit()
+
+    responses = [admin_client.get(f"/{series.slug}/register"), admin_client.post(
+        "/admin/trips/questions-preview", data={"custom_questions_json": json.dumps(questions)})]
+
+    for response in responses:
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert 'id="driver-details"' in html
+        assert f'id="{field_id}"' not in html
+        for key in ("seats", "bikes", "hitch"):
+            if key == disabled:
+                assert f'id="profile-{key}-help"' not in html
+            else:
+                assert re.search(rf'<(?:label|legend)[^>]*>Custom {key} question\?', html)
+                assert f'class="form-field__hint trip-help">Custom {key} hint.</p>' in html
+        assert 'for="profile-dietary-other">Additional food needs?' in html
+        assert 'id="profile-dietary-other-help" class="form-field__hint trip-help">Tell the cook.</p>' in html
+        assert 'id="profile-dietary-other"' in html
+
+
 def test_trip_editors_include_preview_and_allow_only_same_origin_frames(admin_client, db_session):
     _, trip = _series_with_edition(db_session)
     for url in ("/admin/trips/new", f"/admin/trips/{trip.id}/edit"):

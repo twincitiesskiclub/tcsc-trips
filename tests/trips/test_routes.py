@@ -42,9 +42,10 @@ def public_trip(db_session):
     return series, trip, user
 
 
-def _intent(intent_id="pi_trip_test", amount=10000):
+def _intent(intent_id="pi_trip_test", amount=10000, status="requires_payment_method", registration_id=None):
     return SimpleNamespace(id=intent_id, client_secret=f"cs_{intent_id}",
-                           amount=amount, status="requires_payment_method")
+                           amount=amount, status=status,
+                           metadata={"payment_type": "trip", "registration_id": str(registration_id)})
 
 
 def _payload():
@@ -105,6 +106,89 @@ def test_stripe_failure_leaves_registration_pending(
         TripRegistration.id.desc()).first()
     assert registration.status == TripRegistrationStatus.PENDING_PAYMENT
     assert registration.payment_intent_id is None
+
+
+def _pending_registration(public_trip):
+    _, trip, user = public_trip
+    registration = TripRegistration(
+        trip_id=trip.id, user_id=user.id, status=TripRegistrationStatus.PENDING_PAYMENT,
+        answers={}, price_tier="low", amount_cents=10000, payment_intent_id="pi_previous")
+    db.session.add(registration)
+    db.session.commit()
+    return registration
+
+
+@pytest.mark.parametrize("status", [
+    "requires_payment_method", "requires_confirmation", "requires_action", "canceled",
+])
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.cancel")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_register_reuses_pending_row_and_cancels_stale_intent(
+        retrieve_intent, cancel_intent, create_intent, client, public_trip, status):
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _intent("pi_previous", status=status, registration_id=registration.id)
+    create_intent.return_value = _intent("pi_replacement")
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 200
+    assert response.get_json()["clientSecret"] == "cs_pi_replacement"
+    assert response.get_json()["registrationId"] == registration.id
+    retrieve_intent.assert_called_once_with("pi_previous")
+    cancel_intent.assert_called_once_with("pi_previous")
+    assert create_intent.call_args.kwargs["metadata"]["registration_id"] == str(registration.id)
+    assert create_intent.call_args.kwargs["capture_method"] == "manual"
+    db.session.expire_all()
+    assert registration.payment_intent_id == "pi_replacement"
+    assert registration.status == TripRegistrationStatus.PENDING_PAYMENT
+
+
+@pytest.mark.parametrize("status", ["requires_capture", "succeeded", "processing"])
+@patch("app.routes.payments.trip_slack")
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.cancel")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_register_recovers_authorized_previous_intent(
+        retrieve_intent, cancel_intent, create_intent, trip_slack, client, public_trip, status):
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _intent("pi_previous", status=status, registration_id=registration.id)
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == {"email": "You're already signed up for this trip."}
+    retrieve_intent.assert_called_once_with("pi_previous")
+    cancel_intent.assert_not_called()
+    create_intent.assert_not_called()
+    db.session.expire_all()
+    assert registration.payment_intent_id == "pi_previous"
+    assert registration.status == TripRegistrationStatus.PENDING
+    trip_slack.send_registration_dm.assert_called_once_with(registration)
+
+
+@pytest.mark.parametrize("failure", ["retrieve", "cancel"])
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.cancel")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_previous_intent_errors_do_not_block_retry(
+        retrieve_intent, cancel_intent, create_intent, client, public_trip, caplog, failure):
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _intent("pi_previous", registration_id=registration.id)
+    failing_call = retrieve_intent if failure == "retrieve" else cancel_intent
+    failing_call.side_effect = RuntimeError("Stripe is unavailable")
+    create_intent.return_value = _intent("pi_replacement")
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 200
+    assert response.get_json()["clientSecret"] == "cs_pi_replacement"
+    assert any(record.levelname == "WARNING" and "pi_previous" in record.getMessage()
+               for record in caplog.records)
+    if failure == "retrieve":
+        cancel_intent.assert_not_called()
+    db.session.expire_all()
+    assert registration.payment_intent_id == "pi_replacement"
 
 
 def test_register_validation_error_returns_field_errors(

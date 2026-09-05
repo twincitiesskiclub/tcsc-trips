@@ -98,6 +98,81 @@ def test_builtin_defaults_validate(builtin):
     tq.validate_questions([tq.expand_builtin({"builtin": builtin})])
 
 
+def test_expand_carpool_includes_independent_followup_defaults():
+    question = tq.expand_builtin({"builtin": "carpool"})
+    assert question["followups"] == {
+        "seats": {"label": "How many people can you accommodate (besides yourself)?",
+                  "help_text": "", "enabled": True},
+        "bikes": {"label": "How many bikes can you accommodate?", "help_text": "", "enabled": True},
+        "hitch": {"label": "Do you have a trailer hitch?", "help_text": "", "enabled": True},
+    }
+    question["followups"]["seats"]["label"] = "Passenger seats?"
+    assert tq.BUILTIN_QUESTIONS["carpool"]["followups"]["seats"]["label"] != "Passenger seats?"
+
+
+def test_expand_builtin_merges_partial_followup_overrides():
+    question = tq.expand_builtin({"builtin": "carpool", "followups": {
+        "seats": {"label": "Passenger seats?"}, "bikes": {"enabled": False},
+    }})
+    tq.validate_questions([question])
+    assert question["followups"]["seats"] == {
+        "label": "Passenger seats?", "help_text": "", "enabled": True}
+    assert question["followups"]["bikes"]["enabled"] is False
+    assert question["followups"]["hitch"] == tq.BUILTIN_QUESTIONS["carpool"]["followups"]["hitch"]
+
+
+@pytest.mark.parametrize("builtin", ["carpool", "dietary"])
+def test_followups_are_required_in_stored_questions(builtin):
+    question = tq.expand_builtin({"builtin": builtin})
+    del question["followups"]
+    with pytest.raises(ValueError, match="followups must be a mapping"):
+        tq.validate_questions([question])
+
+
+@pytest.mark.parametrize("builtin", ["carpool", "dietary"])
+@pytest.mark.parametrize("change", ["unknown", "missing"])
+def test_followup_keys_are_fixed(builtin, change):
+    question = tq.expand_builtin({"builtin": builtin})
+    if change == "unknown":
+        question["followups"]["extra"] = {"label": "More?", "help_text": ""}
+    else:
+        question["followups"].pop(next(iter(question["followups"])))
+    with pytest.raises(ValueError, match="followups must contain exactly"):
+        tq.validate_questions([question])
+
+
+@pytest.mark.parametrize("fields, message", [
+    ({"label": " ", "help_text": "", "enabled": True}, "label must be non-empty text"),
+    ({"label": 1, "help_text": "", "enabled": True}, "label must be non-empty text"),
+    ({"label": "Seats?", "help_text": None, "enabled": True}, "help_text must be text"),
+    ({"label": "Seats?", "help_text": "", "enabled": "true"}, "enabled.*bool"),
+    ({"label": "Seats?", "help_text": "", "enabled": 1}, "enabled.*bool"),
+    ({"label": "Seats?", "enabled": True}, "must contain exactly"),
+    ({"label": "Seats?", "help_text": ""}, "must contain exactly"),
+    ({"label": "Seats?", "help_text": "", "enabled": True, "required": True}, "must contain exactly"),
+    (None, "must be a mapping"),
+])
+def test_followup_fields_are_validated(fields, message):
+    question = tq.expand_builtin({"builtin": "carpool"})
+    question["followups"]["seats"] = fields
+    with pytest.raises(ValueError, match=message):
+        tq.validate_questions([question])
+
+
+def test_dietary_other_cannot_be_disabled():
+    question = tq.expand_builtin({"builtin": "dietary"})
+    question["followups"]["other"]["enabled"] = False
+    with pytest.raises(ValueError, match="must contain exactly help_text, label"):
+        tq.validate_questions([question])
+
+
+@pytest.mark.parametrize("builtin", ["tent", "region_code"])
+def test_other_builtins_reject_followups(builtin):
+    question = tq.expand_builtin({"builtin": builtin}) | {"followups": {}}
+    with pytest.raises(ValueError, match="unsupported fields: followups"):
+        tq.validate_questions([question])
+
+
 @pytest.mark.parametrize("overrides, message", [
     ({"builtin": "unknown"}, "unknown built-in"),
     ({"builtin": []}, "unknown built-in"),
