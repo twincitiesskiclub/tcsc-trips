@@ -50,3 +50,11 @@
   text-transform: uppercase;
   letter-spacing: 0.3px;
 }
+
+.badge--trip {
+  background: var(--pill-trips-bg);
+  color: var(--pill-trips-text);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
