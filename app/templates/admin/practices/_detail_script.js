@@ -1,6 +1,6 @@
 // Selected ids injected server-side (ids match the option-list endpoints).
 const practiceId = {{ practice.id if practice else 'null' }};
-const selLocationId = {{ practice.location_id if practice else 'null' }};
+const selLocationId = {{ practice.location_id | tojson if practice else 'null' }};
 const selActivities = {{ (practice.activities | map(attribute='id') | list) | tojson if practice else '[]' }};
 const selTypes = {{ (practice.practice_types | map(attribute='id') | list) | tojson if practice else '[]' }};
 const selCoaches = {{ (practice.leads | selectattr('role','equalto','coach') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};

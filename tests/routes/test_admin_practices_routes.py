@@ -481,3 +481,38 @@ def test_admin_edit_is_quiet_for_a_practice_the_poll_already_covers(
     assert not edited.get_json().get("availability_warning"), (
         "a practice already on the poll collects availability normally"
     )
+
+
+def test_detail_page_script_renders_a_missing_location_as_null(
+    admin_client, db_session,
+):
+    """A drafted practice has no location yet (coaches fill it in later), and
+    the edit page's inline script interpolates ``practice.location_id`` raw.
+    Jinja renders Python ``None`` as the bare token ``None``, which is a
+    ReferenceError on the first line of the script -- so the load handler
+    never registers and the form renders empty. Every drafted practice in
+    production hit this on 2026-09-06.
+    """
+    practice = Practice(
+        date=datetime(2126, 9, 8, 18, 15),
+        day_of_week='Tuesday',
+        location_id=None,
+        status='scheduled',
+    )
+    db.session.add(practice)
+    db.session.commit()
+    try:
+        resp = admin_client.get(f'/admin/practices/{practice.id}')
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert 'const selLocationId = null;' in body
+        # No inline script on the page may contain a bare Python None.
+        import re
+        for script in re.findall(r'<script>(.*?)</script>', body, re.S):
+            assert not re.search(r'\bNone\b', script), script[:400]
+    finally:
+        db.session.rollback()
+        stored = db.session.get(Practice, practice.id)
+        if stored is not None:
+            db.session.delete(stored)
+            db.session.commit()
