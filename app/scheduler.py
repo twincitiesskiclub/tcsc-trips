@@ -1045,7 +1045,7 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
     """Daily registration recap to #leadership-registration.
 
     Self-gating via should_post(): posts while a registration window is
-    open plus a 7-day tail after the last one closes, silent otherwise.
+    open, silent otherwise.
     A zero-registration day during the window still posts -- the zero is
     the signal. Covers the prior Central day.
 
@@ -1053,7 +1053,7 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
     Activate Season action runs at season start, while registration (and
     this recap) happens weeks earlier. select_season prefers the season
     taking registrations now, else the soonest ahead (which should_post
-    silences until it opens), else the most recently ended (the tail).
+    silences until it opens), else the most recently ended (also silenced).
 
     Args:
         app: Flask application instance for context.
@@ -1076,7 +1076,7 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
             today = today_central()
             if not should_post(season, today):
                 app.logger.info(
-                    "Season recap: no open or recently closed window, staying quiet")
+                    "Season recap: no open registration window, staying quiet")
                 return
 
             stats = build_recap(season, today - timedelta(days=1))
@@ -1444,7 +1444,7 @@ def init_scheduler(app: Flask) -> bool:
     # ========================================================================
 
     # Daily: registration recap to #leadership-registration while a window
-    # is open (plus a 7-day tail); the job self-gates via should_post().
+    # is open; the job self-gates via should_post().
     scheduler.add_job(
         func=run_season_recap_job,
         args=[app],
