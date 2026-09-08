@@ -48,18 +48,12 @@ def _window(start_utc, end_utc, for_date):
 
 
 def should_post(season, today):
-    """The cadence gate: post while a window is open, and for 7 days after
-    the last one closes so leadership sees the final tally settle."""
+    """Post only on Central dates with an open registration window."""
     windows = [w for w in (
         _window(season.returning_start, season.returning_end, today),
         _window(season.new_start, season.new_end, today),
     ) if w]
-    if not windows:
-        return False
-    if any(w["is_open"] for w in windows):
-        return True
-    last_end = max(w["end"] for w in windows)
-    return 0 <= (today - last_end).days <= 7
+    return any(w["is_open"] for w in windows)
 
 
 def _anchor_date(season):
