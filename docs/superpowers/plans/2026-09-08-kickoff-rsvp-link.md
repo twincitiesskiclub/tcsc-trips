@@ -13,6 +13,6 @@
 - [x] Add route checks using a minimal Flask app with the real security headers, independent of the database and scheduler. Verify anonymous access, fixed post destination, and script delivery under CSP.
 - [x] Add JavaScript behavior checks for one immediate launch, a blocked launch, returning through browser history, and a background document. Exercise the real script with only the external navigation boundary intercepted.
 - [x] Implement `/rsvp` and `/rsvp/` in `app/routes/main.py`, `app/templates/rsvp.html`, and `app/static/rsvp.js`. Remove the unshipped marketing-site prototype.
-- [ ] Run the focused route and JavaScript checks, existing neighboring route/security checks, and the production CSS build. Inspect narrow mobile layouts and the delivered HTML.
+- [x] Run the focused route and JavaScript checks, existing neighboring route/security checks, and the production CSS build. Inspect narrow mobile layouts and the delivered HTML.
 - [ ] Get an independent code review, open a PR, and ship through the repository's PR workflow. Verify the live route and script against the committed files.
 - [ ] Text the user one test link through Twilio, verify delivery, and obtain phone behavior before sending member reminders.
