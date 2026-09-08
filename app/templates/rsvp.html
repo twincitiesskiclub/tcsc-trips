@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="referrer" content="no-referrer" />
+    <meta name="theme-color" content="#202a44" />
+    <meta name="description" content="Open the Fall/Winter Kickoff RSVP post in the Twin Cities Ski Club Slack." />
+    <title>Kickoff RSVP | Twin Cities Ski Club</title>
+    <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}" />
+    <script src="{{ url_for('static', filename='rsvp.js') }}" defer></script>
+    <style>
+      * { box-sizing: border-box; }
+      html { color-scheme: light; background: #202a44; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        padding: max(1.5rem, env(safe-area-inset-top)) max(1.5rem, env(safe-area-inset-right)) max(1.5rem, env(safe-area-inset-bottom)) max(1.5rem, env(safe-area-inset-left));
+        color: #202a44;
+        font-family: system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      main {
+        width: 100%;
+        max-width: 30rem;
+        padding: clamp(1.5rem, 6vw, 3rem);
+        background: #fafaf7;
+        border-top: 0.4rem solid #9ee6bd;
+        border-radius: 0 0 0.5rem 0.5rem;
+      }
+      .club { margin: 0 0 2rem; font-size: 0.9rem; font-weight: 700; }
+      h1 { margin: 0; font-size: clamp(2rem, 8vw, 3rem); font-weight: 800; line-height: 1.08; letter-spacing: -0.04em; }
+      .instructions { margin: 1.5rem 0; font-size: 1.125rem; }
+      .open-app {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3.5rem;
+        width: 100%;
+        padding: 0.9rem 1rem;
+        border-radius: 0.3rem;
+        background: #202a44;
+        color: #fff;
+        font-weight: 700;
+        text-align: center;
+        text-decoration: none;
+      }
+      .open-app:hover { background: #101d35; }
+      a:focus-visible { outline: 3px solid #247747; outline-offset: 4px; }
+      .hint { margin: 1rem 0 0; font-size: 0.9rem; }
+      .browser-link { display: inline-block; min-height: 2.75rem; padding: 0.7rem 0; color: #202a44; text-underline-offset: 0.2em; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <p class="club">Twin Cities Ski Club</p>
+      <h1>Fall/Winter<br />Kickoff RSVP</h1>
+      <p>Opening Slack. If it doesn't open, tap below.</p>
+      <p class="instructions">On the Slack post, add a check mark if you're coming or an X if you can't make it.</p>
+      <!-- Slack generated this native URL for the kickoff post. A real tap
+           remains available when the browser blocks the automatic attempt. -->
+      <a class="open-app" id="open-rsvp" href="slack://channel?team=T02J2AVLSCT&amp;id=C0B2VN1LU11&amp;ts=1788546377.776679&amp;thread_ts=1788546377.776679&amp;host=slack.com">Open RSVP in Slack</a>
+      <p class="hint">You'll need to be signed in to TCSC in the Slack app.</p>
+      <a class="browser-link" id="browser-rsvp" href="https://twincitiesskiclub.slack.com/archives/C0B2VN1LU11/p1788546377776679">Open the post in your browser</a>
+    </main>
+  </body>
+</html>

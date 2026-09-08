@@ -8,6 +8,12 @@ main = Blueprint('main', __name__)
 MARKETING_TRIPS_URL = 'https://twincitiesskiclub.org/trips'
 
 
+@main.route('/rsvp', strict_slashes=False)
+def kickoff_rsvp():
+    """Open the kickoff Slack post from a short, tappable SMS link."""
+    return render_template('rsvp.html'), 200, {'Cache-Control': 'no-store'}
+
+
 @main.route('/register', strict_slashes=False)
 def legacy_register():
     """Retire the Wix-era generic registration path to the app home page."""
