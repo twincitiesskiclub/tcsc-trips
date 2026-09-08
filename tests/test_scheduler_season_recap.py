@@ -25,11 +25,11 @@ TODAY = date(2098, 1, 11)
 
 
 @pytest.fixture(autouse=True)
-def season_query():
+def season_query(app):
     """Keep the scheduler tests independent of the development database."""
-    with patch("app.models.Season") as model:
-        model.query.all.return_value = []
-        yield model.query
+    with app.app_context(), patch.object(Season, "query") as query:
+        query.all.return_value = []
+        yield query
 
 
 def test_quiet_after_registration_closes(app, season_query, caplog):
