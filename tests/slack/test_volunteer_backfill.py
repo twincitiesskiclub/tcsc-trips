@@ -34,9 +34,19 @@ def test_ask_blocks_have_form_elements():
     assert len(checkboxes) == 1
     assert [o["value"] for o in checkboxes[0]["options"]] == [
         "practice_lead", "event_volunteer", "committee"]
-    selects = [e for b in blocks if b.get("type") == "actions"
-               for e in b["elements"] if e["type"] == "multi_static_select"]
-    assert len(selects) == 1
+    # Slack rejects this multi-select in an actions block with invalid_blocks.
+    committee_block = next(
+        b for b in blocks if b.get("block_id") == "volunteer_committees_block")
+    assert committee_block["type"] == "section"
+    assert committee_block["text"]["text"]
+    select = committee_block["accessory"]
+    assert select["type"] == "multi_static_select"
+    assert select["action_id"] == "volunteer_committees_input"
+    assert [o["value"] for o in select["options"]] == [
+        "adventures", "apparel", "dry_tri", "social"]
+    assert not any(e["type"] == "multi_static_select"
+                   for b in blocks if b["type"] == "actions"
+                   for e in b["elements"])
     buttons = [e for b in blocks if b.get("type") == "actions"
                for e in b["elements"] if e["type"] == "button"]
     assert buttons[0]["value"] == "42"
@@ -51,6 +61,20 @@ def test_ask_blocks_error_variant_preserves_picks():
     checkboxes = [e for b in blocks if b.get("type") == "actions"
                   for e in b["elements"] if e["type"] == "checkboxes"][0]
     assert [o["value"] for o in checkboxes.get("initial_options", [])] == ["committee"]
+
+
+def test_ask_blocks_error_variant_preserves_multiple_committees():
+    blocks = build_volunteer_ask_blocks(
+        "Sam", 42, error="Pick at least one way to help.",
+        selected_interests=[], selected_committees=["adventures", "social"])
+    committee_block = next(
+        b for b in blocks if b.get("block_id") == "volunteer_committees_block")
+    assert committee_block["type"] == "section"
+    select = committee_block["accessory"]
+    assert select["action_id"] == "volunteer_committees_input"
+    assert [o["value"] for o in select["initial_options"]] == [
+        "adventures", "social"]
+    assert all(option in select["options"] for option in select["initial_options"])
 
 
 def test_thanks_blocks_name_the_picks():
