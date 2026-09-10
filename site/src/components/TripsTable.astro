@@ -6,47 +6,33 @@
 // the trip's tcsc.ski registration page (signup_url); there are no local trip
 // detail pages. entry.data.slug is the DISPLAY NAME (see content.config.ts).
 import { getCollection } from 'astro:content';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 
 const trips = await getCollection('trips');
 trips.sort((a, b) => a.data.order - b.data.order || a.data.dates.localeCompare(b.data.dates));
-
-const COLS = 'grid items-baseline gap-x-6 gap-y-1 md:grid-cols-[8rem_1fr_minmax(8rem,auto)]';
 ---
-<div>
-  <div class:list={[COLS, 'text-[11px] tracking-wider uppercase text-slate pb-2 border-b border-ink/15 max-md:hidden']}>
-    <span>Dates</span>
-    <span>Trip</span>
-    <span>Where</span>
-  </div>
+<Ledger cols="three" rule="top" surface="paper">
+  <LedgerRow label="Dates" title="Trip" meta="Where" header />
   {trips.length === 0 ? (
-    <p class="py-6 border-b border-ink/10 text-slate">
-      No trips posted. New trips are announced here each fall;{' '}
-      <a href="mailto:contact@twincitiesskiclub.org" class="text-mint-deep underline">get in touch</a>{' '}
-      with questions in the meantime.
-    </p>
+    <LedgerRow title="No trips posted yet.">
+      <Fragment slot="note">
+        Trips go up here once dates are set. Questions in the meantime:{' '}
+        <a
+          href="mailto:contact@twincitiesskiclub.org"
+          class="link-inline"
+        >contact@twincitiesskiclub.org</a>.
+      </Fragment>
+    </LedgerRow>
   ) : (
-    <ul class="divide-y divide-ink/10 border-b border-ink/10">
-      {trips.map((t) => {
-        const Row = t.data.signup_url ? 'a' : 'div';
-        return (
-          <li>
-            <Row
-              {...(t.data.signup_url ? { href: t.data.signup_url } : {})}
-              class:list={[
-                COLS,
-                'py-6 md:-mx-3 md:px-3',
-                t.data.signup_url && 'group transition-colors duration-150 hover:bg-ink/[0.03]',
-              ]}
-            >
-              <span class="text-sm text-slate tabular-nums">{t.data.dates}</span>
-              <span class="font-display text-lg md:text-xl font-semibold text-navy transition-colors duration-150 group-hover:text-mint-deep">
-                {t.data.slug}
-              </span>
-              <span class="text-sm text-slate">{t.data.location}</span>
-            </Row>
-          </li>
-        );
-      })}
-    </ul>
+    trips.map((t) => (
+      <LedgerRow
+        label={t.data.dates}
+        labelRole="caption"
+        title={t.data.slug}
+        meta={t.data.location}
+        href={t.data.signup_url}
+      />
+    ))
   )}
-</div>
+</Ledger>

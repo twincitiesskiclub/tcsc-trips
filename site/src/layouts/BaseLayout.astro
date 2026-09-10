@@ -1,35 +1,43 @@
 ---
 import '@/styles/global.css';
+import { getEntry } from 'astro:content';
 import FontPreload from '@/components/FontPreload.astro';
 import Lightbox from '@/components/Lightbox.astro';
+import { NAVY_HEX } from '@/lib/brand';
 import { fetchSeasonData } from '@/lib/seasonData';
 
 // Stamped on every page so a fallback build is one curl away from being
 // detected. Deploys are deliberately never blocked by an unreachable API, so
 // this is what stops a stale build from shipping invisibly.
 const season = await fetchSeasonData();
+const siteMeta = await getEntry('site_meta', 'site_meta');
 
 interface Props {
   title: string;
   description?: string;
   ogImage?: string;
+  ogImageAlt?: string;
   variant?: 'home' | 'inner';
   robots?: string;
 }
 
 const {
   title,
-  description = 'Year-round cross-country ski training and community for adults 21-35 in Minneapolis-St. Paul, with coached practices, racing, and trips.',
+  description = siteMeta?.data.description ?? 'Skiing.',
   // Default OG image lives in public/og/ (see site_meta.og_image convention).
   ogImage = '/og/og-default.jpg',
+  ogImageAlt,
   variant = 'inner',
   robots,
 } = Astro.props;
 
+const socialImageAlt = ogImageAlt ?? description;
+const socialImageUrl = new URL(ogImage, Astro.site).href;
+
 const isHome = variant === 'home';
 // Every route begins and ends on navy (nav + footer), so browser chrome and
 // the overscroll canvas use that same continuous brand surface.
-const themeColor = '#202A44';
+const themeColor = NAVY_HEX;
 
 // Build formats expose either a generated filename or a directory slash
 // through Astro.url during prerendering. Public routes remain extensionless,
@@ -60,10 +68,14 @@ const orgSameAs = ['https://www.instagram.com/twincitiesskiclub/'];
     {robots && <meta name="robots" content={robots} />}
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
-    <meta property="og:image" content={new URL(ogImage, Astro.site).href} />
+    <meta property="og:image" content={socialImageUrl} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={socialImageAlt} />
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content="Twin Cities Ski Club" />
     <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={socialImageUrl} />
     <link rel="canonical" href={canonicalUrl.href} />
     {/* Code-only Render deploys preserve directory resources for compatibility.
         Keep their visible URL aligned with the extensionless canonical until

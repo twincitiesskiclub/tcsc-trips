@@ -1,0 +1,38 @@
+---
+interface Props {
+  heading?: string;
+  more_href?: string;
+  more_label?: string;
+  surface?: 'paper' | 'navy';
+  class?: string;
+}
+
+const {
+  heading,
+  more_href,
+  more_label,
+  surface = 'paper',
+  class: className,
+}: Props = Astro.props;
+---
+
+<div
+  class:list={[
+    'section-header flex flex-col items-start gap-2 md:flex-row md:items-end md:justify-between',
+    className,
+  ]}
+  data-section-header-surface={surface}
+>
+  {heading && (
+    <h2 class:list={['type-h2', surface === 'navy' ? 'text-paper' : 'text-navy']}>
+      {heading}
+    </h2>
+  )}
+  <slot />
+  {more_href && more_label && (
+    <a
+      href={more_href}
+      class="link-inline inline-flex min-h-11 shrink-0 items-center text-sm"
+    >{more_label}</a>
+  )}
+</div>

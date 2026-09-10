@@ -1,0 +1,144 @@
+---
+import { Image } from 'astro:assets';
+import { MOSAIC } from '@/components/imageWidths';
+
+type Aspect = '4/3' | '4/5' | '3/4';
+
+interface Photo {
+  src: ImageMetadata;
+  alt: string;
+  caption?: string;
+  position?: string;
+  attention?: boolean;
+  loading?: 'eager' | 'lazy';
+}
+
+interface Props {
+  photos: Photo[];
+  cols: 2 | 3 | 5;
+  mobileCols?: 1 | 2 | 3;
+  aspect: Aspect;
+  secondaryAspect?: Aspect;
+  mobileAspect?: Aspect;
+  layout?: 'equal' | 'seven-five' | 'lead-three';
+  captions?: boolean;
+  captionRole?: 'caption' | 'label';
+  /** Let the first photo lead a two-column mobile strip without leaving an
+      orphan cell when the collection count is odd. */
+  mobileLead?: boolean;
+  class?: string;
+}
+
+const {
+  photos,
+  cols,
+  mobileCols = cols === 5 ? 2 : cols,
+  aspect,
+  secondaryAspect,
+  mobileAspect,
+  layout = 'equal',
+  captions = false,
+  captionRole = 'caption',
+  mobileLead = false,
+  class: className,
+}: Props = Astro.props;
+
+const desktopCols = layout === 'seven-five'
+  ? 'md:grid-cols-12'
+  : layout === 'lead-three'
+    ? 'md:grid-cols-3'
+    : {
+        2: 'md:grid-cols-2',
+        3: 'md:grid-cols-3',
+        5: 'md:grid-cols-5',
+      }[cols];
+const smallCols = {
+  1: 'grid-cols-1',
+  2: 'grid-cols-2',
+  3: 'grid-cols-3',
+}[mobileCols];
+const aspectClasses = {
+  '4/3': 'aspect-[4/3]',
+  '4/5': 'aspect-[4/5]',
+  '3/4': 'aspect-[3/4]',
+};
+const mobileAspectClass = mobileAspect && {
+  '4/3': 'aspect-[4/3]',
+  '4/5': 'aspect-[4/5]',
+  '3/4': 'aspect-[3/4]',
+}[mobileAspect];
+const mobileWidth = mobileCols === 3 ? '33vw' : mobileCols === 2 ? '50vw' : '100vw';
+const cropRatios = { '4/3': 3 / 4, '4/5': 5 / 4, '3/4': 4 / 3 };
+---
+
+<div class:list={['photo-strip rule grid gap-px', smallCols, desktopCols, className]}>
+  {photos.map((photo, index) => {
+    const isMobileLead = mobileLead && index === 0;
+    const tileAspect = secondaryAspect && index > 0 ? secondaryAspect : aspect;
+    const tileAspectClass = aspectClasses[tileAspect];
+    const tileDesktopAspectClass = mobileAspect && {
+      '4/3': 'md:aspect-[4/3]',
+      '4/5': 'md:aspect-[4/5]',
+      '3/4': 'md:aspect-[3/4]',
+    }[tileAspect];
+    const desktopWidth = layout === 'seven-five'
+      ? index === 0 ? '58vw' : '42vw'
+      : layout === 'lead-three'
+        ? index === 0 ? '720px' : '240px'
+        : cols === 5 ? '20vw' : cols === 3 ? '33vw' : '50vw';
+    const tileMobileWidth = isMobileLead ? '100vw' : mobileWidth;
+    const sizes = `(min-width: 768px) ${desktopWidth}, ${tileMobileWidth}`;
+    const photoSizes = isMobileLead
+      ? `(min-width: 768px) ${desktopWidth}, 100vw`
+      : sizes;
+    const imageWidth = Math.min(1600, photo.src.width);
+    const imageHeight = Math.round(imageWidth * cropRatios[tileAspect]);
+
+    return (
+      <figure
+        class:list={[
+          'bg-paper',
+          isMobileLead && 'max-md:col-span-2',
+          layout === 'seven-five' && (index === 0 ? 'md:col-span-7' : 'md:col-span-5'),
+          layout === 'lead-three' && index === 0 && 'md:col-span-3',
+        ]}
+      >
+        <div
+          class:list={[
+          'relative overflow-hidden',
+          layout === 'lead-three'
+            ? index === 0 ? 'aspect-square md:aspect-video' : 'aspect-square'
+            : isMobileLead
+            ? 'max-md:aspect-[3/2] md:aspect-[3/4]'
+            : mobileAspect
+              ? [mobileAspectClass, tileDesktopAspectClass]
+              : tileAspectClass,
+          ]}
+        >
+          <Image
+            src={photo.src}
+            alt={photo.alt}
+            widths={MOSAIC}
+            width={imageWidth}
+            height={photo.attention ? imageHeight : undefined}
+            sizes={photoSizes}
+            fit={photo.attention ? 'cover' : undefined}
+            position={photo.attention ? 'attention' : undefined}
+            class="absolute inset-0 h-full w-full object-cover"
+            style={photo.position ? `object-position: ${photo.position}` : undefined}
+            loading={photo.loading ?? 'lazy'}
+            decoding="async"
+          />
+        </div>
+        {captions && photo.caption && (
+          <figcaption
+            class:list={[
+              'pt-2',
+              captionRole === 'label' ? 'label-caps text-mint-deep' : 'type-caption text-slate',
+            ]}
+          >{photo.caption}</figcaption>
+        )}
+      </figure>
+    );
+  })}
+</div>

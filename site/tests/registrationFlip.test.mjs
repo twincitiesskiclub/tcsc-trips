@@ -49,9 +49,9 @@ const PAGE = `<!doctype html><html><body>
      data-new-start="2026-09-03T17:00:00Z"
      data-new-end="2026-09-20T05:00:00Z"
      data-open-label="Register for the season" data-open-url="https://tcsc.ski/"
-     data-soon-label="Fall registration dates" data-soon-url="https://twincitiesskiclub.org/#registration"
+     data-soon-label="How to register" data-soon-url="https://tcsc.ski"
      data-closed-label="How to register" data-closed-url="https://tcsc.ski/"
-     href="https://twincitiesskiclub.org/#registration">Fall registration dates</a>
+     href="https://tcsc.ski">How to register</a>
 </body></html>`;
 
 const PAGE_WITH_EMPTY_CLOSED_URL = `<!doctype html><html><body>
@@ -62,9 +62,9 @@ const PAGE_WITH_EMPTY_CLOSED_URL = `<!doctype html><html><body>
      data-new-start="2026-09-03T17:00:00Z"
      data-new-end="2026-09-20T05:00:00Z"
      data-open-label="Register for the season" data-open-url="https://tcsc.ski/"
-     data-soon-label="Fall registration dates" data-soon-url="https://twincitiesskiclub.org/#registration"
+     data-soon-label="How to register" data-soon-url="https://tcsc.ski"
      data-closed-label="How to register" data-closed-url=""
-     href="https://twincitiesskiclub.org/#registration">Fall registration dates</a>
+     href="https://tcsc.ski">How to register</a>
 </body></html>`;
 
 async function runFlipAt(isoNow, page = PAGE) {
@@ -86,8 +86,8 @@ async function runFlipAt(isoNow, page = PAGE) {
 
 test('leaves the DOM alone while the baked state is still correct', async () => {
   const cta = await runFlipAt('2026-07-30T12:00:00Z');
-  assert.equal(cta.textContent, 'Fall registration dates');
-  assert.equal(cta.getAttribute('href'), 'https://twincitiesskiclub.org/#registration');
+  assert.equal(cta.textContent, 'How to register');
+  assert.equal(cta.getAttribute('href'), 'https://tcsc.ski');
 });
 
 test('flips to the open variant once registration has opened', async () => {

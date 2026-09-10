@@ -1,46 +1,62 @@
 ---
+import BandContainer from '@/components/BandContainer.astro';
+import Seam from '@/components/Seam.astro';
+
 interface Props {
-  variant?: 'navy' | 'paper' | 'paper-on-navy';
+  variant?: 'navy' | 'paper';
   /** Section seam: the section name in the Trail Report label voice (small
       tracked caps) with a hairline running from it to the right edge, on one
       baseline. One device family across the site; physical chapter breaks
       instead of padding gaps wearing badges. */
   seam?: string;
   heading?: string;
-  subhead?: string;
-  contentMax?: 'wide' | 'narrow';
+  rhythm?: 'sm' | 'md' | 'lg';
+  flush?: 'top' | 'bottom' | 'both';
+  headingRole?: 'section' | 'longform';
 }
-const { variant = 'paper', seam, heading, subhead, contentMax = 'wide' } = Astro.props;
+const {
+  variant = 'paper',
+  seam,
+  heading,
+  rhythm = 'md',
+  flush,
+  headingRole = 'section',
+} = Astro.props;
 
-// paper-on-navy: navy band with a rounded paper card inside; the px-6 gutter
-// keeps the card off the viewport edges below the max width.
-const isCard = variant === 'paper-on-navy';
-const surface = variant === 'navy' ? 'bg-navy text-paper' : isCard ? 'bg-navy py-20' : 'bg-paper text-ink';
-const innerMax = contentMax === 'narrow' ? 'max-w-3xl' : 'max-w-7xl';
-const padding = isCard
-  ? 'rounded-xl px-8 py-12 md:px-16 md:py-20'
-  : 'px-6 md:px-10 pb-20 md:pb-28 ' + (seam ? 'pt-8 md:pt-10' : 'pt-20 md:pt-28');
-const seamText = variant === 'navy' ? 'text-mint/90' : 'text-mint-deep';
-const seamRule = variant === 'navy' ? 'bg-mint/20' : 'bg-ink/15';
+const rhythms = {
+  sm: { y: 'band-y-sm', t: 'band-t-sm', b: 'band-b-sm' },
+  md: { y: 'band-y', t: 'band-t', b: 'band-b' },
+  lg: { y: 'band-y-lg', t: 'band-t-lg', b: 'band-b-lg' },
+};
+const band = rhythms[rhythm];
+
+// Navy headings stay paper. Mint is reserved for the home hero, CTA strip,
+// live data, labels, links, and fills.
+const surface = variant === 'navy'
+  ? 'bg-navy text-paper [&_h2]:text-paper [&_h3]:text-paper'
+  : 'bg-paper text-ink';
+const flushTop = flush === 'top' || flush === 'both';
+const flushBottom = flush === 'bottom' || flush === 'both';
+const seamPadding = flushTop ? undefined : band.t;
+const contentPadding = seam
+  ? ['pt-8', !flushBottom && band.b].filter(Boolean).join(' ')
+  : [!flushTop && band.t, !flushBottom && band.b].filter(Boolean).join(' ');
+const headingClass = headingRole === 'longform' ? 'type-h2-longform' : 'type-h2';
 ---
 <section class={surface}>
-  {seam && !isCard && (
-    <div class={'safe-inline-6-10 mx-auto ' + innerMax + ' px-6 md:px-10 pt-12 md:pt-16'}>
-      <div class="flex items-center gap-4">
-        <span class={'text-[11px] tracking-[0.18em] uppercase font-semibold ' + seamText}>{seam}</span>
-        <span class={'h-px flex-1 ' + seamRule} aria-hidden="true"></span>
-      </div>
-    </div>
+  {seam && (
+    <BandContainer class={seamPadding}>
+      <Seam
+        label={seam}
+        surface={variant === 'navy' ? 'navy' : 'paper'}
+        as={heading ? 'span' : 'h2'}
+      />
+    </BandContainer>
   )}
-  <div class={isCard ? 'safe-inline-6 px-6' : undefined}>
-    <div class={'mx-auto ' + innerMax + ' ' + (isCard ? 'bg-paper text-ink ' : '') + padding}>
-      {heading && (
-        <h2 class="font-display font-semibold text-4xl md:text-5xl leading-[1.05] mb-4">{heading}</h2>
-      )}
-      {subhead && (
-        <p class="text-lg leading-relaxed max-w-prose mb-8 opacity-90">{subhead}</p>
-      )}
-      <slot />
-    </div>
-  </div>
+  <BandContainer class={contentPadding}>
+    {heading && (
+      <h2 class:list={[headingClass, 'mb-4']}>{heading}</h2>
+    )}
+    <slot />
+  </BandContainer>
 </section>
