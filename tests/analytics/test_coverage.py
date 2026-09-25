@@ -107,3 +107,17 @@ def test_empty_weeks_inside_season_span_only():
                 _s(date(2099, 6, 2), season="2099 Spring/Summer")]
     assert empty_weeks(sessions, {}) == [date(2099, 11, 9), date(2099, 11, 16)]
     assert empty_weeks(sessions, {"gap:2099-11-09": {"gap_ok": "Break"}}) == [date(2099, 11, 16)]
+
+
+def test_reaction_only_rule_is_for_announcement_channels():
+    chat = _msg("2.000001", "Happy birthday!", [R("birthday", 9)], channel="C02J1FDSBHT")
+    races = _msg("2.000002", "Great race", [R("medal", 7)], channel="C046XRWC4NR")
+    worded = _msg("2.000003", "Bop the :pickle: to join", [], channel="C02J1FDSBHT")
+    adventures = _msg("2.000004", "Cider tasting", [R("apple", 5)], channel="C02HXN45214")
+    found = find_candidates([chat, races, worded, adventures], set(), {}, APPLAUSE)
+    assert found == ["C02HXN45214:2.000004", "C02J1FDSBHT:2.000003"]
+
+
+def test_is_candidate_without_reaction_rule():
+    raw = {"text": "Cider tasting", "reactions": [R("apple", 9)]}
+    assert is_candidate(raw, APPLAUSE) and not is_candidate(raw, APPLAUSE, reactions_count=False)

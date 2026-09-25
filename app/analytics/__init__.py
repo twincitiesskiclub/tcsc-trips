@@ -17,6 +17,8 @@ EVENT_CHANNELS = ("C0B2VN1LU11", "C02HXN45214", "C02J1FDSBHT", "C046XRWC4NR")
 # Slack Workflow trip sign-ups, parsed by parse_trips.
 TRIP_CHANNEL = "C068ECRE0PQ"
 CANDIDATE_CHANNELS = SESSION_CHANNELS + EVENT_CHANNELS
+# Reaction-only candidates are limited to announcement channels.
+REACTION_CANDIDATE_CHANNELS = ("C042G463AQ1", "C03FKTTHNHW", "C0B2VN1LU11", "C02HXN45214")
 LINEAGE_CHANNELS = CANDIDATE_CHANNELS + (TRIP_CHANNEL,)
 SYNC_CHANNELS = ("C042G463AQ1", "C047BRZH1LG", "C0B2VN1LU11", "C068ECRE0PQ", "C02J1FDSBHT", "C046XRWC4NR")
 CATEGORIES = ("practice", "kickoff", "social", "board", "race", "volunteer", "banquet", "other", "trip")

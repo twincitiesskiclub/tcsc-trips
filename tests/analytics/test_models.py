@@ -80,6 +80,8 @@ def test_channel_tuples():
     assert analytics.TRIP_CHANNEL == "C068ECRE0PQ"
     assert set(analytics.EVENT_CHANNELS) == {"C0B2VN1LU11", "C02HXN45214", "C02J1FDSBHT", "C046XRWC4NR"}
     assert analytics.CANDIDATE_CHANNELS == analytics.SESSION_CHANNELS + analytics.EVENT_CHANNELS
+    assert set(analytics.REACTION_CANDIDATE_CHANNELS) == {"C042G463AQ1", "C03FKTTHNHW", "C0B2VN1LU11", "C02HXN45214"}
+    assert set(analytics.REACTION_CANDIDATE_CHANNELS) <= set(analytics.CANDIDATE_CHANNELS)
     assert analytics.LINEAGE_CHANNELS == analytics.CANDIDATE_CHANNELS + (analytics.TRIP_CHANNEL,)
     assert "C02HXN45214" not in analytics.SYNC_CHANNELS          # archived, imported once
     assert "C03FKTTHNHW" not in analytics.SYNC_CHANNELS
