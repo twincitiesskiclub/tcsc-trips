@@ -22,6 +22,14 @@ from .newsletter.models import (
     NewsletterNewsItem,
     NewsletterPrompt,
 )
+from .analytics.models import (  # noqa: F401  (Alembic metadata registration)
+    PracticeAttendance,
+    PracticeSession,
+    SlackArchiveMessage,
+    SlackReactionEvent,
+    WeatherHour,
+    AnalyticsCorrection,
+)
 from .routes.admin import admin
 from .routes.admin_availability import admin_availability_bp
 from .routes.admin_events import admin_events_bp
@@ -84,6 +92,9 @@ def create_app(environment=None):
     app.register_blueprint(season_api_bp)
     app.register_blueprint(slack_bp)
     app.register_blueprint(verify_api)
+
+    from .analytics.cli import analytics_cli
+    app.cli.add_command(analytics_cli)
 
     # Slack Bolt verifies its own request signatures. Browser CSRF tokens are
     # neither available nor appropriate for Slack's server-to-server hooks.

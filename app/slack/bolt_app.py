@@ -3339,13 +3339,25 @@ def _delegate_reaction_event(event, *, removed):
     from app.slack.practices.reactions import handle_attendance_reaction
 
     with get_app_context():
-        return handle_attendance_reaction(
-            channel=item.get("channel"),
-            message_ts=item.get("ts"),
-            reaction=event.get("reaction"),
-            slack_user_id=event.get("user"),
-            removed=removed,
-        )
+        try:
+            return handle_attendance_reaction(
+                channel=item.get("channel"),
+                message_ts=item.get("ts"),
+                reaction=event.get("reaction"),
+                slack_user_id=event.get("user"),
+                removed=removed,
+            )
+        finally:
+            # Analytics un-check log. Guarded twice: record_reaction_event never
+            # raises, and this except covers an import failure.
+            try:
+                from app.analytics.reaction_log import record_reaction_event
+                record_reaction_event(
+                    channel=item.get("channel"), message_ts=item.get("ts"),
+                    emoji=event.get("reaction"), slack_uid=event.get("user"),
+                    removed=removed, event_ts=event.get("event_ts"))
+            except Exception:
+                logger.warning("analytics reaction log skipped", exc_info=True)
 
 
 def _handle_reaction_removed(event):

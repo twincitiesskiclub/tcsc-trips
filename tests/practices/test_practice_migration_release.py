@@ -25,7 +25,7 @@ EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
 # Bump whenever a new migration lands.
-HEAD_REVISION = "6c2f8a4d9e10"
+HEAD_REVISION = "b8e4d2a9c731"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -71,6 +71,11 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
     )
     connection.exec_driver_sql(
         "CREATE TABLE practice_activities (id INTEGER PRIMARY KEY)"
+    )
+    connection.exec_driver_sql(
+        # Created by abc123456789 before this baseline; analytics sessions
+        # reference its primary key when upgrading to head.
+        "CREATE TABLE practice_locations (id SERIAL PRIMARY KEY)"
     )
     connection.exec_driver_sql(
         "CREATE TABLE payments (id INTEGER PRIMARY KEY)"

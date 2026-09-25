@@ -1092,6 +1092,14 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
             app.logger.error(f"Season recap job failed: {e}", exc_info=True)
 
 
+def run_analytics_nightly_job(app: Flask):
+    """Refresh practice analytics with the bot client inside an app context."""
+    from app.analytics.jobs import run_nightly
+
+    with app.app_context():
+        return run_nightly()
+
+
 def init_scheduler(app: Flask) -> bool:
     """Initialize the scheduler within the Flask application.
 
@@ -1459,6 +1467,17 @@ def init_scheduler(app: Flask) -> bool:
         misfire_grace_time=3600
     )
 
+    # Daily: archive sync, derived session rebuild, and historical weather.
+    scheduler.add_job(
+        func=run_analytics_nightly_job,
+        args=[app],
+        trigger=CronTrigger(hour=3, minute=30, timezone='America/Chicago'),
+        id='analytics_nightly',
+        name='Practice Analytics Nightly',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
     scheduler.start()
 
     app.logger.info("=" * 60)
@@ -1544,6 +1563,7 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         Result dict from the job, or error dict if invalid job_type.
     """
     job_map = {
+        'analytics_nightly': run_analytics_nightly_job,
         'morning_check': run_skipper_morning_check_job,
         '48h_check': run_skipper_48h_check_job,
         '24h_check': run_skipper_24h_check_job,
