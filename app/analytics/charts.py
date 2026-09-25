@@ -123,3 +123,40 @@ def layered(base: dict, *extra_layers) -> dict:
 def spec(description: str, body: dict) -> dict:
     return {**deepcopy(body), "$schema": SCHEMA, "config": theme(),
             "description": description, "autosize": {"type": "fit-x", "contains": "padding"}}
+
+
+def factor_bars(rows, *, title) -> dict:
+    height = max(80, 28 * len(rows))
+    y = {"field": "value", "type": "nominal", "title": None, "sort": None}
+    return {
+        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
+        "description": f"Median turnout index by {title}",
+        "layer": [
+            {"mark": {"type": "bar", "color": PALETTE["violet"], "cornerRadiusEnd": 3},
+             "encoding": {"y": y,
+                          "x": {"field": "median_index", "type": "quantitative", "title": "Median turnout index"},
+                          "opacity": {"condition": {"test": "datum.thin", "value": 0.35}, "value": 1},
+                          "tooltip": [{"field": "value", "title": title},
+                                      {"field": "median_index", "title": "Median index"},
+                                      {"field": "median_rsvps", "title": "Median RSVPs"},
+                                      {"field": "nights", "title": "Practices"}]}},
+            {"mark": {"type": "text", "align": "left", "dx": 4, "color": PALETTE["muted"]},
+             "encoding": {"y": y, "x": {"field": "median_index", "type": "quantitative"},
+                          "text": {"field": "nights", "type": "quantitative"}}},
+            {"data": {"values": [{"one": 1}]},
+             "mark": {"type": "rule", "color": PALETTE["ref"], "strokeDash": [4, 3]},
+             "encoding": {"x": {"field": "one", "type": "quantitative"}}},
+        ],
+    }
+
+
+def points(rows, *, x, y, color, tooltip, height=280) -> dict:
+    return {
+        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
+        "description": f"{y} over time",
+        "mark": {"type": "point", "filled": True, "size": 36, "opacity": 0.8},
+        "encoding": {"x": {"field": x, "type": "temporal", "title": None},
+                     "y": {"field": y, "type": "quantitative", "title": "RSVPs"},
+                     "color": {"field": color, "type": "nominal"},
+                     "tooltip": _tooltip(tooltip, y)},
+    }
