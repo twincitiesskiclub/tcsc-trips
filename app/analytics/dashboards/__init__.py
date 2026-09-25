@@ -2,8 +2,9 @@
 from app.analytics.dashboards.base import Dashboard
 from app.analytics.dashboards.practices import DASHBOARD as PRACTICES
 from app.analytics.dashboards.people import DASHBOARD as PEOPLE
+from app.analytics.dashboards.coverage import DASHBOARD as COVERAGE
 
-DASHBOARDS: list[Dashboard] = [PRACTICES, PEOPLE]
+DASHBOARDS: list[Dashboard] = [PRACTICES, PEOPLE, COVERAGE]
 
 
 def get_dashboard(slug) -> Dashboard | None:
