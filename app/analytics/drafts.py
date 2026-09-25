@@ -80,6 +80,9 @@ class SessionDraft:
     lead_uids: list = field(default_factory=list)
     coach_uids: list = field(default_factory=list)
     plan_emoji: list = field(default_factory=list)
+    category: str = ""
+    reported_count: Optional[int] = None
+    decline_emoji: list = field(default_factory=list)
     flags: list = field(default_factory=list)
     season_label: str = ""
     day_of_week: str = ""
@@ -90,11 +93,12 @@ class SessionDraft:
 @dataclass(frozen=True)
 class AttendanceDraft:
     session_key: str
-    slack_uid: str
-    role: str                      # rsvp | plan | lead | coach
+    slack_uid: Optional[str]
+    role: str                      # rsvp | plan | lead | coach | signup | decline
     emoji: Optional[str]
     slot: Optional[str]
     source: str                    # reaction | button | post_text | app | correction
+    person_name: Optional[str] = None
 
 
 @dataclass

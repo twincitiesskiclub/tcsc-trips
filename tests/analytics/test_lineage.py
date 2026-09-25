@@ -3,9 +3,9 @@ from dataclasses import replace
 
 import pytest
 
-from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef
+from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef, SessionDraft
 from app.analytics.history_config import load_history_config
-from app.analytics.lineage import build_lineage
+from app.analytics.lineage import build_lineage, session_category
 
 CH = "C042G463AQ1"
 BOT, ZAP = "U06FYPUNQCU", "U04C46UJXAM"
@@ -459,3 +459,70 @@ def test_slot_preservation_keeps_nonnull_emoji_identity(cfg):
     # Non-null emoji rows still obey the persisted unique constraint.
     rsvps = [r for r in result.attendance if r.role == "rsvp"]
     assert [(r.slack_uid, r.emoji, r.slot) for r in rsvps] == [("UFAKE0001", "six", "early")]
+
+
+GEN = "C0B2VN1LU11"
+
+
+def _event_post(text, reactions, channel=GEN, when=datetime(2099, 5, 1, 9, 0)):
+    ts = _ts(when)
+    return ArchivedMessage(channel, ts, {"ts": ts, "text": text, "reactions": reactions})
+
+
+def test_created_event_uses_correction_date_not_post_ts(cfg):
+    msg = _event_post("*Kickoff potluck!*\nReact :white_check_mark: or :x:",
+                      [R("white_check_mark", "UFAKE0001", "UFAKE0002"), R("x", "UFAKE0003"),
+                       R("tada", "UFAKE0004")])
+    key = f"{GEN}:{msg.ts}"
+    result = build_lineage([msg], [], LOCS, [], cfg, {key: {
+        "create": True, "date": "2099-05-14", "category": "kickoff", "title": "Kickoff potluck",
+        "emoji_roles": {"white_check_mark": "rsvp", "x": "decline"}}})
+    session, = result.sessions
+    assert (session.date, session.kind, session.category, session.title) == (
+        date(2099, 5, 14), "event", "kickoff", "Kickoff potluck")
+    assert session.rsvp_count == 2
+    roles = sorted((row.slack_uid, row.role) for row in result.attendance)
+    assert roles == [("UFAKE0001", "rsvp"), ("UFAKE0002", "rsvp"), ("UFAKE0003", "decline")]
+
+
+def test_multi_option_post_counts_every_option_once(cfg):
+    msg = _event_post("Race :runner: or cheer :mega:",
+                      [R("runner", "UFAKE0001", "UFAKE0002"), R("mega", "UFAKE0002", "UFAKE0003")],
+                      channel="C02HXN45214")
+    key = f"C02HXN45214:{msg.ts}"
+    result = build_lineage([msg], [], LOCS, [], cfg, {key: {
+        "create": True, "date": "2099-05-20", "category": "race",
+        "emoji_roles": {"runner": "rsvp", "mega": "rsvp"}}})
+    assert result.sessions[0].rsvp_count == 3
+
+
+def test_count_only_session(cfg):
+    msg = _event_post("Old kickoff\n*May 1, 2099 9:43 AM* · :white_check_mark: 40 :x: 17", [])
+    key = f"{GEN}:{msg.ts}"
+    result = build_lineage([msg], [], LOCS, [], cfg, {key: {
+        "create": True, "date": "2099-05-16", "category": "kickoff", "reported_count": 40}})
+    session, = result.sessions
+    assert (session.rsvp_count, session.reported_count) == (40, 40)
+    assert "identities_lost" in session.flags and session.needs_review is False
+    assert result.attendance == []
+
+
+def test_event_channel_posts_never_parse_as_templates(cfg):
+    text = "_Thursday, Jul 16th, 2099_ • _TCSC_\n*Board meeting @ Somewhere*\n*Time:* 6:00 PM"
+    msg = _event_post(text, [R("white_check_mark", "UFAKE0001")])
+    assert build_lineage([msg], [], LOCS, [], cfg).sessions == []
+
+
+@pytest.mark.parametrize("kind,activities,override,expected", [
+    ("practice", [], None, "practice"),
+    ("practice", [], "social", "practice"),     # practices are always category practice
+    ("event", ["Kickoff"], None, "kickoff"),
+    ("event", [], None, "other"),
+    ("event", [], "board", "board"),
+    ("event", [], "practice", "other"),
+    ("trip", [], None, "trip"),
+])
+def test_session_category(kind, activities, override, expected):
+    draft = SessionDraft("k", "g", "template", date(2099, 1, 1), None, "t",
+                         kind=kind, activities=activities, category=override or "")
+    assert session_category(draft) == expected
