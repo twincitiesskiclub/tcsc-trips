@@ -6,7 +6,7 @@ from html import unescape
 import re
 from zoneinfo import ZoneInfo
 
-from app.analytics import CANDIDATE_CHANNELS, CATEGORIES, SESSION_CHANNELS
+from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS
 from app.analytics.drafts import (
     AppPractice, ArchivedMessage, AttendanceDraft, LineageResult, LocationRef,
     SeasonRef, SessionDraft,
@@ -94,6 +94,14 @@ def _created_draft(message, fields, cfg, locations):
     )
 
 
+def _assign_rsvp_slots(state, emojis):
+    session = state.draft
+    previous_slots = state.emoji_slots
+    state.emoji_slots = {base_emoji(emoji): previous_slots.get(base_emoji(emoji), session.slot)
+                         for emoji in emojis}
+    session.rsvp_emoji = emojis[0] if len(emojis) == 1 and session.format != "merged" else None
+
+
 def _apply_fields(state, fields, cfg, locations):
     session = state.draft
     for name in ("kind", "status"):
@@ -117,11 +125,7 @@ def _apply_fields(state, fields, cfg, locations):
         session.workout_types = list(fields["types"])
         session.workout_type = workout_bucket(session.workout_types, cfg)
     if "rsvp_emoji" in fields:
-        previous_slots = state.emoji_slots
-        state.emoji_slots = {base_emoji(emoji): previous_slots.get(base_emoji(emoji), session.slot)
-                             for emoji in fields["rsvp_emoji"]}
-        session.rsvp_emoji = (fields["rsvp_emoji"][0]
-                              if len(fields["rsvp_emoji"]) == 1 and session.format != "merged" else None)
+        _assign_rsvp_slots(state, fields["rsvp_emoji"])
     if "plan_emoji" in fields:
         session.plan_emoji = list(fields["plan_emoji"])
     if "title" in fields:
@@ -133,10 +137,7 @@ def _apply_fields(state, fields, cfg, locations):
     if "emoji_roles" in fields:
         roles = fields["emoji_roles"]
         rsvp = [emoji for emoji, role in roles.items() if role == "rsvp"]
-        previous_slots = state.emoji_slots
-        state.emoji_slots = {base_emoji(emoji): previous_slots.get(base_emoji(emoji), session.slot)
-                             for emoji in rsvp}
-        session.rsvp_emoji = rsvp[0] if len(rsvp) == 1 and session.format != "merged" else None
+        _assign_rsvp_slots(state, rsvp)
         session.plan_emoji = [emoji for emoji, role in roles.items() if role == "plan"]
         session.decline_emoji = [emoji for emoji, role in roles.items() if role == "decline"]
     state.rsvp_from.extend(fields.get("rsvp_from", []))
