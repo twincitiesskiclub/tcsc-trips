@@ -2,6 +2,7 @@
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from datetime import date, datetime, time
+from html import unescape
 import re
 from zoneinfo import ZoneInfo
 
@@ -11,7 +12,7 @@ from app.analytics.drafts import (
     SeasonRef, SessionDraft,
 )
 from app.analytics.history_config import (
-    HistoryConfig, activity_bucket, base_emoji, resolve_venue, workout_bucket,
+    HistoryConfig, activity_bucket, base_emoji, classify_title, resolve_venue, workout_bucket,
 )
 from app.analytics.parse_app import extract_app_sessions
 from app.analytics.parse_template import (
@@ -54,6 +55,30 @@ def _merge_time(text):
         if not match[3] and 0 <= hour <= 23 and minute < 60:
             return time(hour, minute)
     return None
+
+
+def _created_draft(message, fields, cfg, locations):
+    line = next((line for line in message.raw.get("text", "").splitlines() if line.strip()), "")
+    title = unescape(line).replace("*", "").replace("_", "").strip()[:120]
+    classification = classify_title(title, cfg)
+    venue = resolve_venue(fields.get("location"), cfg, locations)
+    activities = list(fields.get("activities", classification["activities"]))
+    types = list(fields.get("types", classification["workout_types"]))
+    emojis = list(fields.get("rsvp_emoji", ["white_check_mark"]))
+    key = f"{message.channel_id}:{message.ts}"
+    return SessionDraft(
+        session_key=f"{key}:main", group_key=key, era="template",
+        date=date.fromisoformat(fields["date"]),
+        start_time=time.fromisoformat(fields["start_time"]) if "start_time" in fields else None,
+        title=title, venue_raw=fields.get("location"),
+        location_id=venue["location_id"], location_name=venue["location_name"],
+        lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
+        activities=activities, workout_types=types,
+        activity=activity_bucket(activities, cfg), workout_type=workout_bucket(types, cfg),
+        kind=fields.get("kind", classification["kind"]), status=fields.get("status", "held"),
+        rsvp_emoji=emojis[0] if len(emojis) == 1 else None, rsvp_emoji_set=emojis,
+        channel_id=message.channel_id, source_ts=message.ts, source_archive_id=message.archive_id,
+    )
 
 
 def _apply_fields(state, fields, cfg, locations):
@@ -192,6 +217,13 @@ def build_lineage(
         if (message.channel_id in SESSION_CHANNELS and key not in consumed and _top_level(message)
                 and not is_weekly_preview(text) and looks_like_template(text)):
             drafts.extend(extract_template_sessions(message, cfg, locations))
+
+    produced_posts = {(session.channel_id, session.source_ts) for session in drafts}
+    for key, message in indexed.items():
+        fields = corrections.get(f"{message.channel_id}:{message.ts}", {})
+        if (fields.get("create") is True and key not in produced_posts
+                and message.channel_id in SESSION_CHANNELS and _top_level(message)):
+            drafts.append(_created_draft(message, fields, cfg, locations))
 
     # Thread broadcasts may occur in channel history as well as in replies.
     replies = defaultdict(dict)

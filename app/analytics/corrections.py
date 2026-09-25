@@ -9,7 +9,7 @@ from app.models import db
 
 
 CORRECTION_FIELDS = {
-    "skip", "kind", "date", "start_time", "status", "merged", "rsvp_emoji",
+    "create", "skip", "kind", "date", "start_time", "status", "merged", "rsvp_emoji",
     "plan_emoji", "rsvp_from", "add", "remove", "location", "activities", "types", "ok",
 }
 _POST_KEY = r"C[A-Z0-9]+:\d+\.\d+"
@@ -29,7 +29,7 @@ def validate_correction(key: str, fields: dict) -> dict:
     for field, value in fields.items():
         if field not in CORRECTION_FIELDS:
             raise CorrectionError(f"{field}: unknown correction field")
-        if field in {"skip", "merged", "ok"}:
+        if field in {"create", "skip", "merged", "ok"}:
             valid = isinstance(value, bool)
             expected = "a bool"
         elif field in {"kind", "status"}:
@@ -66,6 +66,10 @@ def validate_correction(key: str, fields: dict) -> dict:
                 expected = "a list of channel:ts references"
         if not valid:
             raise CorrectionError(f"{field}: expected {expected}")
+    if "create" in fields and not re.fullmatch(_POST_KEY, key):
+        raise CorrectionError("create: expected a post key (channel:ts without a slot)")
+    if fields.get("create") and "date" not in fields:
+        raise CorrectionError("date: required when create is true")
     return fields
 
 

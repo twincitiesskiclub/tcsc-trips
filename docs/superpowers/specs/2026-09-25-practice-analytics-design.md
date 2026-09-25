@@ -244,7 +244,7 @@ capacity_lines:             # used by the lift dashboard
 
 ```
 
-Correction fields (stored in `analytics_corrections.fields`): `skip`, `kind`, `date`, `start_time`, `status`, `merged`, `rsvp_emoji`, `plan_emoji`, `rsvp_from`, `add` / `remove` (list of `{slack_uid, role}`), `location`, `activities`, `types`, and `ok` (acknowledge a flag without changing anything). A flag counts as resolved when a correction exists for that session or its post.
+Correction fields (stored in `analytics_corrections.fields`): `create` (bool, post keys only; when true, requires `date` and creates a single session if the archived post produced none), `skip`, `kind`, `date`, `start_time`, `status`, `merged`, `rsvp_emoji`, `plan_emoji`, `rsvp_from`, `add` / `remove` (list of `{slack_uid, role}`), `location`, `activities`, `types`, and `ok` (acknowledge a flag without changing anything). A flag counts as resolved when a correction exists for that session or its post.
 
 ### Parsing rules
 
