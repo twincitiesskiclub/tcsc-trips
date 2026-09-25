@@ -3,23 +3,27 @@ from collections import defaultdict
 import dataclasses
 from datetime import datetime
 
-from sqlalchemy import insert
+from sqlalchemy import func, insert
 from sqlalchemy.orm import joinedload, selectinload
 
-from app.analytics import SESSION_CHANNELS
+from app.analytics import LINEAGE_CHANNELS
 from app.analytics.corrections import load_corrections
-from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef, SeasonRef
+from app.analytics.coverage import empty_weeks
+from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef, SeasonRef, TripSignup
 from app.analytics.history_config import load_history_config
 from app.analytics.lineage import build_lineage
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
-from app.models import AppConfig, Season, SlackUser, User, db
+from app.analytics.parse_trips import edition_year, normalize_name
+from app.models import AppConfig, Season, SlackUser, Trip, User, db
 from app.practices.models import Practice, PracticeLead, PracticeLocation, PracticeRSVP
+from app.trips.models import TripRegistration, TripSeries
+from app.utils import utc_naive_to_central_naive
 
 
 def load_inputs() -> tuple[list[ArchivedMessage], list[AppPractice], list[LocationRef], list[SeasonRef]]:
     """Read DB snapshots for the pure lineage builder, without network access."""
     archive = SlackArchiveMessage.query.filter(
-        SlackArchiveMessage.channel_id.in_(SESSION_CHANNELS)
+        SlackArchiveMessage.channel_id.in_(LINEAGE_CHANNELS)
     ).order_by(SlackArchiveMessage.channel_id, SlackArchiveMessage.ts).all()
     replies = defaultdict(list)
     for row in archive:
@@ -74,11 +78,61 @@ def load_inputs() -> tuple[list[ArchivedMessage], list[AppPractice], list[Locati
     return messages, app_practices, locations, seasons
 
 
+def load_app_trip_signups() -> list[TripSignup]:
+    rows = db.session.query(TripRegistration.id, TripSeries.slug, Trip.start_date, SlackUser.slack_uid,
+                            User.id).join(
+        Trip, TripRegistration.trip_id == Trip.id).join(
+        TripSeries, Trip.series_id == TripSeries.id).join(
+        User, TripRegistration.user_id == User.id).outerjoin(
+        SlackUser, User.slack_user_id == SlackUser.id).filter(
+        TripRegistration.status != "cancelled").order_by(TripRegistration.id).all()
+    return [TripSignup(slug, edition_year(start.date() if hasattr(start, "date") else start),
+                       start.date() if hasattr(start, "date") else start,
+                       uid, None, f"trip_registration:{rid}", user_id)
+            for rid, slug, start, uid, user_id in rows]
+
+
+def load_people() -> dict:
+    """Slack uid to user, and full names that belong to exactly one member."""
+    rows = db.session.query(User.id, User.first_name, User.last_name, SlackUser.slack_uid).outerjoin(
+        SlackUser, User.slack_user_id == SlackUser.id).all()
+    by_name = defaultdict(set)
+    for user_id, first, last, uid in rows:
+        by_name[normalize_name(f"{first} {last}")].add((user_id, uid))
+    return {"uid_to_user": {uid: user_id for user_id, _, _, uid in rows if uid},
+            "name_to_member": {name: next(iter(members)) for name, members in by_name.items()
+                               if len(members) == 1}}
+
+
+def resolve_people(rows, people) -> list[dict]:
+    resolved = {}
+    for row in rows:
+        uid, user_id, unmatched = row.slack_uid, row.user_id, False
+        if user_id is None:
+            member = people["name_to_member"].get(normalize_name(row.person_name)) if row.person_name else None
+            if member:
+                user_id, member_uid = member
+                uid = member_uid or uid
+        if uid:
+            person_key = f"slack:{uid}"
+            user_id = user_id or people["uid_to_user"].get(uid)
+        elif user_id:
+            person_key = f"user:{user_id}"
+        else:
+            person_key, unmatched = f"name:{normalize_name(row.person_name)}", True
+        key = (row.session_key, person_key, row.role, row.emoji, row.slot if row.emoji is None else None)
+        resolved.setdefault(key, dict(
+            session_key=row.session_key, slack_uid=uid, user_id=user_id, person_key=person_key,
+            role=row.role, emoji=row.emoji, slot=row.slot, source=row.source, unmatched=unmatched))
+    return list(resolved.values())
+
+
 def _session_row(draft, rebuilt_at):
     """Map persisted draft fields explicitly; parsing-only fields stay pure."""
     return PracticeSession(
         session_key=draft.session_key, group_key=draft.group_key, era=draft.era,
-        kind=draft.kind, source_message_id=draft.source_archive_id, practice_id=draft.practice_id,
+        kind=draft.kind, category=draft.category, reported_count=draft.reported_count,
+        source_message_id=draft.source_archive_id, practice_id=draft.practice_id,
         date=draft.date, start_time=draft.start_time, day_of_week=draft.day_of_week,
         season_label=draft.season_label, location_id=draft.location_id,
         location_name=draft.location_name, lat=draft.lat, lon=draft.lon, is_indoor=draft.is_indoor,
@@ -104,9 +158,18 @@ def rebuild(*, cfg=None, commit=True) -> dict:
     try:
         corrections = load_corrections()
         cfg = load_rebuild_config(cfg)
-        result = build_lineage(*load_inputs(), cfg, corrections)
-        user_ids = dict(db.session.query(SlackUser.slack_uid, User.id).join(
-            User, User.slack_user_id == SlackUser.id).all())
+        result = build_lineage(*load_inputs(), cfg, corrections, trip_signups=load_app_trip_signups())
+        people = resolve_people(result.attendance, load_people())
+        unmatched = {row["session_key"] for row in people if row["unmatched"]}
+        signups = defaultdict(set)
+        for row in people:
+            if row["role"] == "signup":
+                signups[row["session_key"]].add(row["person_key"])
+        for draft in result.sessions:
+            if draft.kind == "trip":
+                draft.rsvp_count = len(signups[draft.session_key])
+            if draft.session_key in unmatched:
+                draft.flags = [*draft.flags, "unmatched_person"]
         rebuilt_at = datetime.utcnow()
         session_rows = [_session_row(draft, rebuilt_at) for draft in result.sessions]
 
@@ -115,18 +178,21 @@ def rebuild(*, cfg=None, commit=True) -> dict:
         db.session.add_all(session_rows)
         db.session.flush()
         session_ids = {row.session_key: row.id for row in session_rows}
-        attendance = [dict(
-            session_id=session_ids[draft.session_key], slack_uid=draft.slack_uid,
-            user_id=user_ids.get(draft.slack_uid), role=draft.role,
-            emoji=draft.emoji, slot=draft.slot, source=draft.source,
-        ) for draft in result.attendance]
+        attendance = [dict(session_id=session_ids[row["session_key"]],
+                           **{k: row[k] for k in ("slack_uid", "user_id", "person_key", "role",
+                                                  "emoji", "slot", "source")})
+                      for row in people]
         if attendance:
             db.session.execute(insert(PracticeAttendance), attendance)
         from app.analytics.weather import apply_weather
         apply_weather(session_rows)
+        weeks = empty_weeks(result.sessions, corrections)
+        AppConfig.set("analytics_coverage", coverage_snapshot(result.possible_misses, weeks),
+                      category="analytics")
         stats = {"sessions": len(session_rows), "attendance": len(attendance),
                  "needs_review": sum(row.needs_review for row in session_rows),
-                 "possible_misses": result.possible_misses}
+                 "possible_misses": result.possible_misses,
+                 "candidates": len(result.possible_misses), "empty_weeks": len(weeks)}
         if commit:
             db.session.commit()
         else:
@@ -135,6 +201,24 @@ def rebuild(*, cfg=None, commit=True) -> dict:
     except Exception:
         db.session.rollback()
         raise
+
+
+def coverage_snapshot(candidate_keys, weeks) -> dict:
+    rows = {f"{row.channel_id}:{row.ts}": row for row in SlackArchiveMessage.query.filter(
+        func.concat(SlackArchiveMessage.channel_id, ":", SlackArchiveMessage.ts).in_(candidate_keys)).all()} \
+        if candidate_keys else {}
+    candidates = []
+    for key in candidate_keys:
+        row = rows.get(key)
+        text = next((line for line in (row.text if row else "").splitlines() if line.strip()), "")
+        reactions = sorted((row.raw.get("reactions", []) if row else []),
+                           key=lambda r: -r.get("count", 0))[:3]
+        candidates.append({"post_key": key, "channel": key.split(":")[0],
+                           "date": utc_naive_to_central_naive(row.posted_at).date().isoformat() if row else "",
+                           "text": text[:140],
+                           "reactions": {r["name"]: r.get("count", 0) for r in reactions}})
+    return {"computed_at": datetime.utcnow().isoformat(timespec="seconds"),
+            "candidates": candidates, "empty_weeks": [week.isoformat() for week in weeks]}
 
 
 def flagged_sessions() -> list[PracticeSession]:

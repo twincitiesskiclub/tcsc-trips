@@ -8,13 +8,12 @@ from datetime import date, datetime
 
 import pytest
 
+from app.analytics.corrections import TRIP_KEY
 from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef
 from app.analytics.history_config import load_history_config
 from app.analytics.lineage import build_lineage
+from app.analytics.parse_trips import is_signup_post
 from tests.analytics.conftest import DUMP_DIR
-
-pytestmark = pytest.mark.skipif(not (DUMP_DIR / "lift_verified.json").exists(),
-                                reason="real Slack dump not present")
 
 
 def _corrections():
@@ -42,6 +41,8 @@ def _practices():
             for r in rows]
 
 
+@pytest.mark.skipif(not (DUMP_DIR / "lift_verified.json").exists(),
+                    reason="real Slack dump not present")
 def test_strength_lineage_matches_verified_counts():
     locs = [LocationRef(r["id"], r["name"], r["spot"], r["lat"], r["lon"])
             for r in json.loads((DUMP_DIR / "locations.json").read_text())]
@@ -70,3 +71,43 @@ def test_strength_lineage_matches_verified_counts():
         if got != want or fmt != [row["format"]]:
             mismatches.append((row["date"], fmt, got, want))
     assert not mismatches, "\n".join(map(str, mismatches))
+
+
+def _channel_messages(channel_id, filename):
+    payload = json.loads((DUMP_DIR / filename).read_text())
+    rows = payload["messages"] if isinstance(payload, dict) else payload
+    return [ArchivedMessage(channel_id, raw["ts"], raw) for raw in rows]
+
+
+@pytest.mark.skipif(not (DUMP_DIR / "other" / "tech-trip-signups.json").exists(),
+                    reason="real Slack dump not present")
+def test_every_trip_signup_post_lands_on_an_edition():
+    messages = _channel_messages("C068ECRE0PQ", "other/tech-trip-signups.json")
+    assert sum(is_signup_post(message.raw) for message in messages) > 400
+
+    result = build_lineage(messages, [], [], [], load_history_config())
+    assert not any(key.startswith("C068ECRE0PQ:") for key in result.possible_misses)
+    trips = [session for session in result.sessions if session.kind == "trip"]
+    assert all(TRIP_KEY.fullmatch(session.session_key) and session.rsvp_count > 0
+               for session in trips)
+    people = {}
+    for row in result.attendance:
+        if row.role == "signup":
+            people.setdefault(row.session_key, set()).add(row.person_name or row.slack_uid)
+    assert sum(len(people.get(session.session_key, set())) for session in trips) >= 400
+
+
+@pytest.mark.skipif(any(not (DUMP_DIR / filename).exists() for filename in (
+    "general.json", "adventures.json", "other/tech-trip-signups.json")),
+    reason="real Slack dump not present")
+def test_uncatalogued_event_posts_remain_possible_misses():
+    messages = []
+    for channel_id, filename in (("C0B2VN1LU11", "general.json"),
+                                 ("C02HXN45214", "adventures.json"),
+                                 ("C068ECRE0PQ", "other/tech-trip-signups.json")):
+        messages.extend(_channel_messages(channel_id, filename))
+
+    result = build_lineage(messages, [], [], [], load_history_config())
+    assert len(result.possible_misses) > 0
+    assert all(key.startswith(("C0B2VN1LU11:", "C02HXN45214:"))
+               for key in result.possible_misses)

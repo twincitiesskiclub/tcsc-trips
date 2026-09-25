@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 import re
 
+from app.analytics import CATEGORIES
 from app.analytics.models import AnalyticsCorrection
 from app.models import db
 
@@ -11,9 +12,14 @@ from app.models import db
 CORRECTION_FIELDS = {
     "create", "skip", "kind", "date", "start_time", "status", "merged", "rsvp_emoji",
     "plan_emoji", "rsvp_from", "add", "remove", "location", "activities", "types", "ok",
+    "title", "category", "emoji_roles", "reported_count", "gap_ok",
 }
 _POST_KEY = r"C[A-Z0-9]+:\d+\.\d+"
-_KEY = re.compile(rf"(?:{_POST_KEY}(?::(?:early|late|merged|main|\d{{4}}-\d{{2}}-\d{{2}}))?|practice:\d+)")
+TRIP_KEY = re.compile(r"trip:([a-z0-9-]+):(\d{4})")
+GAP_KEY = re.compile(r"gap:(\d{4}-\d{2}-\d{2})")
+_KEY = re.compile(rf"(?:{_POST_KEY}(?::(?:early|late|merged|main|\d{{4}}-\d{{2}}-\d{{2}}))?|practice:\d+"
+                  rf"|{TRIP_KEY.pattern}|{GAP_KEY.pattern})")
+_ROLES = ("rsvp", "plan", "lead", "coach", "signup", "decline")
 
 
 class CorrectionError(ValueError):
@@ -23,7 +29,7 @@ class CorrectionError(ValueError):
 def validate_correction(key: str, fields: dict) -> dict:
     """Validate a key and its fields without changing either."""
     if not isinstance(key, str) or not _KEY.fullmatch(key):
-        raise CorrectionError("key: expected channel:ts[:slot] or practice:id")
+        raise CorrectionError("key: expected channel:ts[:slot], practice:id, trip:slug:YYYY or gap:YYYY-MM-DD")
     if not isinstance(fields, dict) or not fields:
         raise CorrectionError("fields: expected a non-empty mapping")
     for field, value in fields.items():
@@ -33,7 +39,7 @@ def validate_correction(key: str, fields: dict) -> dict:
             valid = isinstance(value, bool)
             expected = "a bool"
         elif field in {"kind", "status"}:
-            choices = ("practice", "event") if field == "kind" else ("held", "cancelled")
+            choices = ("practice", "event", "trip") if field == "kind" else ("held", "cancelled")
             valid = value in choices
             expected = " or ".join(choices)
         elif field == "date":
@@ -55,9 +61,23 @@ def validate_correction(key: str, fields: dict) -> dict:
                 isinstance(entry, dict)
                 and isinstance(entry.get("slack_uid"), str)
                 and bool(re.fullmatch(r"[UW][A-Z0-9]{2,19}", entry["slack_uid"]))
-                and entry.get("role") in ("rsvp", "plan", "lead", "coach")
+                and entry.get("role") in _ROLES
                 for entry in value)
-            expected = "a list of {slack_uid, role}, with role rsvp/plan/lead/coach"
+            expected = "a list of {slack_uid, role}, with role rsvp/plan/lead/coach/signup/decline"
+        elif field in {"title", "gap_ok"}:
+            valid = isinstance(value, str) and bool(value.strip())
+            expected = "a non-empty string"
+        elif field == "category":
+            valid = value in CATEGORIES
+            expected = " or ".join(CATEGORIES)
+        elif field == "reported_count":
+            valid = type(value) is int and value >= 0
+            expected = "a non-negative integer"
+        elif field == "emoji_roles":
+            valid = isinstance(value, dict) and bool(value) and all(
+                isinstance(emoji, str) and emoji.strip() and role in ("rsvp", "decline", "plan")
+                for emoji, role in value.items())
+            expected = "a non-empty {emoji: rsvp|decline|plan} mapping"
         else:
             valid = isinstance(value, list) and all(isinstance(item, str) for item in value)
             expected = "a list of strings"
@@ -66,6 +86,18 @@ def validate_correction(key: str, fields: dict) -> dict:
                 expected = "a list of channel:ts references"
         if not valid:
             raise CorrectionError(f"{field}: expected {expected}")
+    gap = GAP_KEY.fullmatch(key)
+    if gap:
+        if set(fields) != {"gap_ok"}:
+            raise CorrectionError("gap keys take only gap_ok")
+        try:
+            gap_date = date.fromisoformat(gap[1])
+        except ValueError as exc:
+            raise CorrectionError("gap key: expected a valid ISO date") from exc
+        if gap_date.weekday() != 0:
+            raise CorrectionError("gap key: expected a Monday")
+    elif "gap_ok" in fields:
+        raise CorrectionError("gap_ok: only on gap:YYYY-MM-DD keys")
     if "create" in fields and not re.fullmatch(_POST_KEY, key):
         raise CorrectionError("create: expected a post key (channel:ts without a slot)")
     if fields.get("create") and "date" not in fields:

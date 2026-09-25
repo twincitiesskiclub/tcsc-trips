@@ -92,23 +92,29 @@ def sync_recent(
     since = now - timedelta(days=days)
     out = {}
     for channel_id in channel_ids:
-        stats = import_channel(client, channel_id,
-                               oldest=(since - datetime(1970, 1, 1)).total_seconds())
-        # Anything archived in the window that Slack no longer returns was deleted.
-        # Only top-level messages and replies of threads we re-fetched are judged.
-        stale = SlackArchiveMessage.query.filter(
-            SlackArchiveMessage.channel_id == channel_id,
-            SlackArchiveMessage.posted_at >= since,
-            SlackArchiveMessage.deleted_at.is_(None),
-            ~SlackArchiveMessage.ts.in_(stats["seen"] or {""}),
-        ).all()
-        deleted = 0
-        for row in stale:
-            if row.thread_ts and row.thread_ts != row.ts and row.thread_ts not in stats["seen"]:
-                continue
-            row.deleted_at = _utc(time())
-            deleted += 1
-        stats["deleted"] = deleted
+        try:
+            with db.session.begin_nested():
+                stats = import_channel(client, channel_id,
+                                       oldest=(since - datetime(1970, 1, 1)).total_seconds())
+                # Anything archived in the window that Slack no longer returns was deleted.
+                # Only top-level messages and replies of threads we re-fetched are judged.
+                stale = SlackArchiveMessage.query.filter(
+                    SlackArchiveMessage.channel_id == channel_id,
+                    SlackArchiveMessage.posted_at >= since,
+                    SlackArchiveMessage.deleted_at.is_(None),
+                    ~SlackArchiveMessage.ts.in_(stats["seen"] or {""}),
+                ).all()
+                deleted = 0
+                for row in stale:
+                    if row.thread_ts and row.thread_ts != row.ts and row.thread_ts not in stats["seen"]:
+                        continue
+                    row.deleted_at = _utc(time())
+                    deleted += 1
+                stats["deleted"] = deleted
+        except Exception as exc:
+            logger.exception("analytics sync %s failed: %s", channel_id, exc)
+            out[channel_id] = {"error": str(exc)}
+            continue
         out[channel_id] = {k: v for k, v in stats.items() if k != "seen"}
         logger.info("analytics sync %s: %s", channel_id, out[channel_id])
     return out

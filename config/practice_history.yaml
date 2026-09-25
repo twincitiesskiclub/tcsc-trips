@@ -6,6 +6,14 @@ excluded_slack_uids:
   - U06FYPUNQCU   # TCSC app bot, reacts to its own posts with every RSVP emoji
   - U04C46UJXAM   # Zapier-linked account that posted 2022-2025 templates
 
+# Reactions that mean applause, not attendance. A post whose only big
+# reactions are these is not a candidate. Posts that NAME one of these as
+# the RSVP emoji ("smash that :fire:") are still caught by the RSVP wording.
+applause_emoji: ["heart", "+1", "thumbsup", "tada", "joy", "clap", "raised_hands", "100",
+                 "heart_eyes", "laughing", "rolling_on_the_floor_laughing", "pray",
+                 "partying_face", "star-struck", "sob", "eyes", "muscle", "fire",
+                 "sparkles", "white_heart", "blue_heart", "purple_heart", "green_heart",
+                 "exploding_head", "hugging_face", "catjam", "foxy_yay"]
 
 default_location: {lat: 44.9778, lon: -93.2650}   # central Minneapolis, used when a venue is unknown
 
@@ -176,10 +184,24 @@ workout_buckets:
 # Titles containing these words become kind=event (excluded from practice averages).
 event_keywords: ["kickoff", "kick-off", "potluck", "board meeting", "leadership meeting", "social event", "new member event"]
 
-capacity_lines:
-  - {value: 27, label: "2025 split rule", from: 2025-05-01}
-  - {value: 30, label: "Dec 2025 cap", from: 2025-12-01, to: 2026-03-31}
-  - {value: 35, label: "One session (5x7)", from: 2026-08-01}
+# Settings read only by the practice dashboard's split/merged section.
+practice_views:
+  capacity_lines:
+    - {value: 27, label: "2025 split rule", from: 2025-05-01}
+    - {value: 30, label: "Dec 2025 cap", from: 2025-12-01, to: 2026-03-31}
+    - {value: 35, label: "One session (5x7)", from: 2026-08-01}
+
+# Slack Workflow sign-up names (the post's username, lowercased substring,
+# first rule wins) to trip series. Slugs equal the app's trip_series.slug.
+trip_series:
+  - {match: ["pre-birkie"], slug: pre-birkie}
+  - {match: ["birkie"], slug: birkie}
+  - {match: ["great bear"], slug: great-bear-chase}
+  - {match: ["cuyuna"], slug: cuyuna}
+  - {match: ["hayward"], slug: training-trip}
+  - {match: ["sisu"], slug: sisu-ski-fest}
+  - {match: ["north shore"], slug: north-shore}
+  - {match: ["50kum", "50k um"], slug: 50kum}
 
 # Per-post corrections are data and live in the analytics_corrections table
 # (see app/analytics/corrections.py), never in this file.

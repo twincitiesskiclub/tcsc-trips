@@ -6,7 +6,8 @@ from html import unescape
 import re
 from zoneinfo import ZoneInfo
 
-from app.analytics import SESSION_CHANNELS
+from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS, TRIP_CHANNEL
+from app.analytics.coverage import find_candidates
 from app.analytics.drafts import (
     AppPractice, ArchivedMessage, AttendanceDraft, LineageResult, LocationRef,
     SeasonRef, SessionDraft,
@@ -18,6 +19,7 @@ from app.analytics.parse_app import extract_app_sessions
 from app.analytics.parse_template import (
     extract_template_sessions, is_weekly_preview, looks_like_template,
 )
+from app.analytics.parse_trips import is_signup_post, parse_signup, trip_sessions
 from app.analytics.seasons import season_label
 
 
@@ -25,7 +27,6 @@ MERGE_RE = re.compile(r"\b(combin\w*|merg\w*|one session|single session|one lift
 CANCEL_RE = re.compile(r"\bcancel(l?ed|l?ing|s)?\b", re.I)
 _CENTRAL = ZoneInfo("America/Chicago")
 _CLOCK = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?!\d)\s*(AM|PM)?", re.I)
-_MISS_EMOJI = {"white_check_mark", "six", "seven", "zap", "meow-coffee", "ballot_box_with_check"}
 
 
 @dataclass
@@ -57,15 +58,28 @@ def _merge_time(text):
     return None
 
 
+def session_category(session) -> str:
+    """Practices are always 'practice' and trips 'trip'; events keep a valid override."""
+    if session.kind == "practice":
+        return "practice"
+    if session.kind == "trip":
+        return "trip"
+    if session.category and session.category not in ("practice", "trip"):
+        return session.category
+    return "kickoff" if "Kickoff" in session.activities else "other"
+
+
 def _created_draft(message, fields, cfg, locations):
     line = next((line for line in message.raw.get("text", "").splitlines() if line.strip()), "")
-    title = unescape(line).replace("*", "").replace("_", "").strip()[:120]
+    title = fields.get("title") or unescape(line).replace("*", "").replace("_", "").strip()[:120]
     classification = classify_title(title, cfg)
     venue = resolve_venue(fields.get("location"), cfg, locations)
     activities = list(fields.get("activities", classification["activities"]))
     types = list(fields.get("types", classification["workout_types"]))
     emojis = list(fields.get("rsvp_emoji", ["white_check_mark"]))
     key = f"{message.channel_id}:{message.ts}"
+    kind = fields.get("kind") or ("event" if fields.get("category", "practice") != "practice"
+                                  else classification["kind"])
     return SessionDraft(
         session_key=f"{key}:main", group_key=key, era="template",
         date=date.fromisoformat(fields["date"]),
@@ -75,10 +89,18 @@ def _created_draft(message, fields, cfg, locations):
         lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
         activities=activities, workout_types=types,
         activity=activity_bucket(activities, cfg), workout_type=workout_bucket(types, cfg),
-        kind=fields.get("kind", classification["kind"]), status=fields.get("status", "held"),
+        kind=kind, category=fields.get("category", ""), status=fields.get("status", "held"),
         rsvp_emoji=emojis[0] if len(emojis) == 1 else None, rsvp_emoji_set=emojis,
         channel_id=message.channel_id, source_ts=message.ts, source_archive_id=message.archive_id,
     )
+
+
+def _assign_rsvp_slots(state, emojis):
+    session = state.draft
+    previous_slots = state.emoji_slots
+    state.emoji_slots = {base_emoji(emoji): previous_slots.get(base_emoji(emoji), session.slot)
+                         for emoji in emojis}
+    session.rsvp_emoji = emojis[0] if len(emojis) == 1 and session.format != "merged" else None
 
 
 def _apply_fields(state, fields, cfg, locations):
@@ -104,13 +126,21 @@ def _apply_fields(state, fields, cfg, locations):
         session.workout_types = list(fields["types"])
         session.workout_type = workout_bucket(session.workout_types, cfg)
     if "rsvp_emoji" in fields:
-        previous_slots = state.emoji_slots
-        state.emoji_slots = {base_emoji(emoji): previous_slots.get(base_emoji(emoji), session.slot)
-                             for emoji in fields["rsvp_emoji"]}
-        session.rsvp_emoji = (fields["rsvp_emoji"][0]
-                              if len(fields["rsvp_emoji"]) == 1 and session.format != "merged" else None)
+        _assign_rsvp_slots(state, fields["rsvp_emoji"])
     if "plan_emoji" in fields:
         session.plan_emoji = list(fields["plan_emoji"])
+    if "title" in fields:
+        session.title = fields["title"]
+    if "category" in fields:
+        session.category = fields["category"]
+    if "reported_count" in fields:
+        session.reported_count = fields["reported_count"]
+    if "emoji_roles" in fields:
+        roles = fields["emoji_roles"]
+        rsvp = [emoji for emoji, role in roles.items() if role == "rsvp"]
+        _assign_rsvp_slots(state, rsvp)
+        session.plan_emoji = [emoji for emoji, role in roles.items() if role == "plan"]
+        session.decline_emoji = [emoji for emoji, role in roles.items() if role == "decline"]
     state.rsvp_from.extend(fields.get("rsvp_from", []))
 
 
@@ -169,6 +199,7 @@ def _attendance(state, messages, cfg, corrections):
     sources.extend(tuple(key.split(":", 1)) for key in state.rsvp_from)
     coach_emoji = {base_emoji(emoji) for emoji in cfg.coach_emoji}
     plan_emoji = {base_emoji(emoji) for emoji in session.plan_emoji}
+    decline_emoji = {base_emoji(emoji) for emoji in session.decline_emoji}
     for source_key in dict.fromkeys(sources):
         message = messages.get(source_key)
         if message is None:
@@ -183,6 +214,8 @@ def _attendance(state, messages, cfg, corrections):
                     add(uid, "coach", emoji, source="reaction")
                 if base in plan_emoji:
                     add(uid, "plan", emoji, source="reaction")
+                if base in decline_emoji:
+                    add(uid, "decline", emoji, source="reaction")
     reactors = {(row.slack_uid, row.slot) for row in rows.values() if row.role == "rsvp"}
     for uid, slot in state.button_slots:
         if (uid, slot) not in reactors:
@@ -205,7 +238,7 @@ def _attendance(state, messages, cfg, corrections):
 def build_lineage(
     messages: list[ArchivedMessage], app_practices: list[AppPractice],
     locations: list[LocationRef], seasons: list[SeasonRef], cfg: HistoryConfig,
-    corrections: dict | None = None,
+    corrections: dict | None = None, trip_signups=(),
 ) -> LineageResult:
     """Build sessions and attendance without reading or writing the database."""
     corrections = corrections or {}
@@ -222,7 +255,7 @@ def build_lineage(
     for key, message in indexed.items():
         fields = corrections.get(f"{message.channel_id}:{message.ts}", {})
         if (fields.get("create") is True and key not in produced_posts
-                and message.channel_id in SESSION_CHANNELS and _top_level(message)):
+                and message.channel_id in CANDIDATE_CHANNELS and _top_level(message)):
             drafts.append(_created_draft(message, fields, cfg, locations))
 
     # Thread broadcasts may occur in channel history as well as in replies.
@@ -258,6 +291,10 @@ def build_lineage(
                 session.flags.append("cancel_language")
             rows = _attendance(state, indexed, cfg, corrections)
             session.rsvp_count = len({row.slack_uid for row in rows if row.role == "rsvp"})
+            session.category = session_category(session)
+            if session.reported_count is not None:
+                session.rsvp_count = session.reported_count
+                session.flags.append("identities_lost")
             session.day_of_week = session.date.strftime("%A")
             session.season_label = season_label(session.date, seasons)
             session.needs_review = bool(session.flags) and not any(
@@ -265,17 +302,24 @@ def build_lineage(
             sessions.append(session)
             attendance.extend(rows)
 
-    produced = {(session.channel_id, session.source_ts) for session in sessions}
-    # A correction resolves the post even when it skips every resulting session.
-    corrected_posts = {":".join(key.split(":")[:2]) for key in corrections
-                       if not key.startswith("practice:")}
-    corrected_posts.update(f"{session.channel_id}:{session.source_ts}" for session in drafts
-                           if session.session_key in corrections)
-    misses = [f"{channel}:{ts}" for (channel, ts), message in indexed.items()
-              if channel in SESSION_CHANNELS and (channel, ts) not in consumed | produced
-              and f"{channel}:{ts}" not in corrected_posts
-              and _top_level(message) and not is_weekly_preview(message.raw.get("text", ""))
-              and any(reaction.get("count", 0) >= 5 and base_emoji(reaction["name"]) in _MISS_EMOJI
-                      for reaction in message.raw.get("reactions", []))]
+    produced = consumed | {(session.channel_id, session.source_ts) for session in sessions}
+    # A correction on any session of a post resolves the whole post.
+    corrected = {session.group_key for session in drafts if session.session_key in corrections}
+    misses = [key for key in find_candidates(indexed.values(), produced, corrections, cfg.applause_emoji)
+              if key not in corrected]
+    slack_signups, unparsed = [], []
+    for key, message in indexed.items():
+        if message.channel_id != TRIP_CHANNEL or not is_signup_post(message.raw):
+            continue
+        signup = parse_signup(message, cfg)
+        if signup is None:
+            if f"{message.channel_id}:{message.ts}" not in corrections:
+                unparsed.append(f"{message.channel_id}:{message.ts}")
+        else:
+            slack_signups.append(signup)
+    trips, trip_rows = trip_sessions([*slack_signups, *trip_signups], corrections, seasons)
+    sessions.extend(trips)
+    attendance.extend(trip_rows)
+    misses = sorted(misses + unparsed)
     sessions.sort(key=lambda session: (session.date, session.start_time or time.min, session.session_key))
     return LineageResult(sessions, attendance, sorted(misses))

@@ -193,13 +193,39 @@ def test_sync_includes_exact_window_boundary(db_session):
     assert _rows()[ts].deleted_at is None
 
 
-def test_sync_propagates_slack_failure_without_marking_deletions(db_session):
+def test_sync_records_slack_failure_without_marking_deletions(db_session):
     upsert_message(CH, _msg("4072435200.000100"))
 
     class FailedHistory(FakeSlack):
         def conversations_history(self, **kwargs):
             raise SlackApiError("synthetic failure", {"ok": False, "error": "ratelimited"})
 
-    with pytest.raises(SlackApiError):
-        sync_recent(FailedHistory([]), (CH,), now=datetime(2099, 1, 22, 12))
+    stats = sync_recent(FailedHistory([]), (CH,), now=datetime(2099, 1, 22, 12))
+    assert "ratelimited" in stats[CH]["error"]
     assert _rows()["4072435200.000100"].deleted_at is None
+
+
+@pytest.mark.parametrize("channels", [(CH, "CFAKEBAD"), ("CFAKEBAD", CH)])
+def test_sync_isolates_failed_channel_and_rolls_back_partial_import(db_session, caplog, channels):
+    existing = _msg("4072435200.000100", text="original text")
+    partial = _msg("4072435300.000200", reply_count=1)
+    upsert_message("CFAKEBAD", existing)
+    error = SlackApiError("synthetic failure", {"ok": False, "error": "not_in_channel"})
+
+    class FailedReplies(FakeSlack):
+        def conversations_history(self, channel, **kwargs):
+            if channel == "CFAKEBAD":
+                return {"messages": [{**existing, "text": "changed text"}, partial]}
+            return super().conversations_history(channel, **kwargs)
+
+        def conversations_replies(self, **kwargs):
+            raise error
+
+    stats = sync_recent(FailedReplies([existing]), channels, now=datetime(2099, 1, 22, 12))
+    assert stats[CH] == {"messages": 1, "replies": 0, "reactions_refetched": 0, "deleted": 0}
+    assert _rows()[existing["ts"]].raw == existing
+    assert stats["CFAKEBAD"] == {"error": str(error)}
+    bad_rows = SlackArchiveMessage.query.filter_by(channel_id="CFAKEBAD").all()
+    assert len(bad_rows) == 1
+    assert bad_rows[0].raw == existing and bad_rows[0].deleted_at is None
+    assert any("CFAKEBAD" in record.message and record.exc_info for record in caplog.records)

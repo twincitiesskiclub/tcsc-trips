@@ -20,6 +20,7 @@ class HistoryConfigError(ValueError):
 @dataclass
 class HistoryConfig:
     excluded_slack_uids: frozenset
+    applause_emoji: frozenset
     coach_emoji: frozenset
     default_lat: float
     default_lon: float
@@ -31,6 +32,7 @@ class HistoryConfig:
     event_keywords: list[str]
     indoor_locations: list[str]
     capacity_lines: list[dict]
+    trip_series: list[dict]
 
 
 def _mapping(value, key):
@@ -73,6 +75,10 @@ def _date(value, key):
     raise HistoryConfigError(f"{key}: expected an ISO date")
 
 
+def base_emoji(name: str) -> str:
+    return re.sub(r"::skin-tone-\d+$", "", name)
+
+
 def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
     """Load rules afresh, rejecting malformed content before any rebuild."""
     try:
@@ -86,7 +92,9 @@ def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
         raise HistoryConfigError("corrections: per-post corrections belong in the DB")
     if "coach_emoji" in data:
         raise HistoryConfigError('coach_emoji: belongs in AppConfig "analytics_coach_emoji"')
-    for key in ("excluded_slack_uids", "event_keywords", "indoor_locations"):
+    if "capacity_lines" in data:
+        raise HistoryConfigError("capacity_lines: moved under practice_views")
+    for key in ("excluded_slack_uids", "applause_emoji", "event_keywords", "indoor_locations"):
         _strings(data.get(key), key)
 
     default = data.get("default_location")
@@ -94,7 +102,7 @@ def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
     for key in ("lat", "lon"):
         _number(default.get(key), f"default_location.{key}")
 
-    for key in ("venues", "activity_rules", "type_rules", "capacity_lines"):
+    for key in ("venues", "activity_rules", "type_rules", "trip_series"):
         _list(data.get(key), key)
         for index, entry in enumerate(data[key]):
             _mapping(entry, f"{key}[{index}]")
@@ -137,23 +145,35 @@ def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
         _string(bucket[0], f"{key}[0]")
         _strings(bucket[1], f"{key}[1]")
 
-    for index, line in enumerate(data["capacity_lines"]):
-        key = f"capacity_lines[{index}]"
+    _mapping(data.get("practice_views"), "practice_views")
+    _list(data["practice_views"].get("capacity_lines"), "practice_views.capacity_lines")
+    for index, line in enumerate(data["practice_views"]["capacity_lines"]):
+        key = f"practice_views.capacity_lines[{index}]"
+        _mapping(line, key)
         _number(line.get("value"), f"{key}.value")
         _string(line.get("label"), f"{key}.label")
         _date(line.get("from"), f"{key}.from")
         if "to" in line:
             _date(line["to"], f"{key}.to")
 
+    for index, rule in enumerate(data["trip_series"]):
+        key = f"trip_series[{index}]"
+        _strings(rule.get("match"), f"{key}.match")
+        _string(rule.get("slug"), f"{key}.slug")
+        if not re.fullmatch(r"[a-z0-9-]+", rule["slug"]):
+            raise HistoryConfigError(f"{key}.slug: expected [a-z0-9-]+")
+
     return HistoryConfig(
         excluded_slack_uids=frozenset(data["excluded_slack_uids"]),
+        applause_emoji=frozenset(base_emoji(e) for e in data["applause_emoji"]),
         coach_emoji=frozenset(),
         default_lat=float(default["lat"]), default_lon=float(default["lon"]),
         venues=data["venues"], activity_rules=data["activity_rules"],
         type_rules=data["type_rules"], activity_buckets=data["activity_buckets"],
         workout_buckets=[(name, types) for name, types in data["workout_buckets"]],
         event_keywords=data["event_keywords"], indoor_locations=data["indoor_locations"],
-        capacity_lines=data["capacity_lines"],
+        capacity_lines=data["practice_views"]["capacity_lines"],
+        trip_series=data["trip_series"],
     )
 
 
@@ -233,7 +253,3 @@ def workout_bucket(types: list, cfg: HistoryConfig) -> str:
         if any(value in members for value in types):
             return name
     return "Other"
-
-
-def base_emoji(name: str) -> str:
-    return re.sub(r"::skin-tone-\d+$", "", name)

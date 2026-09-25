@@ -100,7 +100,7 @@ def test_corrections_commands(app, transaction, tmp_path, command):
 
 def test_flags_reads_db_sessions_and_builds_misses_without_writes(app, transaction, tmp_path):
     from app.analytics import cli
-    from app.analytics.drafts import ArchivedMessage, LineageResult
+    from app.analytics.drafts import ArchivedMessage, LineageResult, TripSignup
     post = ArchivedMessage("CFAKEFLAGS", "4087911600.000100", {"text": "Invented practice"},
                            replies=({"text": "Invented reply"},), archive_id=17)
     miss = ArchivedMessage("CFAKEFLAGS", "4087911601.000100", {
@@ -111,11 +111,16 @@ def test_flags_reads_db_sessions_and_builds_misses_without_writes(app, transacti
                               date=date(2099, 7, 16), title="Invented title", flags=["unknown_venue"],
                               format="single", rsvp_count=2)
     inputs = ([post, miss], [], [], [])
+    practices = [SimpleNamespace(kind="practice", date=day, season_label="2099 Fall/Winter")
+                 for day in (date(2099, 11, 3), date(2099, 11, 24))]
+    signups = [TripSignup("cuyuna", 2099, date(2099, 7, 16), "UFAKE6001", None,
+                          "trip_registration:999")]
     output = tmp_path / "flags.json"
     with patch.object(cli, "load_inputs", return_value=inputs), \
+         patch.object(cli, "load_app_trip_signups", return_value=signups), \
          patch.object(cli, "load_corrections", return_value={}) as corrections, \
          patch.object(cli.AppConfig, "get", return_value=["snowcoach"]) as config, \
-         patch.object(cli, "build_lineage", return_value=LineageResult([], [], [miss_key])) as build, \
+         patch.object(cli, "build_lineage", return_value=LineageResult(practices, [], [miss_key])) as build, \
          patch.object(cli, "flagged_sessions", return_value=[flagged]), \
          patch.object(cli, "rebuild") as rebuild:
         result = app.test_cli_runner().invoke(args=["analytics", "flags", "--json", str(output)])
@@ -124,11 +129,15 @@ def test_flags_reads_db_sessions_and_builds_misses_without_writes(app, transacti
     assert build.call_args.args[:4] == inputs
     assert build.call_args.args[4].coach_emoji == frozenset({"snowcoach"})
     assert build.call_args.args[5] == corrections.return_value
+    assert build.call_args.kwargs == {"trip_signups": signups}
     rebuild.assert_not_called()
     transaction.commit.assert_not_called()
     assert "2099-07-16  practice:999  unknown_venue  Invented title" in result.output
-    assert miss_key in result.output
+    assert f"2099-07-16  {miss_key}  candidate" in result.output
+    assert "2099-11-09  empty_week" in result.output
+    assert "2099-11-16  empty_week" in result.output
     data = json.loads(output.read_text())
+    assert data["empty_weeks"] == ["2099-11-09", "2099-11-16"]
     assert data["flagged_sessions"] == [{
         "session_key": "practice:999", "post_key": key, "date": "2099-07-16",
         "title": "Invented title", "flags": ["unknown_venue"], "format": "single",
@@ -189,6 +198,35 @@ def test_nightly_injected_client_and_default_weather(app):
     bot.assert_not_called()
     sync.assert_called_once_with(client)
     weather.assert_called_once_with()
+
+
+def test_nightly_continues_after_channel_failure(db_session, transaction):
+    from app.analytics import SYNC_CHANNELS, jobs
+    from app.analytics.models import SlackArchiveMessage
+
+    bad_channel, good_channel = SYNC_CHANNELS[:2]
+    raw = {"ts": "4072435200.000100", "user": "UFAKE0001", "text": "Synthetic post"}
+
+    class FailedChannel:
+        def conversations_history(self, channel, **kwargs):
+            if channel == bad_channel:
+                raise RuntimeError("not_in_channel")
+            return {"messages": [raw] if channel == good_channel else []}
+
+    with patch.object(jobs, "rebuild", return_value={"sessions": 1}) as rebuild, \
+         patch.object(jobs, "fetch_missing_weather", return_value={"sessions": 0}) as weather, \
+         patch.object(jobs, "get_slack_client") as bot:
+        out = jobs.run_nightly(client=FailedChannel())
+    assert out["ok"] is True and out["step"] == "done"
+    assert out["sync"][bad_channel] == {"error": "not_in_channel"}
+    assert out["sync"][good_channel]["messages"] == 1
+    assert SlackArchiveMessage.query.filter_by(channel_id=good_channel, ts=raw["ts"]).one().raw == raw
+    assert out["rebuild"] == {"sessions": 1}
+    rebuild.assert_called_once_with()
+    weather.assert_called_once_with()
+    bot.assert_not_called()
+    transaction.commit.assert_called_once_with()
+    transaction.rollback.assert_not_called()
 
 
 @pytest.mark.parametrize("ok", [True, False])

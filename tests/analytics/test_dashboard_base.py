@@ -91,9 +91,12 @@ def test_apply_every_filter_and_attendance_role(db_session):
     excluded = _session('excluded', date(2099, 1, 6), activity='Run', kind='event')
     db_session.add_all([matching, excluded])
     db_session.flush()
-    rsvp = PracticeAttendance(session_id=matching.id, slack_uid='UFAKE1301', role='rsvp', source='app')
-    lead = PracticeAttendance(session_id=matching.id, slack_uid='UFAKE1302', role='lead', source='app')
-    other = PracticeAttendance(session_id=excluded.id, slack_uid='UFAKE1303', role='rsvp', source='app')
+    rsvp = PracticeAttendance(session_id=matching.id, slack_uid='UFAKE1301',
+                              person_key='slack:UFAKE1301', role='rsvp', source='app')
+    lead = PracticeAttendance(session_id=matching.id, slack_uid='UFAKE1302',
+                              person_key='slack:UFAKE1302', role='lead', source='app')
+    other = PracticeAttendance(session_id=excluded.id, slack_uid='UFAKE1303',
+                              person_key='slack:UFAKE1303', role='rsvp', source='app')
     db_session.add_all([rsvp, lead, other])
     db_session.flush()
     f = base.Filters(seasons=['2099 Test'], date_from=date(2099, 1, 5), date_to=date(2099, 1, 5),
