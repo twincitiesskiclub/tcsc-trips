@@ -269,3 +269,14 @@ def test_date_objects_in_dashboard_configuration(source):
         filters = parse_filters(MultiDict(), dashboard)
     assert filters.date_from == date(2099, 5, 1)
     assert filters.date_to == date(2099, 9, 1)
+
+
+def test_filter_options_queries_categories_once(db_session):
+    session = _session("category-once", date(2099, 1, 5), category="social", kind="event")
+    db_session.add(session)
+    db_session.flush()
+    with patch("app.utils.today_central", return_value=date(2099, 1, 6)), \
+         patch.object(base, "_distinct", wraps=base._distinct) as distinct:
+        options = base.filter_options(D, DOMAINS)
+    assert "social" in options["categories"]
+    assert sum(call.args[0] is PracticeSession.category for call in distinct.call_args_list) == 1

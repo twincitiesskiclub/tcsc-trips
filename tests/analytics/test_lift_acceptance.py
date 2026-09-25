@@ -5,10 +5,12 @@ the gitignored .superpowers folder, so it only runs on the dev box. Nothing
 it reads is committed."""
 import json
 from datetime import date, datetime
+from types import SimpleNamespace
 
 import pytest
 
 from app.analytics.corrections import TRIP_KEY
+from app.analytics.dashboards.splits import _session_rows
 from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef
 from app.analytics.history_config import load_history_config
 from app.analytics.lineage import build_lineage
@@ -111,3 +113,40 @@ def test_uncatalogued_event_posts_remain_possible_misses():
     assert len(result.possible_misses) > 0
     assert all(key.startswith(("C0B2VN1LU11:", "C02HXN45214:"))
                for key in result.possible_misses)
+
+
+@pytest.mark.skipif(any(not (DUMP_DIR / filename).exists() for filename in (
+    "lift_verified.json", "chan.json", "threads.json", "summer.json", "summer_threads.json",
+    "app_practices.json", "locations.json")), reason="real Slack dump not present")
+def test_strength_split_dashboard_matches_verified_counts():
+    locs = [LocationRef(r["id"], r["name"], r["spot"], r["lat"], r["lon"])
+            for r in json.loads((DUMP_DIR / "locations.json").read_text())]
+    result = build_lineage(_messages(), _practices(), locs, [], load_history_config(), _corrections())
+    sessions = [s for s in result.sessions if s.activity == "Strength" and s.kind == "practice"]
+    ids = {s.session_key: i for i, s in enumerate(sessions)}
+    session_rows = [SimpleNamespace(id=ids[s.session_key], date=s.date, format=s.format,
+                                    status=s.status, season_label=s.season_label,
+                                    day_of_week=s.day_of_week, start_time=s.start_time, slot=s.slot)
+                    for s in sessions]
+    attendance = [SimpleNamespace(session_id=ids[a.session_key], slack_uid=a.slack_uid,
+                                  slot=a.slot, role=a.role)
+                  for a in result.attendance if a.role == "rsvp" and a.session_key in ids]
+    by_date = {}
+    for row in _session_rows(session_rows, attendance):
+        by_date.setdefault(row["date"], []).append(row)
+    mismatches = []
+    for row in json.loads((DUMP_DIR / "lift_verified.json").read_text())["sessions"]:
+        # Accepted split-vs-merged mismatch: .superpowers/sdd/2026-09-25-attendance-analytics/progress.md ruling.
+        if row["date"] == "2025-07-24":
+            continue
+        rows = by_date.get(row["date"], [])
+        if row["format"] == "single":
+            got = {"one": sum(r["single"] for r in rows)}
+            want = {"one": row["one"]}
+        else:
+            got = {"early": sum(r["early"] for r in rows), "late": sum(r["late"] for r in rows)}
+            want = {"early": row["early"], "late": row["late"]}
+        fmt = sorted({r["format"] for r in rows})
+        if got != want or fmt != [row["format"]]:
+            mismatches.append((row["date"], fmt, got, want))
+    assert not mismatches, "\n".join(map(str, mismatches))

@@ -225,12 +225,13 @@ def filtered_build(monkeypatch):
     attendance = [_a(s, "vet") for s in sessions[:3]]
     attendance += [_a(s, "new") for s in sessions[1:3]]
     attendance += [_a(s, "practice") for s in sessions[3:]]
+    attendance.append(_a(sessions[2], "practice"))
     monkeypatch.setattr(pp, "load_sessions", lambda filters: [
         s for s in sessions if (not filters.kinds or s.kind in filters.kinds)
         and (not filters.seasons or s.season_label in filters.seasons)])
     monkeypatch.setattr(pp, "load_attendance", lambda ids, role: [
         a for a in attendance if a.session_id in ids and a.role in role])
-    monkeypatch.setattr(pp.utils, "today_central", lambda: date(2099, 11, 30))
+    monkeypatch.setattr(pp.utils, "today_central", lambda: date(2100, 5, 1))
     monkeypatch.setattr(pp, "display_names", lambda keys: {p: p.title() for p in keys})
     monkeypatch.setattr(pp, "never_rsvpd", lambda: [])
     return pp.build
@@ -270,7 +271,10 @@ def test_kind_filter_only_narrows_retention_and_newcomers(filtered_build):
     assert tiles["People this season"] == 3
     tables = {b.title: b.rows for b in blocks if isinstance(b, Table)}
     assert tables["Who comes to what"] == [{"combo": "Event", "people": 2}, {"combo": "Practice", "people": 1}]
-    assert {r["person_key"]: r["all_time"] for r in tables["Everyone"]} == {"vet": 3, "new": 2, "practice": 2}
+    all_seasons = filtered_build(Filters(kinds=["event"]))
+    overlap = next(b for b in all_seasons if isinstance(b, Table) and b.title == "Who comes to what")
+    assert overlap.rows == [{"combo": "Event", "people": 2}, {"combo": "Event + Practice", "people": 1}]
+    assert {r["person_key"]: r["all_time"] for r in tables["Everyone"]} == {"vet": 3, "new": 2, "practice": 3}
 
 
 def test_dashboard_explains_earliest_season_limit(filtered_build):
@@ -307,16 +311,13 @@ def test_dashboard_builds_valid_specs_and_preserves_full_history(empty, seasons,
     for chart in chart_blocks:
         jsonschema.validate(chart.spec, SCHEMA)
         assert vlc.vegalite_to_svg(chart.spec)
-        assert all(r["season_label"] in (seasons or [F24, F25]) for r in chart.rows)
+        assert all(r["season_label"] in (seasons or [F24, f"{F25} (so far)"]) for r in chart.rows)
     if empty or kinds == ["event"]:
         assert all(chart.rows == [] for chart in chart_blocks)
-    else:
-        assert chart_blocks[0].rows == [
-            {"season_label": F24, "next_season": F25, "group": "First season",
-             "people": 1, "returned": 1, "rate": 1.0}]
+    assert chart_blocks[0].rows == []
     tables = {b.title: b.rows for b in blocks if isinstance(b, Table)}
     assert tables["Who comes to what"] == ([] if empty else [
-        {"combo": "Practice", "people": 2}])
+        {"combo": "Practice", "people": 1 if seasons else 2}])
     assert tables["Registered, never RSVP'd"] == [{"name": "Alex Example"}]
     assert len(tables["Everyone"]) == (0 if empty else 2)
     if not empty:
@@ -337,3 +338,41 @@ def test_people_route_renders_dashboard_title(admin_client):
 def test_people_route_requires_admin(client):
     response = client.get("/admin/analytics/people")
     assert response.status_code == 302
+
+
+@pytest.mark.parametrize("label, today, expected", [
+    ("2099 Spring/Summer", date(2099, 4, 30), False),
+    ("2099 Spring/Summer", date(2099, 5, 1), True),
+    ("2099 Spring/Summer", date(2099, 8, 31), True),
+    ("2099 Spring/Summer", date(2099, 9, 1), False),
+    ("2099 Fall/Winter", date(2099, 8, 31), False),
+    ("2099 Fall/Winter", date(2099, 9, 1), True),
+    ("2099 Fall/Winter", date(2100, 4, 30), True),
+    ("2099 Fall/Winter", date(2100, 5, 1), False),
+    ("Unknown", date(2099, 6, 1), False),
+    ("2099 Unknown", date(2099, 6, 1), False),
+    ("0000 Spring/Summer", date(2099, 6, 1), False),
+    (None, date(2099, 6, 1), False),
+])
+def test_season_in_progress_boundaries(label, today, expected):
+    assert pp.season_in_progress(label, today) is expected
+
+
+def test_in_progress_season_omits_retention_and_labels_newcomers(filtered_build, monkeypatch):
+    monkeypatch.setattr(pp.utils, "today_central", lambda: date(2099, 11, 30))
+    blocks = filtered_build(Filters())
+    charts = [b for b in blocks if isinstance(b, Chart)]
+    assert {r["next_season"] for r in charts[0].rows} == {F24}
+    assert {r["season_label"] for r in charts[1].rows} == {
+        "2097 Fall/Winter", F24, f"{F25} (so far)"}
+    selected = filtered_build(Filters(seasons=[F25]))
+    newcomers = next(b for b in selected if isinstance(b, Chart) and b.title == "How far newcomers get")
+    assert {r["season_label"] for r in newcomers.rows} == {f"{F25} (so far)"}
+    assert any("The current season is still in progress, so it is not yet counted as a next season "
+               "in the retention chart, and its newcomer column is partial." in b.text
+               for b in blocks if isinstance(b, Note))
+
+
+def test_shift_keeps_season_type_across_years():
+    assert pp._shift("2099 Spring/Summer", 1) == "2100 Spring/Summer"
+    assert pp._shift("2099 Fall/Winter", -1) == "2098 Fall/Winter"

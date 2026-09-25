@@ -68,17 +68,18 @@ def nights(sessions, attendance, *, status="held"):
 
 
 def baseline_medians(rows):
+    """Return each season/weekday group's median and night count."""
     groups = defaultdict(list)
     for row in rows:
         groups[(row["season_label"], row["day_of_week"])].append(row["rsvps"])
-    return {key: median(values) for key, values in groups.items()}
+    return {key: (median(values), len(values)) for key, values in groups.items()}
 
 
 def with_index(rows, medians):
     out = []
     for row in rows:
-        base = medians.get((row["season_label"], row["day_of_week"]))
-        out.append({**row, "index": round(row["rsvps"] / base, 2) if base else None})
+        base, count = medians.get((row["season_label"], row["day_of_week"]), (None, 0))
+        out.append({**row, "index": round(row["rsvps"] / base, 2) if base and count >= 3 else None})
     return out
 
 

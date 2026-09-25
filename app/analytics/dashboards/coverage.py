@@ -1,9 +1,10 @@
 """Is the data set complete? Candidates, empty weeks, sync freshness, soft items."""
 from collections import defaultdict
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from sqlalchemy import func
 
+from app import utils
 from app.analytics import CHANNELS, SYNC_CHANNELS, charts
 from app.analytics.dashboards.base import Chart, Dashboard, Note, Table, Tile, Tiles
 from app.analytics.models import PracticeSession, SlackArchiveMessage
@@ -13,9 +14,13 @@ SOFT_FLAGS = ["identities_lost", "unmatched_person", "missing_date"]
 
 
 def freshness(rows, now):
-    return [{"channel": CHANNELS.get(channel, channel),
-             "last_synced": synced.isoformat(sep=" ", timespec="minutes") if synced else "never",
-             "fresh": bool(synced) and now - synced <= timedelta(hours=48)} for channel, synced in rows]
+    out = []
+    for channel, synced in rows:
+        fresh = bool(synced) and now - synced <= timedelta(hours=48)
+        out.append({"channel": CHANNELS.get(channel, channel),
+                    "last_synced": utils.format_datetime_central(synced, "%Y-%m-%d %H:%M") if synced else "never",
+                    "fresh": fresh, "fresh_display": "Yes" if fresh else "No"})
+    return out
 
 
 def weekly_counts(rows):
@@ -69,6 +74,9 @@ def build(filters):
                                   color_range=[charts.PALETTE["violet"], charts.PALETTE["early"], charts.PALETTE["late"]],
                                   x_title="Week", y_title="Sessions", tooltip=["week", "kind", "sessions"],
                                   x_type="temporal")
+    span_days = (date.fromisoformat(weeks[-1]["week"]) -
+                 date.fromisoformat(weeks[0]["week"])).days + 7 if weeks else 7
+    body["mark"]["size"] = {"expr": f"min(24, width * 0.85 * 7 / {span_days})"}
     gaps = {"data": {"values": [{"week": week} for week in empty]},
             "mark": {"type": "rule", "color": "#dc2626", "strokeWidth": 1},
             "encoding": {"x": {"field": "week", "type": "temporal"}}}
@@ -81,8 +89,8 @@ def build(filters):
         Chart("Sessions per week", description, chart_spec, weeks,
               [("week", "Week of"), ("kind", "Kind"), ("sessions", "Sessions")]),
         Table("Empty weeks", [{"week": week} for week in empty], [("week", "Week of")]),
-        Table("Sync freshness", sync, [("channel", "Channel"), ("last_synced", "Last synced (UTC)"),
-                                       ("fresh", "Fresh")]),
+        Table("Sync freshness", sync, [("channel", "Channel"), ("last_synced", "Last synced (Central)"),
+                                       ("fresh_display", "Fresh")]),
         Table("Soft items", soft, [("date", "Date"), ("title", "Session"), ("flag", "Flag")]),
         Note("Complete means zero unresolved candidates and zero empty weeks. "
              "Claude resolves new candidates with catalog corrections."),

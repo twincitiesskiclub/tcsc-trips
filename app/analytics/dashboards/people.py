@@ -1,6 +1,6 @@
 """Who comes and who drifts. Names are shown; every /admin user can see them."""
 from collections import defaultdict
-from datetime import timedelta
+from datetime import date, timedelta
 
 from app import utils
 from app.analytics import charts
@@ -14,6 +14,8 @@ KIND_LABELS = {"practice": "Practice", "event": "Event", "trip": "Trip"}
 BUCKETS = ("1", "2", "3", "4 to 5", "6 or more")
 
 
+# season_key and _shift rely on "YYYY Spring/Summer" or "YYYY Fall/Winter"
+# labels from app/analytics/seasons.py and Season.name.
 def season_key(label):
     year, _, kind = label.partition(" ")
     return (int(year), 1 if kind == "Fall/Winter" else 0) if year.isdigit() else (0, 0)
@@ -22,6 +24,21 @@ def season_key(label):
 def _shift(label, years):
     year, _, kind = (label or "").partition(" ")
     return f"{int(year) + years} {kind}" if year.isdigit() else None
+
+
+def season_in_progress(label, today) -> bool:
+    year, _, kind = (label or "").partition(" ")
+    if len(year) != 4 or not year.isdigit():
+        return False
+    try:
+        year = int(year)
+        if kind == "Spring/Summer":
+            return date(year, 5, 1) <= today <= date(year, 8, 31)
+        if kind == "Fall/Winter":
+            return date(year, 9, 1) <= today <= date(year + 1, 4, 30)
+    except ValueError:
+        pass
+    return False
 
 
 def attendance_pairs(sessions, attendance):
@@ -183,10 +200,14 @@ def build(filters):
         Tile("Lapsed regulars", len(lapsed), "regular last season, gone 4 weeks"),
     ])
     retained = [row for row in retention(selected)
-                if not filters.seasons or row["season_label"] in filters.seasons]
+                if (not filters.seasons or row["season_label"] in filters.seasons)
+                and not season_in_progress(row["next_season"], today)]
     retention_description = "Share of each season's people who came back the next season of the same type."
     newcomers = [row for row in newcomer_curve(selected)
                  if not filters.seasons or row["season_label"] in filters.seasons]
+    for row in newcomers:
+        if season_in_progress(row["season_label"], today):
+            row["season_label"] += " (so far)"
     newcomer_description = "People in their first season, by how many sessions they came to that season."
     return [
         tiles,
@@ -204,7 +225,9 @@ def build(filters):
                   color_range=["#c7d2fe", "#a5b4fc", "#818cf8", "#6366f1", "#4a3aa7"],
                   x_title="Season", y_title="People", tooltip=["season_label", "bucket", "people"])),
               newcomers, [("season_label", "Season"), ("bucket", "Sessions"), ("people", "People")]),
-        Table("Who comes to what", overlap(pairs), [("combo", "Comes to"), ("people", "People")]),
+        Table("Who comes to what", overlap([(p, s) for p, s in pairs
+                                          if not filters.seasons or s.season_label in filters.seasons]),
+              [("combo", "Comes to"), ("people", "People")]),
         Table("Lapsed regulars", [{**row, "name": names[row["person_key"]]} for row in lapsed],
               [("name", "Name"), ("last_rsvp", "Last RSVP"), ("last_season_count", "Last season"),
                ("this_season_count", "This season")]),
@@ -217,7 +240,9 @@ def build(filters):
         Note("A person counts as coming when they RSVP'd or signed up. Count-only sessions from the "
              "old general channel have no names, so they are left out here. "
              "The earliest season on record (Oct 2022) counts everyone as first season "
-             "because there is no earlier data."),
+             "because there is no earlier data. "
+             "The current season is still in progress, so it is not yet counted as a next season "
+             "in the retention chart, and its newcomer column is partial."),
     ]
 
 

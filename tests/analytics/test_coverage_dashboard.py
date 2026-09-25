@@ -31,9 +31,9 @@ def test_freshness_boundary_never_and_unknown_channel():
                          ("CFAKE0002", now - timedelta(hours=48, seconds=1)),
                          ("CFAKE0003", None)], now)
     assert rows == [
-        {"channel": "CFAKE0001", "last_synced": "2099-01-01 12:00", "fresh": True},
-        {"channel": "CFAKE0002", "last_synced": "2099-01-01 11:59", "fresh": False},
-        {"channel": "CFAKE0003", "last_synced": "never", "fresh": False}]
+        {"channel": "CFAKE0001", "last_synced": "2099-01-01 06:00", "fresh": True, "fresh_display": "Yes"},
+        {"channel": "CFAKE0002", "last_synced": "2099-01-01 05:59", "fresh": False, "fresh_display": "No"},
+        {"channel": "CFAKE0003", "last_synced": "never", "fresh": False, "fresh_display": "No"}]
 
 
 def test_weekly_counts_group_by_monday_and_kind():
@@ -63,6 +63,7 @@ def test_build_with_empty_snapshot():
     chart = next(b for b in blocks if isinstance(b, Chart))
     jsonschema.validate(chart.spec, SCHEMA)
     assert chart.rows == []
+    assert chart.spec["mark"]["size"] == {"expr": "min(24, width * 0.85 * 7 / 7)"}
 
 
 @pytest.mark.parametrize("empty_weeks", [[], ["2099-01-12"]])
@@ -90,6 +91,10 @@ def test_build_snapshot_tables_and_valid_chart(empty_weeks):
     assert tables["Empty weeks"] == [{"week": week} for week in empty_weeks]
     assert tables["Soft items"] == soft
     assert [r["fresh"] for r in tables["Sync freshness"]] == [True, False]
+    assert [r["fresh_display"] for r in tables["Sync freshness"]] == ["Yes", "No"]
+    sync = next(b for b in blocks if isinstance(b, Table) and b.title == "Sync freshness")
+    assert sync.columns == [("channel", "Channel"), ("last_synced", "Last synced (Central)"),
+                            ("fresh_display", "Fresh")]
     chart = next(b for b in blocks if isinstance(b, Chart))
     jsonschema.validate(chart.spec, SCHEMA)
     assert vlc.vegalite_to_svg(chart.spec)
@@ -104,6 +109,7 @@ def test_build_snapshot_tables_and_valid_chart(empty_weeks):
     else:
         bars = chart.spec
         assert "layer" not in chart.spec
+    assert bars["mark"]["size"] == {"expr": "min(24, width * 0.85 * 7 / 21)"}
     assert bars["encoding"]["x"]["type"] == "temporal"
     assert bars["encoding"]["color"]["scale"]["domain"] == ["practice", "event", "trip"]
     assert isinstance(blocks[-1], Note)
@@ -177,3 +183,26 @@ def test_coverage_route_renders_dashboard(admin_client):
 
 def test_coverage_route_requires_admin(client):
     assert client.get("/admin/analytics/coverage").status_code == 302
+
+
+@pytest.mark.parametrize("synced, expected", [
+    (datetime(2026, 1, 3, 2), "2026-01-02 20:00"),
+    (datetime(2026, 7, 3, 2), "2026-07-02 21:00"),
+])
+def test_freshness_displays_central_but_compares_utc(synced, expected):
+    row = cv.freshness([("CFAKE0001", synced)], synced + timedelta(hours=48))[0]
+    assert row["last_synced"] == expected
+    assert row["fresh"] is True
+
+
+def test_weekly_bars_scale_to_long_history():
+    dates = [(date(2023, 5, 1) + timedelta(weeks=i), "practice") for i in range(173)]
+    with patch.object(cv, "_snapshot", return_value=None), \
+         patch.object(cv, "_session_dates", return_value=dates), \
+         patch.object(cv, "_sync_rows", return_value=[]), \
+         patch.object(cv, "_soft_items", return_value=[]):
+        blocks = cv.build(Filters())
+    chart = next(b for b in blocks if isinstance(b, Chart))
+    assert chart.spec["mark"]["size"] == {"expr": "min(24, width * 0.85 * 7 / 1211)"}
+    jsonschema.validate(chart.spec, SCHEMA)
+    assert vlc.vegalite_to_svg(chart.spec)

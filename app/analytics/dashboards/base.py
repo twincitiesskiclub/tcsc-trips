@@ -190,6 +190,7 @@ def filter_options(dashboard, domains=None) -> dict:
     days = _distinct(PracticeSession.day_of_week)
     formats = _distinct(PracticeSession.format)
     kinds = _distinct(PracticeSession.kind)
+    categories = _distinct(PracticeSession.category)
     # Same-year fall/winter comes after spring/summer; labels begin with the year.
     seasons = sorted(domains["seasons"], key=lambda value: (
         value[:4], "Fall/Winter" in value, value), reverse=True)
@@ -199,7 +200,7 @@ def filter_options(dashboard, domains=None) -> dict:
             "days": [value for value in DAYS if value in days],
             "formats": [value for value in FORMATS if value in formats],
             "kinds": [value for value in KINDS if value in kinds],
-            "categories": [c for c in CATEGORIES if c in _distinct(PracticeSession.category)]}
+            "categories": [c for c in CATEGORIES if c in categories]}
 
 
 def footer() -> dict:

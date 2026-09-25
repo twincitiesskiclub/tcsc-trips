@@ -45,7 +45,7 @@ def test_cancelled_sessions_are_not_nights():
 def test_index_is_relative_to_season_weekday_median():
     rows = [{"season_label": "S", "day_of_week": "Tuesday", "rsvps": n} for n in (10, 20, 30)]
     medians = p.baseline_medians(rows)
-    assert medians[("S", "Tuesday")] == 20
+    assert medians[("S", "Tuesday")] == (20, 3)
     assert [r["index"] for r in p.with_index(rows, medians)] == [0.5, 1.0, 1.5]
     assert p.with_index([{"season_label": "X", "day_of_week": "Monday", "rsvps": 4}], medians)[0]["index"] is None
 
@@ -104,7 +104,7 @@ def test_nights_count_rsvps_and_record_leads_separately():
 
 
 def test_zero_baseline_has_no_index_or_factor_group():
-    rows = [{"season_label": "S", "day_of_week": "Tuesday", "rsvps": 0, "activity": "Run"}]
+    rows = [{"season_label": "S", "day_of_week": "Tuesday", "rsvps": 0, "activity": "Run"}] * 3
     indexed = p.with_index(rows, p.baseline_medians(rows))
     assert indexed[0]["index"] is None
     assert "index" not in rows[0]
@@ -243,3 +243,13 @@ def test_turnout_index_note_explains_filtered_split_night_comparison():
     note = next(b.text for b in blocks if isinstance(b, Note) and b.text.startswith("Turnout index:"))
     assert "When a filter keeps only one session of a split night, that night is compared against whole nights." in note
     assert "\u2014" not in note and "\u2013" not in note
+
+
+def test_two_night_baseline_has_no_index_even_when_other_groups_are_large():
+    thin = [{"season_label": "S", "day_of_week": "Tuesday", "rsvps": n} for n in (10, 20)]
+    other = [{"season_label": "S", "day_of_week": "Thursday", "rsvps": 10}] * 3
+    other += [{"season_label": "Previous", "day_of_week": "Tuesday", "rsvps": 10}] * 3
+    medians = p.baseline_medians(thin + other)
+    assert [r["index"] for r in p.with_index(thin, medians)] == [None, None]
+    assert medians[("S", "Tuesday")] == (15, 2)
+    assert p.with_index(other[:1], medians)[0]["index"] == 1.0
