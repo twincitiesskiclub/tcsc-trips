@@ -179,6 +179,7 @@ def test_coverage_route_renders_dashboard(admin_client):
     assert b"Is every club happening in the data, and what is missing?" in response.data
     assert b"Sync freshness" in response.data
     assert all(CHANNELS[channel].encode() in response.data for channel in SYNC_CHANNELS)
+    assert b">Apply<" not in response.data
 
 
 def test_coverage_route_requires_admin(client):

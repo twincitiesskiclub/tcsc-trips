@@ -143,6 +143,48 @@ def test_practices_route_renders_dashboard_title(admin_client):
     response = admin_client.get("/admin/analytics/practices")
     assert response.status_code == 200
     assert b"What makes a practice draw" in response.data
+    assert b">Apply<" in response.data
+
+
+def test_factor_bar_description_explains_which_way_bars_run():
+    sessions = [_s(1, date(2099, 11, 5), 10)]
+    attendance = _rsvps(sessions[0], 10)
+    with patch.object(p, "load_sessions", return_value=sessions), \
+         patch.object(p, "load_attendance", return_value=attendance), \
+         patch.object(p, "load_baseline_sessions", return_value=(sessions, attendance)):
+        blocks = p.build(Filters(kinds=["practice"]))
+    chart = next(b for b in blocks if isinstance(b, Chart) and b.title == "Activity")
+    assert chart.description == ("Median turnout index by activity. Bars run right of 1.0 when practices draw "
+                                 "more than a typical practice for that season and weekday, left when they draw fewer.")
+    assert "—" not in chart.description and "–" not in chart.description
+
+
+def test_color_group_buckets_named_activities_and_puts_the_rest_in_other():
+    assert p.color_group("Strength") == "Strength"
+    assert p.color_group("Ski") == "Ski"
+    assert p.color_group("Run") == "Run"
+    assert p.color_group("Multisport") == "Other"
+
+
+def test_turnout_over_time_colors_by_group_with_a_legend_and_keeps_real_activity_in_tooltip():
+    sessions = [_s(1, date(2099, 11, 5), 10, activity="Strength"),
+                _s(2, date(2099, 11, 12), 10, activity="Multisport")]
+    attendance = [row for s in sessions for row in _rsvps(s, s.rsvp_count)]
+    with patch.object(p, "load_sessions", return_value=sessions), \
+         patch.object(p, "load_attendance", return_value=attendance), \
+         patch.object(p, "load_baseline_sessions", return_value=(sessions, attendance)):
+        blocks = p.build(Filters(kinds=["practice"]))
+    chart = next(b for b in blocks if isinstance(b, Chart) and b.title == "Turnout over time")
+    assert [r["color_group"] for r in chart.rows] == ["Strength", "Other"]
+    assert chart.spec["encoding"]["color"]["field"] == "color_group"
+    assert chart.spec["encoding"]["color"]["scale"] == {
+        "domain": ["Strength", "Ski", "Run", "Other"],
+        "range": ["#2a78d6", "#eb6834", "#1baf7a", "#9a9994"]}
+    assert chart.spec["encoding"]["color"]["legend"] == {"title": "Activity"}
+    tooltip_fields = [t["field"] for t in chart.spec["encoding"]["tooltip"]]
+    assert "activity" in tooltip_fields
+    jsonschema.validate(chart.spec, SCHEMA)
+    assert vlc.vegalite_to_svg(chart.spec)
 
 
 def test_date_filter_preserves_baseline_week_of_season():

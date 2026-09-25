@@ -83,14 +83,40 @@ def test_factor_bars_validate_and_render_with_thin_groups():
     rows = [{"value": "Run", "median_index": 1.2, "median_rsvps": 24, "nights": 5, "thin": False},
             {"value": "Ski", "median_index": 0.8, "median_rsvps": 16, "nights": 2, "thin": True}]
     body = charts.factor_bars(rows, title="Activity")
-    bar, label, rule = body["layer"]
+    bar, high_label, low_label, rule = body["layer"]
     assert bar["encoding"]["opacity"] == {"condition": {"test": "datum.thin", "value": 0.35}, "value": 1}
     assert bar["encoding"]["x"]["field"] == "median_index"
     assert bar["encoding"]["y"]["field"] == "value"
-    assert label["encoding"]["text"]["field"] == "nights"
+    assert high_label["encoding"]["text"]["field"] == "nights"
+    assert low_label["encoding"]["text"]["field"] == "nights"
     assert rule["data"]["values"] == [{"one": 1}]
     assert rule["encoding"]["x"]["field"] == "one"
     _check(charts.spec("Median turnout by activity", body))
+
+
+def test_factor_bars_diverge_from_one_with_computed_domain_and_color_condition():
+    rows = [{"value": "Run", "median_index": 1.8, "median_rsvps": 24, "nights": 5, "thin": False},
+            {"value": "Ski", "median_index": 0.3, "median_rsvps": 6, "nights": 2, "thin": True}]
+    body = charts.factor_bars(rows, title="Activity")
+    bar, high_label, low_label, rule = body["layer"]
+    assert bar["encoding"]["x2"] == {"datum": 1}
+    assert bar["encoding"]["color"] == {
+        "condition": {"test": "datum.median_index >= 1", "value": charts.PALETTE["early"]},
+        "value": "#e34948"}
+    assert bar["encoding"]["x"]["scale"] == {"domain": [0.25, 1.85]}
+    assert bar["mark"]["clip"] is False
+    assert high_label["mark"] == {"type": "text", "align": "left", "dx": 4, "color": charts.PALETTE["muted"]}
+    assert high_label["transform"] == [{"filter": "datum.median_index >= 1"}]
+    assert low_label["mark"] == {"type": "text", "align": "right", "dx": -4, "color": charts.PALETTE["muted"]}
+    assert low_label["transform"] == [{"filter": "datum.median_index < 1"}]
+    assert rule["mark"]["strokeDash"] == [4, 3]
+    _check(charts.spec("Median turnout by activity", body))
+
+
+def test_factor_bars_domain_falls_back_when_no_rows():
+    body = charts.factor_bars([], title="Activity")
+    bar = body["layer"][0]
+    assert bar["encoding"]["x"]["scale"]["domain"] == [0.5, 1.5]
 
 
 def test_points_validate_and_render_temporal_turnout():
@@ -98,4 +124,11 @@ def test_points_validate_and_render_temporal_turnout():
     assert body["encoding"]["x"]["type"] == "temporal"
     assert body["encoding"]["y"]["type"] == "quantitative"
     assert body["encoding"]["color"]["type"] == "nominal"
+    _check(charts.spec("Turnout over time", body))
+
+
+def test_points_accepts_color_scale():
+    body = charts.points(ROWS, x="week", y="rsvps", color="slot", tooltip=["week", "slot", "rsvps"],
+                         color_scale={"domain": ["Early", "Late"], "range": ["#111111", "#222222"]})
+    assert body["encoding"]["color"]["scale"] == {"domain": ["Early", "Late"], "range": ["#111111", "#222222"]}
     _check(charts.spec("Turnout over time", body))

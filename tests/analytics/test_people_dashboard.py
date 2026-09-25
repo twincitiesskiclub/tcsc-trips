@@ -365,6 +365,7 @@ def test_in_progress_season_omits_retention_and_labels_newcomers(filtered_build,
     assert {r["next_season"] for r in charts[0].rows} == {F24}
     assert {r["season_label"] for r in charts[1].rows} == {
         "2097 Fall/Winter", F24, f"{F25} (so far)"}
+    assert charts[1].spec["encoding"]["x"]["sort"] == ["2097 Fall/Winter", F24, f"{F25} (so far)"]
     selected = filtered_build(Filters(seasons=[F25]))
     newcomers = next(b for b in selected if isinstance(b, Chart) and b.title == "How far newcomers get")
     assert {r["season_label"] for r in newcomers.rows} == {f"{F25} (so far)"}
@@ -376,3 +377,25 @@ def test_in_progress_season_omits_retention_and_labels_newcomers(filtered_build,
 def test_shift_keeps_season_type_across_years():
     assert pp._shift("2099 Spring/Summer", 1) == "2100 Spring/Summer"
     assert pp._shift("2099 Fall/Winter", -1) == "2098 Fall/Winter"
+
+
+def test_season_sort_orders_chronologically_and_so_far_last():
+    labels = ["2099 Fall/Winter (so far)", "2098 Fall/Winter", "2098 Spring/Summer"]
+    assert pp._season_sort(labels) == ["2098 Spring/Summer", "2098 Fall/Winter", "2099 Fall/Winter (so far)"]
+
+
+def test_retention_chart_formats_rate_as_percent(filtered_build):
+    blocks = filtered_build(Filters(seasons=[F24]))
+    chart = next(b for b in blocks if isinstance(b, Chart) and b.title == "Coming back next season")
+    assert chart.spec["encoding"]["y"]["axis"] == {"format": ".0%"}
+    assert chart.spec["encoding"]["y"]["title"] == "Came back"
+    rate_tooltip = next(t for t in chart.spec["encoding"]["tooltip"] if t["field"] == "rate")
+    assert rate_tooltip["format"] == ".0%"
+
+
+def test_retention_and_newcomer_charts_sort_x_chronologically(filtered_build):
+    blocks = filtered_build(Filters(seasons=[F24]))
+    retention = next(b for b in blocks if isinstance(b, Chart) and b.title == "Coming back next season")
+    newcomers = next(b for b in blocks if isinstance(b, Chart) and b.title == "How far newcomers get")
+    assert retention.spec["encoding"]["x"]["sort"] == [F24]
+    assert newcomers.spec["encoding"]["x"]["sort"] == [F24]

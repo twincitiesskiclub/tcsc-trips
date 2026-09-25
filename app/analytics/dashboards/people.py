@@ -21,6 +21,13 @@ def season_key(label):
     return (int(year), 1 if kind == "Fall/Winter" else 0) if year.isdigit() else (0, 0)
 
 
+def _season_sort(labels):
+    """Chronological x-axis order, with an in-progress "(so far)" label keyed as its season."""
+    def key(label):
+        return season_key(label[:-len(" (so far)")] if label.endswith(" (so far)") else label)
+    return sorted(set(labels), key=key)
+
+
 def _shift(label, years):
     year, _, kind = (label or "").partition(" ")
     return f"{int(year) + years} {kind}" if year.isdigit() else None
@@ -209,21 +216,28 @@ def build(filters):
         if season_in_progress(row["season_label"], today):
             row["season_label"] += " (so far)"
     newcomer_description = "People in their first season, by how many sessions they came to that season."
+    retention_body = charts.grouped_bars(
+        retained, x="season_label", y="rate", color="group",
+        color_domain=["First season", "Returning"],
+        color_range=[charts.PALETTE["early"], charts.PALETTE["violet"]],
+        x_title="Season", y_title="Came back",
+        tooltip=["season_label", "group", "people", "returned",
+                 {"field": "rate", "type": "quantitative", "format": ".0%"}],
+        x_sort=_season_sort(row["season_label"] for row in retained))
+    retention_body["encoding"]["y"]["axis"] = {"format": ".0%"}
+    newcomer_body = charts.stacked_columns(
+        newcomers, x="season_label", y="people", color="bucket", color_domain=list(BUCKETS),
+        color_range=["#c7d2fe", "#a5b4fc", "#818cf8", "#6366f1", "#4a3aa7"],
+        x_title="Season", y_title="People", tooltip=["season_label", "bucket", "people"],
+        x_sort=_season_sort(row["season_label"] for row in newcomers))
     return [
         tiles,
         Chart("Coming back next season", retention_description,
-              charts.spec(retention_description, charts.grouped_bars(
-                  retained, x="season_label", y="rate", color="group",
-                  color_domain=["First season", "Returning"],
-                  color_range=[charts.PALETTE["early"], charts.PALETTE["violet"]],
-                  x_title="Season", y_title="Came back", tooltip=["season_label", "group", "people", "returned", "rate"])),
+              charts.spec(retention_description, retention_body),
               retained, [("season_label", "Season"), ("group", "Group"), ("people", "People"),
                          ("returned", "Came back"), ("rate", "Rate")]),
         Chart("How far newcomers get", newcomer_description,
-              charts.spec(newcomer_description, charts.stacked_columns(
-                  newcomers, x="season_label", y="people", color="bucket", color_domain=list(BUCKETS),
-                  color_range=["#c7d2fe", "#a5b4fc", "#818cf8", "#6366f1", "#4a3aa7"],
-                  x_title="Season", y_title="People", tooltip=["season_label", "bucket", "people"])),
+              charts.spec(newcomer_description, newcomer_body),
               newcomers, [("season_label", "Season"), ("bucket", "Sessions"), ("people", "People")]),
         Table("Who comes to what", overlap([(p, s) for p, s in pairs
                                           if not filters.seasons or s.season_label in filters.seasons]),

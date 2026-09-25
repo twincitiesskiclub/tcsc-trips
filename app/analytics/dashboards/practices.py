@@ -14,6 +14,16 @@ FACTORS = [("activity", "Activity"), ("workout_type", "Workout"), ("location", "
            ("snow_depth_in", "Snow depth"), ("minutes_after_sunset", "Daylight"),
            ("week_band", "Week of season"), ("lead", "Lead")]
 
+# The theme's category range only has 3 colors, so 6+ activities repeat colors on the
+# turnout scatter. Group into a small palette instead; every other activity is "Other".
+COLOR_GROUPS = ["Strength", "Ski", "Run"]
+COLOR_GROUP_DOMAIN = COLOR_GROUPS + ["Other"]
+COLOR_GROUP_RANGE = ["#2a78d6", "#eb6834", "#1baf7a", "#9a9994"]
+
+
+def color_group(activity):
+    return activity if activity in COLOR_GROUPS else "Other"
+
 
 def band(field, value):
     if value is None:
@@ -53,7 +63,7 @@ def nights(sessions, attendance, *, status="held"):
         first = min(group, key=lambda s: (s.start_time is None, s.start_time))
         rows.append({
             "date": day.isoformat(), "season_label": first.season_label, "day_of_week": first.day_of_week,
-            "activity": first.activity, "workout_type": first.workout_type,
+            "activity": first.activity, "color_group": color_group(first.activity), "workout_type": first.workout_type,
             "location": first.location_name or "Unknown",
             "start_hour": first.start_time.hour if first.start_time else None,
             "temp_f": first.temp_f, "precip_in": first.precip_in, "snow_depth_in": first.snow_depth_in,
@@ -144,8 +154,10 @@ def build(filters):
     time_rows = sorted(rows + [{**row, "index": None} for row in nights(sessions, attendance, status="cancelled")],
                        key=lambda row: row["date"])
     over_time = "Every practice night, colored by activity. Cancelled nights are faded."
-    points = charts.points(time_rows, x="date", y="rsvps", color="activity",
-                           tooltip=["date", "activity", "location", "rsvps", "index", "status"])
+    points = charts.points(time_rows, x="date", y="rsvps", color="color_group",
+                           tooltip=["date", "activity", "location", "rsvps", "index", "status"],
+                           color_scale={"domain": COLOR_GROUP_DOMAIN, "range": COLOR_GROUP_RANGE})
+    points["encoding"]["color"]["legend"] = {"title": "Activity"}
     points["encoding"]["opacity"] = {
         "condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 0.8}
     blocks.append(Chart("Turnout over time", over_time,
@@ -154,7 +166,8 @@ def build(filters):
                                     ("rsvps", "RSVPs"), ("index", "Index"), ("status", "Status")]))
     for key, label in FACTORS:
         factor = factor_rows(rows, key)
-        description = f"Median turnout index by {label.lower()}. 1.0 is a typical practice for that season and weekday."
+        description = (f"Median turnout index by {label.lower()}. Bars run right of 1.0 when practices draw "
+                       "more than a typical practice for that season and weekday, left when they draw fewer.")
         blocks.append(Chart(label, description, charts.spec(description, charts.factor_bars(factor, title=label)),
                             factor, [("value", label), ("median_index", "Median index"),
                                      ("median_rsvps", "Median RSVPs"), ("nights", "Practices")]))

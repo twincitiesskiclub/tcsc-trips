@@ -133,6 +133,15 @@ def test_format_pills_have_readable_labels_and_preserve_query_values(admin_clien
     assert 'name="format" value="split" checked' in html
 
 
+def test_filter_form_hidden_when_dashboard_has_no_filters(admin_client):
+    with patch.object(STUB, "filters", []):
+        response = admin_client.get("/admin/analytics/stub")
+    assert response.status_code == 200
+    assert b">Apply<" not in response.data
+    assert b">Reset<" not in response.data
+    assert b'aria-label="Dashboard filters"' not in response.data
+
+
 def test_never_synced_footer(admin_client):
     with patch.object(base, "footer", return_value={"data_through": None, "needs_review": 0}):
         response = admin_client.get("/admin/analytics/stub")
