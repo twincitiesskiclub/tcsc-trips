@@ -8,9 +8,10 @@ from flask.cli import AppGroup
 
 from app.analytics.archive import import_channel, sync_recent
 from app.analytics.corrections import export_corrections, import_corrections, load_corrections
+from app.analytics.coverage import empty_weeks
 from app.analytics.jobs import run_nightly
 from app.analytics.lineage import build_lineage
-from app.analytics.rebuild import flagged_sessions, load_inputs, load_rebuild_config, rebuild
+from app.analytics.rebuild import flagged_sessions, load_app_trip_signups, load_inputs, load_rebuild_config, rebuild
 from app.analytics.weather import fetch_missing_weather
 from app.models import AppConfig, db
 from app.slack.client import get_slack_client, get_slack_user_client
@@ -58,10 +59,12 @@ def fetch_weather():
 @analytics_cli.command("flags")
 @click.option("--json", "json_path", type=click.Path(dir_okay=False, writable=True))
 def flags(json_path):
-    """List review sessions and possible misses without changing the DB."""
+    """List review sessions, candidates, and empty weeks without changing the DB."""
     inputs = load_inputs()
     messages = inputs[0]
-    lineage = build_lineage(*inputs, load_rebuild_config(), load_corrections())
+    corrections = load_corrections()
+    lineage = build_lineage(*inputs, load_rebuild_config(), corrections,
+                            trip_signups=load_app_trip_signups())
     by_id = {message.archive_id: message for message in messages if message.archive_id is not None}
     by_key = {f"{message.channel_id}:{message.ts}": message for message in messages}
     sessions = []
@@ -86,10 +89,14 @@ def flags(json_path):
             "reactions": {reaction["name"]: reaction.get("count", 0)
                           for reaction in message.raw.get("reactions", [])},
         })
-        click.echo(f"{day}  {key}  possible_miss")
+        click.echo(f"{day}  {key}  candidate")
+    weeks = empty_weeks(lineage.sessions, corrections)
+    for monday in weeks:
+        click.echo(f"{monday}  empty_week")
     if json_path:
         Path(json_path).write_text(json.dumps({
             "flagged_sessions": sessions, "possible_misses": misses,
+            "empty_weeks": [week.isoformat() for week in weeks],
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

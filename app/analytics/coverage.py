@@ -1,4 +1,5 @@
 """Completeness checks over the archive and the lineage. Pure functions."""
+from datetime import timedelta
 import re
 
 from app.analytics import CANDIDATE_CHANNELS
@@ -46,3 +47,23 @@ def find_candidates(messages, produced_posts, corrections, applause) -> list[str
         if is_candidate(raw, applause):
             found.append(key)
     return sorted(found)
+
+
+def empty_weeks(sessions, corrections) -> list:
+    """Mondays between a season's first and last practice with no practice at all."""
+    spans, filled = {}, set()
+    for session in sessions:
+        if session.kind != "practice":
+            continue
+        monday = session.date - timedelta(days=session.date.weekday())
+        filled.add(monday)
+        first, last = spans.get(session.season_label, (monday, monday))
+        spans[session.season_label] = (min(first, monday), max(last, monday))
+    gaps = set()
+    for first, last in spans.values():
+        monday = first
+        while monday <= last:
+            if monday not in filled and f"gap:{monday.isoformat()}" not in corrections:
+                gaps.add(monday)
+            monday += timedelta(days=7)
+    return sorted(gaps)

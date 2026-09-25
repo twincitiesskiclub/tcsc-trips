@@ -1,8 +1,11 @@
 """Hand-written posts only; no real Slack content."""
+from datetime import date
+from types import SimpleNamespace
+
 import pytest
 
 from app.analytics import CANDIDATE_CHANNELS, TRIP_CHANNEL
-from app.analytics.coverage import find_candidates, is_candidate
+from app.analytics.coverage import empty_weeks, find_candidates, is_candidate
 from app.analytics.drafts import ArchivedMessage
 
 APPLAUSE = frozenset({"heart", "tada", "+1", "clap"})
@@ -92,3 +95,15 @@ def test_session_correction_resolves_whole_post(suffix):
     post = _msg("1.000001", "Bop the :pickle:")
     corrections = {f"{CH}:{post.ts}{suffix}": {"ok": True}}
     assert find_candidates([post], set(), corrections, APPLAUSE) == []
+
+
+def _s(day, kind="practice", season="2099 Fall/Winter"):
+    return SimpleNamespace(date=day, kind=kind, season_label=season)
+
+
+def test_empty_weeks_inside_season_span_only():
+    sessions = [_s(date(2099, 11, 3)), _s(date(2099, 11, 24)),          # Tue Nov 3 .. Tue Nov 24
+                _s(date(2099, 11, 12), kind="event"),                   # events never fill a week
+                _s(date(2099, 6, 2), season="2099 Spring/Summer")]
+    assert empty_weeks(sessions, {}) == [date(2099, 11, 9), date(2099, 11, 16)]
+    assert empty_weeks(sessions, {"gap:2099-11-09": {"gap_ok": "Break"}}) == [date(2099, 11, 16)]

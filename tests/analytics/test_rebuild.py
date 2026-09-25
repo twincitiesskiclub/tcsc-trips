@@ -2,9 +2,10 @@ from unittest.mock import patch
 
 import pytest
 
+from app.analytics.drafts import AttendanceDraft
 from app.analytics.history_config import HistoryConfigError
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
-from app.analytics.rebuild import rebuild
+from app.analytics.rebuild import rebuild, resolve_people
 from app.analytics.archive import upsert_message
 
 CH = "C042G463AQ1"
@@ -156,8 +157,8 @@ def test_rebuild_failure_restores_previous_tables(app, monkeypatch, failure):
             else:
                 from app.analytics.lineage import build_lineage
                 from dataclasses import replace
-                def bad_attendance(*args):
-                    result = build_lineage(*args)
+                def bad_attendance(*args, **kwargs):
+                    result = build_lineage(*args, **kwargs)
                     result.attendance[0] = replace(result.attendance[0], role="bad_role")
                     return result
                 monkeypatch.setattr("app.analytics.rebuild.build_lineage", bad_attendance)
@@ -182,7 +183,8 @@ def test_flags_and_draft_fields_are_persisted(db_session):
     assert [s.date for s in flagged] == sorted(s.date for s in flagged)
     assert all(s.needs_review for s in flagged)
     assert stats["needs_review"] == len(flagged)
-    assert set(stats) == {"sessions", "attendance", "needs_review", "possible_misses"}
+    assert set(stats) == {"sessions", "attendance", "needs_review", "possible_misses",
+                          "candidates", "empty_weeks"}
     for row in rows:
         archive = db_session.get(SlackArchiveMessage, row.source_message_id)
         assert archive.ts == "4087911600.000100"
@@ -217,3 +219,125 @@ def test_rebuild_uses_rsvp_from_and_flushes_weather(db_session, monkeypatch):
     assert early.rsvp_count == 3 and early.temp_f == 42.5
     assert early.id in [row.id for row in seen]
     assert PracticeAttendance.query.filter_by(session_id=early.id, slack_uid="UFAKEEXTRA").one().user_id is None
+
+
+PEOPLE = {"uid_to_user": {"UFAKE0001": 11, "UFAKE0002": 12},
+          "name_to_member": {"pat example": (11, "UFAKE0001"), "no slack": (13, None)}}
+
+
+def _row(uid=None, name=None, key="trip:cuyuna:2099", role="signup"):
+    return AttendanceDraft(key, uid, role, None, None, "reaction", name)
+
+
+def test_resolve_people_matches_names_and_dedupes():
+    rows = resolve_people([_row(name="pat example"), _row(uid="UFAKE0001"),   # same person twice
+                           _row(name="no slack"), _row(name="nobody here"),
+                           _row(uid="UFAKE0002", key="C1:1.0:main", role="rsvp")], PEOPLE)
+    got = sorted((r["session_key"], r["person_key"], r["user_id"], r["unmatched"]) for r in rows)
+    assert got == [("C1:1.0:main", "slack:UFAKE0002", 12, False),
+                   ("trip:cuyuna:2099", "name:nobody here", None, True),
+                   ("trip:cuyuna:2099", "slack:UFAKE0001", 11, False),
+                   ("trip:cuyuna:2099", "user:13", 13, False)]
+
+
+def test_ambiguous_name_stays_unmatched():
+    rows = resolve_people([_row(name="pat example", uid="UFAKE0002")],
+                          {"uid_to_user": {"UFAKE0002": 12}, "name_to_member": {}})
+    assert rows[0]["person_key"] == "slack:UFAKE0002"          # lone-mention fallback
+    rows = resolve_people([_row(name="pat example")], {"uid_to_user": {}, "name_to_member": {}})
+    assert rows[0]["person_key"] == "name:pat example" and rows[0]["unmatched"]
+
+
+def test_rebuild_events_trips_and_coverage_snapshot(db_session):
+    from app.analytics.corrections import upsert_correction
+    from app.models import AppConfig
+
+    gen, trip = "C0B2VN1LU11", "C068ECRE0PQ"
+    upsert_message(gen, {"ts": "4087911700.000100", "text": "Game night, give a :white_check_mark:",
+                         "reactions": [{"name": "white_check_mark", "count": 1, "users": ["UFAKE7001"]},
+                                       {"name": "x", "count": 1, "users": ["UFAKE7002"]}]})
+    upsert_message(gen, {"ts": "4087911701.000100", "text": "Bop the :pickle: for pickleball",
+                         "reactions": [{"name": "pickle", "count": 2, "users": ["UFAKE7003", "UFAKE7004"]}]})
+    upsert_message(trip, {"ts": "4087911702.000100", "subtype": "bot_message",
+                          "username": "Cuyuna Trip Sign-Up",
+                          "text": "Trip Signup Submitted. This does not mean that they have paid!\nZed Nobodyfake"})
+    upsert_correction(f"{gen}:4087911700.000100", {
+        "create": True, "date": "2099-07-20", "category": "social", "title": "Game night",
+        "emoji_roles": {"white_check_mark": "rsvp", "x": "decline"}}, "test", "test")
+    stats = rebuild(commit=False)
+
+    event = PracticeSession.query.filter_by(session_key=f"{gen}:4087911700.000100:main").one()
+    assert (event.kind, event.category, event.rsvp_count) == ("event", "social", 1)
+    decline = PracticeAttendance.query.filter_by(session_id=event.id, role="decline").one()
+    assert decline.person_key == "slack:UFAKE7002"
+
+    trip_session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
+    row = PracticeAttendance.query.filter_by(session_id=trip_session.id).one()
+    assert row.person_key == "name:zed nobodyfake" and row.slack_uid is None
+    assert "unmatched_person" in trip_session.flags and "missing_date" in trip_session.flags
+
+    keys = [c["post_key"] for c in AppConfig.get("analytics_coverage")["candidates"]]
+    assert f"{gen}:4087911701.000100" in keys and f"{gen}:4087911700.000100" not in keys
+    assert stats["candidates"] == len(keys)
+
+
+def test_load_people_excludes_ambiguous_names(db_session):
+    from app.analytics.rebuild import load_people
+    from app.models import User
+
+    for index, (first, last) in enumerate([("Pat", "Twin"), ("Pat", "Twin"), ("Solo", "Fake")]):
+        db_session.add(User(first_name=first, last_name=last,
+                            email=f"task6-person-{index}@example.invalid"))
+    people = load_people()
+    assert "pat twin" not in people["name_to_member"]
+    assert "solo fake" in people["name_to_member"]
+
+
+def test_load_app_trip_signups_keeps_members_without_slack_and_skips_cancelled(db_session):
+    from datetime import date, datetime
+    from app.analytics.drafts import TripSignup
+    from app.analytics.rebuild import load_app_trip_signups
+    from app.models import SlackUser, Trip, User
+    from app.trips.models import TripRegistration, TripSeries
+
+    series = TripSeries(slug="task6-fake-trip", name="Fake trip", destination="Fake venue")
+    trip = Trip(slug="task6-fake-trip-2099", series=series, name="Fake trip", destination="Fake venue",
+                max_participants_standard=10, max_participants_extra=0,
+                start_date=datetime(2099, 1, 10, 12), end_date=datetime(2099, 1, 12, 12),
+                signup_start=datetime(2098, 11, 1), signup_end=datetime(2099, 1, 1),
+                price_low=0, price_high=0)
+    registrations = []
+    for index, status in enumerate(["confirmed", "pending_payment", "cancelled"]):
+        user = User(first_name="Trip", last_name=f"Fake{index}",
+                    email=f"task6-trip-{index}@example.invalid",
+                    slack_user=SlackUser(slack_uid="UFAKE6001") if index == 0 else None)
+        registrations.append(TripRegistration(trip=trip, user=user, status=status,
+                                              price_tier="low", amount_cents=0))
+    db_session.add_all(registrations)
+    db_session.flush()
+    rows = [row for row in load_app_trip_signups() if row.series_slug == series.slug]
+    assert rows == [
+        TripSignup(series.slug, 2098, date(2099, 1, 10), "UFAKE6001", None,
+                   f"trip_registration:{registrations[0].id}"),
+        TripSignup(series.slug, 2098, date(2099, 1, 10), None, "Trip Fake1",
+                   f"trip_registration:{registrations[1].id}"),
+    ]
+
+
+def test_coverage_snapshot_summarizes_candidates_in_central_time(db_session):
+    from datetime import date, datetime
+    from app.analytics.rebuild import coverage_snapshot
+
+    row = upsert_message("C0B2VN1LU11", {"ts": "4087911710.000100",
+        "text": "\n  \n" + "A" * 150 + "\nSecond line", "reactions": [
+            {"name": "one", "count": 1}, {"name": "four", "count": 4},
+            {"name": "two", "count": 2}, {"name": "three", "count": 3}]})
+    row.posted_at = datetime(2099, 7, 20, 2)
+    key = f"{row.channel_id}:{row.ts}"
+    start = datetime.utcnow().replace(microsecond=0)
+    snapshot = coverage_snapshot([key], [date(2099, 11, 9)])
+    assert start <= datetime.fromisoformat(snapshot["computed_at"]) <= datetime.utcnow()
+    assert snapshot["empty_weeks"] == ["2099-11-09"]
+    assert snapshot["candidates"] == [{
+        "post_key": key, "channel": "C0B2VN1LU11", "date": "2099-07-19",
+        "text": "A" * 140, "reactions": {"four": 4, "three": 3, "two": 2}}]
