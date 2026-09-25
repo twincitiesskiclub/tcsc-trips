@@ -1,0 +1,127 @@
+{% extends 'admin/admin_base.html' %}
+{% block title %}{{ dashboard.title }}{% endblock %}
+{% block extra_css %}
+<style>
+  #analytics, #analytics * { box-sizing: border-box; }
+  #analytics { min-width: 0; overflow-wrap: anywhere; }
+  #analytics .analytics-card { min-width: 0; max-width: 100%; }
+  #analytics fieldset { min-width: 0; border: 0; margin-inline: 0; padding: 0; }
+  #analytics .analytics-pill { position: relative; display: inline-flex; max-width: 100%; }
+  #analytics .analytics-pill input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+  #analytics .analytics-pill span { min-height: 44px; display: inline-flex; align-items: center; white-space: normal; }
+  #analytics .analytics-pill input:checked + span { background: #1c2c44; color: #fff; border-color: #1c2c44; }
+  #analytics .analytics-pill input:focus-visible + span { outline: 2px solid #1c2c44; outline-offset: 2px; }
+  #analytics input[type=date] { min-width: 0; max-width: 100%; min-height: 44px; }
+  #analytics .analytics-chart { width: 100%; min-width: 0; overflow: hidden; }
+  #analytics .analytics-chart .vega-embed { padding: 0; max-width: 100%; }
+  #analytics .analytics-chart svg { max-width: 100%; height: auto; }
+  #analytics .analytics-table-wrap { max-width: 100%; overflow-x: auto; }
+  #analytics .analytics-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  #analytics .analytics-table th, #analytics .analytics-table td { padding: 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid #e3e5e6; }
+  #analytics .analytics-table th { cursor: pointer; }
+  #analytics .analytics-table th[aria-sort=ascending]::after { content: ' ↑'; }
+  #analytics .analytics-table th[aria-sort=descending]::after { content: ' ↓'; }
+  #analytics summary { min-height: 44px; padding: 12px 0; cursor: pointer; }
+</style>
+{% endblock %}
+{% macro data_table(block) %}
+<div class="analytics-table-wrap" tabindex="0" role="region" aria-label="{{ block.title }} data">
+  <table class="analytics-table">
+    <caption class="sr-only">{{ block.title }}</caption>
+    <thead><tr>{% for key, label in block.columns %}<th scope="col">{{ label }}</th>{% endfor %}</tr></thead>
+    <tbody>{% for row in block.rows %}<tr>{% for key, label in block.columns %}<td>{{ row.get(key, '') if row.get(key) is not none else '' }}</td>{% endfor %}</tr>
+      {% else %}<tr><td colspan="{{ block.columns|length }}">No data for these filters.</td></tr>{% endfor %}</tbody>
+  </table>
+</div>
+{% endmacro %}
+{% block content %}
+<div id="analytics" class="space-y-6">
+  <header>
+    <a href="{{ url_for('admin_analytics.index') }}" class="text-sm text-zinc-600">Analytics</a>
+    <h1 class="text-2xl font-semibold text-tcsc-navy">{{ dashboard.title }}</h1>
+    <p class="text-sm text-zinc-600">{{ dashboard.question }}</p>
+  </header>
+  <form method="get" action="{{ url_for('admin_analytics.dashboard', slug=dashboard.slug) }}" class="analytics-card rounded-lg border border-solid border-zinc-200 bg-white p-4 space-y-4" aria-label="Dashboard filters">
+    {% for name, key, label, selected in [
+      ('season', 'seasons', 'Seasons', filters.seasons),
+      ('day_of_week', 'days', 'Days', filters.days),
+      ('activity', 'activities', 'Activities', filters.activities),
+      ('workout_type', 'workout_types', 'Workout types', filters.workout_types),
+      ('location', 'locations', 'Locations', filters.location_ids),
+      ('format', 'formats', 'Formats', filters.formats),
+      ('kind', 'kinds', 'Kinds', filters.kinds)] %}
+      {% if name in dashboard.filters %}
+      <fieldset>
+        <legend class="mb-2 text-sm font-semibold">{{ label }}</legend>
+        <div class="flex flex-wrap gap-2">
+          {% for option in options.get(key, []) %}
+          {% set value = option[0] if name == 'location' else option %}
+          {% set text = option[1] if name == 'location' else option %}
+          {% if name == 'format' %}
+          {% set text = {'single': 'One session', 'split': 'Two sessions', 'merged': 'Merged'}.get(value, value) %}
+          {% endif %}
+          <label class="analytics-pill">
+            <input type="checkbox" name="{{ name }}" value="{{ value }}" {% if value in selected %}checked{% endif %}>
+            <span class="admin-ui-pill">{{ text }}</span>
+          </label>
+          {% endfor %}
+        </div>
+      </fieldset>
+      {% endif %}
+    {% endfor %}
+    {% if 'date_range' in dashboard.filters %}
+    <div class="flex flex-wrap gap-4">
+      <label class="block text-sm font-semibold">From
+        <input class="block rounded-lg border border-solid border-zinc-200 text-sm" type="date" name="date_from" value="{{ filters.date_from.isoformat() if filters.date_from else '' }}">
+      </label>
+      <label class="block text-sm font-semibold">Through
+        <input class="block rounded-lg border border-solid border-zinc-200 text-sm" type="date" name="date_to" value="{{ filters.date_to.isoformat() if filters.date_to else '' }}">
+      </label>
+    </div>
+    {% endif %}
+    <div class="flex flex-wrap items-center gap-4">
+      <button type="submit" class="rounded-lg border-0 bg-tcsc-navy px-4 py-3 text-sm font-semibold text-white cursor-pointer">Apply</button>
+      <a href="{{ url_for('admin_analytics.dashboard', slug=dashboard.slug) }}" class="px-2 py-3 text-sm text-zinc-600">Reset</a>
+    </div>
+  </form>
+  {% for block in blocks %}
+    {% if block.kind == 'tiles' %}
+    <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">
+      {% for tile in block.tiles %}
+      <div class="analytics-card rounded-lg border border-solid border-zinc-200 bg-white p-4">
+        <div class="text-sm text-zinc-600">{{ tile.label }}</div>
+        <div class="text-2xl font-semibold">{{ tile.value }}</div>
+        {% if tile.sub %}<div class="text-sm text-zinc-600">{{ tile.sub }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% elif block.kind == 'chart' %}
+    <section class="analytics-card rounded-lg border border-solid border-zinc-200 bg-white p-4">
+      <h2 class="text-lg font-semibold">{{ block.title }}</h2>
+      <p class="text-sm text-zinc-600">{{ block.description }}</p>
+      {% if block.rows %}
+      <div class="analytics-chart" data-spec-id="spec-{{ loop.index }}" role="img" aria-label="{{ block.description }}"></div>
+      <script type="application/json" id="spec-{{ loop.index }}">{{ block.spec|tojson }}</script>
+      {% else %}
+      <p class="text-sm text-zinc-600">No data for these filters.</p>
+      {% endif %}
+      <details><summary>Show data</summary>{{ data_table(block) }}</details>
+    </section>
+    {% elif block.kind == 'table' %}
+    <section class="analytics-card rounded-lg border border-solid border-zinc-200 bg-white p-4">
+      <h2 class="text-lg font-semibold">{{ block.title }}</h2>
+      {{ data_table(block) }}
+    </section>
+    {% elif block.kind == 'note' %}
+    <p class="text-sm text-zinc-600">{{ block.text }}</p>
+    {% endif %}
+  {% endfor %}
+  <footer class="text-sm text-zinc-600">{% if footer.get('data_through') %}Data through {{ footer['data_through'] }}{% else %}Data not yet synced{% endif %} · RSVPs are not headcount · {{ footer.get('needs_review', 0) }} sessions need review</footer>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='vendor/vega@6.4.0.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/vega-lite@6.4.3.min.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/vega-embed@7.3.0.min.js') }}"></script>
+<script src="{{ url_for('static', filename='admin_analytics.js') }}"></script>
+{% endblock %}

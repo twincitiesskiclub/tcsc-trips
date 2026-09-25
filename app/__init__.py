@@ -31,6 +31,7 @@ from .analytics.models import (  # noqa: F401  (Alembic metadata registration)
     AnalyticsCorrection,
 )
 from .routes.admin import admin
+from .routes.admin_analytics import admin_analytics_bp
 from .routes.admin_availability import admin_availability_bp
 from .routes.admin_events import admin_events_bp
 from .routes.admin_newsletter import admin_newsletter_bp
@@ -80,6 +81,7 @@ def create_app(environment=None):
     app.register_blueprint(events)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
+    app.register_blueprint(admin_analytics_bp)
     app.register_blueprint(admin_availability_bp)
     app.register_blueprint(admin_events_bp)
     app.register_blueprint(admin_newsletter_bp)
