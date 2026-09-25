@@ -20,6 +20,7 @@ class HistoryConfigError(ValueError):
 @dataclass
 class HistoryConfig:
     excluded_slack_uids: frozenset
+    applause_emoji: frozenset
     coach_emoji: frozenset
     default_lat: float
     default_lon: float
@@ -73,6 +74,10 @@ def _date(value, key):
     raise HistoryConfigError(f"{key}: expected an ISO date")
 
 
+def base_emoji(name: str) -> str:
+    return re.sub(r"::skin-tone-\d+$", "", name)
+
+
 def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
     """Load rules afresh, rejecting malformed content before any rebuild."""
     try:
@@ -86,7 +91,7 @@ def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
         raise HistoryConfigError("corrections: per-post corrections belong in the DB")
     if "coach_emoji" in data:
         raise HistoryConfigError('coach_emoji: belongs in AppConfig "analytics_coach_emoji"')
-    for key in ("excluded_slack_uids", "event_keywords", "indoor_locations"):
+    for key in ("excluded_slack_uids", "applause_emoji", "event_keywords", "indoor_locations"):
         _strings(data.get(key), key)
 
     default = data.get("default_location")
@@ -147,6 +152,7 @@ def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
 
     return HistoryConfig(
         excluded_slack_uids=frozenset(data["excluded_slack_uids"]),
+        applause_emoji=frozenset(base_emoji(e) for e in data["applause_emoji"]),
         coach_emoji=frozenset(),
         default_lat=float(default["lat"]), default_lon=float(default["lon"]),
         venues=data["venues"], activity_rules=data["activity_rules"],
@@ -233,7 +239,3 @@ def workout_bucket(types: list, cfg: HistoryConfig) -> str:
         if any(value in members for value in types):
             return name
     return "Other"
-
-
-def base_emoji(name: str) -> str:
-    return re.sub(r"::skin-tone-\d+$", "", name)

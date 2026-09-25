@@ -7,6 +7,7 @@ import re
 from zoneinfo import ZoneInfo
 
 from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS
+from app.analytics.coverage import find_candidates
 from app.analytics.drafts import (
     AppPractice, ArchivedMessage, AttendanceDraft, LineageResult, LocationRef,
     SeasonRef, SessionDraft,
@@ -25,7 +26,6 @@ MERGE_RE = re.compile(r"\b(combin\w*|merg\w*|one session|single session|one lift
 CANCEL_RE = re.compile(r"\bcancel(l?ed|l?ing|s)?\b", re.I)
 _CENTRAL = ZoneInfo("America/Chicago")
 _CLOCK = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?!\d)\s*(AM|PM)?", re.I)
-_MISS_EMOJI = {"white_check_mark", "six", "seven", "zap", "meow-coffee", "ballot_box_with_check"}
 
 
 @dataclass
@@ -301,17 +301,10 @@ def build_lineage(
             sessions.append(session)
             attendance.extend(rows)
 
-    produced = {(session.channel_id, session.source_ts) for session in sessions}
-    # A correction resolves the post even when it skips every resulting session.
-    corrected_posts = {":".join(key.split(":")[:2]) for key in corrections
-                       if not key.startswith("practice:")}
-    corrected_posts.update(f"{session.channel_id}:{session.source_ts}" for session in drafts
-                           if session.session_key in corrections)
-    misses = [f"{channel}:{ts}" for (channel, ts), message in indexed.items()
-              if channel in SESSION_CHANNELS and (channel, ts) not in consumed | produced
-              and f"{channel}:{ts}" not in corrected_posts
-              and _top_level(message) and not is_weekly_preview(message.raw.get("text", ""))
-              and any(reaction.get("count", 0) >= 5 and base_emoji(reaction["name"]) in _MISS_EMOJI
-                      for reaction in message.raw.get("reactions", []))]
+    produced = consumed | {(session.channel_id, session.source_ts) for session in sessions}
+    # A correction on any session of a post resolves the whole post.
+    corrected = {session.group_key for session in drafts if session.session_key in corrections}
+    misses = [key for key in find_candidates(indexed.values(), produced, corrections, cfg.applause_emoji)
+              if key not in corrected]
     sessions.sort(key=lambda session: (session.date, session.start_time or time.min, session.session_key))
     return LineageResult(sessions, attendance, sorted(misses))

@@ -293,6 +293,16 @@ def test_only_eligible_top_level_messages_are_possible_misses(cfg):
     assert res.possible_misses == [f"{CH}:{msg.ts}"]
 
 
+def test_possible_misses_include_event_rsvp_wording_and_non_applause_reactions(cfg):
+    wording = replace(_post("Bop the :pickle:", []), channel_id="C02HXN45214")
+    reactions = replace(_post("Cider tasting Saturday", [R("apple", *[
+        f"UFAKE{i:04d}" for i in range(5)])]), channel_id="C02J1FDSBHT")
+    result = build_lineage([reactions, wording], [], LOCS, [], cfg)
+    assert result.sessions == []
+    assert result.possible_misses == sorted([
+        f"{wording.channel_id}:{wording.ts}", f"{reactions.channel_id}:{reactions.ts}"])
+
+
 def test_app_merge_keeps_both_slots_buttons_and_plan_choices(cfg):
     msg = _post(SPLIT_TEXT, [R("six", "UFAKE1"), R("seven", "UFAKE2"),
                              R("book", "UFAKE3"), R("bike", "UFAKE4")], replies=[{

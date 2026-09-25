@@ -6,6 +6,14 @@ excluded_slack_uids:
   - U06FYPUNQCU   # TCSC app bot, reacts to its own posts with every RSVP emoji
   - U04C46UJXAM   # Zapier-linked account that posted 2022-2025 templates
 
+# Reactions that mean applause, not attendance. A post whose only big
+# reactions are these is not a candidate. Posts that NAME one of these as
+# the RSVP emoji ("smash that :fire:") are still caught by the RSVP wording.
+applause_emoji: ["heart", "+1", "thumbsup", "tada", "joy", "clap", "raised_hands", "100",
+                 "heart_eyes", "laughing", "rolling_on_the_floor_laughing", "pray",
+                 "partying_face", "star-struck", "sob", "eyes", "muscle", "fire",
+                 "sparkles", "white_heart", "blue_heart", "purple_heart", "green_heart",
+                 "exploding_head", "hugging_face", "catjam", "foxy_yay"]
 
 default_location: {lat: 44.9778, lon: -93.2650}   # central Minneapolis, used when a venue is unknown
 

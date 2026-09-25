@@ -259,3 +259,39 @@ def test_coach_emoji_belongs_in_app_config(tmp_path, value):
     path.write_text(yaml.safe_dump(data))
     with pytest.raises(HistoryConfigError, match='coach_emoji.*AppConfig "analytics_coach_emoji"'):
         load_history_config(path)
+
+
+def test_applause_emoji_required(tmp_path):
+    import yaml
+    from app.analytics.history_config import DEFAULT_PATH, HistoryConfigError, load_history_config
+    data = yaml.safe_load(DEFAULT_PATH.read_text())
+    assert "heart" in load_history_config().applause_emoji
+    del data["applause_emoji"]
+    path = tmp_path / "h.yaml"
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(HistoryConfigError, match="applause_emoji"):
+        load_history_config(path)
+
+
+@pytest.mark.parametrize("value", [None, "heart", [123], [""]])
+def test_applause_emoji_must_be_strings(tmp_path, value):
+    import yaml
+    from app.analytics.history_config import DEFAULT_PATH
+
+    data = yaml.safe_load(DEFAULT_PATH.read_text())
+    data["applause_emoji"] = value
+    path = tmp_path / "h.yaml"
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(HistoryConfigError, match="applause_emoji"):
+        load_history_config(path)
+
+
+def test_applause_emoji_normalizes_skin_tones(tmp_path):
+    import yaml
+    from app.analytics.history_config import DEFAULT_PATH
+
+    data = yaml.safe_load(DEFAULT_PATH.read_text())
+    data["applause_emoji"] = ["heart", "clap::skin-tone-4", "clap"]
+    path = tmp_path / "h.yaml"
+    path.write_text(yaml.safe_dump(data))
+    assert load_history_config(path).applause_emoji == frozenset({"heart", "clap"})
