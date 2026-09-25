@@ -62,6 +62,14 @@ def test_unknown_slug_404(admin_client):
     assert admin_client.get("/admin/analytics/nope").status_code == 404
 
 
+def test_thursday_strength_redirects(admin_client):
+    response = admin_client.get("/admin/analytics/thursday-strength")
+    assert response.status_code == 302
+    location = response.headers["Location"]
+    assert "/admin/analytics/practices" in location
+    assert "activity=Strength" in location and "day_of_week=Thursday" in location
+
+
 def test_detail_requires_admin(client):
     assert client.get('/admin/analytics/stub').status_code in (302, 401)
 
@@ -83,10 +91,20 @@ def test_module_dispatch_and_all_filter_controls(admin_client):
     parse.assert_called_once()
     assert response.status_code == 200
     html = response.data.decode()
-    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds']:
+    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds', 'Categories']:
         assert label in html
     assert '&lt;script&gt;alert' in html
     assert 'method="get"' in html and 'analytics-table' in html
+
+
+def test_category_control_preserves_selection(admin_client):
+    with patch.object(STUB, 'filters', ['category']), \
+         patch.object(base, 'filter_options', return_value={'categories': ['social', 'trip']}):
+        response = admin_client.get('/admin/analytics/stub?category=social')
+    assert response.status_code == 200
+    assert b'name="category" value="social" checked' in response.data
+    assert b'name="category" value="trip" checked' not in response.data
+    assert b'name="category" value="trip"' in response.data
 
 
 def test_empty_chart_keeps_description_and_table_without_embed_target(admin_client):

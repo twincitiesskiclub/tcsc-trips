@@ -199,20 +199,6 @@ def test_build_trusts_loaders_even_when_filters_do_not_match():
     assert _tiles(blocks)["Average per week"].value == "38.8"
 
 
-def test_registered_dashboard_route_uses_real_blocks(admin_client):
-    from app.analytics.dashboards import base
-    with patch.object(ts, "load_sessions", return_value=_data()[0]), \
-         patch.object(ts, "load_attendance", return_value=_data()[1]), \
-         patch.object(base, "get_filter_domains", return_value={"seasons": {"2099 Fall/Winter"},
-            "activities": {"Strength"}, "workout_types": set(), "location_ids": set()}), \
-         patch.object(base, "filter_options", return_value={}), \
-         patch.object(base, "footer", return_value={}):
-        response = admin_client.get("/admin/analytics/thursday-strength")
-    assert response.status_code == 200
-    assert response.data.count(b'class="analytics-chart"') == 4
-    assert b"38.8" in response.data and b"Should Thursday strength run as one session or two?" in response.data
-
-
 def test_sessions_with_known_and_unknown_times_sort_safely():
     from datetime import time
     sessions = [_session(1), _session(2)]

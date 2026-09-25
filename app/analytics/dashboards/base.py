@@ -8,6 +8,7 @@ from sqlalchemy.engine import Row
 from werkzeug.datastructures import MultiDict
 
 from app import utils
+from app.analytics import CATEGORIES
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
 from app.models import db
 
@@ -70,24 +71,26 @@ class Filters:
     workout_types: list[str] = field(default_factory=list)
     location_ids: list[int] = field(default_factory=list)
     formats: list[str] = field(default_factory=list)
-    kinds: list[str] = field(default_factory=lambda: ["practice"])
+    kinds: list[str] = field(default_factory=list)
+    categories: list[str] = field(default_factory=list)
 
 
-FILTER_NAMES = ("season", "date_range", "day_of_week", "activity", "workout_type", "location", "format", "kind")
+FILTER_NAMES = ("season", "date_range", "day_of_week", "activity", "workout_type", "location", "format", "kind", "category")
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 FORMATS = ("single", "split", "merged")
-KINDS = ("practice", "event")
+KINDS = ("practice", "event", "trip")
 # URL name, Filters attribute, PracticeSession column.
 _FIELDS = (
     ("season", "seasons", "season_label"), ("day_of_week", "days", "day_of_week"),
     ("activity", "activities", "activity"), ("workout_type", "workout_types", "workout_type"),
     ("location", "location_ids", "location_id"), ("format", "formats", "format"),
-    ("kind", "kinds", "kind"),
+    ("kind", "kinds", "kind"), ("category", "categories", "category"),
 )
 
 
 def _past_sessions():
-    return PracticeSession.query.filter(PracticeSession.date <= utils.today_central())
+    return PracticeSession.query.filter(
+        PracticeSession.date <= utils.today_central(), ~PracticeSession.flags.any("missing_date"))
 
 
 def _distinct(column):
@@ -105,13 +108,14 @@ def _values(value):
 
 
 def parse_filters(args: MultiDict, dashboard: Dashboard, domains=None) -> Filters:
-    domains = {**(get_filter_domains() if domains is None else domains), "days": set(DAYS), "formats": set(FORMATS), "kinds": set(KINDS)}
+    domains = {**(get_filter_domains() if domains is None else domains), "days": set(DAYS),
+               "formats": set(FORMATS), "kinds": set(KINDS), "categories": set(CATEGORIES)}
     result = Filters()
     for name, attribute, _ in _FIELDS:
         def valid(values, *, fixed=False):
             # Fixed data constraints must survive an empty/missing DB domain.
             # Catalog constraints still reject invalid dashboard configuration.
-            check_domain = not fixed or attribute in ("days", "formats", "kinds")
+            check_domain = not fixed or attribute in ("days", "formats", "kinds", "categories")
             cleaned = []
             for value in values:
                 if attribute == "location_ids":
@@ -128,8 +132,6 @@ def parse_filters(args: MultiDict, dashboard: Dashboard, domains=None) -> Filter
             values = valid(_values(dashboard.defaults.get(attribute, dashboard.defaults.get(name, []))))
         if attribute in dashboard.fixed or name in dashboard.fixed:
             values = valid(_values(dashboard.fixed.get(attribute, dashboard.fixed.get(name))), fixed=True)
-        if attribute == "kinds" and not values:
-            values = ["practice"]
         setattr(result, attribute, values)
 
     for attribute in ("date_from", "date_to"):
@@ -170,11 +172,13 @@ def load_sessions(filters) -> list[PracticeSession]:
 def load_attendance(session_ids: list[int], role="rsvp") -> list[Row]:
     if not session_ids:
         return []
+    role_filter = PracticeAttendance.role.in_(role) if isinstance(role, tuple) else PracticeAttendance.role == role
     return PracticeAttendance.query.with_entities(
         PracticeAttendance.session_id, PracticeAttendance.slack_uid,
+        PracticeAttendance.person_key, PracticeAttendance.user_id,
         PracticeAttendance.slot, PracticeAttendance.role,
     ).filter(
-        PracticeAttendance.session_id.in_(session_ids), PracticeAttendance.role == role
+        PracticeAttendance.session_id.in_(session_ids), role_filter
     ).order_by(PracticeAttendance.id).all()
 
 
@@ -194,7 +198,8 @@ def filter_options(dashboard, domains=None) -> dict:
             "locations": sorted({(id_, name or f"Location {id_}") for id_, name in locations}, key=lambda item: (item[1], item[0])),
             "days": [value for value in DAYS if value in days],
             "formats": [value for value in FORMATS if value in formats],
-            "kinds": [value for value in KINDS if value in kinds]}
+            "kinds": [value for value in KINDS if value in kinds],
+            "categories": [c for c in CATEGORIES if c in _distinct(PracticeSession.category)]}
 
 
 def footer() -> dict:
