@@ -197,6 +197,11 @@ def test_gap_key_needs_monday_and_only_gap_ok():
         validate_correction(POST, {"gap_ok": "only on gap keys"})
 
 
+def test_gap_key_rejects_invalid_iso_date():
+    with pytest.raises(CorrectionError, match="^gap key: expected a valid ISO date$"):
+        validate_correction("gap:2099-02-30", {"gap_ok": "Holiday break"})
+
+
 def test_add_accepts_signup_and_decline():
     validate_correction(POST, {"add": [{"slack_uid": "UFAKE0001", "role": "decline"},
                                        {"slack_uid": "UFAKE0002", "role": "signup"}]})

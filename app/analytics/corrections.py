@@ -90,7 +90,11 @@ def validate_correction(key: str, fields: dict) -> dict:
     if gap:
         if set(fields) != {"gap_ok"}:
             raise CorrectionError("gap keys take only gap_ok")
-        if date.fromisoformat(gap[1]).weekday() != 0:
+        try:
+            gap_date = date.fromisoformat(gap[1])
+        except ValueError as exc:
+            raise CorrectionError("gap key: expected a valid ISO date") from exc
+        if gap_date.weekday() != 0:
             raise CorrectionError("gap key: expected a Monday")
     elif "gap_ok" in fields:
         raise CorrectionError("gap_ok: only on gap:YYYY-MM-DD keys")
