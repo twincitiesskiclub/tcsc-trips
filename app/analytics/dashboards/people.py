@@ -54,10 +54,12 @@ def retention(pairs):
             continue
         for group in ("First season", "Returning"):
             people = [p for p in seasons[label] if (first[p] == label) == (group == "First season")]
+            if not people:
+                continue
             returned = sum(p in seasons[following] for p in people)
             rows.append({"season_label": label, "next_season": following, "group": group,
                          "people": len(people), "returned": returned,
-                         "rate": round(returned / len(people), 2) if people else 0.0})
+                         "rate": round(returned / len(people), 2)})
     return rows
 
 
@@ -149,6 +151,7 @@ def never_rsvpd():
     if season is None:
         return []
     came = db.session.query(PracticeAttendance.user_id).join(PracticeSession).filter(
+        PracticeSession.status == "held",
         PracticeSession.date >= season.start_date, PracticeAttendance.user_id.isnot(None),
         PracticeAttendance.role.in_(("rsvp", "signup")))
     rows = db.session.query(User.first_name, User.last_name).join(
@@ -159,13 +162,13 @@ def never_rsvpd():
 
 
 def build(filters):
-    everything = load_sessions(Filters(kinds=filters.kinds))
+    everything = load_sessions(Filters())
     pairs = attendance_pairs(everything, load_attendance([s.id for s in everything], role=("rsvp", "signup")))
     today = utils.today_central()
     current = current_label(pairs, today)
     lapsed = lapsed_regulars(pairs, today)
     names = display_names([p for p, _ in pairs])
-    selected = [(p, s) for p, s in pairs if not filters.seasons or s.season_label in filters.seasons]
+    selected = [(p, s) for p, s in pairs if not filters.kinds or s.kind in filters.kinds]
 
     this_season = _by_season(pairs).get(current, {})
     first = _first_season(pairs)
@@ -179,9 +182,11 @@ def build(filters):
         Tile("First-timers", sum(first[p] == current for p in this_season), "first time ever this season"),
         Tile("Lapsed regulars", len(lapsed), "regular last season, gone 4 weeks"),
     ])
-    retained = retention(selected)
+    retained = [row for row in retention(selected)
+                if not filters.seasons or row["season_label"] in filters.seasons]
     retention_description = "Share of each season's people who came back the next season of the same type."
-    newcomers = newcomer_curve(selected)
+    newcomers = [row for row in newcomer_curve(selected)
+                 if not filters.seasons or row["season_label"] in filters.seasons]
     newcomer_description = "People in their first season, by how many sessions they came to that season."
     return [
         tiles,
@@ -199,7 +204,7 @@ def build(filters):
                   color_range=["#c7d2fe", "#a5b4fc", "#818cf8", "#6366f1", "#4a3aa7"],
                   x_title="Season", y_title="People", tooltip=["season_label", "bucket", "people"])),
               newcomers, [("season_label", "Season"), ("bucket", "Sessions"), ("people", "People")]),
-        Table("Who comes to what", overlap(selected), [("combo", "Comes to"), ("people", "People")]),
+        Table("Who comes to what", overlap(pairs), [("combo", "Comes to"), ("people", "People")]),
         Table("Lapsed regulars", [{**row, "name": names[row["person_key"]]} for row in lapsed],
               [("name", "Name"), ("last_rsvp", "Last RSVP"), ("last_season_count", "Last season"),
                ("this_season_count", "This season")]),
@@ -210,7 +215,9 @@ def build(filters):
                ("trip_this", "Trips this season"), ("practice_last", "Practices last season"),
                ("all_time", "All time")]),
         Note("A person counts as coming when they RSVP'd or signed up. Count-only sessions from the "
-             "old general channel have no names, so they are left out here."),
+             "old general channel have no names, so they are left out here. "
+             "The earliest season on record (Oct 2022) counts everyone as first season "
+             "because there is no earlier data."),
     ]
 
 
