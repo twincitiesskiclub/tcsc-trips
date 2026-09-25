@@ -310,7 +310,7 @@ Filters come from one catalog: `season`, `date_range`, `day_of_week`, `activity`
 
 ### Rendering
 
-The page is server-rendered. Each chart's spec is inlined with `|tojson`. `admin_analytics.js` calls `vegaEmbed` with `renderer: 'svg'` and `actions: false`, sets width from the container, and re-embeds on resize (debounced ResizeObserver). A render error shows a message in place of the chart. The page keeps no client-side state and needs no JSON API.
+The page is server-rendered. Each chart's spec is inlined with `|tojson`. `admin_analytics.js` calls `vegaEmbed` with `renderer: 'svg'`, `actions: false` and `ast: true` (the admin CSP forbids `unsafe-eval`, so Vega must use its expression interpreter), sets width from the container, and re-embeds on resize (debounced ResizeObserver). A render error shows a message in place of the chart. The page keeps no client-side state and needs no JSON API.
 
 ### `charts.py`
 

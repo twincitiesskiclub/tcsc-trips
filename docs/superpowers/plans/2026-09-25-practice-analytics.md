@@ -2235,7 +2235,7 @@ This is one task because none of the pieces is reviewable alone. The deliverable
 
   The footer reads: "Data through {{ footer.data_through }} · RSVPs are not headcount · {{ footer.needs_review }} sessions need review". Load the three vendored scripts, then `admin_analytics.js`, in `{% block extra_js %}`, only on this template.
 - `admin_analytics.js` (vanilla, UMD-style export for node tests like `practice_plan_reactions.js`):
-  - `embedAll(root, vegaEmbed)`: for each `.analytics-chart`, parse its JSON script, set `spec.width` to the element's `clientWidth` minus 8, and call `vegaEmbed(el, spec, {renderer: "svg", actions: false})`. On a rejected promise, set `el.textContent = "This chart could not be drawn. The table below has the same numbers."`
+  - `embedAll(root, vegaEmbed)`: for each `.analytics-chart`, parse its JSON script, set `spec.width` to the element's `clientWidth` minus 8, and call `vegaEmbed(el, spec, {renderer: "svg", actions: false, ast: true})` (`ast: true` because the admin CSP has no `unsafe-eval`). On a rejected promise, set `el.textContent = "This chart could not be drawn. The table below has the same numbers."`
   - `watchResize(root, vegaEmbed)`: a ResizeObserver, debounced 150 ms, that re-embeds a chart when its width changes by more than 8 px
   - `sortTable(table, colIndex)`: numeric-aware, toggles asc/desc, sets `aria-sort`, and is attached on `th` click and Enter key
   - Auto-init on `DOMContentLoaded` when `window.vegaEmbed` exists
