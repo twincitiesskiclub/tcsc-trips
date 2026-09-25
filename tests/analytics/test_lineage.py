@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, time
 from dataclasses import replace
 
 import pytest
@@ -32,6 +32,103 @@ def _post(text, reactions, when=datetime(2099, 7, 16, 8, 0), replies=()):
 
 def R(name, *users):
     return {"name": name, "count": len(users), "users": list(users)}
+
+
+def test_create_session_from_no_header_post(cfg):
+    from copy import deepcopy
+
+    msg = replace(_post("\n  *Official RSVP for _strength_ tomorrow at 7 am &amp; a stretch*  \nDetails below",
+                        [R("white_check_mark", BOT, "UFAKE0001", "UFAKE0002", "UFAKE0003", "UFAKE0004")]),
+                  archive_id=42)
+    key = f"{CH}:{msg.ts}"
+    corrections = {key: {"create": True, "date": "2099-07-17", "start_time": "07:00",
+                         "location": "Balance Fitness Studio", "activities": ["Strength"]}}
+    before = deepcopy((msg, corrections))
+    assert build_lineage([msg], [], LOCS, [], cfg).possible_misses == [key]
+    result = build_lineage([msg], [], LOCS, [], cfg, corrections)
+    session, = result.sessions
+    assert (session.session_key, session.group_key, session.era, session.format, session.slot) == (
+        key + ":main", key, "template", "single", None)
+    assert (session.date, session.start_time, session.rsvp_count) == (date(2099, 7, 17), time(7), 4)
+    assert session.title == "Official RSVP for strength tomorrow at 7 am & a stretch"
+    assert (session.venue_raw, session.location_name, session.location_id, session.is_indoor) == (
+        "Balance Fitness Studio", "Balance Fitness Studio", 38, True)
+    assert (session.lat, session.lon) == (44.95, -93.28)
+    assert (session.activities, session.activity, session.workout_types, session.workout_type) == (
+        ["Strength"], "Strength", ["Circuit"], "Circuit")
+    assert (session.channel_id, session.source_ts, session.source_archive_id) == (CH, msg.ts, 42)
+    assert (session.kind, session.status, session.flags, session.needs_review) == ("practice", "held", [], False)
+    assert session.rsvp_emoji_set == ["white_check_mark"]
+    assert result.possible_misses == []
+    assert {row.slack_uid for row in result.attendance} == {f"UFAKE000{i}" for i in range(1, 5)}
+    assert all(row.role == "rsvp" and row.source == "reaction" for row in result.attendance)
+    assert build_lineage([msg], [], LOCS, [], cfg, corrections) == result
+    assert (msg, corrections) == before
+
+
+@pytest.mark.parametrize("emojis,expected", [(["zap", "six"], 2), ([], 0)])
+def test_create_honors_overrides_and_reaction_roles(cfg, emojis, expected):
+    msg = _post("Strength tomorrow", [R("white_check_mark", "UFAKE0009"),
+        R("zap::skin-tone-3", BOT, "UFAKE0001"), R("six", "UFAKE0001", "UFAKE0002"),
+        R("coachface", BOT, "UFAKE0003"), R("book::skin-tone-2", "UFAKE0004")])
+    cfg = replace(cfg, coach_emoji=frozenset({"coachface"}))
+    corrections = {f"{CH}:{msg.ts}": {"create": True, "date": "2099-07-17",
+        "activities": ["Run", "Bike"], "types": ["Intervals"], "kind": "event",
+        "status": "cancelled", "rsvp_emoji": emojis, "plan_emoji": ["book"]}}
+    result = build_lineage([msg], [], LOCS, [], cfg, corrections)
+    session, = result.sessions
+    assert (session.activities, session.activity, session.workout_types, session.workout_type) == (
+        ["Run", "Bike"], "Multisport", ["Intervals"], "Intervals")
+    assert (session.kind, session.status, session.start_time, session.rsvp_count) == (
+        "event", "cancelled", None, expected)
+    assert session.rsvp_emoji_set == emojis
+    assert {(row.slack_uid, row.role) for row in result.attendance if row.role != "rsvp"} == {
+        ("UFAKE0003", "coach"), ("UFAKE0004", "plan")}
+
+
+@pytest.mark.parametrize("title,activities,types,kind", [
+    ("Strength tomorrow", ["Strength"], ["Circuit"], "practice"),
+    ("Season kickoff potluck", ["Kickoff"], ["Kickoff"], "event"),
+    ("x" * 140, [], [], "practice"),
+])
+def test_create_defaults_from_title(cfg, title, activities, types, kind):
+    msg = _post("\n  " + title + "\nIgnored second line", [])
+    result = build_lineage([msg], [], LOCS, [], cfg,
+                           {f"{CH}:{msg.ts}": {"create": True, "date": "2099-07-17"}})
+    session, = result.sessions
+    assert session.title == title[:120]
+    assert (session.activities, session.workout_types, session.kind) == (activities, types, kind)
+    assert (session.start_time, session.location_id, session.status) == (None, None, "held")
+    assert (session.lat, session.lon) == (cfg.default_lat, cfg.default_lon)
+    assert session.flags == [] and not session.needs_review
+
+
+@pytest.mark.parametrize("app_era", [False, True])
+def test_create_does_not_duplicate_existing_sessions(cfg, app_era):
+    msg = _post(SPLIT_TEXT, [R("six", "UFAKE0001")])
+    practices = [AppPractice(9901, datetime(2099, 7, 16, 18, 5), "scheduled", False,
+        CH, msg.ts, "six", "Balance Fitness Studio", None)] if app_era else []
+    key = f"{CH}:{msg.ts}"
+    fields = {"date": "2099-07-17", "activities": ["Run"]}
+    expected = build_lineage([msg], practices, LOCS, [], cfg, {key: fields})
+    result = build_lineage([msg], practices, LOCS, [], cfg, {key: {**fields, "create": True}})
+    assert result == expected
+    assert len(result.sessions) == (1 if app_era else 2)
+    assert all(s.date == date(2099, 7, 17) and s.activity == "Run" for s in result.sessions)
+
+
+@pytest.mark.parametrize("case", ["missing", "deleted", "reply", "off_channel", "false"])
+def test_create_requires_eligible_archived_post(cfg, case):
+    msg = _post("Official RSVP for strength tomorrow at 7 am", [R("white_check_mark", "UFAKE0001")])
+    if case == "deleted":
+        msg = replace(msg, deleted=True)
+    elif case == "reply":
+        msg = replace(msg, raw={**msg.raw, "thread_ts": "1.000000"})
+    elif case == "off_channel":
+        msg = replace(msg, channel_id="CFAKEOTHER")
+    corrections = {f"{msg.channel_id}:{msg.ts}": {"create": case != "false", "date": "2099-07-17"}}
+    result = build_lineage([] if case == "missing" else [msg], [], LOCS, [], cfg, corrections)
+    assert result.sessions == [] and result.attendance == []
 
 
 def test_excluded_accounts_never_attend(cfg):

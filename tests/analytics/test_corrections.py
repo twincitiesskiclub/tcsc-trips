@@ -9,6 +9,39 @@ from app.analytics.corrections import (
 KEY = "C042G463AQ1:4087911600.000100"
 
 
+@pytest.mark.parametrize("fields", [
+    {"create": True, "date": "2099-07-17"},
+    {"create": False},
+    {"create": True, "date": "2099-07-17", "start_time": "07:00",
+     "location": "Test studio", "activities": ["Strength"], "types": ["Circuit"],
+     "kind": "practice", "status": "held", "rsvp_emoji": ["white_check_mark"],
+     "plan_emoji": ["book"]},
+])
+def test_create_validation_accepts_post_key(fields):
+    assert validate_correction(KEY, fields) == fields
+
+
+@pytest.mark.parametrize("fields,match", [
+    ({"create": True}, "date"),
+    ({"create": True, "date": None}, "date"),
+    ({"create": True, "date": "2099-02-30"}, "date"),
+    ({"create": "true", "date": "2099-07-17"}, "create"),
+    ({"create": 1, "date": "2099-07-17"}, "create"),
+    ({"create": None}, "create"),
+])
+def test_create_validation_rejects_invalid_fields(fields, match):
+    with pytest.raises(CorrectionError, match=match):
+        validate_correction(KEY, fields)
+
+
+@pytest.mark.parametrize("key", [KEY + ":main", KEY + ":early", KEY + ":late",
+    KEY + ":merged", KEY + ":2099-07-17", "practice:123"])
+@pytest.mark.parametrize("create", [True, False])
+def test_create_validation_requires_post_key(key, create):
+    with pytest.raises(CorrectionError, match="create"):
+        validate_correction(key, {"create": create, "date": "2099-07-17"})
+
+
 @pytest.mark.parametrize("key,fields", [
     ("not-a-key", {"skip": True}),
     (KEY, {}),
