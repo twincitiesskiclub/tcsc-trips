@@ -107,9 +107,9 @@ Weather applies to any session with a resolved location (events at known venues 
 At rebuild, a top-level post in any archived channel (except `#extra-training-fun`, which is never counted) is a **candidate** when it did not become a session and either:
 
 - names an emoji in RSVP phrasing (`hit`, `bop`, `smash`, `react with`, `give a`, `RSVP`, followed by `:emoji:`), or
-- has 5 or more reactions on a single emoji.
+- is in an announcement channel (`#announcements-practices`, `#announcements-summer`, `#announcements-general`, `#announcements-adventures`) and has 5 or more reactions on a single non-applause emoji.
 
-Skin-tone suffixes are stripped before matching. Candidate detection is one function with no per-channel rules. This replaces the existing "possible miss" check in `flask analytics flags`.
+`#chat` and `#races-information` need the RSVP wording: their big reactions are celebrations (a dump preview on 2026-09-25 found 383 reaction-only `#chat` posts against 23 with RSVP wording). Skin-tone suffixes are stripped before matching. Candidate detection is one function; the only channel rule is that tuple. This replaces the existing "possible miss" check in `flask analytics flags`.
 
 A candidate is **resolved** when a correction exists for its post key (`create`, `skip`, or `rsvp_from` pointing at it).
 
