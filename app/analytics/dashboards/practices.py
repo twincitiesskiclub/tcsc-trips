@@ -34,17 +34,19 @@ def band(field, value):
     return str(value)
 
 
-def nights(sessions, attendance):
+def nights(sessions, attendance, *, status="held"):
     people = defaultdict(set)
     leads = set()
+    attended = set()
     for row in attendance:
+        attended.add(row.session_id)
         if row.role == "rsvp":
             people[row.session_id].add(row.person_key)
         elif row.role == "lead":
             leads.add(row.session_id)
     groups = defaultdict(list)
     for session in sessions:
-        if session.status == "held":
+        if session.status == status:
             groups[(session.group_key, session.date)].append(session)
     rows = []
     for (_, day), group in sorted(groups.items(), key=lambda item: item[0][1]):
@@ -57,8 +59,10 @@ def nights(sessions, attendance):
             "temp_f": first.temp_f, "precip_in": first.precip_in, "snow_depth_in": first.snow_depth_in,
             "minutes_after_sunset": first.minutes_after_sunset,
             "has_lead": any(s.id in leads for s in group),
-            "rsvps": len(set().union(*(people[s.id] for s in group))),
+            "rsvps": len(set().union(*(people[s.id] for s in group))) +
+                     sum(s.reported_count for s in group if s.reported_count is not None and s.id not in attended),
             "formats": sorted({s.format for s in group}),
+            "status": status,
         })
     return rows
 
@@ -78,10 +82,7 @@ def with_index(rows, medians):
     return out
 
 
-def _week_bands(rows):
-    starts = {}
-    for row in rows:
-        starts[row["season_label"]] = min(starts.get(row["season_label"], row["date"]), row["date"])
+def _week_bands(rows, starts):
     for row in rows:
         week = (date.fromisoformat(row["date"]) - date.fromisoformat(starts[row["season_label"]])).days // 7 + 1
         row["week_band"] = "Weeks 1 to 4" if week <= 4 else "Weeks 5 to 8" if week <= 8 else \
@@ -130,16 +131,26 @@ def build(filters):
     sessions = load_sessions(filters)
     attendance = load_attendance([s.id for s in sessions], role=("rsvp", "lead"))
     base_sessions, base_attendance = load_baseline_sessions(filters)
-    medians = baseline_medians(nights(base_sessions, base_attendance))
-    rows = _week_bands(with_index(nights(sessions, attendance), medians))
-    people = len({row.person_key for row in attendance if row.role == "rsvp"})
+    baseline = nights(base_sessions, base_attendance)
+    medians = baseline_medians(baseline)
+    starts = {}
+    for row in baseline:
+        starts[row["season_label"]] = min(starts.get(row["season_label"], row["date"]), row["date"])
+    rows = _week_bands(with_index(nights(sessions, attendance), medians), starts)
+    held_ids = {s.id for s in sessions if s.status == "held"}
+    people = len({row.person_key for row in attendance if row.role == "rsvp" and row.session_id in held_ids})
     blocks = [_tiles(rows, people)]
-    over_time = "Every practice night, colored by activity."
+    time_rows = sorted(rows + [{**row, "index": None} for row in nights(sessions, attendance, status="cancelled")],
+                       key=lambda row: row["date"])
+    over_time = "Every practice night, colored by activity. Cancelled nights are faded."
+    points = charts.points(time_rows, x="date", y="rsvps", color="activity",
+                           tooltip=["date", "activity", "location", "rsvps", "index", "status"])
+    points["encoding"]["opacity"] = {
+        "condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 0.8}
     blocks.append(Chart("Turnout over time", over_time,
-                        charts.spec(over_time, charts.points(rows, x="date", y="rsvps", color="activity",
-                                                             tooltip=["date", "activity", "location", "rsvps", "index"])),
-                        rows, [("date", "Date"), ("activity", "Activity"), ("location", "Location"),
-                               ("rsvps", "RSVPs"), ("index", "Index")]))
+                        charts.spec(over_time, points),
+                        time_rows, [("date", "Date"), ("activity", "Activity"), ("location", "Location"),
+                                    ("rsvps", "RSVPs"), ("index", "Index"), ("status", "Status")]))
     for key, label in FACTORS:
         factor = factor_rows(rows, key)
         description = f"Median turnout index by {label.lower()}. 1.0 is a typical practice for that season and weekday."
@@ -153,7 +164,8 @@ def build(filters):
         ("date", "Date"), ("day_of_week", "Day"), ("activity", "Activity"), ("workout_type", "Workout"),
         ("location", "Location"), ("rsvps", "RSVPs"), ("index", "Index"), ("temp_f", "Temp °F")]))
     blocks += [Note("Turnout index: a practice's RSVPs divided by the median for practices on the same "
-                    "weekday in the same season. 1.2 means 20% above a typical practice for that slot."),
+                    "weekday in the same season. 1.2 means 20% above a typical practice for that slot. "
+                    "When a filter keeps only one session of a split night, that night is compared against whole nights."),
                Note("Faded bars have fewer than 5 practices behind them. Read them as anecdotes."),
                Note("RSVPs are not headcount. Some people RSVP and skip, some come without reacting.")]
     return blocks

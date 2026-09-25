@@ -8,19 +8,19 @@ import jsonschema
 import vl_convert as vlc
 
 from app.analytics.dashboards import practices as p
-from app.analytics.dashboards.base import Chart, Filters, Tiles
+from app.analytics.dashboards.base import Chart, Filters, Note, Table, Tiles
 from tests.analytics.conftest import FIXTURES
 
 SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
 
 
 def _s(id, day, rsvps, group=None, activity="Run", fmt="single", temp=50.0, season="2099 Fall/Winter",
-       status="held", hour=18):
+       status="held", hour=18, reported_count=None):
     return SimpleNamespace(id=id, date=day, group_key=group or f"g{id}", season_label=season,
                            day_of_week=day.strftime("%A"), activity=activity, workout_type="Endurance",
                            location_name="Park", start_time=time(hour, 0), temp_f=temp, precip_in=0.0,
                            snow_depth_in=0.0, minutes_after_sunset=-30, format=fmt, status=status,
-                           kind="practice", slot=None, rsvp_count=rsvps)
+                           kind="practice", slot=None, rsvp_count=rsvps, reported_count=reported_count)
 
 
 def _rsvps(session, n, start=0, role="rsvp"):
@@ -143,3 +143,103 @@ def test_practices_route_renders_dashboard_title(admin_client):
     response = admin_client.get("/admin/analytics/practices")
     assert response.status_code == 200
     assert b"What makes a practice draw" in response.data
+
+
+def test_date_filter_preserves_baseline_week_of_season():
+    sessions = [_s(i, date(2099, 11, 3) + timedelta(weeks=i), 10) for i in range(8)]
+    attendance = [row for s in sessions for row in _rsvps(s, 10)]
+    with patch.object(p, "load_sessions", return_value=sessions[4:]), \
+         patch.object(p, "load_attendance", return_value=[r for r in attendance if r.session_id >= 4]), \
+         patch.object(p, "load_baseline_sessions", return_value=(sessions, attendance)):
+        blocks = p.build(Filters(kinds=["practice"], date_from=sessions[4].date))
+    table = next(b for b in blocks if isinstance(b, Table) and b.title == "Every practice")
+    assert table.rows[0]["date"] == "2099-12-01"
+    assert table.rows[0]["week_band"] == "Weeks 5 to 8"
+    factor = next(b for b in blocks if isinstance(b, Chart) and b.title == "Week of season")
+    assert factor.rows == [{"value": "Weeks 5 to 8", "median_index": 1.0,
+                            "median_rsvps": 10, "nights": 4, "thin": True}]
+
+
+def test_cancelled_night_appears_only_in_turnout_over_time():
+    held = [_s(i, date(2099, 11, 3) + timedelta(weeks=i), n) for i, n in enumerate((10, 10, 20, 30, 30))]
+    cancelled = _s(10, date(2099, 12, 8), 50, status="cancelled", activity="Ski")
+    sessions = held + [cancelled]
+    attendance = [row for s in held for row in _rsvps(s, s.rsvp_count)] + _rsvps(cancelled, 50)
+    with patch.object(p, "load_sessions", return_value=sessions), \
+         patch.object(p, "load_attendance", return_value=attendance), \
+         patch.object(p, "load_baseline_sessions", return_value=(sessions, attendance)):
+        blocks = p.build(Filters(kinds=["practice"]))
+    chart = next(b for b in blocks if isinstance(b, Chart) and b.title == "Turnout over time")
+    assert len(chart.rows) == 6
+    assert [(r["date"], r["rsvps"]) for r in chart.rows if r["status"] == "cancelled"] == [("2099-12-08", 50)]
+    assert chart.spec["data"]["values"] == chart.rows
+    assert chart.spec["encoding"]["opacity"] == {
+        "condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 0.8}
+    assert [r["index"] for r in chart.rows if r["status"] == "held"] == [0.5, 0.5, 1.0, 1.5, 1.5]
+    tiles = {t.label: t.value for t in blocks[0].tiles}
+    assert tiles["Practices"] == 5
+    assert tiles["Average RSVPs"] == "20.0"
+    assert tiles["Strongest draw"] == tiles["Weakest draw"] == "Run"
+    for block in blocks:
+        if isinstance(block, Chart):
+            jsonschema.validate(block.spec, SCHEMA)
+            assert vlc.vegalite_to_svg(block.spec)
+            if block is not chart:
+                assert sum(r["nights"] for r in block.rows) == 5
+                assert all(r["value"] != "Ski" for r in block.rows)
+        elif isinstance(block, Table):
+            assert len(block.rows) == 5
+            assert all(r["date"] != "2099-12-08" for r in block.rows)
+    activity = next(b for b in blocks if isinstance(b, Chart) and b.title == "Activity")
+    assert activity.rows == [{"value": "Run", "median_index": 1.0,
+                              "median_rsvps": 20, "nights": 5, "thin": False}]
+
+
+def test_count_only_session_contributes_reported_count_to_night():
+    s = _s(1, date(2099, 11, 5), 12, reported_count=12)
+    assert p.nights([s], [])[0]["rsvps"] == 12
+
+
+def test_cancelled_only_season_has_chart_point_without_held_metrics():
+    s = _s(1, date(2099, 11, 5), 12, status="cancelled", reported_count=12)
+    with patch.object(p, "load_sessions", return_value=[s]), \
+         patch.object(p, "load_attendance", return_value=[]), \
+         patch.object(p, "load_baseline_sessions", return_value=([s], [])):
+        blocks = p.build(Filters(kinds=["practice"]))
+    assert all(t.value == "No data" for t in blocks[0].tiles)
+    chart = next(b for b in blocks if isinstance(b, Chart) and b.title == "Turnout over time")
+    assert [(r["status"], r["rsvps"], r["index"]) for r in chart.rows] == [("cancelled", 12, None)]
+    for block in blocks:
+        if isinstance(block, (Chart, Table)) and block is not chart:
+            assert block.rows == []
+        if isinstance(block, Chart):
+            jsonschema.validate(block.spec, SCHEMA)
+
+
+def test_split_night_adds_count_only_sessions_to_distinct_rsvps():
+    a = _s(1, date(2099, 11, 5), 12, group="g", fmt="split", reported_count=12)
+    b = _s(2, a.date, 3, group="g", fmt="split", hour=19)
+    c = _s(3, a.date, 3, group="g", fmt="split", hour=20)
+    rows = p.nights([a, b, c], _rsvps(b, 3) + _rsvps(c, 3, start=2))
+    assert rows[0]["rsvps"] == 17
+
+
+def test_distinct_people_counts_only_held_session_rsvps():
+    held = _s(1, date(2099, 11, 5), 2)
+    cancelled = _s(2, date(2099, 11, 12), 3, status="cancelled")
+    attendance = _rsvps(held, 2) + _rsvps(held, 1, start=100, role="lead") + _rsvps(cancelled, 3)
+    with patch.object(p, "load_sessions", return_value=[held, cancelled]), \
+         patch.object(p, "load_attendance", return_value=attendance), \
+         patch.object(p, "load_baseline_sessions", return_value=([held, cancelled], attendance)):
+        blocks = p.build(Filters(kinds=["practice"]))
+    assert next(t.value for t in blocks[0].tiles if t.label == "Distinct people") == 2
+
+
+def test_turnout_index_note_explains_filtered_split_night_comparison():
+    with patch.object(p, "load_sessions", return_value=[]), \
+         patch.object(p, "load_attendance", return_value=[]), \
+         patch.object(p, "load_baseline_sessions", return_value=([], [])):
+        blocks = p.build(Filters(kinds=["practice"]))
+    note = next(b.text for b in blocks if isinstance(b, Note) and b.text.startswith("Turnout index:"))
+    assert "When a filter keeps only one session of a split night, that night is compared against whole nights." in note
+    assert "\u2014" not in note and "\u2013" not in note
