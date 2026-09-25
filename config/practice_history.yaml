@@ -1,0 +1,185 @@
+# Practice lineage configuration. Read by app/analytics/history_config.py at
+# every rebuild. An invalid file fails the rebuild and leaves the previous
+# tables in place. PUBLIC REPO: never put member names or member Slack IDs here.
+
+excluded_slack_uids:
+  - U06FYPUNQCU   # TCSC app bot, reacts to its own posts with every RSVP emoji
+  - U04C46UJXAM   # Zapier-linked account that posted 2022-2025 templates
+
+
+default_location: {lat: 44.9778, lon: -93.2650}   # central Minneapolis, used when a venue is unknown
+
+indoor_locations: ["Balance Fitness Studio", "Royals Athletic Center"]
+
+# Raw venue text (lowercased substring match, first rule wins) to a location.
+# `location` is looked up by practice_locations.name (+ spot); row ids differ
+# between databases, so never use ids here.
+venues:
+  - match: ["balance fitness"]
+    location: {name: "Balance Fitness Studio"}
+  - match: ["bassett creek"]
+    location: {name: "Theodore Wirth", spot: "Bassett Creek Playground"}
+  - match: ["xerxes", "theodore wirth trails", "wirth trails"]
+    location: {name: "Theodore Wirth", spot: "Xerxes Field"}
+  - match: ["the trailhead", "trailhead", "wirth chalet", "chalet @ theodore wirth", "theodore wirth chalet"]
+    location: {name: "Theodore Wirth", spot: "Trailhead Bridge"}
+  - match: ["theodore wirth", "wirth"]
+    location: {name: "Theodore Wirth", spot: "Xerxes Field"}
+  - match: ["richardson nature"]
+    location: {name: "Hyland - Richardson Nature Center"}
+  - match: ["hyland park - visitor", "hyland - visitor"]
+    location: {name: "Hyland", spot: "Visitor Center"}
+  - match: ["hyland", "jan's place", "jan’s place"]
+    location: {name: "Hyland", spot: "Jan's Place"}
+  - match: ["elm creek"]
+    location: {name: "Elm Creek", spot: "Chalet"}
+  - match: ["french park"]
+    location: {name: "French Park", spot: "Visitor Center"}
+  - match: ["brackett"]
+    location: {name: "Brackett Park", spot: "Recreation Center"}
+  - match: ["royals athletic"]
+    location: {name: "Hopkins Highschool", spot: "Royals Athletic Center"}
+  - match: ["bohemian flats"]
+    location: {name: "Bohemian Flats", spot: "Parking Lot"}
+  - match: ["fort snelling"]
+    location: {name: "Fort Snelling", spot: "Whiskey the Horse Grave"}
+  - match: ["battle creek"]
+    location: {name: "Battle Creek", spot: "Recreation Center"}
+  - match: ["minnehaha"]
+    location: {name: "Minnehaha Park", spot: "Pavillion 1"}
+  - match: ["cedar lake"]
+    location: {name: "Cedar Lake", spot: "Point Beach Parking Lot"}
+  - match: ["murray field"]
+    location: {name: "Murray Field", spot: "Track"}
+  - match: ["bde maka ska", "thomas beach"]
+    location: {name: "Bde Maka Ska", spot: "Thomas Beach"}
+  - match: ["carver lake"]
+    location: {name: "Carver Lake Preserve"}
+  - match: ["afton"]
+    location: {name: "Afton", spot: "Valley Creek Trail"}
+  - match: ["brookview"]
+    location: {name: "Brookview Park", spot: "Large Picnic Shelter"}
+  - match: ["beards plaisance"]
+    name: Beards Plaisance
+    lat: 44.9215
+    lon: -93.3100
+  - match: ["punch pizza", "greenway behind"]
+    name: Midtown Greenway
+    lat: 44.9486
+    lon: -93.2984
+  - match: ["monument on east river"]
+    name: East River Road Monument
+    lat: 44.9570
+    lon: -93.2090
+  - match: ["house", "residence"]
+    name: Member's home          # private homes, never store the address or owner
+
+# Title keywords to canonical practice_activities names. Lowercased substring
+# match, first rule wins. default_types apply when no type rule matches.
+activity_rules:
+  - match: ["multi-sport", "multisport", "multi sport", "run / rollerski / ride"]
+    activities: [Run, Skate/Classic Rollerski, Bike]
+  - match: ["rollerski (skate/classic) or pole hike", "or pole hike"]
+    activities: [Skate/Classic Rollerski, Pole Hike]
+  - match: ["classic rollerski"]
+    activities: [Classic Rollerski]
+  - match: ["skate rollerski"]
+    activities: [Skate Rollerski]
+  - match: ["rollerski", "roller-ski", "roller ski"]
+    activities: [Skate/Classic Rollerski]
+  - match: ["strength", "lift"]
+    activities: [Strength]
+    default_types: [Circuit]
+  - match: ["pole hike / pole run", "pole hike or pole jog", "pole hike, pole run"]
+    activities: ["Pole Hike, Pole Run"]
+  - match: ["pole run", "run w/ poles", "running w/ poles", "bounding"]
+    activities: [Pole Run]
+  - match: ["pole hike"]
+    activities: [Pole Hike]
+  - match: ["skate/classic", "skate or classic", "either technique", "hamster wheel", "natural trails", "casual group ski", "snowy ski", "chill skate"]
+    activities: [Skate/Classic Ski]
+  - match: ["classic"]
+    activities: [Classic Ski]
+  - match: ["skate"]
+    activities: [Skate Ski]
+  - match: ["orienteering"]
+    activities: [Orienteering]
+  - match: ["trail run", "run/hike", "jog", "run"]
+    activities: [Run]
+  - match: ["hike"]
+    activities: [Hike]
+  - match: ["bike", "ride"]
+    activities: [Bike]
+  - match: ["relay", "heptathlon", "scavenger", "ultimate", "game"]
+    activities: [Game]
+  - match: ["kickoff", "kick-off", "potluck"]
+    activities: [Kickoff]
+
+# All matching rules contribute (not first-wins).
+type_rules:
+  - match: ["vo2"]
+    types: ["Intervals (VO2 Max)"]
+  - match: ["threshold"]
+    types: ["Intervals (Threshold)"]
+  - match: ["tempo"]
+    types: ["Intervals (Tempo)"]
+  - match: ["interval", "techniquetervals", "repeats", "800s"]
+    types: [Intervals]
+  - match: ["circuit"]
+    types: [Circuit]
+  - match: ["technique"]
+    types: [Technique]
+  - match: ["endurance", "meetup", "easy", "chill", "casual"]
+    types: [Endurance]
+  - match: ["time trial", " tt", "bog tt"]
+    types: [Time Trial]
+  - match: ["benchmark"]
+    types: [Benchmark]
+  - match: ["relay"]
+    types: [Relays]
+  - match: ["game", "ultimate", "frisbee", "scavenger", "capture the flag"]
+    types: [Non-structured]
+  - match: ["kickoff", "potluck"]
+    types: [Kickoff]
+
+activity_buckets:
+  Strength: Strength
+  Run: Run
+  Pole Run: Run
+  Pole Hike: Run
+  "Pole Hike, Pole Run": Run
+  Hike: Run
+  Skate Ski: Ski
+  Classic Ski: Ski
+  Skate/Classic Ski: Ski
+  Skate Rollerski: Rollerski
+  Classic Rollerski: Rollerski
+  Skate/Classic Rollerski: Rollerski
+  Bike: Bike
+  Mountain Bike: Bike
+  Orienteering: Other
+  Game: Other
+  Dryland Triathlon: Other
+  Kickoff: Event
+  Season: Event
+
+# First bucket whose list contains any of the session's types wins.
+workout_buckets:
+  - [Intervals, ["Intervals", "Intervals (VO2 Max)", "Intervals (Threshold)", "Intervals (Tempo)"]]
+  - [Time Trial, ["Time Trial", "Benchmark"]]
+  - [Technique, ["Technique"]]
+  - [Circuit, ["Circuit"]]
+  - [Games, ["Relays", "Non-structured"]]
+  - [Endurance, ["Endurance", "Active Recovery"]]
+  - [Event, ["Kickoff"]]
+
+# Titles containing these words become kind=event (excluded from practice averages).
+event_keywords: ["kickoff", "kick-off", "potluck", "board meeting", "leadership meeting", "social event", "new member event"]
+
+capacity_lines:
+  - {value: 27, label: "2025 split rule", from: 2025-05-01}
+  - {value: 30, label: "Dec 2025 cap", from: 2025-12-01, to: 2026-03-31}
+  - {value: 35, label: "One session (5x7)", from: 2026-08-01}
+
+# Per-post corrections are data and live in the analytics_corrections table
+# (see app/analytics/corrections.py), never in this file.

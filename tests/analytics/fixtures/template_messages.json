@@ -1,0 +1,258 @@
+[
+  {
+    "name": "zapier_single",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2022-10-25T08:00",
+    "raw": {
+      "ts": "1666702800.000000",
+      "user": "U04C46UJXAM",
+      "text": ":woman-playing-handball:  _Tuesday,_ _Oct 25, 2022_ • _TCSC_ • :man-playing-handball:\n*Run w/ Poles - Intervals* *@* *Theodore Wirth Trails*\n&gt;:clock6:  *Time:* 6:15 PM\n&gt;:people_holding_hands:  *Leads:* <@UFAKE0101> &amp; <@UFAKE0102>\n&gt; :pushpin:  *Location:* Theodore Wirth Trails\n*Bop that* :white_check_mark: *so we'll know you'll be there.*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":main", "date": "2022-10-25", "start": "18:15", "rsvp_emoji": "white_check_mark", "format": "single", "flags": [], "title": "Run w/ Poles - Intervals", "venue_raw": "Theodore Wirth Trails", "activities": ["Pole Run"], "workout_types": ["Intervals"], "activity": "Run", "workout_type": "Intervals", "lead_uids": ["UFAKE0101", "UFAKE0102"], "coach_uids": [], "is_indoor": false, "location_id": 34, "location_name": "Theodore Wirth", "lat": 44.98, "lon": -93.31}
+    ]}
+  },
+  {
+    "name": "split_zap_check",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2023-10-26T08:00",
+    "raw": {
+      "ts": "1698325200.000000",
+      "text": "_Thursday, Oct 26, 2023_ • _TCSC_\n*Strength Circuit @ Balance Fitness Studio*\n*Time:* 6:00 &amp; 7:00 PM\n*Coach:* <@UFAKE0201>\n*Bop that* :zap: *(for 6:00PM session) or* :white_check_mark: *(for 7:00PM session) so we'll know you'll be there.*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":early", "date": "2023-10-26", "start": "18:00", "rsvp_emoji": "zap", "format": "split", "flags": [], "activities": ["Strength"], "workout_types": ["Circuit"], "activity": "Strength", "workout_type": "Circuit", "is_indoor": true, "coach_uids": ["UFAKE0201"], "location_id": 38},
+      {"key_suffix": ":late", "date": "2023-10-26", "start": "19:00", "rsvp_emoji": "white_check_mark", "format": "split", "flags": [], "activities": ["Strength"], "workout_types": ["Circuit"], "activity": "Strength", "workout_type": "Circuit", "is_indoor": true, "coach_uids": ["UFAKE0201"], "location_id": 38}
+    ]}
+  },
+  {
+    "name": "split_six_seven",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-07-17T08:00",
+    "raw": {
+      "ts": "1752757200.000000",
+      "text": "_Thursday, Jul 17th, 2025_ • _TCSC_\n*Lift @ Balance Fitness Studio*\n*Time:* 6:05 PM :six: & 7:20 PM :seven:\n*Bop that* :six: *(6:05PM) or* :seven: *(7:20PM)*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":early", "date": "2025-07-17", "start": "18:05", "rsvp_emoji": "six", "format": "split", "flags": [], "activities": ["Strength"], "workout_types": ["Circuit"], "is_indoor": true},
+      {"key_suffix": ":late", "date": "2025-07-17", "start": "19:20", "rsvp_emoji": "seven", "format": "split", "flags": [], "activities": ["Strength"], "workout_types": ["Circuit"], "is_indoor": true}
+    ]}
+  },
+  {
+    "name": "friday_am_posted_night_before",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-02-06T20:16",
+    "raw": {
+      "ts": "1738894560.000000",
+      "text": "_Friday, Feb 7th, 2025_ • _TCSC_\n*Easy Run @ Theodore Wirth Trails*\n*Time:* 7:00 AM  ( :meow-coffee: )\n*Bop that* :meow-coffee: *if you'll be there*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":main", "date": "2025-02-07", "start": "07:00", "rsvp_emoji": "meow-coffee", "format": "single", "flags": [], "activities": ["Run"], "workout_types": ["Endurance"], "activity": "Run", "workout_type": "Endurance", "is_indoor": false}
+    ]}
+  },
+  {
+    "name": "wrong_year_header",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-01-30T12:00",
+    "raw": {
+      "ts": "1738260000.000000",
+      "text": "_Friday, Jan 31st, 2024_ • _TCSC_\n*Easy Run @ Theodore Wirth Trails*\n*Time:* 7:00 AM\n*Bop that* :white_check_mark: *if you'll be there*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":main", "date": "2025-01-31", "start": "07:00", "rsvp_emoji": "white_check_mark", "format": "single", "flags": ["date_mismatch"], "activities": ["Run"], "workout_types": ["Endurance"]}
+    ]}
+  },
+  {
+    "name": "multi_day",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-12-03T08:00",
+    "raw": {
+      "ts": "1764770400.000000",
+      "text": "_Wednesday & Friday, Dec 3rd & 5th, 2025_ • _TCSC_\n*Easy Run @ Theodore Wirth Trails*\n*Bop that* :white_check_mark: *(Wed 6:30 PM) or* :ballot_box_with_check: *(Fri 7:00 AM)*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":2025-12-03", "date": "2025-12-03", "start": "18:30", "rsvp_emoji": "white_check_mark", "format": "single", "flags": ["multi_day"], "activities": ["Run"], "workout_types": ["Endurance"]},
+      {"key_suffix": ":2025-12-05", "date": "2025-12-05", "start": "07:00", "rsvp_emoji": "ballot_box_with_check", "format": "single", "flags": ["multi_day"], "activities": ["Run"], "workout_types": ["Endurance"]}
+    ]}
+  },
+  {
+    "name": "weekly_preview",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2023-10-22T08:00",
+    "raw": {
+      "ts": "1697979600.000000",
+      "text": ":date: • _Week of Oct 22, 2023_ _| TCSC_ • :date:\n_Tuesday, Oct 24, 2023_\n*Easy Run @ Theodore Wirth Trails*\n*Time:* 6:15 PM\n_Thursday, Oct 26, 2023_\n*Lift @ Balance Fitness Studio*\n*Time:* 6:00 PM\n_Additional details are available in the TCSC Team Calendar..._"
+    },
+    "expected": {"weekly_preview": true, "sessions": []}
+  },
+  {
+    "name": "event_kickoff",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-10-07T08:00",
+    "raw": {
+      "ts": "1759842000.000000",
+      "text": "_Tuesday, Oct 7th, 2025_ • _TCSC_\n*Season Kickoff + Potluck @ Minnehaha Pavillion 1*\n*Time:* 6:15 PM\n*Bop that* :white_check_mark: *if you'll be there*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":main", "date": "2025-10-07", "start": "18:15", "rsvp_emoji": "white_check_mark", "format": "single", "kind": "event", "flags": ["unknown_location_row"], "activities": ["Kickoff"], "workout_types": ["Kickoff"], "activity": "Event", "workout_type": "Event", "venue_raw": "Minnehaha Pavillion 1", "location_id": null, "location_name": "Minnehaha Park", "is_indoor": false}
+    ]}
+  },
+  {
+    "name": "unknown_venue_and_title",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-10-07T08:00",
+    "raw": {
+      "ts": "1759842000.000000",
+      "text": "_Tuesday, Oct 7th, 2025_\n*Super Secret Surprise @ Some New Park*"
+    },
+    "expected": {"sessions": [
+      {"key_suffix": ":main", "date": "2025-10-07", "start": null, "rsvp_emoji": "white_check_mark", "format": "single", "flags": ["unknown_venue", "unmatched_title"], "activities": [], "workout_types": [], "activity": "Other", "workout_type": "Other", "venue_raw": "Some New Park", "location_id": null, "location_name": null, "is_indoor": false, "lat": 44.9778, "lon": -93.265}
+    ]}
+  },
+  {
+    "name": "plain_announcement",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2025-10-07T08:00",
+    "raw": {"ts": "1759842000.000000", "text": "Remember to bring a pen to practice today!"},
+    "expected": {"sessions": []}
+  },
+  {
+    "name": "plan_choices_skate_classic",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2099-07-16T08:00",
+    "raw": {
+      "ts": "4087890000.000000",
+      "text": "_Thursday, Jul 16, 2099_\n*Easy Run @ Theodore Wirth Trails*\nOptional chat at 5:00 PM\n*Time:* 6:15 PM\n*Bop that* :ski: (skate) or :snowflake: (classic)"
+    },
+    "expected": {
+      "sessions": [
+        {
+          "key_suffix": ":main",
+          "date": "2099-07-16",
+          "start": "18:15",
+          "rsvp_emoji": "ski",
+          "rsvp_emoji_set": [
+            "ski",
+            "snowflake"
+          ],
+          "format": "single",
+          "flags": [
+            "emoji_ambiguous"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "plan_choices_workouts",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2099-07-16T08:00",
+    "raw": {
+      "ts": "4087890000.000000",
+      "text": "_Thursday, Jul 16, 2099_\n*Easy Run @ Theodore Wirth Trails*\nOptional chat at 5:00 PM\n*Time:* 6:15 PM\n*Bop that* :one: (technique) or :two: (technique & intervals)"
+    },
+    "expected": {
+      "sessions": [
+        {
+          "key_suffix": ":main",
+          "date": "2099-07-16",
+          "start": "18:15",
+          "rsvp_emoji": "one",
+          "rsvp_emoji_set": [
+            "one",
+            "two"
+          ],
+          "format": "single",
+          "flags": [
+            "emoji_ambiguous"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "multisport_choices",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2099-07-16T08:00",
+    "raw": {
+      "ts": "4087890000.000000",
+      "text": "_Thursday, Jul 16, 2099_\n*Easy Run @ Theodore Wirth Trails*\nOptional chat at 5:00 PM\n*Time:* 6:15 PM\n*Bop that* :runner: (run) or :skier: (ski) or :bike: (ride)"
+    },
+    "expected": {
+      "sessions": [
+        {
+          "key_suffix": ":main",
+          "date": "2099-07-16",
+          "start": "18:15",
+          "rsvp_emoji": "runner",
+          "rsvp_emoji_set": [
+            "runner",
+            "skier",
+            "bike"
+          ],
+          "format": "single",
+          "flags": [
+            "emoji_ambiguous"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "seasonal_choices",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2099-07-16T08:00",
+    "raw": {
+      "ts": "4087890000.000000",
+      "text": "_Thursday, Jul 16, 2099_\n*Easy Run @ Theodore Wirth Trails*\nOptional chat at 5:00 PM\n*Time:* 6:15 PM\n*Bop that* :sunny: or :snowflake: or :fallen_leaf: or :umbrella:"
+    },
+    "expected": {
+      "sessions": [
+        {
+          "key_suffix": ":main",
+          "date": "2099-07-16",
+          "start": "18:15",
+          "rsvp_emoji": "sunny",
+          "rsvp_emoji_set": [
+            "sunny",
+            "snowflake",
+            "fallen_leaf",
+            "umbrella"
+          ],
+          "format": "single",
+          "flags": [
+            "emoji_ambiguous"
+          ]
+        }
+      ]
+    }
+  },
+  {
+    "name": "three_number_choices",
+    "channel_id": "CFAKE0001",
+    "posted_at_central": "2099-07-16T08:00",
+    "raw": {
+      "ts": "4087890000.000000",
+      "text": "_Thursday, Jul 16, 2099_\n*Easy Run @ Theodore Wirth Trails*\nOptional chat at 5:00 PM\n*Time:* 6:15 PM\n*Bop that* :one: or :two: or :fri:"
+    },
+    "expected": {
+      "sessions": [
+        {
+          "key_suffix": ":main",
+          "date": "2099-07-16",
+          "start": "18:15",
+          "rsvp_emoji": "one",
+          "rsvp_emoji_set": [
+            "one",
+            "two",
+            "fri"
+          ],
+          "format": "single",
+          "flags": [
+            "emoji_ambiguous"
+          ]
+        }
+      ]
+    }
+  }
+]
