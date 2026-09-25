@@ -217,18 +217,21 @@ def test_config_public_types(cfg):
     ("workout_buckets", [["Intervals", "Intervals"]]),
     ("event_keywords", "kickoff"),
     ("indoor_locations", [None]),
-    ("capacity_lines", {}),
-    ("capacity_lines", [None]),
-    ("capacity_lines", [{"value": "27", "label": "Synthetic", "from": "2025-05-01"}]),
-    ("capacity_lines", [{"value": 27, "label": 3, "from": "2025-05-01"}]),
-    ("capacity_lines", [{"value": 27, "label": "Synthetic", "from": "not-a-date"}]),
+    ("practice_views.capacity_lines", {}),
+    ("practice_views.capacity_lines", [None]),
+    ("practice_views.capacity_lines", [{"value": "27", "label": "Synthetic", "from": "2025-05-01"}]),
+    ("practice_views.capacity_lines", [{"value": 27, "label": 3, "from": "2025-05-01"}]),
+    ("practice_views.capacity_lines", [{"value": 27, "label": "Synthetic", "from": "not-a-date"}]),
 ])
 def test_invalid_fields_name_the_key(tmp_path, key, value):
     import yaml
     from app.analytics.history_config import DEFAULT_PATH
 
     data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data[key] = value
+    if key == "practice_views.capacity_lines":
+        data["practice_views"] = {"capacity_lines": value}
+    else:
+        data[key] = value
     path = tmp_path / "invalid.yaml"
     path.write_text(yaml.safe_dump(data))
     with pytest.raises(HistoryConfigError, match=key):
@@ -295,3 +298,39 @@ def test_applause_emoji_normalizes_skin_tones(tmp_path):
     path = tmp_path / "h.yaml"
     path.write_text(yaml.safe_dump(data))
     assert load_history_config(path).applause_emoji == frozenset({"heart", "clap"})
+
+
+def test_capacity_lines_moved_under_practice_views(tmp_path):
+    import yaml
+    from app.analytics.history_config import DEFAULT_PATH
+
+    data = yaml.safe_load(DEFAULT_PATH.read_text())
+    data["capacity_lines"] = []
+    path = tmp_path / "h.yaml"
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(HistoryConfigError, match="practice_views"):
+        load_history_config(path)
+
+
+def test_practice_capacity_lines_still_available(cfg):
+    assert [line["value"] for line in cfg.capacity_lines] == [27, 30, 35]
+
+
+@pytest.mark.parametrize("value", [
+    None, {}, [None], [{"match": "cuyuna", "slug": "cuyuna"}],
+    [{"match": [""], "slug": "cuyuna"}],
+    [{"match": [123], "slug": "cuyuna"}],
+    [{"match": ["cuyuna"], "slug": 123}],
+    [{"match": ["cuyuna"], "slug": "Bad_slug"}],
+    [{"match": ["cuyuna"], "slug": ""}],
+])
+def test_invalid_trip_series(tmp_path, value):
+    import yaml
+    from app.analytics.history_config import DEFAULT_PATH
+
+    data = yaml.safe_load(DEFAULT_PATH.read_text())
+    data["trip_series"] = value
+    path = tmp_path / "h.yaml"
+    path.write_text(yaml.safe_dump(data))
+    with pytest.raises(HistoryConfigError, match="trip_series"):
+        load_history_config(path)

@@ -6,7 +6,7 @@ from html import unescape
 import re
 from zoneinfo import ZoneInfo
 
-from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS
+from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS, TRIP_CHANNEL
 from app.analytics.coverage import find_candidates
 from app.analytics.drafts import (
     AppPractice, ArchivedMessage, AttendanceDraft, LineageResult, LocationRef,
@@ -19,6 +19,7 @@ from app.analytics.parse_app import extract_app_sessions
 from app.analytics.parse_template import (
     extract_template_sessions, is_weekly_preview, looks_like_template,
 )
+from app.analytics.parse_trips import is_signup_post, parse_signup, trip_sessions
 from app.analytics.seasons import season_label
 
 
@@ -237,7 +238,7 @@ def _attendance(state, messages, cfg, corrections):
 def build_lineage(
     messages: list[ArchivedMessage], app_practices: list[AppPractice],
     locations: list[LocationRef], seasons: list[SeasonRef], cfg: HistoryConfig,
-    corrections: dict | None = None,
+    corrections: dict | None = None, trip_signups=(),
 ) -> LineageResult:
     """Build sessions and attendance without reading or writing the database."""
     corrections = corrections or {}
@@ -306,5 +307,19 @@ def build_lineage(
     corrected = {session.group_key for session in drafts if session.session_key in corrections}
     misses = [key for key in find_candidates(indexed.values(), produced, corrections, cfg.applause_emoji)
               if key not in corrected]
+    slack_signups, unparsed = [], []
+    for key, message in indexed.items():
+        if message.channel_id != TRIP_CHANNEL or not is_signup_post(message.raw):
+            continue
+        signup = parse_signup(message, cfg)
+        if signup is None:
+            if f"{message.channel_id}:{message.ts}" not in corrections:
+                unparsed.append(f"{message.channel_id}:{message.ts}")
+        else:
+            slack_signups.append(signup)
+    trips, trip_rows = trip_sessions([*slack_signups, *trip_signups], corrections, seasons)
+    sessions.extend(trips)
+    attendance.extend(trip_rows)
+    misses = sorted(misses + unparsed)
     sessions.sort(key=lambda session: (session.date, session.start_time or time.min, session.session_key))
     return LineageResult(sessions, attendance, sorted(misses))

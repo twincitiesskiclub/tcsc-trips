@@ -15,6 +15,16 @@ class ArchivedMessage:
 
 
 @dataclass(frozen=True)
+class TripSignup:
+    series_slug: str
+    edition_year: int             # Fall/Winter start year
+    posted_on: date               # Central date of the sign-up
+    slack_uid: Optional[str]
+    person_name: Optional[str]
+    source_key: str               # "channel:ts" or "trip_registration:<id>"
+
+
+@dataclass(frozen=True)
 class AppPractice:
     id: int
     date: datetime                 # naive Central, as stored in practices.date
