@@ -55,8 +55,9 @@ class PracticeSession(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     session_key = db.Column(db.String(80), nullable=False)
-    era = db.Column(db.String(10), nullable=False)          # template | app
-    kind = db.Column(db.String(10), nullable=False, default="practice")  # practice | event
+    era = db.Column(db.String(10), nullable=False)          # template | app | trip
+    kind = db.Column(db.String(10), nullable=False, default="practice")  # practice | event | trip
+    category = db.Column(db.String(20), nullable=False, default="practice", index=True)
     source_message_id = db.Column(db.Integer, db.ForeignKey("slack_archive_messages.id", ondelete="SET NULL"))
     practice_id = db.Column(db.Integer, db.ForeignKey("practices.id", ondelete="SET NULL"))
     date = db.Column(db.Date, nullable=False, index=True)
@@ -79,6 +80,7 @@ class PracticeSession(db.Model):
     rsvp_emoji = db.Column(db.String(100))
     status = db.Column(db.String(10), nullable=False, default="held")  # held | cancelled
     rsvp_count = db.Column(db.Integer, nullable=False, default=0)
+    reported_count = db.Column(db.Integer)  # count-only sessions: names were lost
     temp_f = db.Column(db.Float)
     feels_like_f = db.Column(db.Float)
     wind_mph = db.Column(db.Float)
@@ -100,7 +102,10 @@ class PracticeSession(db.Model):
         db.UniqueConstraint("session_key", name="uq_practice_sessions_session_key"),
         db.CheckConstraint("format IN ('single','split','merged')", name="ck_session_format"),
         db.CheckConstraint("status IN ('held','cancelled')", name="ck_session_status"),
-        db.CheckConstraint("kind IN ('practice','event')", name="ck_session_kind"),
+        db.CheckConstraint("kind IN ('practice','event','trip')", name="ck_session_kind"),
+        db.CheckConstraint(
+            "category IN ('practice','kickoff','social','board','race','volunteer','banquet','other','trip')",
+            name="ck_session_category"),
     )
 
 
@@ -111,17 +116,19 @@ class PracticeAttendance(db.Model):
     session_id = db.Column(
         db.Integer, db.ForeignKey("practice_sessions.id", ondelete="CASCADE"),
         nullable=False, index=True)
-    slack_uid = db.Column(db.String(20), nullable=False, index=True)
+    slack_uid = db.Column(db.String(20), index=True)
+    person_key = db.Column(db.String(120), nullable=False, index=True)  # slack:U.. | user:N | name:...
     user_id = db.Column(db.Integer, db.ForeignKey("users.id", ondelete="SET NULL"))
-    role = db.Column(db.String(10), nullable=False)    # rsvp | plan | lead | coach
+    role = db.Column(db.String(10), nullable=False)    # rsvp | plan | lead | coach | signup | decline
     emoji = db.Column(db.String(100))
     slot = db.Column(db.String(10))                    # early | late
     source = db.Column(db.String(12), nullable=False)  # reaction | button | post_text | app | correction
 
     __table_args__ = (
-        db.UniqueConstraint("session_id", "slack_uid", "role", "emoji",
-                            name="uq_attendance_session_uid_role_emoji"),
-        db.CheckConstraint("role IN ('rsvp','plan','lead','coach')", name="ck_attendance_role"),
+        db.UniqueConstraint("session_id", "person_key", "role", "emoji",
+                            name="uq_attendance_session_person_role_emoji"),
+        db.CheckConstraint("role IN ('rsvp','plan','lead','coach','signup','decline')",
+                           name="ck_attendance_role"),
     )
 
 

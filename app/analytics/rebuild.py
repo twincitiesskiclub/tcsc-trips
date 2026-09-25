@@ -117,6 +117,7 @@ def rebuild(*, cfg=None, commit=True) -> dict:
         session_ids = {row.session_key: row.id for row in session_rows}
         attendance = [dict(
             session_id=session_ids[draft.session_key], slack_uid=draft.slack_uid,
+            person_key=f"slack:{draft.slack_uid}",
             user_id=user_ids.get(draft.slack_uid), role=draft.role,
             emoji=draft.emoji, slot=draft.slot, source=draft.source,
         ) for draft in result.attendance]
