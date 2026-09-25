@@ -200,6 +200,35 @@ def test_nightly_injected_client_and_default_weather(app):
     weather.assert_called_once_with()
 
 
+def test_nightly_continues_after_channel_failure(db_session, transaction):
+    from app.analytics import SYNC_CHANNELS, jobs
+    from app.analytics.models import SlackArchiveMessage
+
+    bad_channel, good_channel = SYNC_CHANNELS[:2]
+    raw = {"ts": "4072435200.000100", "user": "UFAKE0001", "text": "Synthetic post"}
+
+    class FailedChannel:
+        def conversations_history(self, channel, **kwargs):
+            if channel == bad_channel:
+                raise RuntimeError("not_in_channel")
+            return {"messages": [raw] if channel == good_channel else []}
+
+    with patch.object(jobs, "rebuild", return_value={"sessions": 1}) as rebuild, \
+         patch.object(jobs, "fetch_missing_weather", return_value={"sessions": 0}) as weather, \
+         patch.object(jobs, "get_slack_client") as bot:
+        out = jobs.run_nightly(client=FailedChannel())
+    assert out["ok"] is True and out["step"] == "done"
+    assert out["sync"][bad_channel] == {"error": "not_in_channel"}
+    assert out["sync"][good_channel]["messages"] == 1
+    assert SlackArchiveMessage.query.filter_by(channel_id=good_channel, ts=raw["ts"]).one().raw == raw
+    assert out["rebuild"] == {"sessions": 1}
+    rebuild.assert_called_once_with()
+    weather.assert_called_once_with()
+    bot.assert_not_called()
+    transaction.commit.assert_called_once_with()
+    transaction.rollback.assert_not_called()
+
+
 @pytest.mark.parametrize("ok", [True, False])
 def test_nightly_cli_exit_status(app, ok):
     from app.analytics import cli

@@ -229,6 +229,15 @@ def _row(uid=None, name=None, key="trip:cuyuna:2099", role="signup"):
     return AttendanceDraft(key, uid, role, None, None, "reaction", name)
 
 
+def test_resolve_people_preserves_button_rsvp_slots():
+    drafts = [AttendanceDraft("practice:999:merged", "UFAKE0001", "rsvp", None, slot, "button")
+              for slot in ("early", "late")]
+    rows = resolve_people(drafts, PEOPLE)
+    assert len(rows) == 2
+    assert {row["slot"] for row in rows} == {"early", "late"}
+    assert all(row["person_key"] == "slack:UFAKE0001" for row in rows)
+
+
 def test_resolve_people_matches_names_and_dedupes():
     rows = resolve_people([_row(name="pat example"), _row(uid="UFAKE0001"),   # same person twice
                            _row(name="no slack"), _row(name="nobody here"),

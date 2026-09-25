@@ -120,7 +120,7 @@ def resolve_people(rows, people) -> list[dict]:
             person_key = f"user:{user_id}"
         else:
             person_key, unmatched = f"name:{normalize_name(row.person_name)}", True
-        key = (row.session_key, person_key, row.role, row.emoji)
+        key = (row.session_key, person_key, row.role, row.emoji, row.slot if row.emoji is None else None)
         resolved.setdefault(key, dict(
             session_key=row.session_key, slack_uid=uid, user_id=user_id, person_key=person_key,
             role=row.role, emoji=row.emoji, slot=row.slot, source=row.source, unmatched=unmatched))
