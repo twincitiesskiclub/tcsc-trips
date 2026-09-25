@@ -32,7 +32,7 @@ class _Session:
     """Builder-only provenance, including intent that survives a merge."""
     draft: SessionDraft
     emoji_slots: dict
-    button_uids: list = field(default_factory=list)
+    button_slots: list[tuple[str, str | None]] = field(default_factory=list)
     correction_keys: list = field(default_factory=list)
     rsvp_from: list = field(default_factory=list)
 
@@ -117,7 +117,7 @@ def _merge_group(group, replies, corrections, cfg, locations):
     if not decisions:
         session.flags.append("merge_detected")
     state = _Session(session, {emoji: slot for item in group for emoji, slot in item.emoji_slots.items()},
-                     [uid for item in group for uid in item.button_uids], keys,
+                     [entry for item in group for entry in item.button_slots], keys,
                      [key for item in group for key in item.rsvp_from])
     # Post and early-session explicit times take precedence over reply inference.
     for key in group[0].correction_keys:
@@ -135,7 +135,9 @@ def _attendance(state, messages, cfg, corrections):
 
     def add(uid, role, emoji=None, slot=None, source="correction"):
         if uid not in cfg.excluded_slack_uids:
-            key = (session.session_key, uid, role, emoji)
+            # Null-emoji button rows may carry both pre-merge slots. Keep the
+            # persisted uniqueness of non-null reaction/correction emoji rows.
+            key = (session.session_key, uid, role, emoji, slot if emoji is None else None)
             rows.setdefault(key, AttendanceDraft(session.session_key, uid, role, emoji, slot, source))
 
     sources = [(session.channel_id, session.source_ts)]
@@ -156,10 +158,10 @@ def _attendance(state, messages, cfg, corrections):
                     add(uid, "coach", emoji, source="reaction")
                 if base in plan_emoji:
                     add(uid, "plan", emoji, source="reaction")
-    reactors = {row.slack_uid for row in rows.values() if row.role == "rsvp"}
-    for uid in state.button_uids:
-        if uid not in reactors:
-            add(uid, "rsvp", source="button")
+    reactors = {(row.slack_uid, row.slot) for row in rows.values() if row.role == "rsvp"}
+    for uid, slot in state.button_slots:
+        if (uid, slot) not in reactors:
+            add(uid, "rsvp", slot=slot, source="button")
     source = "post_text" if session.era == "template" else "app"
     for role, uids in (("lead", session.lead_uids), ("coach", session.coach_uids)):
         for uid in uids:
@@ -207,7 +209,8 @@ def build_lineage(
             continue
         rsvp_emojis = session.rsvp_emoji_set or ([session.rsvp_emoji] if session.rsvp_emoji else [])
         state = _Session(session, {base_emoji(emoji): session.slot for emoji in rsvp_emojis},
-                         list(practices[session.practice_id].button_rsvp_uids) if session.era == "app" else [], keys)
+                         [(uid, session.slot) for uid in practices[session.practice_id].button_rsvp_uids]
+                         if session.era == "app" else [], keys)
         for key in keys:
             _apply_fields(state, corrections[key], cfg, locations)
         groups[session.group_key].append(state)

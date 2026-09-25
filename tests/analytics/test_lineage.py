@@ -335,3 +335,30 @@ def test_ambiguous_choices_union_rsvps_and_correction_overrides(cfg, emojis, ove
     assert session.format == "single"
     assert "emoji_ambiguous" in session.flags
     assert session.needs_review == (override is None)
+
+
+@pytest.mark.parametrize("merged", [False, True])
+def test_button_rsvps_keep_each_source_session_slot(cfg, merged):
+    msg = _post(SPLIT_TEXT, [R("six", "UFAKE0001")])
+    early = AppPractice(9901, datetime(2099, 7, 16, 18, 5), "scheduled", False,
+                        CH, msg.ts, "six", "Balance Fitness Studio", None,
+                        activities=("Strength",), button_rsvp_uids=("UFAKE0001", "UFAKE0002", "UFAKE0004"))
+    late = replace(early, id=9902, date=datetime(2099, 7, 16, 19, 20), slack_session_emoji="seven",
+                   button_rsvp_uids=("UFAKE0001", "UFAKE0003", "UFAKE0004"))
+    result = build_lineage([msg], [late, early], LOCS, [], cfg,
+                           {"practice:9901": {"merged": merged}})
+    assert [s.format for s in result.sessions] == (["merged"] if merged else ["split", "split"])
+    assert {(r.slack_uid, r.slot) for r in result.attendance if r.source == "button"} == {
+        ("UFAKE0002", "early"), ("UFAKE0003", "late"), ("UFAKE0004", "early"),
+        ("UFAKE0004", "late"), ("UFAKE0001", "late")}
+    assert [s.rsvp_count for s in result.sessions] == ([4] if merged else [3, 3])
+
+
+def test_slot_preservation_keeps_nonnull_emoji_identity(cfg):
+    msg = _post(SPLIT_TEXT, [R("six", "UFAKE0001")])
+    corrections = {f"{CH}:{msg.ts}:early": {"add": [
+        {"slack_uid": "UFAKE0001", "role": "rsvp", "emoji": "six", "slot": "late"}]}}
+    result = build_lineage([msg], [], LOCS, [], cfg, corrections)
+    # Non-null emoji rows still obey the persisted unique constraint.
+    rsvps = [r for r in result.attendance if r.role == "rsvp"]
+    assert [(r.slack_uid, r.emoji, r.slot) for r in rsvps] == [("UFAKE0001", "six", "early")]
