@@ -248,6 +248,85 @@ def test_ambiguous_name_stays_unmatched():
     assert rows[0]["person_key"] == "name:pat example" and rows[0]["unmatched"]
 
 
+def test_resolve_people_keeps_mention_when_matched_member_has_no_slack():
+    row = resolve_people([_row(name="no slack", uid="UFAKE0009")], PEOPLE)[0]
+    assert (row["person_key"], row["slack_uid"], row["user_id"], row["unmatched"]) == (
+        "slack:UFAKE0009", "UFAKE0009", 13, False)
+
+
+@pytest.mark.parametrize("uid", [None, "UFAKE0001"])
+def test_resolve_people_known_user_skips_name_matching(uid):
+    draft = AttendanceDraft("trip:cuyuna:2099", uid, "signup", None, None,
+                            "app", "pat example", user_id=13)
+    row = resolve_people([draft], PEOPLE)[0]
+    assert row["user_id"] == 13 and not row["unmatched"]
+    assert row["person_key"] == ("slack:UFAKE0001" if uid else "user:13")
+
+
+def _register_trip(db_session, user):
+    from datetime import datetime
+    from app.models import Trip
+    from app.trips.models import TripRegistration, TripSeries
+
+    series = TripSeries(slug="cuyuna", name="Fake trip", destination="Fake venue")
+    trip = Trip(slug="task6-fix-trip-2099", series=series, name="Fake trip", destination="Fake venue",
+                max_participants_standard=10, max_participants_extra=0,
+                start_date=datetime(2099, 9, 25, 12), end_date=datetime(2099, 9, 27, 12),
+                signup_start=datetime(2099, 7, 1), signup_end=datetime(2099, 9, 1),
+                price_low=0, price_high=0)
+    registration = TripRegistration(trip=trip, user=user, status="confirmed",
+                                    price_tier="low", amount_cents=0)
+    db_session.add(registration)
+    db_session.flush()
+
+
+@pytest.mark.parametrize("uid", [None, "UFAKE6002"])
+def test_rebuild_trip_count_dedupes_typed_name_and_app_registration(db_session, uid):
+    from app.models import SlackUser, User
+
+    user = User(first_name="Pat", last_name="Example", email="task6-overlap@example.invalid",
+                slack_user=SlackUser(slack_uid=uid) if uid else None)
+    _register_trip(db_session, user)
+    upsert_message("C068ECRE0PQ", {"ts": "4087911703.000100", "subtype": "bot_message",
+        "username": "Cuyuna Trip Sign-Up",
+        "text": "Trip Signup Submitted. This does not mean that they have paid!\nPat Example"})
+    rebuild(commit=False)
+    session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
+    assert session.rsvp_count == 1
+    row = PracticeAttendance.query.filter_by(session_id=session.id).one()
+    assert row.user_id == user.id
+    assert row.person_key == (f"slack:{uid}" if uid else f"user:{user.id}")
+
+
+def test_rebuild_app_trip_retains_user_with_ambiguous_name_and_no_slack(db_session):
+    from app.models import User
+
+    user = User(first_name="Pat", last_name="Twin", email="task6-registered-twin@example.invalid")
+    db_session.add(User(first_name="Pat", last_name="Twin", email="task6-other-twin@example.invalid"))
+    _register_trip(db_session, user)
+    rebuild(commit=False)
+    session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
+    row = PracticeAttendance.query.filter_by(session_id=session.id).one()
+    assert row.person_key == f"user:{user.id}" and row.user_id == user.id
+    assert row.slack_uid is None and row.source == "app"
+    assert "unmatched_person" not in session.flags
+
+
+def test_rebuild_dated_trip_unmatched_name_does_not_need_review(db_session):
+    from app.analytics.corrections import upsert_correction
+
+    upsert_message("C068ECRE0PQ", {"ts": "4087911704.000100", "subtype": "bot_message",
+        "username": "Cuyuna Trip Sign-Up",
+        "text": "Trip Signup Submitted. This does not mean that they have paid!\nZed Nobodyfake"})
+    upsert_correction("trip:cuyuna:2099", {"date": "2099-09-25"}, "test date", "test")
+    rebuild(commit=False)
+    session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
+    assert "unmatched_person" in session.flags
+    assert "missing_date" not in session.flags and session.needs_review is False
+    row = PracticeAttendance.query.filter_by(session_id=session.id).one()
+    assert row.person_key == "name:zed nobodyfake" and row.user_id is None
+
+
 def test_rebuild_events_trips_and_coverage_snapshot(db_session):
     from app.analytics.corrections import upsert_correction
     from app.models import AppConfig
@@ -318,9 +397,9 @@ def test_load_app_trip_signups_keeps_members_without_slack_and_skips_cancelled(d
     rows = [row for row in load_app_trip_signups() if row.series_slug == series.slug]
     assert rows == [
         TripSignup(series.slug, 2098, date(2099, 1, 10), "UFAKE6001", None,
-                   f"trip_registration:{registrations[0].id}"),
-        TripSignup(series.slug, 2098, date(2099, 1, 10), None, "Trip Fake1",
-                   f"trip_registration:{registrations[1].id}"),
+                   f"trip_registration:{registrations[0].id}", registrations[0].user_id),
+        TripSignup(series.slug, 2098, date(2099, 1, 10), None, None,
+                   f"trip_registration:{registrations[1].id}", registrations[1].user_id),
     ]
 
 

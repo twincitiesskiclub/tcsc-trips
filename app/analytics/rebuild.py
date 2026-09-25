@@ -80,7 +80,7 @@ def load_inputs() -> tuple[list[ArchivedMessage], list[AppPractice], list[Locati
 
 def load_app_trip_signups() -> list[TripSignup]:
     rows = db.session.query(TripRegistration.id, TripSeries.slug, Trip.start_date, SlackUser.slack_uid,
-                            User.first_name, User.last_name).join(
+                            User.id).join(
         Trip, TripRegistration.trip_id == Trip.id).join(
         TripSeries, Trip.series_id == TripSeries.id).join(
         User, TripRegistration.user_id == User.id).outerjoin(
@@ -88,8 +88,8 @@ def load_app_trip_signups() -> list[TripSignup]:
         TripRegistration.status != "cancelled").order_by(TripRegistration.id).all()
     return [TripSignup(slug, edition_year(start.date() if hasattr(start, "date") else start),
                        start.date() if hasattr(start, "date") else start,
-                       uid, None if uid else f"{first} {last}", f"trip_registration:{rid}")
-            for rid, slug, start, uid, first, last in rows]
+                       uid, None, f"trip_registration:{rid}", user_id)
+            for rid, slug, start, uid, user_id in rows]
 
 
 def load_people() -> dict:
@@ -107,11 +107,12 @@ def load_people() -> dict:
 def resolve_people(rows, people) -> list[dict]:
     resolved = {}
     for row in rows:
-        uid, user_id, unmatched = row.slack_uid, None, False
-        member = people["name_to_member"].get(normalize_name(row.person_name)) if row.person_name else None
-        if member:
-            user_id, member_uid = member
-            uid = member_uid
+        uid, user_id, unmatched = row.slack_uid, row.user_id, False
+        if user_id is None:
+            member = people["name_to_member"].get(normalize_name(row.person_name)) if row.person_name else None
+            if member:
+                user_id, member_uid = member
+                uid = member_uid or uid
         if uid:
             person_key = f"slack:{uid}"
             user_id = user_id or people["uid_to_user"].get(uid)
@@ -160,7 +161,13 @@ def rebuild(*, cfg=None, commit=True) -> dict:
         result = build_lineage(*load_inputs(), cfg, corrections, trip_signups=load_app_trip_signups())
         people = resolve_people(result.attendance, load_people())
         unmatched = {row["session_key"] for row in people if row["unmatched"]}
+        signups = defaultdict(set)
+        for row in people:
+            if row["role"] == "signup":
+                signups[row["session_key"]].add(row["person_key"])
         for draft in result.sessions:
+            if draft.kind == "trip":
+                draft.rsvp_count = len(signups[draft.session_key])
             if draft.session_key in unmatched:
                 draft.flags = [*draft.flags, "unmatched_person"]
         rebuilt_at = datetime.utcnow()

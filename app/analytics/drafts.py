@@ -22,6 +22,7 @@ class TripSignup:
     slack_uid: Optional[str]
     person_name: Optional[str]
     source_key: str               # "channel:ts" or "trip_registration:<id>"
+    user_id: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -109,6 +110,7 @@ class AttendanceDraft:
     slot: Optional[str]
     source: str                    # reaction | button | post_text | app | correction
     person_name: Optional[str] = None
+    user_id: Optional[int] = None
 
 
 @dataclass

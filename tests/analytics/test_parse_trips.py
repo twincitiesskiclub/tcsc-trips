@@ -103,10 +103,10 @@ def test_build_lineage_includes_trips_and_flags_unparsed(cfg):
 
 
 def test_build_lineage_combines_app_and_slack_signups(cfg):
-    good = _post("Pat Example", "Cuyuna Trip Sign-Up")
+    good = _post("<@UFAKE0001>", "Cuyuna Trip Sign-Up")
     app_signups = [
-        TripSignup("cuyuna", 2099, date(2099, 11, 22), None, "PAT EXAMPLE", "trip_registration:1"),
-        TripSignup("cuyuna", 2099, date(2099, 11, 23), "UFAKE0002", None, "trip_registration:2"),
+        TripSignup("cuyuna", 2099, date(2099, 11, 22), "UFAKE0001", None, "trip_registration:1", 11),
+        TripSignup("cuyuna", 2099, date(2099, 11, 23), "UFAKE0002", None, "trip_registration:2", 12),
     ]
     result = build_lineage([good], [], [], [], cfg, trip_signups=app_signups)
     assert len(result.sessions) == 1
@@ -118,6 +118,26 @@ def test_build_lineage_combines_app_and_slack_signups(cfg):
 def test_trip_edition_skip():
     signup = TripSignup("cuyuna", 2099, date(2099, 8, 7), None, "Pat Example", "C:1")
     assert trip_sessions([signup], {"trip:cuyuna:2099": {"skip": True}}, []) == ([], [])
+
+
+@pytest.mark.parametrize("source_key, expected", [("trip_registration:1", "app"), ("C:1", "post_text")])
+def test_trip_attendance_source(source_key, expected):
+    signup = TripSignup("cuyuna", 2099, date(2099, 8, 7), "UFAKE0001", None, source_key)
+    _, attendance = trip_sessions([signup], {}, [])
+    assert attendance[0].source == expected
+
+
+@pytest.mark.parametrize("uid", [None, "UFAKE0001"])
+def test_trip_sessions_dedupe_app_signups_and_keep_distinct_users(uid):
+    signups = [
+        TripSignup("cuyuna", 2099, date(2099, 8, 7), uid, None, "trip_registration:1", user_id=11),
+        TripSignup("cuyuna", 2099, date(2099, 8, 8), uid, None, "trip_registration:2", user_id=11),
+        TripSignup("cuyuna", 2099, date(2099, 8, 9), None, None, "trip_registration:3", user_id=12),
+    ]
+    sessions, attendance = trip_sessions(signups, {}, [])
+    assert sessions[0].rsvp_count == 2
+    assert [(row.user_id, row.slack_uid, row.source) for row in attendance] == [
+        (11, uid, "app"), (12, None, "app")]
 
 
 def test_unparsed_known_series_is_a_possible_miss(cfg):

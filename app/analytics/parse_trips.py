@@ -72,9 +72,13 @@ def trip_sessions(signups, corrections, seasons):
         people = {}
         for signup in sorted(group, key=lambda s: s.source_key):
             name = normalize_name(signup.person_name) if signup.person_name else None
-            person = f"name:{name}" if name else f"slack:{signup.slack_uid}"
+            if signup.user_id is not None:
+                person = f"slack:{signup.slack_uid}" if signup.slack_uid else f"user:{signup.user_id}"
+            else:
+                person = f"name:{name}" if name else f"slack:{signup.slack_uid}"
+            source = "app" if signup.source_key.startswith("trip_registration:") else "post_text"
             people.setdefault(person, AttendanceDraft(key, signup.slack_uid, "signup", None, None,
-                                                      "reaction", name))
+                                                      source, name, signup.user_id))
         flags = [] if dated else ["missing_date"]
         sessions.append(SessionDraft(
             session_key=key, group_key=key, era="trip", date=day, start_time=None,
