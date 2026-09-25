@@ -7,6 +7,7 @@ from app.analytics.corrections import (
     upsert_correction, validate_correction)
 
 KEY = "C042G463AQ1:4087911600.000100"
+POST = "C02HXN45214:1700000000.000100"
 
 
 @pytest.mark.parametrize("fields", [
@@ -151,3 +152,79 @@ def test_attendance_corrections_reject_invalid_slack_uid(field, uid):
 def test_attendance_corrections_accept_slack_uid_boundaries(field, uid):
     fields = {field: [{"slack_uid": uid, "role": "rsvp"}]}
     assert validate_correction("practice:999", fields) == fields
+
+
+def test_event_catalog_entry_validates():
+    fields = {"create": True, "date": "2099-01-14", "title": "Pickleball night", "category": "social",
+              "emoji_roles": {"pickle": "rsvp", "x": "decline", "call_me_hand::skin-tone-4": "rsvp"}}
+    assert validate_correction(POST, fields) == fields
+
+
+def test_count_only_entry_validates():
+    validate_correction(POST, {"create": True, "date": "2024-05-16", "category": "kickoff",
+                               "reported_count": 40})
+
+
+@pytest.mark.parametrize("fields", [
+    {"category": "picnic"},
+    {"emoji_roles": {}},
+    {"emoji_roles": {"x": "maybe"}},
+    {"reported_count": -1},
+    {"reported_count": True},
+    {"title": "  "},
+    {"kind": "social"},
+])
+def test_bad_new_fields_rejected(fields):
+    with pytest.raises(CorrectionError):
+        validate_correction(POST, fields)
+
+
+def test_trip_key():
+    validate_correction("trip:great-bear-chase:2024", {"date": "2025-03-06", "title": "Great Bear Chase 2025"})
+    with pytest.raises(CorrectionError):
+        validate_correction("trip:Great Bear:2024", {"date": "2025-03-06"})
+    with pytest.raises(CorrectionError):
+        validate_correction("trip:cuyuna:2024", {"create": True, "date": "2024-09-01"})
+
+
+def test_gap_key_needs_monday_and_only_gap_ok():
+    validate_correction("gap:2099-12-21", {"gap_ok": "Holiday break"})   # 2099-12-21 is a Monday
+    with pytest.raises(CorrectionError):
+        validate_correction("gap:2099-12-22", {"gap_ok": "Tuesday is not a week start"})
+    with pytest.raises(CorrectionError):
+        validate_correction("gap:2099-12-21", {"skip": True})
+    with pytest.raises(CorrectionError):
+        validate_correction(POST, {"gap_ok": "only on gap keys"})
+
+
+def test_add_accepts_signup_and_decline():
+    validate_correction(POST, {"add": [{"slack_uid": "UFAKE0001", "role": "decline"},
+                                       {"slack_uid": "UFAKE0002", "role": "signup"}]})
+
+
+@pytest.mark.parametrize("field", ["add", "remove"])
+@pytest.mark.parametrize("role", ["signup", "decline"])
+def test_trip_attendance_roles_validate(field, role):
+    fields = {"kind": "trip", "category": "trip", field: [{"slack_uid": "UFAKE0001", "role": role}]}
+    assert validate_correction("trip:cuyuna:2024", fields) == fields
+
+
+def test_zero_reported_count_and_plan_emoji_validate():
+    fields = {"reported_count": 0, "emoji_roles": {"book": "plan"}}
+    assert validate_correction(POST, fields) == fields
+
+
+@pytest.mark.parametrize("fields", [
+    {"category": []}, {"title": None}, {"reported_count": 1.5},
+    {"emoji_roles": []}, {"emoji_roles": {" ": "rsvp"}}, {"emoji_roles": {1: "rsvp"}},
+])
+def test_new_field_types_rejected(fields):
+    with pytest.raises(CorrectionError):
+        validate_correction(POST, fields)
+
+
+@pytest.mark.parametrize("fields", [{"gap_ok": " "}, {"gap_ok": None},
+    {"gap_ok": "Holiday break", "skip": True}])
+def test_gap_fields_rejected(fields):
+    with pytest.raises(CorrectionError):
+        validate_correction("gap:2099-12-21", fields)
