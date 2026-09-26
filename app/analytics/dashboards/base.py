@@ -89,14 +89,21 @@ _FIELDS = (
 )
 
 
+def _dashboard_kinds(dashboard) -> list[str]:
+    for settings in (dashboard.fixed, dashboard.defaults):
+        for key in ("kinds", "kind"):
+            if key in settings:
+                return list(_values(settings[key])) if settings[key] else []
+    return []
+
+
 def _past_sessions(dashboard=None):
     query = PracticeSession.query.filter(
         PracticeSession.date <= utils.today_central(), ~PracticeSession.flags.any("missing_date"))
     if dashboard is not None:
-        kinds = dashboard.fixed.get("kinds", dashboard.fixed.get("kind",
-            dashboard.defaults.get("kinds", dashboard.defaults.get("kind", []))))
+        kinds = _dashboard_kinds(dashboard)
         if kinds:
-            query = query.filter(PracticeSession.kind.in_(_values(kinds)))
+            query = query.filter(PracticeSession.kind.in_(kinds))
     return query
 
 
