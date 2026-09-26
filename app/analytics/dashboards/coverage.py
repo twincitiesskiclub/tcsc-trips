@@ -39,10 +39,12 @@ def _session_dates():
 
 
 def _sync_rows():
+    status = AppConfig.get("analytics_sync_status") or {}
     found = dict(db.session.query(SlackArchiveMessage.channel_id, func.max(SlackArchiveMessage.synced_at))
                  .filter(SlackArchiveMessage.channel_id.in_(SYNC_CHANNELS))
                  .group_by(SlackArchiveMessage.channel_id).all())
-    return [(channel, found.get(channel)) for channel in SYNC_CHANNELS]
+    return [(channel, datetime.fromisoformat(status[channel]) if channel in status else found.get(channel))
+            for channel in SYNC_CHANNELS]
 
 
 def _soft_items():

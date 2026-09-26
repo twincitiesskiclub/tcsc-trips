@@ -137,6 +137,7 @@ def test_snapshot_reads_stored_value(db_session):
 
 
 def test_sync_rows_uses_latest_sync_and_includes_never_synced(db_session):
+    db_session.query(AppConfig).filter_by(key="analytics_sync_status").delete()
     db_session.query(SlackArchiveMessage).delete()
     now = datetime(2099, 1, 3, 12)
     for i, (channel, synced) in enumerate([(SYNC_CHANNELS[0], now - timedelta(days=3)),
@@ -146,6 +147,22 @@ def test_sync_rows_uses_latest_sync_and_includes_never_synced(db_session):
     db_session.flush()
     assert cv._sync_rows() == [(channel, now if channel == SYNC_CHANNELS[0] else None)
                               for channel in SYNC_CHANNELS]
+
+
+def test_sync_rows_prefers_channel_status_with_archive_fallback(db_session):
+    db_session.query(SlackArchiveMessage).delete()
+    archived = datetime(2099, 1, 3, 12)
+    for channel in SYNC_CHANNELS[:2]:
+        db_session.add(SlackArchiveMessage(channel_id=channel, ts="4070908800.000100",
+                                           posted_at=archived, synced_at=archived, raw={}))
+    AppConfig.set("analytics_sync_status", {
+        SYNC_CHANNELS[0]: "2099-01-04T12:00:00",
+        SYNC_CHANNELS[2]: "2099-01-05T12:00:00",
+    }, category="analytics")
+    db_session.flush()
+    expected = {SYNC_CHANNELS[0]: datetime(2099, 1, 4, 12),
+                SYNC_CHANNELS[1]: archived, SYNC_CHANNELS[2]: datetime(2099, 1, 5, 12)}
+    assert cv._sync_rows() == [(channel, expected.get(channel)) for channel in SYNC_CHANNELS]
 
 
 def test_session_dates_and_soft_items_include_all_kinds(db_session):

@@ -1,6 +1,6 @@
 """Dashboard blocks, validated GET filters, and read-only data access."""
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, datetime
 from typing import Callable, ClassVar
 
 from sqlalchemy import func
@@ -10,7 +10,7 @@ from werkzeug.datastructures import MultiDict
 from app import utils
 from app.analytics import CATEGORIES
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
-from app.models import db
+from app.models import AppConfig, db
 from app.practices.models import PracticeLocation
 
 
@@ -216,6 +216,10 @@ def filter_options(dashboard, domains=None) -> dict:
 
 
 def footer() -> dict:
-    latest = db.session.query(func.max(SlackArchiveMessage.synced_at)).scalar()
+    status = AppConfig.get("analytics_sync_status")
+    if status is not None:
+        latest = max((datetime.fromisoformat(value) for value in status.values()), default=None)
+    else:
+        latest = db.session.query(func.max(SlackArchiveMessage.synced_at)).scalar()
     return {"data_through": utils.format_datetime_central(latest) if latest else None,
             "needs_review": PracticeSession.query.filter_by(needs_review=True).count()}
