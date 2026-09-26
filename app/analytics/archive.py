@@ -9,9 +9,10 @@ from time import time
 
 from sqlalchemy.dialects.postgresql import insert
 
+from app import utils
 from app.analytics import SYNC_CHANNELS
 from app.analytics.models import SlackArchiveMessage
-from app.models import db
+from app.models import AppConfig, db
 
 logger = logging.getLogger(__name__)
 
@@ -91,6 +92,7 @@ def sync_recent(
     now = now or _utc(time())
     since = now - timedelta(days=days)
     out = {}
+    sync_status = AppConfig.get("analytics_sync_status") or {}
     for channel_id in channel_ids:
         try:
             with db.session.begin_nested():
@@ -115,6 +117,14 @@ def sync_recent(
             logger.exception("analytics sync %s failed: %s", channel_id, exc)
             out[channel_id] = {"error": str(exc)}
             continue
+        try:
+            # Bookkeeping must not roll back this channel's imported messages.
+            with db.session.begin_nested():
+                updated_status = {**sync_status, channel_id: utils.get_current_times()["utc"].isoformat(timespec="seconds")}
+                AppConfig.set("analytics_sync_status", updated_status, category="analytics")
+            sync_status = updated_status
+        except Exception:
+            logger.exception("analytics sync %s status update failed", channel_id)
         out[channel_id] = {k: v for k, v in stats.items() if k != "seen"}
         logger.info("analytics sync %s: %s", channel_id, out[channel_id])
     return out

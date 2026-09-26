@@ -4,8 +4,10 @@ from unittest.mock import patch
 import pytest
 from werkzeug.datastructures import MultiDict
 
+from app.analytics import SYNC_CHANNELS
 from app.analytics.dashboards import base
 from app.analytics.models import PracticeSession, PracticeAttendance, SlackArchiveMessage
+from app.models import AppConfig
 from app.practices.models import PracticeLocation
 
 from app.analytics.dashboards.base import Dashboard, parse_filters
@@ -210,6 +212,7 @@ def test_load_attendance_accepts_multiple_roles_and_people_without_slack(db_sess
 
 
 def test_footer_uses_latest_sync_not_post_date_and_central_timezone(db_session):
+    db_session.query(AppConfig).filter_by(key='analytics_sync_status').delete()
     before = base.footer()['needs_review']
     message = SlackArchiveMessage(channel_id='CFAKE13', ts='1300000000.001',
                                   posted_at=datetime(2090, 1, 1), synced_at=datetime(2099, 1, 6, 2), raw={})
@@ -219,6 +222,35 @@ def test_footer_uses_latest_sync_not_post_date_and_central_timezone(db_session):
     footer = base.footer()
     assert footer['data_through'] == 'Jan 05, 2099 08:00 PM CST'
     assert footer['needs_review'] == before + 1
+
+
+@pytest.mark.parametrize('archive_day', [1, 10])
+def test_footer_prefers_latest_channel_status_over_archive_sync(db_session, archive_day):
+    db_session.query(SlackArchiveMessage).delete()
+    db_session.add(SlackArchiveMessage(channel_id='CFAKE13', ts='1300000000.001',
+                                       posted_at=datetime(2090, 1, 1),
+                                       synced_at=datetime(2099, 1, archive_day), raw={}))
+    AppConfig.set('analytics_sync_status', {SYNC_CHANNELS[0]: '2099-01-06T02:00:00',
+                                          SYNC_CHANNELS[1]: '2099-01-04T02:00:00'}, category='analytics')
+    db_session.flush()
+    assert base.footer()['data_through'] == 'Jan 05, 2099 08:00 PM CST'
+
+
+def test_footer_ignores_newer_status_for_removed_channel(db_session):
+    AppConfig.set('analytics_sync_status', {SYNC_CHANNELS[0]: '2099-01-06T02:00:00',
+                                          SYNC_CHANNELS[1]: '2099-01-04T02:00:00',
+                                          'CFAKEREMOVED': '2099-01-10T02:00:00'}, category='analytics')
+    db_session.flush()
+    assert base.footer()['data_through'] == 'Jan 05, 2099 08:00 PM CST'
+
+
+def test_footer_with_empty_sync_status_has_no_success_time(db_session):
+    db_session.add(SlackArchiveMessage(channel_id='CFAKE13', ts='1300000000.001',
+                                       posted_at=datetime(2090, 1, 1),
+                                       synced_at=datetime(2099, 1, 6, 2), raw={}))
+    AppConfig.set('analytics_sync_status', {}, category='analytics')
+    db_session.flush()
+    assert base.footer()['data_through'] is None
 
 
 @pytest.mark.parametrize('attribute, selected', [
