@@ -225,6 +225,39 @@ def test_sync_includes_exact_window_boundary(db_session):
     assert _rows()[ts].deleted_at is None
 
 
+def test_sync_status_write_failure_preserves_messages_and_continues(db_session, monkeypatch, caplog):
+    prior = {"CFAKEBAD": "2099-01-01T12:00:00"}
+    AppConfig.set("analytics_sync_status", prior, category="analytics")
+    db_session.flush()
+    monkeypatch.setattr("app.utils.get_current_times",
+                        lambda: {"utc": datetime(2099, 1, 22, 12, 1)})
+    real_set = AppConfig.set
+    calls = []
+
+    def fail_second_write(*args, **kwargs):
+        calls.append(args)
+        result = real_set(*args, **kwargs)
+        db_session.flush()
+        if len(calls) == 2:
+            raise RuntimeError("synthetic status write failure")
+        return result
+
+    monkeypatch.setattr(AppConfig, "set", fail_second_write)
+    channels = (CH, "CFAKEBAD", "CFAKENEXT")
+    raw = _msg("4072435200.000100")
+    stats = sync_recent(FakeSlack([raw]), channels, now=datetime(2099, 1, 22, 12))
+    db_session.flush()
+    db_session.expire_all()
+
+    assert len(calls) == 3
+    for channel in channels:
+        assert stats[channel] == {"messages": 1, "replies": 0, "reactions_refetched": 0, "deleted": 0}
+        assert SlackArchiveMessage.query.filter_by(channel_id=channel, ts=raw["ts"]).one().raw == raw
+    assert AppConfig.get("analytics_sync_status") == {
+        **prior, CH: "2099-01-22T12:01:00", "CFAKENEXT": "2099-01-22T12:01:00"}
+    assert any("CFAKEBAD" in record.message and record.exc_info for record in caplog.records)
+
+
 def test_sync_records_slack_failure_without_marking_deletions(db_session):
     upsert_message(CH, _msg("4072435200.000100"))
 

@@ -8,7 +8,7 @@ from sqlalchemy.engine import Row
 from werkzeug.datastructures import MultiDict
 
 from app import utils
-from app.analytics import CATEGORIES
+from app.analytics import CATEGORIES, SYNC_CHANNELS
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
 from app.models import AppConfig, db
 from app.practices.models import PracticeLocation
@@ -225,7 +225,8 @@ def filter_options(dashboard, domains=None) -> dict:
 def footer() -> dict:
     status = AppConfig.get("analytics_sync_status")
     if status is not None:
-        latest = max((datetime.fromisoformat(value) for value in status.values()), default=None)
+        latest = max((datetime.fromisoformat(status[channel]) for channel in SYNC_CHANNELS
+                      if channel in status), default=None)
     else:
         latest = db.session.query(func.max(SlackArchiveMessage.synced_at)).scalar()
     return {"data_through": utils.format_datetime_central(latest) if latest else None,

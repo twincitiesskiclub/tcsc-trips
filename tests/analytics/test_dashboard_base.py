@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 from werkzeug.datastructures import MultiDict
 
+from app.analytics import SYNC_CHANNELS
 from app.analytics.dashboards import base
 from app.analytics.models import PracticeSession, PracticeAttendance, SlackArchiveMessage
 from app.models import AppConfig
@@ -229,8 +230,16 @@ def test_footer_prefers_latest_channel_status_over_archive_sync(db_session, arch
     db_session.add(SlackArchiveMessage(channel_id='CFAKE13', ts='1300000000.001',
                                        posted_at=datetime(2090, 1, 1),
                                        synced_at=datetime(2099, 1, archive_day), raw={}))
-    AppConfig.set('analytics_sync_status', {'CFAKEQUIET': '2099-01-06T02:00:00',
-                                          'CFAKE13': '2099-01-04T02:00:00'}, category='analytics')
+    AppConfig.set('analytics_sync_status', {SYNC_CHANNELS[0]: '2099-01-06T02:00:00',
+                                          SYNC_CHANNELS[1]: '2099-01-04T02:00:00'}, category='analytics')
+    db_session.flush()
+    assert base.footer()['data_through'] == 'Jan 05, 2099 08:00 PM CST'
+
+
+def test_footer_ignores_newer_status_for_removed_channel(db_session):
+    AppConfig.set('analytics_sync_status', {SYNC_CHANNELS[0]: '2099-01-06T02:00:00',
+                                          SYNC_CHANNELS[1]: '2099-01-04T02:00:00',
+                                          'CFAKEREMOVED': '2099-01-10T02:00:00'}, category='analytics')
     db_session.flush()
     assert base.footer()['data_through'] == 'Jan 05, 2099 08:00 PM CST'
 

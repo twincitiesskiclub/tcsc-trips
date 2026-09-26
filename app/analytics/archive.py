@@ -117,8 +117,14 @@ def sync_recent(
             logger.exception("analytics sync %s failed: %s", channel_id, exc)
             out[channel_id] = {"error": str(exc)}
             continue
-        sync_status = {**sync_status, channel_id: utils.get_current_times()["utc"].isoformat(timespec="seconds")}
-        AppConfig.set("analytics_sync_status", sync_status, category="analytics")
+        try:
+            # Bookkeeping must not roll back this channel's imported messages.
+            with db.session.begin_nested():
+                updated_status = {**sync_status, channel_id: utils.get_current_times()["utc"].isoformat(timespec="seconds")}
+                AppConfig.set("analytics_sync_status", updated_status, category="analytics")
+            sync_status = updated_status
+        except Exception:
+            logger.exception("analytics sync %s status update failed", channel_id)
         out[channel_id] = {k: v for k, v in stats.items() if k != "seen"}
         logger.info("analytics sync %s: %s", channel_id, out[channel_id])
     return out
