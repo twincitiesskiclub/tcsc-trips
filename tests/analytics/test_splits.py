@@ -8,9 +8,8 @@ import jsonschema
 import pytest
 import vl_convert as vlc
 
-from app.analytics import dashboards
-from app.analytics.dashboards import thursday_strength as ts
-from app.analytics.dashboards.base import Chart, Filters, Note, Table, Tiles
+from app.analytics.dashboards import splits as ts
+from app.analytics.dashboards.base import Chart, Filters, Note, Table
 from tests.analytics.conftest import FIXTURES
 
 WEEKS = [(20, 10), (25, 15), (18, 17), (30, 20)]
@@ -39,13 +38,8 @@ def _data():
 
 
 def _build(sessions, attendance, filters=None):
-    with patch.object(ts, "load_sessions", return_value=sessions) as load, \
-         patch.object(ts, "load_attendance", return_value=attendance) as load_rsvps:
-        selected = filters or Filters(days=["Thursday"], activities=["Strength"])
-        blocks = ts.DASHBOARD.build(selected)
-        load.assert_called_once_with(selected)
-        load_rsvps.assert_called_once_with([s.id for s in sessions])
-        return blocks
+    selected = filters or Filters(days=["Thursday"], activities=["Strength"])
+    return [ts.tiles(sessions, attendance), *ts.split_blocks(sessions, attendance, selected)]
 
 
 @pytest.fixture
@@ -66,21 +60,6 @@ def _render(chart):
     png = vlc.vegalite_to_png(json.dumps({**chart.spec, "width": 800}))
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
     return png
-
-
-def test_dashboard_contract_and_registration(blocks):
-    d = ts.DASHBOARD
-    assert dashboards.get_dashboard("thursday-strength") is d
-    assert d.title == "Thursday strength"
-    assert d.question == "Should Thursday strength run as one session or two?"
-    assert d.filters == ["season", "date_range", "day_of_week", "format"]
-    assert d.fixed == {"activities": ["Strength"], "kinds": ["practice"]}
-    assert d.defaults == {"days": ["Thursday"]}
-    assert [type(b) for b in blocks] == [Tiles, Chart, Chart, Table, Chart, Chart, Note, Note, Note]
-    assert [c.title for c in _charts(blocks)] == [
-        "Every strength session", "Season by season", "This season against last", "Who picks which slot"]
-    assert blocks[-3].text == "RSVPs are not headcount. Some people RSVP and skip, some come without reacting, and leads often don't react."
-    assert blocks[-2].text == "Merges happened on nights with low RSVPs, so merged weeks averaging fewer people does not mean merging lowers turnout."
 
 
 def test_tiles(blocks):
@@ -197,20 +176,6 @@ def test_build_trusts_loaders_even_when_filters_do_not_match():
     blocks = _build(*_data(), filters=Filters(seasons=["Other"], days=["Friday"],
                                            date_to=date(2000, 1, 1)))
     assert _tiles(blocks)["Average per week"].value == "38.8"
-
-
-def test_registered_dashboard_route_uses_real_blocks(admin_client):
-    from app.analytics.dashboards import base
-    with patch.object(ts, "load_sessions", return_value=_data()[0]), \
-         patch.object(ts, "load_attendance", return_value=_data()[1]), \
-         patch.object(base, "get_filter_domains", return_value={"seasons": {"2099 Fall/Winter"},
-            "activities": {"Strength"}, "workout_types": set(), "location_ids": set()}), \
-         patch.object(base, "filter_options", return_value={}), \
-         patch.object(base, "footer", return_value={}):
-        response = admin_client.get("/admin/analytics/thursday-strength")
-    assert response.status_code == 200
-    assert response.data.count(b'class="analytics-chart"') == 4
-    assert b"38.8" in response.data and b"Should Thursday strength run as one session or two?" in response.data
 
 
 def test_sessions_with_known_and_unknown_times_sort_safely():

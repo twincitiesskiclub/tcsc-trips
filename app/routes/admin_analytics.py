@@ -1,5 +1,5 @@
 """Read-only admin analytics pages."""
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, redirect, render_template, request, url_for
 
 from app.analytics import dashboards
 from app.analytics.dashboards import base
@@ -17,10 +17,13 @@ def index():
 @admin_analytics_bp.get("/<slug>")
 @admin_required
 def dashboard(slug):
+    if slug == "thursday-strength":
+        return redirect(url_for(".dashboard", slug="practices", activity="Strength",
+                                day_of_week="Thursday"))
     definition = dashboards.get_dashboard(slug)
     if definition is None:
         abort(404)
-    domains = base.get_filter_domains()
+    domains = base.get_filter_domains(definition)
     filters = base.parse_filters(request.args, definition, domains)
     return render_template(
         "admin/analytics/dashboard.html", dashboard=definition, blocks=definition.build(filters),

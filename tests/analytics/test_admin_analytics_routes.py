@@ -62,6 +62,14 @@ def test_unknown_slug_404(admin_client):
     assert admin_client.get("/admin/analytics/nope").status_code == 404
 
 
+def test_thursday_strength_redirects(admin_client):
+    response = admin_client.get("/admin/analytics/thursday-strength")
+    assert response.status_code == 302
+    location = response.headers["Location"]
+    assert "/admin/analytics/practices" in location
+    assert "activity=Strength" in location and "day_of_week=Thursday" in location
+
+
 def test_detail_requires_admin(client):
     assert client.get('/admin/analytics/stub').status_code in (302, 401)
 
@@ -83,10 +91,20 @@ def test_module_dispatch_and_all_filter_controls(admin_client):
     parse.assert_called_once()
     assert response.status_code == 200
     html = response.data.decode()
-    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds']:
+    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds', 'Categories']:
         assert label in html
     assert '&lt;script&gt;alert' in html
     assert 'method="get"' in html and 'analytics-table' in html
+
+
+def test_category_control_preserves_selection(admin_client):
+    with patch.object(STUB, 'filters', ['category']), \
+         patch.object(base, 'filter_options', return_value={'categories': ['social', 'trip']}):
+        response = admin_client.get('/admin/analytics/stub?category=social')
+    assert response.status_code == 200
+    assert b'name="category" value="social" checked' in response.data
+    assert b'name="category" value="trip" checked' not in response.data
+    assert b'name="category" value="trip"' in response.data
 
 
 def test_empty_chart_keeps_description_and_table_without_embed_target(admin_client):
@@ -115,6 +133,15 @@ def test_format_pills_have_readable_labels_and_preserve_query_values(admin_clien
     assert 'name="format" value="split" checked' in html
 
 
+def test_filter_form_hidden_when_dashboard_has_no_filters(admin_client):
+    with patch.object(STUB, "filters", []):
+        response = admin_client.get("/admin/analytics/stub")
+    assert response.status_code == 200
+    assert b">Apply<" not in response.data
+    assert b">Reset<" not in response.data
+    assert b'aria-label="Dashboard filters"' not in response.data
+
+
 def test_never_synced_footer(admin_client):
     with patch.object(base, "footer", return_value={"data_through": None, "needs_review": 0}):
         response = admin_client.get("/admin/analytics/stub")
@@ -128,4 +155,4 @@ def test_filter_domains_are_loaded_once_per_dashboard_request(admin_client):
          patch.object(base, "get_filter_domains", wraps=base.get_filter_domains) as domains:
         response = admin_client.get("/admin/analytics/stub")
     assert response.status_code == 200
-    assert domains.call_count == 1
+    domains.assert_called_once_with(STUB)

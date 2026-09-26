@@ -322,4 +322,4 @@ def build_lineage(
     attendance.extend(trip_rows)
     misses = sorted(misses + unparsed)
     sessions.sort(key=lambda session: (session.date, session.start_time or time.min, session.session_key))
-    return LineageResult(sessions, attendance, sorted(misses))
+    return LineageResult(sessions, attendance, misses)

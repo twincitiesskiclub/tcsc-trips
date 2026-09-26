@@ -41,6 +41,7 @@
     <h1 class="text-2xl font-semibold text-tcsc-navy">{{ dashboard.title }}</h1>
     <p class="text-sm text-zinc-600">{{ dashboard.question }}</p>
   </header>
+  {% if dashboard.filters %}
   <form method="get" action="{{ url_for('admin_analytics.dashboard', slug=dashboard.slug) }}" class="analytics-card rounded-lg border border-solid border-zinc-200 bg-white p-4 space-y-4" aria-label="Dashboard filters">
     {% for name, key, label, selected in [
       ('season', 'seasons', 'Seasons', filters.seasons),
@@ -49,7 +50,8 @@
       ('workout_type', 'workout_types', 'Workout types', filters.workout_types),
       ('location', 'locations', 'Locations', filters.location_ids),
       ('format', 'formats', 'Formats', filters.formats),
-      ('kind', 'kinds', 'Kinds', filters.kinds)] %}
+      ('kind', 'kinds', 'Kinds', filters.kinds),
+      ('category', 'categories', 'Categories', filters.categories)] %}
       {% if name in dashboard.filters %}
       <fieldset>
         <legend class="mb-2 text-sm font-semibold">{{ label }}</legend>
@@ -84,6 +86,7 @@
       <a href="{{ url_for('admin_analytics.dashboard', slug=dashboard.slug) }}" class="px-2 py-3 text-sm text-zinc-600">Reset</a>
     </div>
   </form>
+  {% endif %}
   {% for block in blocks %}
     {% if block.kind == 'tiles' %}
     <div class="grid grid-cols-2 gap-4 lg:grid-cols-4">

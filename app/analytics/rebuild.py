@@ -3,7 +3,7 @@ from collections import defaultdict
 import dataclasses
 from datetime import datetime
 
-from sqlalchemy import func, insert
+from sqlalchemy import insert, tuple_
 from sqlalchemy.orm import joinedload, selectinload
 
 from app.analytics import LINEAGE_CHANNELS
@@ -204,8 +204,9 @@ def rebuild(*, cfg=None, commit=True) -> dict:
 
 
 def coverage_snapshot(candidate_keys, weeks) -> dict:
+    pairs = [tuple(key.split(":", 1)) for key in candidate_keys]
     rows = {f"{row.channel_id}:{row.ts}": row for row in SlackArchiveMessage.query.filter(
-        func.concat(SlackArchiveMessage.channel_id, ":", SlackArchiveMessage.ts).in_(candidate_keys)).all()} \
+        tuple_(SlackArchiveMessage.channel_id, SlackArchiveMessage.ts).in_(pairs)).all()} \
         if candidate_keys else {}
     candidates = []
     for key in candidate_keys:

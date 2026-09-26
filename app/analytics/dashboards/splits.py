@@ -3,9 +3,7 @@ from collections import defaultdict
 from datetime import date, time, timedelta
 
 from app.analytics import charts
-from app.analytics.dashboards.base import (
-    Chart, Dashboard, Note, Table, Tile, Tiles, load_attendance, load_sessions,
-)
+from app.analytics.dashboards.base import Chart, Note, Table, Tile, Tiles
 from app.analytics.history_config import load_history_config
 
 
@@ -175,9 +173,12 @@ def _tiles(weeks, lines):
     return Tiles(tiles)
 
 
-def build(filters):
-    sessions = load_sessions(filters)
-    attendance = load_attendance([s.id for s in sessions])
+def tiles(sessions, attendance):
+    weeks = weekly_totals(sessions, attendance)
+    return _tiles(weeks, _capacity_lines([s for s in sessions if s.status != "cancelled"]))
+
+
+def split_blocks(sessions, attendance, filters):
     weeks = weekly_totals(sessions, attendance)
     lines = _capacity_lines([s for s in sessions if s.status != "cancelled"])
     rows = _session_rows(sessions, attendance)
@@ -341,17 +342,9 @@ def build(filters):
         charts.spec(preference_description, preference_body),
         preferences, [("season_label", "Season"), ("preference", "Slot preference"), ("people", "People")])
 
-    return [_tiles(weeks, lines), session_chart, season_chart, season_table, comparison_chart, preference_chart,
+    return [session_chart, season_chart, season_table, comparison_chart, preference_chart,
             Note("RSVPs are not headcount. Some people RSVP and skip, some come without reacting, and leads often don't react."),
             Note("Merges happened on nights with low RSVPs, so merged weeks averaging fewer people does not mean merging lowers turnout."),
             Note("Cancelled nights appear faded in the session chart and are left out of every average."),
             *([Note("Weekly totals add every selected day, so a week with two lifts counts both nights.")]
               if len(filters.days) > 1 else [])]
-
-
-DASHBOARD = Dashboard(
-    slug="thursday-strength", title="Thursday strength",
-    question="Should Thursday strength run as one session or two?",
-    filters=["season", "date_range", "day_of_week", "format"], build=build,
-    fixed={"activities": ["Strength"], "kinds": ["practice"]}, defaults={"days": ["Thursday"]},
-)

@@ -16,7 +16,8 @@ CORRECTION_FIELDS = {
 }
 _POST_KEY = r"C[A-Z0-9]+:\d+\.\d+"
 TRIP_KEY = re.compile(r"trip:([a-z0-9-]+):(\d{4})")
-GAP_KEY = re.compile(r"gap:(\d{4}-\d{2}-\d{2})")
+GAP_KEY_PREFIX = "gap:"
+GAP_KEY = re.compile(rf"{GAP_KEY_PREFIX}(\d{{4}}-\d{{2}}-\d{{2}})")
 _KEY = re.compile(rf"(?:{_POST_KEY}(?::(?:early|late|merged|main|\d{{4}}-\d{{2}}-\d{{2}}))?|practice:\d+"
                   rf"|{TRIP_KEY.pattern}|{GAP_KEY.pattern})")
 _ROLES = ("rsvp", "plan", "lead", "coach", "signup", "decline")

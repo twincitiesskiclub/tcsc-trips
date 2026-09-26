@@ -3,6 +3,7 @@ from datetime import timedelta
 import re
 
 from app.analytics import CANDIDATE_CHANNELS, REACTION_CANDIDATE_CHANNELS
+from app.analytics.corrections import GAP_KEY_PREFIX
 from app.analytics.history_config import base_emoji
 from app.analytics.parse_template import is_weekly_preview
 
@@ -64,7 +65,7 @@ def empty_weeks(sessions, corrections) -> list:
     for first, last in spans.values():
         monday = first
         while monday <= last:
-            if monday not in filled and f"gap:{monday.isoformat()}" not in corrections:
+            if monday not in filled and f"{GAP_KEY_PREFIX}{monday.isoformat()}" not in corrections:
                 gaps.add(monday)
             monday += timedelta(days=7)
     return sorted(gaps)
