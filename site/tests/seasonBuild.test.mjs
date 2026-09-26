@@ -50,11 +50,11 @@ test('the hero shows the coming_soon dates line under the CTA, with all baked va
   const dates = document.querySelector('[data-registration-dates]');
   assert.ok(dates, 'expected a dates element in the hero section');
   assert.equal(dates.hasAttribute('hidden'), false, 'dates line should be visible under coming_soon');
-  assert.match(dates.textContent, /Returning members .+ · New members .+/);
+  assert.match(dates.textContent, /Returning members .+ · new members .+/);
 
-  // Baked so registrationFlip.ts can hide it (open/closed) or restore it
-  // (coming_soon) without a rebuild, exactly like the CTA's own variants.
-  assert.equal(dates.getAttribute('data-open-dates'), '');
+  // Baked so registrationFlip.ts can switch to the new-member opening date
+  // while the returning-member window is open, then hide it when closed.
+  assert.match(dates.getAttribute('data-open-dates'), /^New members .+/);
   assert.equal(dates.getAttribute('data-closed-dates'), '');
   assert.equal(dates.getAttribute('data-soon-dates'), dates.textContent);
 

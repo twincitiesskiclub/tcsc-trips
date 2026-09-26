@@ -1,0 +1,24 @@
+---
+/**
+ * The one chapter seam: an optional small-caps label followed by one
+ * structural hairline. The caller chooses heading semantics for the label.
+ */
+interface Props {
+  label?: string | null;
+  surface?: 'paper' | 'navy';
+  as?: 'h2' | 'span';
+  class?: string;
+}
+
+const {
+  label,
+  surface = 'paper',
+  as: Label = 'span',
+  class: className,
+}: Props = Astro.props;
+---
+
+<div class:list={['seam-row flex items-center gap-4', className]} data-seam data-seam-surface={surface}>
+  {label && <Label class="seam">{label}</Label>}
+  <span class="rule h-px flex-1" aria-hidden="true"></span>
+</div>

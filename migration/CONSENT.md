@@ -34,7 +34,7 @@ above.
 | breadwinners | site/src/assets/images/photos/breadwinners.jpg | 2025-12-20_1766246168-871389_0.jpg |
 | night-practice | site/src/assets/images/photos/night-practice.jpg | 2026-01-08_1767926187-104029_0.jpg |
 | ashwabay-podiums | site/src/assets/images/photos/ashwabay-podiums.jpg | 2026-01-31_1769909408-073549_1.jpg |
-| loppet-skijor | site/src/assets/images/photos/loppet-skijor.jpg | 2025-02-03_1738622884-996139_0.jpg |
+| loppet-skijor | site/src/assets/images/photos/loppet-skijor.jpg | 2025-02-03_1738622884-996139_0.jpg | PULLED 2026-08-31 (brand review L-007): frame carries City of Lakes Loppet and MTEC photo-sales marks; no third-party rights line recorded. Restore from git and crop the marks once Rob records rights, as done for skijor-race. |
 | techno-corner | site/src/assets/images/photos/techno-corner.jpg | 2025-02-22_1740268459-587669_0.jpg |
 | finlandia-axes | site/src/assets/images/photos/finlandia-axes.jpg | 2026-02-14_1771096714-097109_1.jpg |
 | vasaloppet-duo | site/src/assets/images/photos/vasaloppet-duo.jpg | 2026-02-14_1771088334-691999_0.jpg |

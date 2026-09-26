@@ -43,7 +43,14 @@ interface Props {
 const { title, description, ogImage, robots, headline, subhead, facts, photo, photoAlt, photoPosition } = Astro.props;
 const cta = await getRegistrationCta();
 ---
-<BaseLayout title={title} variant="inner" description={description} ogImage={ogImage} robots={robots}>
+<BaseLayout
+  title={title}
+  variant="inner"
+  description={description}
+  ogImage={ogImage}
+  ogImageAlt={photoAlt}
+  robots={robots}
+>
   <Nav />
   <MobileNavPanel>
     <CtaForState slot="cta" {...cta} />

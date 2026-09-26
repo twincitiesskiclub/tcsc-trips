@@ -16,6 +16,13 @@ export const navLinks: NavLink[] = [
   { label: 'Sponsors', href: '/sponsors' },
 ];
 
+/** Footer-only destinations, appended after the primary navigation. */
+export const FOOTER_EXTRAS: NavLink[] = [
+  { label: 'Trips', href: '/trips' },
+  { label: 'Extra training fun', href: '/extra-training-fun' },
+  { label: 'Dry Tri', href: '/dry-tri' },
+];
+
 /**
  * Active-state test for nav links: true when `pathname` is the link target
  * or any deeper path within its section (/wax-room/xyz highlights Wax Room).

@@ -5,6 +5,7 @@ import {
   cardNote,
   datesSentence,
   formatDay,
+  newMembersLine,
   stripSubhead,
 } from '../src/lib/registrationCopy.ts';
 
@@ -39,7 +40,7 @@ test('returns null for missing or unparseable input', () => {
 });
 
 test('builds the dates sentence from both windows', () => {
-  assert.equal(datesSentence(WINDOWS), 'Returning members Aug 28; new members Sep 3');
+  assert.equal(datesSentence(WINDOWS), 'Returning members Aug 28 · new members Sep 3');
 });
 
 test('builds a partial dates sentence when only one window exists', () => {
@@ -53,38 +54,62 @@ test('has no dates sentence when no window exists', () => {
   assert.equal(datesSentence({}), null);
 });
 
+test('shows the new-member date only before that window opens', () => {
+  assert.equal(
+    newMembersLine(WINDOWS, Date.parse('2026-08-30T17:00:00Z')),
+    'New members Sep 3',
+  );
+  assert.equal(
+    newMembersLine(WINDOWS, Date.parse(WINDOWS.new_start)),
+    '',
+  );
+  assert.equal(newMembersLine({}, Date.now()), '');
+});
+
 test('the coming_soon subhead leads with the real dates', () => {
   assert.equal(
     stripSubhead('coming_soon', WINDOWS),
-    'Returning members Aug 28; new members Sep 3. Intermediate ability and up, no racing required.',
+    'Returning members Aug 28 · new members Sep 3. You should be comfortable on skis. Racing is optional.',
   );
 });
 
 test('the coming_soon subhead omits dates rather than inventing them', () => {
   assert.equal(
     stripSubhead('coming_soon', {}),
-    'Registration opens soon. Intermediate ability and up, no racing required.',
+    'Registration opens soon. You should be comfortable on skis. Racing is optional.',
   );
 });
 
 test('the open and closed subheads do not carry dates', () => {
   assert.equal(
     stripSubhead('open', WINDOWS),
-    'Intermediate ability and up, no racing required.',
+    'Registration is open. You should be comfortable on skis. Racing is optional.',
   );
   assert.equal(
     stripSubhead('closed', WINDOWS),
-    'Registration is closed. Intermediate ability and up, no racing required.',
+    'Registration is closed. Fall/Winter reopens Aug/Sep, Spring/Summer Apr/May. You should be comfortable on skis. Racing is optional.',
   );
 });
 
-test('the card note matches the hand-written format it replaces', () => {
+test('the coming-soon card note names the upcoming registration dates', () => {
   assert.equal(
-    cardNote(2026, WINDOWS),
+    cardNote('coming_soon', 2026, WINDOWS),
     '2026 registration: returning members Aug 28 · new members Sep 3',
   );
 });
 
-test('there is no card note without dates', () => {
-  assert.equal(cardNote(2026, {}), null);
+test('the open card note states that registration is open', () => {
+  assert.equal(cardNote('open', 2026, {}), 'Registration open');
+  assert.equal(
+    cardNote('open', 2026, { new_start: '2099-09-03T17:00:00Z' }),
+    'Registration open · new members from Sep 3',
+  );
+});
+
+test('the closed card note states that registration is closed', () => {
+  assert.equal(cardNote('closed', 2026, WINDOWS), '2026 registration closed');
+});
+
+test('there is no coming-soon card note without dates', () => {
+  assert.equal(cardNote('coming_soon', 2026, {}), null);
 });
