@@ -18,7 +18,7 @@ FACTORS = [("activity", "Activity"), ("workout_type", "Workout"), ("location", "
 # turnout scatter. Group into a small palette instead; every other activity is "Other".
 COLOR_GROUPS = ["Strength", "Ski", "Run"]
 COLOR_GROUP_DOMAIN = COLOR_GROUPS + ["Other"]
-COLOR_GROUP_RANGE = ["#2a78d6", "#eb6834", "#1baf7a", "#9a9994"]
+COLOR_GROUP_RANGE = [charts.PALETTE["early"], charts.PALETTE["late"], "#1baf7a", "#9a9994"]
 
 
 def color_group(activity):
@@ -49,8 +49,8 @@ def nights(sessions, attendance, *, status="held"):
     leads = set()
     attended = set()
     for row in attendance:
-        attended.add(row.session_id)
         if row.role == "rsvp":
+            attended.add(row.session_id)
             people[row.session_id].add(row.person_key)
         elif row.role == "lead":
             leads.add(row.session_id)

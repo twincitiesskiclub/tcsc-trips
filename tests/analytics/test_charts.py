@@ -119,6 +119,13 @@ def test_factor_bars_domain_falls_back_when_no_rows():
     assert bar["encoding"]["x"]["scale"]["domain"] == [0.5, 1.5]
 
 
+def test_factor_bar_text_layers_have_independent_encodings():
+    body = charts.factor_bars([], title="Activity")
+    high_label, low_label = body["layer"][1:3]
+    high_label["encoding"]["text"]["field"] = "median_rsvps"
+    assert low_label["encoding"]["text"]["field"] == "nights"
+
+
 def test_points_validate_and_render_temporal_turnout():
     body = charts.points(ROWS, x="week", y="rsvps", color="slot", tooltip=["week", "slot", "rsvps"])
     assert body["encoding"]["x"]["type"] == "temporal"

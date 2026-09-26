@@ -104,6 +104,46 @@ def test_category_options_only_include_dated_past_sessions(db_session):
     assert options['categories'] == ['practice', 'social']
 
 
+@pytest.mark.parametrize('constraint', ['fixed', 'defaults'])
+def test_filter_domains_follow_dashboard_kinds(db_session, constraint):
+    from dataclasses import replace
+    from app.analytics.dashboards import people, practices
+
+    today = date(2099, 1, 5)
+    db_session.add_all([
+        _session('kind-practice', today, kind='practice', activity='Run', workout_type='Endurance'),
+        _session('kind-event', today, kind='event', category='social', activity='Event', workout_type='Event'),
+        _session('kind-future', today + timedelta(days=1), activity='Future', workout_type='Future'),
+    ])
+    db_session.flush()
+    dashboard = replace(practices.DASHBOARD, fixed={}, defaults={})
+    setattr(dashboard, constraint, {'kinds': ['practice']})
+    with patch('app.utils.today_central', return_value=today):
+        options = base.filter_options(dashboard)
+        assert options['activities'] == ['Run']
+        assert options['workout_types'] == ['Endurance']
+        assert options['kinds'] == ['practice']
+        assert options['categories'] == ['practice']
+        filters = parse_filters(MultiDict({'activity': ['Run', 'Event'], 'workout_type': ['Endurance', 'Event']}), dashboard)
+        assert filters.activities == ['Run'] and filters.workout_types == ['Endurance']
+        assert base.filter_options(people.DASHBOARD)['activities'] == ['Event', 'Run']
+
+
+def test_location_options_disambiguate_spots(db_session):
+    locations = [PracticeLocation(name='Test Park', spot=spot) for spot in ('North trail', 'South trail', '')]
+    db_session.add_all(locations)
+    db_session.flush()
+    db_session.add_all([
+        _session(f'spot-{i}', date(2099, 1, 5), location_id=location.id, location_name=location.name)
+        for i, location in enumerate(locations)
+    ])
+    db_session.flush()
+    with patch('app.utils.today_central', return_value=date(2099, 1, 5)):
+        options = dict(base.filter_options(D)['locations'])
+    assert [options[location.id] for location in locations] == [
+        'Test Park - North trail', 'Test Park - South trail', 'Test Park']
+
+
 def test_load_sessions_and_options_exclude_future_central_dates(db_session):
     today = date(2099, 1, 5)
     earlier = _session('earlier', today - timedelta(days=1), start_time=time(18), activity='Past activity')

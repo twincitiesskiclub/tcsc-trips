@@ -155,4 +155,4 @@ def test_filter_domains_are_loaded_once_per_dashboard_request(admin_client):
          patch.object(base, "get_filter_domains", wraps=base.get_filter_domains) as domains:
         response = admin_client.get("/admin/analytics/stub")
     assert response.status_code == 200
-    assert domains.call_count == 1
+    domains.assert_called_once_with(STUB)

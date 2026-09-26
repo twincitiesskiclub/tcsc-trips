@@ -70,15 +70,16 @@ def trip_sessions(signups, corrections, seasons):
         dated = "date" in fields
         day = date.fromisoformat(fields["date"]) if dated else max(s.posted_on for s in group)
         people = {}
-        for signup in sorted(group, key=lambda s: s.source_key):
-            name = normalize_name(signup.person_name) if signup.person_name else None
-            if signup.user_id is not None:
-                person = f"slack:{signup.slack_uid}" if signup.slack_uid else f"user:{signup.user_id}"
+        for entry in sorted(group, key=lambda s: s.source_key):
+            name = normalize_name(entry.person_name) if entry.person_name else None
+            if entry.user_id is not None:
+                person = f"slack:{entry.slack_uid}" if entry.slack_uid else f"user:{entry.user_id}"
             else:
-                person = f"name:{name}" if name else f"slack:{signup.slack_uid}"
-            source = "app" if signup.source_key.startswith("trip_registration:") else "post_text"
-            people.setdefault(person, AttendanceDraft(key, signup.slack_uid, "signup", None, None,
-                                                      source, name, signup.user_id))
+                person = f"name:{name}" if name else f"slack:{entry.slack_uid}"
+            if person not in people:
+                source = "app" if entry.source_key.startswith("trip_registration:") else "post_text"
+                people[person] = AttendanceDraft(key, entry.slack_uid, "signup", None, None,
+                                                 source, name, entry.user_id)
         flags = [] if dated else ["missing_date"]
         sessions.append(SessionDraft(
             session_key=key, group_key=key, era="trip", date=day, start_time=None,

@@ -150,10 +150,10 @@ def factor_bars(rows, *, title) -> dict:
             # text mark can't be driven by an encoding condition in Vega-Lite.
             {"transform": [{"filter": "datum.median_index >= 1"}],
              "mark": {"type": "text", "align": "left", "dx": 4, "color": PALETTE["muted"]},
-             "encoding": text_encoding},
+             "encoding": deepcopy(text_encoding)},
             {"transform": [{"filter": "datum.median_index < 1"}],
              "mark": {"type": "text", "align": "right", "dx": -4, "color": PALETTE["muted"]},
-             "encoding": text_encoding},
+             "encoding": deepcopy(text_encoding)},
             {"data": {"values": [{"one": 1}]},
              "mark": {"type": "rule", "color": PALETTE["ref"], "strokeDash": [4, 3]},
              "encoding": {"x": {"field": "one", "type": "quantitative"}}},

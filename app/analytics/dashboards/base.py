@@ -11,6 +11,7 @@ from app import utils
 from app.analytics import CATEGORIES
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
 from app.models import db
+from app.practices.models import PracticeLocation
 
 
 @dataclass
@@ -88,17 +89,23 @@ _FIELDS = (
 )
 
 
-def _past_sessions():
-    return PracticeSession.query.filter(
+def _past_sessions(dashboard=None):
+    query = PracticeSession.query.filter(
         PracticeSession.date <= utils.today_central(), ~PracticeSession.flags.any("missing_date"))
+    if dashboard is not None:
+        kinds = dashboard.fixed.get("kinds", dashboard.fixed.get("kind",
+            dashboard.defaults.get("kinds", dashboard.defaults.get("kind", []))))
+        if kinds:
+            query = query.filter(PracticeSession.kind.in_(_values(kinds)))
+    return query
 
 
-def _distinct(column):
-    return {value for (value,) in _past_sessions().with_entities(column).distinct() if value is not None}
+def _distinct(column, dashboard=None):
+    return {value for (value,) in _past_sessions(dashboard).with_entities(column).distinct() if value is not None}
 
 
-def get_filter_domains() -> dict:
-    return {attribute: _distinct(getattr(PracticeSession, column))
+def get_filter_domains(dashboard=None) -> dict:
+    return {attribute: _distinct(getattr(PracticeSession, column), dashboard)
             for _, attribute, column in _FIELDS
             if attribute in ("seasons", "activities", "workout_types", "location_ids")}
 
@@ -108,7 +115,7 @@ def _values(value):
 
 
 def parse_filters(args: MultiDict, dashboard: Dashboard, domains=None) -> Filters:
-    domains = {**(get_filter_domains() if domains is None else domains), "days": set(DAYS),
+    domains = {**(get_filter_domains(dashboard) if domains is None else domains), "days": set(DAYS),
                "formats": set(FORMATS), "kinds": set(KINDS), "categories": set(CATEGORIES)}
     result = Filters()
     for name, attribute, _ in _FIELDS:
@@ -183,20 +190,25 @@ def load_attendance(session_ids: list[int], role="rsvp") -> list[Row]:
 
 
 def filter_options(dashboard, domains=None) -> dict:
-    domains = get_filter_domains() if domains is None else domains
-    locations = _past_sessions().with_entities(
-        PracticeSession.location_id, PracticeSession.location_name).filter(
+    domains = get_filter_domains(dashboard) if domains is None else domains
+    locations = _past_sessions(dashboard).outerjoin(
+        PracticeLocation, PracticeLocation.id == PracticeSession.location_id).with_entities(
+        PracticeSession.location_id, PracticeSession.location_name, PracticeLocation.spot).filter(
         PracticeSession.location_id.isnot(None)).distinct().all()
-    days = _distinct(PracticeSession.day_of_week)
-    formats = _distinct(PracticeSession.format)
-    kinds = _distinct(PracticeSession.kind)
-    categories = _distinct(PracticeSession.category)
+    days = _distinct(PracticeSession.day_of_week, dashboard)
+    formats = _distinct(PracticeSession.format, dashboard)
+    kinds = _distinct(PracticeSession.kind, dashboard)
+    categories = _distinct(PracticeSession.category, dashboard)
+    location_labels = set()
+    for id_, name, spot in locations:
+        label = name or f"Location {id_}"
+        location_labels.add((id_, f"{label} - {spot}" if spot else label))
     # Same-year fall/winter comes after spring/summer; labels begin with the year.
     seasons = sorted(domains["seasons"], key=lambda value: (
         value[:4], "Fall/Winter" in value, value), reverse=True)
     return {"seasons": seasons, "activities": sorted(domains["activities"]),
             "workout_types": sorted(domains["workout_types"]),
-            "locations": sorted({(id_, name or f"Location {id_}") for id_, name in locations}, key=lambda item: (item[1], item[0])),
+            "locations": sorted(location_labels, key=lambda item: (item[1], item[0])),
             "days": [value for value in DAYS if value in days],
             "formats": [value for value in FORMATS if value in formats],
             "kinds": [value for value in KINDS if value in kinds],

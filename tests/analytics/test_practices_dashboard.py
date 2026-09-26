@@ -103,6 +103,13 @@ def test_nights_count_rsvps_and_record_leads_separately():
     assert rows[0]["location"] == "Unknown"
 
 
+def test_count_only_night_with_lead_preserves_reported_count():
+    s = _s(1, date(2099, 11, 5), 12, reported_count=12)
+    rows = p.nights([s], _rsvps(s, 1, role="lead"))
+    assert rows[0]["rsvps"] == 12
+    assert rows[0]["has_lead"] is True
+
+
 def test_zero_baseline_has_no_index_or_factor_group():
     rows = [{"season_label": "S", "day_of_week": "Tuesday", "rsvps": 0, "activity": "Run"}] * 3
     indexed = p.with_index(rows, p.baseline_medians(rows))
