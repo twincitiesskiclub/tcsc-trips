@@ -1,10 +1,9 @@
 """Combine archived posts and app practices into a pure, normalized lineage."""
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, time
+from datetime import date, time
 from html import unescape
 import re
-from zoneinfo import ZoneInfo
 
 from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS, TRIP_CHANNEL
 from app.analytics.coverage import find_candidates
@@ -21,11 +20,11 @@ from app.analytics.parse_template import (
 )
 from app.analytics.parse_trips import is_signup_post, parse_signup, trip_sessions
 from app.analytics.seasons import season_label
+from app.utils import slack_ts_central_date
 
 
 MERGE_RE = re.compile(r"\b(combin\w*|merg\w*|one session|single session|one lift)\b", re.I)
 CANCEL_RE = re.compile(r"\bcancel(l?ed|l?ing|s)?\b", re.I)
-_CENTRAL = ZoneInfo("America/Chicago")
 _CLOCK = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?!\d)\s*(AM|PM)?", re.I)
 
 
@@ -41,10 +40,6 @@ class _Session:
 
 def _top_level(message):
     return message.raw.get("thread_ts", message.ts) == message.ts
-
-
-def _reply_date(reply):
-    return datetime.fromtimestamp(float(reply["ts"]), _CENTRAL).date()
 
 
 def _merge_time(text):
@@ -145,7 +140,8 @@ def _merge_group(group, replies, corrections, cfg, locations):
     if merged_key in corrections and merged_key not in keys:
         keys.append(merged_key)
     decisions = [corrections[key]["merged"] for key in keys if "merged" in corrections[key]]
-    matching = next((reply for reply in replies if _reply_date(reply) == first.date
+    matching = next((reply for reply in replies
+                     if slack_ts_central_date(reply["ts"]) == first.date
                      and MERGE_RE.search(reply.get("text", ""))), None)
     if False in decisions or not (True in decisions or (not decisions and matching)):
         return group
@@ -275,8 +271,8 @@ def build_lineage(
         thread = sorted(replies[(first.channel_id, first.source_ts)].values(), key=lambda reply: float(reply["ts"]))
         for state in _merge_group(group, thread, corrections, cfg, locations):
             session = state.draft
-            if any(_reply_date(reply) <= session.date and CANCEL_RE.search(reply.get("text", ""))
-                   for reply in thread):
+            if any(slack_ts_central_date(reply["ts"]) <= session.date
+                   and CANCEL_RE.search(reply.get("text", "")) for reply in thread):
                 session.flags.append("cancel_language")
             rows = _attendance(state, indexed, cfg, corrections)
             session.rsvp_count = len({row.slack_uid for row in rows if row.role == "rsvp"})

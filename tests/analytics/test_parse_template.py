@@ -65,22 +65,22 @@ def test_golden(case, cfg):
 
 
 @pytest.mark.parametrize("header,posted,dates,flags", [
-    ("_Tuesday, Jan 31_ • _TCSC_", "2023-01-31T08:00", [date(2023, 1, 31)], []),
-    ("_Thursday, Jun 8th, 2023_", "2023-06-15T09:00", [date(2023, 6, 15)], ["date_mismatch"]),
-    ("_Friday, Jan 31st, 2024_", "2025-01-30T12:00", [date(2025, 1, 31)], ["date_mismatch"]),
-    ("_Thursday, Jul 17th, 2099_", "2099-07-16T08:00", [date(2099, 7, 16)], ["date_mismatch"]),
-    ("Thursday, 10/26/2023 @ 6:00 PM", "2023-10-26T08:00", [date(2023, 10, 26)], []),
-    ("Wednesday &amp; Friday, December 3rd &amp; 5th, 2025", "2025-12-03T08:00",
+    ("_Tuesday, Jan 31_ • _TCSC_", "2023-01-31", [date(2023, 1, 31)], []),
+    ("_Thursday, Jun 8th, 2023_", "2023-06-15", [date(2023, 6, 15)], ["date_mismatch"]),
+    ("_Friday, Jan 31st, 2024_", "2025-01-30", [date(2025, 1, 31)], ["date_mismatch"]),
+    ("_Thursday, Jul 17th, 2099_", "2099-07-16", [date(2099, 7, 16)], ["date_mismatch"]),
+    ("Thursday, 10/26/2023 @ 6:00 PM", "2023-10-26", [date(2023, 10, 26)], []),
+    ("Wednesday &amp; Friday, December 3rd &amp; 5th, 2025", "2025-12-03",
      [date(2025, 12, 3), date(2025, 12, 5)], []),
-    ("Thursday, Jan 1", "2025-12-31T08:00", [date(2026, 1, 1)], []),
-    ("Thursday, Jan 1, 2025", "2025-12-31T08:00", [date(2026, 1, 1)], ["date_mismatch"]),
-    ("Friday, Feb 30, 2025", "2025-02-27T08:00", [date(2025, 2, 28)], ["date_mismatch"]),
-    ("Wednesday, Jul 15, 2099", "2099-07-16T08:00", [date(2099, 7, 15)], []),
-    ("Friday, Jul 24, 2099", "2099-07-16T08:00", [date(2099, 7, 24)], []),
-    ("No date header", "2099-07-16T08:00", [], []),
+    ("Thursday, Jan 1", "2025-12-31", [date(2026, 1, 1)], []),
+    ("Thursday, Jan 1, 2025", "2025-12-31", [date(2026, 1, 1)], ["date_mismatch"]),
+    ("Friday, Feb 30, 2025", "2025-02-27", [date(2025, 2, 28)], ["date_mismatch"]),
+    ("Wednesday, Jul 15, 2099", "2099-07-16", [date(2099, 7, 15)], []),
+    ("Friday, Jul 24, 2099", "2099-07-16", [date(2099, 7, 24)], []),
+    ("No date header", "2099-07-16", [], []),
 ])
 def test_headers(header, posted, dates, flags):
-    assert parse_header(header, datetime.fromisoformat(posted)) == (dates, flags)
+    assert parse_header(header, date.fromisoformat(posted)) == (dates, flags)
 
 
 @pytest.mark.parametrize("text,expected", [
@@ -249,7 +249,7 @@ def test_bop_controls_rsvp_despite_other_time_emoji(cfg):
 
 def test_multi_day_without_second_weekday_keeps_distinct_dates_and_keys(cfg):
     header = "Tuesday, Dec 2nd & 4th, 2025"
-    assert parse_header(header, datetime(2025, 12, 2, 8)) == (
+    assert parse_header(header, date(2025, 12, 2)) == (
         [date(2025, 12, 2), date(2025, 12, 4)], [])
     msg = message(header + "\n*Run @ Theodore Wirth Trails*\n"
                   "*Bop that* :white_check_mark: *(6:30 PM) or* :ballot_box_with_check: *(7:00 AM)*",

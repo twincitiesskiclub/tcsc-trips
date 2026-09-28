@@ -1,12 +1,11 @@
 """Trip sign-ups from Slack Workflow posts, and trip sessions. Pure."""
-from datetime import date, datetime
+from datetime import date
 import re
-from zoneinfo import ZoneInfo
 
 from app.analytics.drafts import AttendanceDraft, SessionDraft, TripSignup
 from app.analytics.seasons import season_label
+from app.utils import slack_ts_central_date
 
-_CENTRAL = ZoneInfo("America/Chicago")
 HEADER = re.compile(r"submitted\.\s+this does not mean that they have paid", re.I)
 _MENTION = re.compile(r"<@([UW][A-Z0-9]+)(?:\|[^>]*)?>")
 _ANSWER = re.compile(r"\*What's your (first name|last name|name)\?\*\n([^\n]*)", re.I)
@@ -37,7 +36,7 @@ def parse_signup(message, cfg) -> TripSignup | None:
     slug = _series(raw.get("username", ""), cfg)
     if slug is None:
         return None
-    posted_on = datetime.fromtimestamp(float(message.ts), _CENTRAL).date()
+    posted_on = slack_ts_central_date(message.ts)
     body = raw["text"].split("\n", 1)[1] if "\n" in raw["text"] else ""
     answers = {label.lower(): value.strip() for label, value in _ANSWER.findall(body)}
     if "first name" in answers:

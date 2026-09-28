@@ -1,14 +1,13 @@
 """Pure parsing of date-headed Zapier and hand-posted practice announcements."""
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from html import unescape
 import re
-from zoneinfo import ZoneInfo
 
 from app.analytics.drafts import ArchivedMessage, LocationRef, SessionDraft
 from app.analytics.history_config import HistoryConfig, classify_title, resolve_venue
+from app.utils import slack_ts_central_date
 
 
-_CENTRAL = ZoneInfo("America/Chicago")
 _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
            "September", "October", "November", "December")
@@ -56,12 +55,11 @@ def _valid_date(year: int, month: int, day: int) -> date | None:
         return None
 
 
-def parse_header(text: str, posted_at_central: datetime) -> tuple[list[date], list[str]]:
+def parse_header(text: str, posted: date) -> tuple[list[date], list[str]]:
     """Read header dates, correcting stale or impossible dates within the post window."""
     match = _header(text)
     if match is None:
         return [], []
-    posted = posted_at_central.date()
     first, last = posted - timedelta(days=1), posted + timedelta(days=8)
     month = (int(match["nmonth"]) if match["nmonth"] else
              next(i for i, name in enumerate(_MONTHS, 1)
@@ -184,8 +182,7 @@ def extract_template_sessions(
     text = msg.raw.get("text", "")
     if is_weekly_preview(text) or not looks_like_template(text):
         return []
-    posted = datetime.fromtimestamp(float(msg.raw["ts"]), _CENTRAL)
-    dates, flags = parse_header(text, posted)
+    dates, flags = parse_header(text, slack_ts_central_date(msg.raw["ts"]))
     if not dates:
         return []
     title, venue_raw = parse_title(text), parse_venue(text)
