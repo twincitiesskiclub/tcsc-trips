@@ -8,7 +8,7 @@ from sqlalchemy.engine import Row
 from werkzeug.datastructures import MultiDict
 
 from app import utils
-from app.analytics import CATEGORIES, SYNC_CHANNELS
+from app.analytics import SYNC_CHANNELS
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
 from app.models import AppConfig, db
 from app.practices.models import PracticeLocation
@@ -72,10 +72,8 @@ class Filters:
     location_ids: list[int] = field(default_factory=list)
     formats: list[str] = field(default_factory=list)
     kinds: list[str] = field(default_factory=list)
-    categories: list[str] = field(default_factory=list)
 
 
-FILTER_NAMES = ("season", "date_range", "day_of_week", "activity", "workout_type", "location", "format", "kind", "category")
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 FORMATS = ("single", "split", "merged")
 KINDS = ("practice", "event", "trip")
@@ -84,7 +82,7 @@ _FIELDS = (
     ("season", "seasons", "season_label"), ("day_of_week", "days", "day_of_week"),
     ("activity", "activities", "activity"), ("workout_type", "workout_types", "workout_type"),
     ("location", "location_ids", "location_id"), ("format", "formats", "format"),
-    ("kind", "kinds", "kind"), ("category", "categories", "category"),
+    ("kind", "kinds", "kind"),
 )
 
 
@@ -116,7 +114,7 @@ def _iso(value):
 
 def parse_filters(args: MultiDict, dashboard: Dashboard, domains=None) -> Filters:
     domains = {**(get_filter_domains(dashboard.kinds) if domains is None else domains), "days": set(DAYS),
-               "formats": set(FORMATS), "kinds": set(KINDS), "categories": set(CATEGORIES)}
+               "formats": set(FORMATS), "kinds": set(KINDS)}
     result = Filters()
     for name, attribute, _ in _FIELDS:
         if name not in dashboard.filters:
@@ -178,7 +176,6 @@ def filter_options(dashboard, domains=None) -> dict:
     days = _distinct(PracticeSession.day_of_week, dashboard.kinds)
     formats = _distinct(PracticeSession.format, dashboard.kinds)
     kinds = _distinct(PracticeSession.kind, dashboard.kinds)
-    categories = _distinct(PracticeSession.category, dashboard.kinds)
     location_labels = set()
     for id_, name, spot in locations:
         label = name or f"Location {id_}"
@@ -191,8 +188,7 @@ def filter_options(dashboard, domains=None) -> dict:
             "locations": sorted(location_labels, key=lambda item: (item[1], item[0])),
             "days": [value for value in DAYS if value in days],
             "formats": [value for value in FORMATS if value in formats],
-            "kinds": [value for value in KINDS if value in kinds],
-            "categories": [c for c in CATEGORIES if c in categories]}
+            "kinds": [value for value in KINDS if value in kinds]}
 
 
 def footer() -> dict:

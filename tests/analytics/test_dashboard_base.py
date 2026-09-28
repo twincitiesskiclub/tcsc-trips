@@ -32,19 +32,13 @@ def test_invalid_values_dropped():
     assert f.date_to == date(2025, 5, 1)
 
 
-def test_category_filter_validates_against_categories():
-    dashboard = Dashboard("c", "C", "?", ["category"], lambda f: [])
-    f = parse_filters(MultiDict({"category": ["social", "picnic"]}), dashboard, DOMAINS)
-    assert f.categories == ["social"]
-
-
 def test_kinds_default_is_all():
     dashboard = Dashboard("k", "K", "?", ["kind"], lambda f: [])
     assert parse_filters(MultiDict(), dashboard, DOMAINS).kinds == []
 
 
 def test_all_filters_validate_and_disallowed_requests_are_ignored():
-    dashboard = Dashboard('all', 'All', '?', list(base.FILTER_NAMES), lambda f: [])
+    dashboard = Dashboard('all', 'All', '?', ['season', 'date_range', 'day_of_week', 'activity', 'workout_type', 'location', 'format', 'kind'], lambda f: [])
     args = MultiDict({'activity': ['Run', 'junk'], 'workout_type': ['Circuit', 'junk'],
                       'location': ['38', '999', 'no'], 'kind': ['event', 'trip', 'junk'],
                       'date_to': '2025-06-01', 'day_of_week': ['Monday', 'junk']})
@@ -76,7 +70,7 @@ def test_missing_date_trips_are_hidden(db_session):
     assert "task13:dated" in keys and "task13:undated" not in keys
 
 
-def test_category_options_only_include_dated_past_sessions(db_session):
+def test_kind_options_only_include_dated_past_sessions(db_session):
     today = date(2099, 1, 5)
     db_session.add_all([
         _session('social', today, kind='event', category='social'),
@@ -87,7 +81,7 @@ def test_category_options_only_include_dated_past_sessions(db_session):
     db_session.flush()
     with patch('app.utils.today_central', return_value=today):
         options = base.filter_options(D)
-    assert options['categories'] == ['practice', 'social']
+    assert options['kinds'] == ['practice', 'event']
 
 
 def test_practices_dashboard_limits_options_and_sessions_to_practices(db_session):
@@ -106,7 +100,6 @@ def test_practices_dashboard_limits_options_and_sessions_to_practices(db_session
         assert options['activities'] == ['Run']
         assert options['workout_types'] == ['Endurance']
         assert options['kinds'] == ['practice']
-        assert options['categories'] == ['practice']
         filters = parse_filters(MultiDict({'activity': ['Run', 'Event'], 'workout_type': ['Endurance', 'Event'],
                                            'kind': 'event'}), dashboard)
         assert filters.activities == ['Run'] and filters.workout_types == ['Endurance']
@@ -240,7 +233,6 @@ def test_footer_with_empty_sync_status_has_no_success_time(db_session):
 @pytest.mark.parametrize('attribute, selected', [
     ('seasons', ['2099 Test']), ('days', ['Monday']), ('activities', ['Strength']),
     ('workout_types', ['Circuit']), ('formats', ['split']), ('kinds', ['practice']),
-    ('categories', ['practice']),
     ('date_from', date(2099, 1, 5)), ('date_to', date(2099, 1, 5)),
 ])
 def test_each_filter_changes_the_query(db_session, attribute, selected):
@@ -278,13 +270,3 @@ def test_location_filters_and_past_options_ordering(db_session):
     assert seasons == ['2099 Fall/Winter', '2099 Spring/Summer']
     assert options['days'].index('Monday') < options['days'].index('Sunday')
 
-
-def test_filter_options_queries_categories_once(db_session):
-    session = _session("category-once", date(2099, 1, 5), category="social", kind="event")
-    db_session.add(session)
-    db_session.flush()
-    with patch("app.utils.today_central", return_value=date(2099, 1, 6)), \
-         patch.object(base, "_distinct", wraps=base._distinct) as distinct:
-        options = base.filter_options(D, DOMAINS)
-    assert "social" in options["categories"]
-    assert sum(call.args[0] is PracticeSession.category for call in distinct.call_args_list) == 1

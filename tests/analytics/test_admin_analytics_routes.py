@@ -82,7 +82,7 @@ def test_partial_dicts_render_and_index_does_not_load_vega(admin_client):
 
 
 def test_module_dispatch_and_all_filter_controls(admin_client):
-    dashboard = Dashboard('all', 'All', 'Question?', list(base.FILTER_NAMES), lambda f: [
+    dashboard = Dashboard('all', 'All', 'Question?', ['season', 'date_range', 'day_of_week', 'activity', 'workout_type', 'location', 'format', 'kind'], lambda f: [
         base.Table('Table', [{'value': '</script><script>alert(1)</script>'}], [('value', 'Value')])])
     with patch.object(dashboards, 'get_dashboard', return_value=dashboard) as lookup, \
          patch.object(base, 'parse_filters', return_value=base.Filters()) as parse:
@@ -91,20 +91,10 @@ def test_module_dispatch_and_all_filter_controls(admin_client):
     parse.assert_called_once()
     assert response.status_code == 200
     html = response.data.decode()
-    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds', 'Categories']:
+    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds']:
         assert label in html
     assert '&lt;script&gt;alert' in html
     assert 'method="get"' in html and 'analytics-table' in html
-
-
-def test_category_control_preserves_selection(admin_client):
-    with patch.object(STUB, 'filters', ['category']), \
-         patch.object(base, 'filter_options', return_value={'categories': ['social', 'trip']}):
-        response = admin_client.get('/admin/analytics/stub?category=social')
-    assert response.status_code == 200
-    assert b'name="category" value="social" checked' in response.data
-    assert b'name="category" value="trip" checked' not in response.data
-    assert b'name="category" value="trip"' in response.data
 
 
 def test_empty_chart_keeps_description_and_table_without_embed_target(admin_client):

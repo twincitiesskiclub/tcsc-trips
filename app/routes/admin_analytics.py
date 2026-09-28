@@ -28,5 +28,4 @@ def dashboard(slug):
     return render_template(
         "admin/analytics/dashboard.html", dashboard=definition, blocks=definition.build(filters),
         filters=filters, options=base.filter_options(definition, domains), footer=base.footer(),
-        request_args=request.args,
     )
