@@ -55,6 +55,18 @@ def fetch_weather():
     _print_json(fetch_missing_weather())
 
 
+def _post_with_replies(session):
+    """The archived post a flagged session came from, and its live thread replies."""
+    message = session.source_message_id and db.session.get(SlackArchiveMessage, session.source_message_id)
+    message = message or archive_rows([session.group_key]).get(session.group_key)
+    if message is None:
+        return None, []
+    return message, SlackArchiveMessage.query.filter(
+        SlackArchiveMessage.channel_id == message.channel_id, SlackArchiveMessage.thread_ts == message.ts,
+        SlackArchiveMessage.ts != message.ts, SlackArchiveMessage.deleted_at.is_(None),
+    ).order_by(SlackArchiveMessage.ts).all()
+
+
 @analytics_cli.command("flags")
 @click.option("--json", "json_path", type=click.Path(dir_okay=False, writable=True))
 def flags(json_path):
@@ -62,12 +74,7 @@ def flags(json_path):
     snapshot = AppConfig.get("analytics_coverage", {"candidates": [], "empty_weeks": []})
     sessions = []
     for session in flagged_sessions():
-        message = (db.session.get(SlackArchiveMessage, session.source_message_id)
-                   if session.source_message_id else None) or archive_rows([session.group_key]).get(session.group_key)
-        replies = SlackArchiveMessage.query.filter(
-            SlackArchiveMessage.channel_id == message.channel_id, SlackArchiveMessage.thread_ts == message.ts,
-            SlackArchiveMessage.ts != message.ts, SlackArchiveMessage.deleted_at.is_(None),
-        ).order_by(SlackArchiveMessage.ts).all() if message else []
+        message, replies = _post_with_replies(session)
         sessions.append({
             "session_key": session.session_key,
             "post_key": f"{message.channel_id}:{message.ts}" if message else session.group_key,
