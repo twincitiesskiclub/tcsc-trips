@@ -10,8 +10,7 @@ from app.models import db
 logger = logging.getLogger(__name__)
 
 
-def record_reaction_event(*, channel, message_ts, emoji, slack_uid, removed,
-                          event_ts=None, commit=True):
+def record_reaction_event(*, channel, message_ts, emoji, slack_uid, removed, event_ts=None):
     if channel not in CHANNELS or not (message_ts and emoji and slack_uid):
         return False
     try:
@@ -20,10 +19,7 @@ def record_reaction_event(*, channel, message_ts, emoji, slack_uid, removed,
             channel_id=channel, message_ts=message_ts, emoji=emoji,
             slack_uid=slack_uid, action="removed" if removed else "added",
             event_ts=event_ts))
-        if commit:
-            db.session.commit()
-        else:
-            db.session.flush()
+        db.session.commit()
         return True
     except Exception:
         try:

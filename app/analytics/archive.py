@@ -9,7 +9,6 @@ from time import time
 
 from sqlalchemy.dialects.postgresql import insert
 
-from app import utils
 from app.analytics import SYNC_CHANNELS
 from app.analytics.models import SlackArchiveMessage
 from app.models import AppConfig, db
@@ -110,7 +109,7 @@ def sync_recent(
                 for row in stale:
                     if row.thread_ts and row.thread_ts != row.ts and row.thread_ts not in stats["seen"]:
                         continue
-                    row.deleted_at = _utc(time())
+                    row.deleted_at = now
                     deleted += 1
                 stats["deleted"] = deleted
         except Exception as exc:
@@ -120,7 +119,7 @@ def sync_recent(
         try:
             # Bookkeeping must not roll back this channel's imported messages.
             with db.session.begin_nested():
-                updated_status = {**sync_status, channel_id: utils.get_current_times()["utc"].isoformat(timespec="seconds")}
+                updated_status = {**sync_status, channel_id: now.isoformat(timespec="seconds")}
                 AppConfig.set("analytics_sync_status", updated_status, category="analytics")
             sync_status = updated_status
         except Exception:
