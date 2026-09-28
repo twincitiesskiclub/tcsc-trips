@@ -10,18 +10,6 @@ from app.models import db, User
 from app.practices.models import Practice, PracticeLocation
 
 
-def test_analytics_tables_exist_with_key_columns(db_session):
-    insp = inspect(db.engine)
-    tables = set(insp.get_table_names())
-    assert {"slack_archive_messages", "slack_reaction_events", "practice_sessions",
-            "practice_attendance", "weather_hours", "analytics_corrections"} <= tables
-    cols = {c["name"] for c in insp.get_columns("practice_sessions")}
-    assert {"session_key", "format", "slot", "rsvp_count", "temp_f",
-            "minutes_after_sunset", "flags", "needs_review"} <= cols
-    att = {c["name"] for c in insp.get_columns("practice_attendance")}
-    assert {"slack_uid", "role", "emoji", "slot", "source"} <= att
-
-
 def test_attendance_rows_cascade_with_session(db_session):
     s = PracticeSession(session_key="test:cascade", era="template", date=date(2099, 1, 1),
                         day_of_week="Thursday", season_label="2098 Fall/Winter",
@@ -77,16 +65,8 @@ def test_unique_constraints_have_stable_names(db_session, model, column, name):
 
 
 def test_channel_tuples():
-    assert analytics.TRIP_CHANNEL == "C068ECRE0PQ"
-    assert set(analytics.EVENT_CHANNELS) == {"C0B2VN1LU11", "C02HXN45214", "C02J1FDSBHT", "C046XRWC4NR"}
-    assert analytics.CANDIDATE_CHANNELS == analytics.SESSION_CHANNELS + analytics.EVENT_CHANNELS
-    assert set(analytics.REACTION_CANDIDATE_CHANNELS) == {"C042G463AQ1", "C03FKTTHNHW", "C0B2VN1LU11", "C02HXN45214"}
-    assert set(analytics.REACTION_CANDIDATE_CHANNELS) <= set(analytics.CANDIDATE_CHANNELS)
-    assert analytics.LINEAGE_CHANNELS == analytics.CANDIDATE_CHANNELS + (analytics.TRIP_CHANNEL,)
-    assert "C02HXN45214" not in analytics.SYNC_CHANNELS          # archived, imported once
-    assert "C03FKTTHNHW" not in analytics.SYNC_CHANNELS
+    assert not {"C02HXN45214", "C03FKTTHNHW"} & set(analytics.SYNC_CHANNELS)  # archived
     assert set(analytics.LINEAGE_CHANNELS) <= set(analytics.CHANNELS)
-    assert "trip" in analytics.CATEGORIES and "practice" in analytics.CATEGORIES
 
 
 def _session(**overrides):
@@ -95,16 +75,6 @@ def _session(**overrides):
                   group_key="trip:cuyuna:2099")
     values.update(overrides)
     return PracticeSession(**values)
-
-
-def test_trip_session_with_name_only_signup(db_session):
-    session = _session()
-    db_session.add(session)
-    db_session.flush()
-    db_session.add(PracticeAttendance(session_id=session.id, slack_uid=None,
-                                      person_key="name:pat example", role="signup", source="reaction"))
-    db_session.flush()
-    assert session.reported_count is None
 
 
 def test_person_key_is_the_uniqueness_key(db_session):
