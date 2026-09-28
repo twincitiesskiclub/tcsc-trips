@@ -110,7 +110,7 @@ def resolve_venue(raw: str | None, cfg: HistoryConfig,
                      and ("spot" not in target or loc.spot == target["spot"])), None)
     if location is not None:
         return location_fields(location, cfg), []
-    # A rule naming a missing DB row still counts as a known venue.
+    # A rule whose DB row is missing keeps the rule's name and indoor spot.
     return {**fields, "location_name": target["name"],
             "is_indoor": _is_indoor(cfg, target["name"], target.get("spot"))}, ["unknown_location_row"]
 
