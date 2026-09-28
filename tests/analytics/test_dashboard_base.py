@@ -16,7 +16,7 @@ DOMAINS = {"seasons": {"2025 Fall/Winter", "2026 Spring/Summer"}, "activities": 
            "workout_types": {"Circuit"}, "location_ids": {38}}
 D = Dashboard(slug="t", title="T", question="Q?",
               filters=["season", "date_range", "day_of_week", "format"],
-              build=lambda f: [], fixed={"activities": ["Strength"]}, defaults={"days": ["Thursday"]})
+              build=lambda f: [])
 
 
 def _parse(**args):
@@ -24,10 +24,12 @@ def _parse(**args):
         return parse_filters(MultiDict(args), D)
 
 
-def test_invalid_values_dropped_and_defaults_applied():
-    f = _parse(season=["2025 Fall/Winter", "<script>"], date_from="notadate", format=["split", "bogus"])
+def test_invalid_values_dropped():
+    f = _parse(season=["2025 Fall/Winter", "<script>"], date_from="notadate", format=["split", "bogus"],
+               day_of_week=["junk", ""], date_to="2025-05-01")
     assert f.seasons == ["2025 Fall/Winter"] and f.date_from is None and f.formats == ["split"]
-    assert f.days == ["Thursday"] and f.activities == ["Strength"] and f.kinds == []
+    assert f.days == [] and f.activities == [] and f.kinds == []
+    assert f.date_to == date(2025, 5, 1)
 
 
 def test_category_filter_validates_against_categories():
@@ -39,12 +41,6 @@ def test_category_filter_validates_against_categories():
 def test_kinds_default_is_all():
     dashboard = Dashboard("k", "K", "?", ["kind"], lambda f: [])
     assert parse_filters(MultiDict(), dashboard, DOMAINS).kinds == []
-
-
-def test_request_overrides_defaults_but_not_fixed():
-    f = _parse(day_of_week=["Wednesday", "Friday"], activity=["Run"], date_from="2025-05-01")
-    assert f.days == ["Wednesday", "Friday"] and f.activities == ["Strength"]
-    assert f.date_from == date(2025, 5, 1)
 
 
 def test_all_filters_validate_and_disallowed_requests_are_ignored():
@@ -60,18 +56,6 @@ def test_all_filters_validate_and_disallowed_requests_are_ignored():
     assert f.date_to == date(2025, 6, 1)
     assert ignored.activities == [] and ignored.location_ids == [] and ignored.kinds == []
     assert ignored.date_to is None
-
-
-def test_empty_and_invalid_requests_use_defaults():
-    assert _parse(day_of_week=['junk', '']).days == ['Thursday']
-
-
-def test_dashboard_mutable_defaults_are_independent():
-    first = Dashboard('a', 'A', '?', [], lambda f: [])
-    second = Dashboard('b', 'B', '?', [], lambda f: [])
-    first.fixed['activities'] = ['Run']
-    first.defaults['days'] = ['Monday']
-    assert not second.fixed and not second.defaults
 
 
 def _session(key, day, **values):
@@ -106,9 +90,7 @@ def test_category_options_only_include_dated_past_sessions(db_session):
     assert options['categories'] == ['practice', 'social']
 
 
-@pytest.mark.parametrize('constraint', ['fixed', 'defaults'])
-def test_filter_domains_follow_dashboard_kinds(db_session, constraint):
-    from dataclasses import replace
+def test_practices_dashboard_limits_options_and_sessions_to_practices(db_session):
     from app.analytics.dashboards import people, practices
 
     today = date(2099, 1, 5)
@@ -118,16 +100,18 @@ def test_filter_domains_follow_dashboard_kinds(db_session, constraint):
         _session('kind-future', today + timedelta(days=1), activity='Future', workout_type='Future'),
     ])
     db_session.flush()
-    dashboard = replace(practices.DASHBOARD, fixed={}, defaults={})
-    setattr(dashboard, constraint, {'kinds': ['practice']})
+    dashboard = practices.DASHBOARD
     with patch('app.utils.today_central', return_value=today):
         options = base.filter_options(dashboard)
         assert options['activities'] == ['Run']
         assert options['workout_types'] == ['Endurance']
         assert options['kinds'] == ['practice']
         assert options['categories'] == ['practice']
-        filters = parse_filters(MultiDict({'activity': ['Run', 'Event'], 'workout_type': ['Endurance', 'Event']}), dashboard)
+        filters = parse_filters(MultiDict({'activity': ['Run', 'Event'], 'workout_type': ['Endurance', 'Event'],
+                                           'kind': 'event'}), dashboard)
         assert filters.activities == ['Run'] and filters.workout_types == ['Endurance']
+        assert filters.kinds == ['practice']
+        assert [s.session_key for s in base.load_sessions(filters)] == ['task13:kind-practice']
         assert base.filter_options(people.DASHBOARD)['activities'] == ['Event', 'Run']
 
 
@@ -293,54 +277,6 @@ def test_location_filters_and_past_options_ordering(db_session):
     seasons = [s for s in options['seasons'] if s.startswith('2099')]
     assert seasons == ['2099 Fall/Winter', '2099 Spring/Summer']
     assert options['days'].index('Monday') < options['days'].index('Sunday')
-
-
-@pytest.mark.parametrize('attribute, fixed', [
-    ('seasons', ['2099 Absent']), ('activities', ['Absent activity']),
-    ('workout_types', ['Absent workout']), ('location_ids', ['999999']),
-])
-def test_fixed_database_values_survive_missing_domains(attribute, fixed):
-    dashboard = Dashboard('fixed', 'Fixed', '?', [], lambda f: [], fixed={attribute: fixed})
-    with patch.object(base, 'get_filter_domains', return_value=DOMAINS):
-        filters = parse_filters(MultiDict(), dashboard)
-    assert getattr(filters, attribute) == ([999999] if attribute == 'location_ids' else fixed)
-
-
-def test_absent_fixed_activity_returns_no_sessions_instead_of_other_activities(db_session):
-    session = _session('fixed-other', date(2099, 1, 5), activity='Run')
-    db_session.add(session)
-    db_session.flush()
-    dashboard = Dashboard('fixed', 'Fixed', '?', ['activity'], lambda f: [],
-                          fixed={'activities': ['Strength']})
-    domains = {**DOMAINS, 'activities': {'Run'}}
-    with patch.object(base, 'get_filter_domains', return_value=domains):
-        filters = parse_filters(MultiDict({'activity': 'Run'}), dashboard)
-    assert filters.activities == ['Strength']
-    query = PracticeSession.query.filter(PracticeSession.id == session.id)
-    assert base.apply_filters(query, filters).all() == []
-
-
-def test_fixed_values_still_validate_catalogs_and_coerce_locations():
-    dashboard = Dashboard('fixed', 'Fixed', '?', [], lambda f: [], fixed={
-        'days': ['Monday', 'invalid'], 'formats': ['split', 'invalid'],
-        'kinds': ['event', 'invalid'], 'location_ids': ['999999', 'invalid'],
-        'activity': 'Absent activity', 'categories': ['social', 'picnic'],
-    })
-    with patch.object(base, 'get_filter_domains', return_value=DOMAINS):
-        filters = parse_filters(MultiDict(), dashboard)
-    assert filters.days == ['Monday'] and filters.formats == ['split'] and filters.kinds == ['event']
-    assert filters.location_ids == [999999] and filters.activities == ['Absent activity']
-    assert filters.categories == ['social']
-
-
-@pytest.mark.parametrize("source", ["defaults", "fixed"])
-def test_date_objects_in_dashboard_configuration(source):
-    dashboard = Dashboard('dates', 'Dates', '?', ['date_range'], lambda f: [],
-                          **{source: {'date_from': date(2099, 5, 1), 'date_to': date(2099, 9, 1)}})
-    with patch.object(base, 'get_filter_domains', return_value=DOMAINS):
-        filters = parse_filters(MultiDict(), dashboard)
-    assert filters.date_from == date(2099, 5, 1)
-    assert filters.date_to == date(2099, 9, 1)
 
 
 def test_filter_options_queries_categories_once(db_session):

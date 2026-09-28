@@ -189,5 +189,5 @@ DASHBOARD = Dashboard(
     slug="practices", title="What makes a practice draw",
     question="Which days, times, activities, places and conditions bring people out?",
     filters=["season", "date_range", "day_of_week", "activity", "workout_type", "location", "format"],
-    build=build, fixed={"kinds": ["practice"]},
+    build=build, kinds=("practice",),
 )

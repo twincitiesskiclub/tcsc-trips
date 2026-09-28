@@ -58,8 +58,7 @@ class Dashboard:
     question: str
     filters: list[str]
     build: Callable
-    fixed: dict = field(default_factory=dict)
-    defaults: dict = field(default_factory=dict)
+    kinds: tuple = ()
 
 
 @dataclass
@@ -89,80 +88,54 @@ _FIELDS = (
 )
 
 
-def _dashboard_kinds(dashboard) -> list[str]:
-    for settings in (dashboard.fixed, dashboard.defaults):
-        for key in ("kinds", "kind"):
-            if key in settings:
-                return list(_values(settings[key])) if settings[key] else []
-    return []
-
-
-def _past_sessions(dashboard=None):
+def _past_sessions(kinds=()):
     query = PracticeSession.query.filter(
         PracticeSession.date <= utils.today_central(), ~PracticeSession.flags.any("missing_date"))
-    if dashboard is not None:
-        kinds = _dashboard_kinds(dashboard)
-        if kinds:
-            query = query.filter(PracticeSession.kind.in_(kinds))
+    if kinds:
+        query = query.filter(PracticeSession.kind.in_(kinds))
     return query
 
 
-def _distinct(column, dashboard=None):
-    return {value for (value,) in _past_sessions(dashboard).with_entities(column).distinct() if value is not None}
+def _distinct(column, kinds=()):
+    return {value for (value,) in _past_sessions(kinds).with_entities(column).distinct() if value is not None}
 
 
-def get_filter_domains(dashboard=None) -> dict:
-    return {attribute: _distinct(getattr(PracticeSession, column), dashboard)
+def get_filter_domains(kinds=()) -> dict:
+    return {attribute: _distinct(getattr(PracticeSession, column), kinds)
             for _, attribute, column in _FIELDS
             if attribute in ("seasons", "activities", "workout_types", "location_ids")}
 
 
-def _values(value):
-    return value if isinstance(value, (list, tuple, set)) else [value]
+def _iso(value):
+    try:
+        # HTML date inputs and shared URLs use the extended ISO form.
+        return date.fromisoformat(value) if len(value) == 10 else None
+    except ValueError:
+        return None
 
 
 def parse_filters(args: MultiDict, dashboard: Dashboard, domains=None) -> Filters:
-    domains = {**(get_filter_domains(dashboard) if domains is None else domains), "days": set(DAYS),
+    domains = {**(get_filter_domains(dashboard.kinds) if domains is None else domains), "days": set(DAYS),
                "formats": set(FORMATS), "kinds": set(KINDS), "categories": set(CATEGORIES)}
     result = Filters()
     for name, attribute, _ in _FIELDS:
-        def valid(values, *, fixed=False):
-            # Fixed data constraints must survive an empty/missing DB domain.
-            # Catalog constraints still reject invalid dashboard configuration.
-            check_domain = not fixed or attribute in ("days", "formats", "kinds", "categories")
-            cleaned = []
-            for value in values:
-                if attribute == "location_ids":
-                    try:
-                        value = int(value)
-                    except (TypeError, ValueError):
-                        continue
-                if (not check_domain or value in domains.get(attribute, set())) and value not in cleaned:
-                    cleaned.append(value)
-            return cleaned
-
-        values = valid(args.getlist(name)) if name in dashboard.filters else []
-        if not values:
-            values = valid(_values(dashboard.defaults.get(attribute, dashboard.defaults.get(name, []))))
-        if attribute in dashboard.fixed or name in dashboard.fixed:
-            values = valid(_values(dashboard.fixed.get(attribute, dashboard.fixed.get(name))), fixed=True)
+        if name not in dashboard.filters:
+            continue
+        values = []
+        for value in args.getlist(name):
+            if attribute == "location_ids":
+                try:
+                    value = int(value)
+                except ValueError:
+                    continue
+            if value in domains[attribute] and value not in values:
+                values.append(value)
         setattr(result, attribute, values)
-
-    for attribute in ("date_from", "date_to"):
-        def iso(value):
-            if isinstance(value, date):
-                return value
-            try:
-                # HTML date inputs and shared URLs use the extended ISO form.
-                return date.fromisoformat(value) if len(value) == 10 else None
-            except (TypeError, ValueError):
-                return None
-        value = iso(args.get(attribute, "")) if "date_range" in dashboard.filters else None
-        if value is None:
-            value = iso(dashboard.defaults.get(attribute, ""))
-        if attribute in dashboard.fixed:
-            value = iso(dashboard.fixed[attribute])
-        setattr(result, attribute, value)
+    if "date_range" in dashboard.filters:
+        result.date_from = _iso(args.get("date_from", ""))
+        result.date_to = _iso(args.get("date_to", ""))
+    if dashboard.kinds:
+        result.kinds = list(dashboard.kinds)
     return result
 
 
@@ -197,15 +170,15 @@ def load_attendance(session_ids: list[int], role="rsvp") -> list[Row]:
 
 
 def filter_options(dashboard, domains=None) -> dict:
-    domains = get_filter_domains(dashboard) if domains is None else domains
-    locations = _past_sessions(dashboard).outerjoin(
+    domains = get_filter_domains(dashboard.kinds) if domains is None else domains
+    locations = _past_sessions(dashboard.kinds).outerjoin(
         PracticeLocation, PracticeLocation.id == PracticeSession.location_id).with_entities(
         PracticeSession.location_id, PracticeSession.location_name, PracticeLocation.spot).filter(
         PracticeSession.location_id.isnot(None)).distinct().all()
-    days = _distinct(PracticeSession.day_of_week, dashboard)
-    formats = _distinct(PracticeSession.format, dashboard)
-    kinds = _distinct(PracticeSession.kind, dashboard)
-    categories = _distinct(PracticeSession.category, dashboard)
+    days = _distinct(PracticeSession.day_of_week, dashboard.kinds)
+    formats = _distinct(PracticeSession.format, dashboard.kinds)
+    kinds = _distinct(PracticeSession.kind, dashboard.kinds)
+    categories = _distinct(PracticeSession.category, dashboard.kinds)
     location_labels = set()
     for id_, name, spot in locations:
         label = name or f"Location {id_}"
