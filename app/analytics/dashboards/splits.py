@@ -3,7 +3,7 @@ from collections import defaultdict
 from datetime import date, time, timedelta
 
 from app.analytics import charts
-from app.analytics.dashboards.base import Chart, Note, Table, Tile, Tiles
+from app.analytics.dashboards.base import Chart, Note, Table
 from app.analytics.history_config import load_history_config
 
 
@@ -65,10 +65,10 @@ def _weeks_over(weeks, line):
     return sum(w["total"] > line["value"] for w in eligible), len(eligible)
 
 
-def _capacity_count(weeks, line, *, empty=""):
+def _capacity_count(weeks, line):
     over, count = _weeks_over(weeks, line)
     if line.get("to"):
-        return f"{over} of {count} in effect" if count else empty
+        return f"{over} of {count} in effect" if count else ""
     return over
 
 
@@ -148,34 +148,6 @@ def _capacity_lines(sessions):
             for line in load_history_config().capacity_lines
             if not line.get("to") or (dates and _as_date(line["from"]) <= max(dates)
                                       and _as_date(line["to"]) >= min(dates))]
-
-
-def _tiles(weeks, lines):
-    if not weeks:
-        labels = ["Average per week", *[f"Weeks over {line['value']}" for line in lines],
-                  "Late session share", "Latest week"]
-        return Tiles([Tile(label, "No data") for label in labels])
-    totals = [w["total"] for w in weeks]
-    tiles = [Tile("Average per week", f"{sum(totals) / len(totals):.1f}" if totals else "N/A",
-                  f"RSVPs a week, peak {max(totals, default=0)}")]
-    tiles.extend(Tile(f"Weeks over {line['value']}",
-                      (_capacity_count(weeks, line, empty="No data") if line.get("to") else
-                       f"{_capacity_count(weeks, line)} of {len(totals)}"), line["label"])
-                 for line in lines)
-    tiles.append(Tile("Late session share", _late_share(weeks), "of two-session RSVPs"))
-    latest = max(weeks, key=lambda w: w["week"]) if weeks else None
-    previous = None
-    if latest:
-        target = latest["week"] - timedelta(days=364)
-        previous = next((w for w in weeks if abs((w["week"] - target).days) <= 3), None)
-    tiles.append(Tile("Latest week", str(latest["total"]) if latest else "N/A",
-                      f"Same week last year: {previous['total']}" if previous else ""))
-    return Tiles(tiles)
-
-
-def tiles(sessions, attendance):
-    weeks = weekly_totals(sessions, attendance)
-    return _tiles(weeks, _capacity_lines([s for s in sessions if s.status != "cancelled"]))
 
 
 def split_blocks(sessions, attendance, filters):
