@@ -1,5 +1,3 @@
-import textwrap
-
 import pytest
 
 from app.analytics.drafts import LocationRef

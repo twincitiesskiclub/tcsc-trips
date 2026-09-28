@@ -57,8 +57,8 @@ def test_golden(case, cfg):
             assert activity_bucket(got.activities, cfg) == want["activity"]
         if "workout_type" in want:
             assert workout_bucket(got.workout_types, cfg) == want["workout_type"]
-        for key in ("title", "activities", "workout_types", "lead_uids", "coach_uids", "venue_raw", "is_indoor", "location_id",
-                    "location_name", "lat", "lon", "rsvp_emoji_set"):
+        for key in ("title", "activities", "workout_types", "lead_uids", "coach_uids", "venue_raw",
+                    "is_indoor", "location_id", "location_name", "lat", "lon", "rsvp_emoji_set"):
             if key in want:
                 assert getattr(got, key) == want[key], key
     assert raw == original
