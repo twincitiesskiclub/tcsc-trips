@@ -4,29 +4,37 @@ import pytest
 
 from app.analytics.models import SlackReactionEvent
 from app.analytics.reaction_log import record_reaction_event
+from app.models import db
 import app.slack.bolt_app as bolt_module
+
+
+@pytest.fixture
+def db_session(db_session, monkeypatch):
+    """Keep the logger's commit inside the test transaction."""
+    monkeypatch.setattr(db.session, "commit", lambda: db.session.flush())
+    return db_session
 
 
 def test_records_add_and_remove_for_archived_channel(db_session):
     assert record_reaction_event(channel="C042G463AQ1", message_ts="4072435200.000100",
                                  emoji="six", slack_uid="UFAKE0009", removed=False,
-                                 event_ts="4072435201.1", commit=False)
+                                 event_ts="4072435201.1")
     assert record_reaction_event(channel="C042G463AQ1", message_ts="4072435200.000100",
-                                 emoji="six", slack_uid="UFAKE0009", removed=True, commit=False)
+                                 emoji="six", slack_uid="UFAKE0009", removed=True)
     rows = SlackReactionEvent.query.filter_by(slack_uid="UFAKE0009").order_by(SlackReactionEvent.id).all()
     assert [r.action for r in rows] == ["added", "removed"]
 
 
 def test_ignores_other_channels(db_session):
     assert record_reaction_event(channel="COTHER", message_ts="1.1", emoji="six",
-                                 slack_uid="UFAKE0010", removed=False, commit=False) is False
+                                 slack_uid="UFAKE0010", removed=False) is False
     assert SlackReactionEvent.query.filter_by(slack_uid="UFAKE0010").count() == 0
 
 
 def test_never_raises(db_session):
     with patch("app.analytics.reaction_log.db.session.add", side_effect=RuntimeError("boom")):
         assert record_reaction_event(channel="C042G463AQ1", message_ts="1.1", emoji="six",
-                                     slack_uid="UFAKE0011", removed=False, commit=False) is False
+                                     slack_uid="UFAKE0011", removed=False) is False
 
 
 def test_delegate_returns_attendance_result_even_if_log_fails(app):
@@ -98,13 +106,12 @@ def test_delegate_ignores_non_message_events():
     rec.assert_not_called()
 
 
-@pytest.mark.parametrize("operation", ["flush", "commit"])
-def test_database_failure_rolls_back(db_session, operation):
-    with patch(f"app.analytics.reaction_log.db.session.{operation}",
+def test_database_failure_rolls_back(db_session):
+    with patch("app.analytics.reaction_log.db.session.commit",
                side_effect=RuntimeError("write failed")):
         assert record_reaction_event(
             channel="C042G463AQ1", message_ts="1.1", emoji="six",
-            slack_uid="UFAKE0011", removed=False, commit=operation == "commit",
+            slack_uid="UFAKE0011", removed=False,
         ) is False
     assert SlackReactionEvent.query.filter_by(slack_uid="UFAKE0011").count() == 0
 

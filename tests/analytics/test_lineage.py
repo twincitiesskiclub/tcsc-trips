@@ -58,7 +58,7 @@ def test_create_session_from_no_header_post(cfg):
         ["Strength"], "Strength", ["Circuit"], "Circuit")
     assert (session.channel_id, session.source_ts, session.source_archive_id) == (CH, msg.ts, 42)
     assert (session.kind, session.status, session.flags, session.needs_review) == ("practice", "held", [], False)
-    assert session.rsvp_emoji_set == ["white_check_mark"]
+    assert session.rsvp_emoji == "white_check_mark"
     assert result.possible_misses == []
     assert {row.slack_uid for row in result.attendance} == {f"UFAKE000{i}" for i in range(1, 5)}
     assert all(row.role == "rsvp" and row.source == "reaction" for row in result.attendance)
@@ -81,7 +81,7 @@ def test_create_honors_overrides_and_reaction_roles(cfg, emojis, expected):
         ["Run", "Bike"], "Multisport", ["Intervals"], "Intervals")
     assert (session.kind, session.status, session.start_time, session.rsvp_count) == (
         "event", "cancelled", None, expected)
-    assert session.rsvp_emoji_set == emojis
+    assert {row.emoji.split("::")[0] for row in result.attendance if row.role == "rsvp"} == set(emojis)
     assert {(row.slack_uid, row.role) for row in result.attendance if row.role != "rsvp"} == {
         ("UFAKE0003", "coach"), ("UFAKE0004", "plan")}
 
@@ -536,3 +536,15 @@ def test_session_category(kind, activities, override, expected):
     draft = SessionDraft("k", "g", "template", date(2099, 1, 1), None, "t",
                          kind=kind, activities=activities, category=override or "")
     assert session_category(draft) == expected
+
+
+@pytest.mark.parametrize("activities,types,buckets", [
+    (("Strength",), ("Circuit",), ("Strength", "Circuit")),
+    (("Run", "Bike", "Kickoff"), ("Endurance", "Technique"), ("Multisport", "Technique")),
+    ((), (), ("Other", "Other")),
+])
+def test_app_session_buckets(cfg, activities, types, buckets):
+    practice = AppPractice(1, datetime(2099, 1, 7, 18, 30), "scheduled", False, CH, "4083.1", None,
+                           "Balance Fitness Studio", None, activities=activities, types=types)
+    session, = build_lineage([], [practice], LOCS, [], cfg).sessions
+    assert (session.activity, session.workout_type) == buckets

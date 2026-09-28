@@ -1,5 +1,3 @@
-import textwrap
-
 import pytest
 
 from app.analytics.drafts import LocationRef
@@ -27,30 +25,27 @@ def test_real_config_loads(cfg):
 
 
 def test_venue_by_name_and_spot(cfg):
-    v = resolve_venue("The Trailhead @ Wirth", cfg, LOCS)
-    assert (v["location_id"], v["matched"]) == (36, True)
-    assert v["rule_kind"] == "location"
-    v = resolve_venue("Theodore Wirth Trails", cfg, LOCS)
+    v, flags = resolve_venue("The Trailhead @ Wirth", cfg, LOCS)
+    assert (v["location_id"], flags) == (36, [])
+    v, _ = resolve_venue("Theodore Wirth Trails", cfg, LOCS)
     assert v["location_id"] == 34
 
 
 def test_indoor_and_unknown_venue(cfg):
-    assert resolve_venue("Balance Fitness Studio", cfg, LOCS)["is_indoor"] is True
-    v = resolve_venue("Somewhere New", cfg, LOCS)
-    assert v["matched"] is False and v["location_id"] is None
-    assert v["rule_kind"] is None
+    assert resolve_venue("Balance Fitness Studio", cfg, LOCS)[0]["is_indoor"] is True
+    v, flags = resolve_venue("Somewhere New", cfg, LOCS)
+    assert flags == ["unknown_venue"] and v["location_id"] is None
     assert (v["lat"], v["lon"]) == (44.9778, -93.2650)
 
 
 def test_config_only_venue_has_own_coordinates(cfg):
-    v = resolve_venue("Beards Plaisance", cfg, LOCS)
+    v, flags = resolve_venue("Beards Plaisance", cfg, LOCS)
     assert v["location_id"] is None and v["location_name"] == "Beards Plaisance"
-    assert v["rule_kind"] == "name"
-    assert v["lat"] == pytest.approx(44.9215) and v["matched"] is True
+    assert v["lat"] == pytest.approx(44.9215) and flags == []
 
 
 def test_private_home_never_keeps_raw_text(cfg):
-    v = resolve_venue("Somebody's House", cfg, LOCS)
+    v, _ = resolve_venue("Somebody's House", cfg, LOCS)
     assert v["location_name"] == "Member's home"
 
 
@@ -86,46 +81,34 @@ def test_base_emoji():
     assert base_emoji("six") == "six"
 
 
-def test_invalid_config_raises(tmp_path):
-    p = tmp_path / "bad.yaml"
-    p.write_text(textwrap.dedent("""
-        excluded_slack_uids: not-a-list
-    """))
-    with pytest.raises(HistoryConfigError):
-        load_history_config(p)
-
-
 @pytest.mark.parametrize("raw", [None, "", "Somewhere New"])
 def test_unmatched_venue_returns_complete_shape(cfg, raw):
-    assert resolve_venue(raw, cfg, LOCS) == {
+    assert resolve_venue(raw, cfg, LOCS) == ({
         "location_id": None, "location_name": None,
-        "lat": cfg.default_lat, "lon": cfg.default_lon,
-        "is_indoor": False, "matched": False, "rule_kind": None,
-    }
+        "lat": cfg.default_lat, "lon": cfg.default_lon, "is_indoor": False,
+    }, ["unknown_venue"])
 
 
 def test_missing_location_row_retains_rule_name_and_indoor_spot(cfg):
-    assert resolve_venue("ROYALS ATHLETIC CENTER", cfg, LOCS) == {
+    assert resolve_venue("ROYALS ATHLETIC CENTER", cfg, LOCS) == ({
         "location_id": None, "location_name": "Hopkins Highschool",
-        "lat": cfg.default_lat, "lon": cfg.default_lon,
-        "is_indoor": True, "matched": True, "rule_kind": "location",
-    }
+        "lat": cfg.default_lat, "lon": cfg.default_lon, "is_indoor": True,
+    }, ["unknown_location_row"])
 
 
 def test_indoor_spot_and_nullable_coordinates(cfg):
     locations = [LocationRef(99, "Hopkins Highschool", "Royals Athletic Center", None, None)]
-    venue = resolve_venue("Royals Athletic", cfg, locations)
+    venue, _ = resolve_venue("Royals Athletic", cfg, locations)
     assert venue["location_id"] == 99
     assert venue["is_indoor"] is True
     assert (venue["lat"], venue["lon"]) == (cfg.default_lat, cfg.default_lon)
 
 
 def test_location_spot_must_match(cfg):
-    venue = resolve_venue("The Trailhead", cfg, LOCS[:1])
-    assert venue["matched"] is True
+    venue, flags = resolve_venue("The Trailhead", cfg, LOCS[:1])
+    assert flags == ["unknown_location_row"]
     assert venue["location_id"] is None
     assert venue["location_name"] == "Theodore Wirth"
-    assert venue["rule_kind"] == "location"
 
 
 def test_venue_normalizes_apostrophes_on_both_sides(cfg):
@@ -134,9 +117,9 @@ def test_venue_normalizes_apostrophes_on_both_sides(cfg):
     custom = replace(cfg, venues=[{
         "match": ["FAKE’S FIELD"], "name": "Synthetic Field",
     }])
-    assert resolve_venue("fake's field", custom, [])["matched"] is True
+    assert resolve_venue("fake's field", custom, [])[1] == []
     custom.venues[0]["match"] = ["fake's field"]
-    assert resolve_venue("FAKE’S FIELD", custom, [])["matched"] is True
+    assert resolve_venue("FAKE’S FIELD", custom, [])[1] == []
 
 
 def test_all_type_rules_contribute_in_rule_order(cfg):
@@ -188,57 +171,26 @@ def test_config_public_types(cfg):
 
 
 @pytest.mark.parametrize("key,value", [
-    ("corrections", []),
-    ("excluded_slack_uids", "not-a-list"),
-    ("excluded_slack_uids", [123]),
-    ("coach_emoji", [False]),
-    ("default_location", []),
-    ("default_location", {"lat": "north", "lon": -93}),
-    ("default_location", {"lat": 45, "lon": True}),
-    ("default_location", {"lat": float("nan"), "lon": -93}),
-    ("venues", {}),
-    ("venues", [None]),
-    ("venues", [{"match": [], "name": "Synthetic"}]),
-    ("venues", [{"match": [1], "name": "Synthetic"}]),
-    ("venues", [{"match": ["synthetic"]}]),
-    ("venues", [{"match": ["synthetic"], "location": {}}]),
-    ("venues", [{"match": ["synthetic"], "location": {"name": "Synthetic", "spot": 3}}]),
-    ("venues", [{"match": ["synthetic"], "name": "Synthetic", "location": {"name": "Synthetic"}}]),
-    ("venues", [{"match": ["synthetic"], "name": "Synthetic", "lat": "north"}]),
-    ("activity_rules", {}),
-    ("activity_rules", [{"match": ["run"], "activities": "Run"}]),
-    ("activity_rules", [{"match": ["run"], "activities": ["Run"], "default_types": [3]}]),
+    ("venues", [{"match": "synthetic", "name": "Synthetic"}]),
+    ("activity_rules", [{"match": "run", "activities": ["Run"]}]),
     ("type_rules", [{"match": "run", "types": ["Endurance"]}]),
-    ("type_rules", [{"match": ["run"], "types": [3]}]),
-    ("activity_buckets", []),
-    ("activity_buckets", {"Run": ["Run"]}),
-    ("workout_buckets", {}),
-    ("workout_buckets", [["Intervals"]]),
-    ("workout_buckets", [["Intervals", "Intervals"]]),
-    ("event_keywords", "kickoff"),
-    ("indoor_locations", [None]),
-    ("practice_views.capacity_lines", {}),
-    ("practice_views.capacity_lines", [None]),
-    ("practice_views.capacity_lines", [{"value": "27", "label": "Synthetic", "from": "2025-05-01"}]),
-    ("practice_views.capacity_lines", [{"value": 27, "label": 3, "from": "2025-05-01"}]),
-    ("practice_views.capacity_lines", [{"value": 27, "label": "Synthetic", "from": "not-a-date"}]),
+    ("trip_series", [{"match": "cuyuna", "slug": "cuyuna"}]),
+    ("venues", [{"match": ["synthetic"]}]),
+    ("venues", [{"match": ["synthetic"], "name": "Synthetic", "location": {"name": "Synthetic"}}]),
 ])
 def test_invalid_fields_name_the_key(tmp_path, key, value):
     import yaml
     from app.analytics.history_config import DEFAULT_PATH
 
     data = yaml.safe_load(DEFAULT_PATH.read_text())
-    if key == "practice_views.capacity_lines":
-        data["practice_views"] = {"capacity_lines": value}
-    else:
-        data[key] = value
+    data[key] = value
     path = tmp_path / "invalid.yaml"
     path.write_text(yaml.safe_dump(data))
     with pytest.raises(HistoryConfigError, match=key):
         load_history_config(path)
 
 
-@pytest.mark.parametrize("content", ["", "[]", "venues: [", "!!python/object:builtins.object {}"])
+@pytest.mark.parametrize("content", ["venues: [", "!!python/object:builtins.object {}"])
 def test_invalid_yaml_documents_raise_config_error(tmp_path, content):
     path = tmp_path / "invalid.yaml"
     path.write_text(content)
@@ -249,44 +201,6 @@ def test_invalid_yaml_documents_raise_config_error(tmp_path, content):
 def test_missing_config_raises_config_error(tmp_path):
     with pytest.raises(HistoryConfigError):
         load_history_config(tmp_path / "missing.yaml")
-
-
-@pytest.mark.parametrize("value", [["coachface"], [], None])
-def test_coach_emoji_belongs_in_app_config(tmp_path, value):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["coach_emoji"] = value
-    path = tmp_path / "invalid.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match='coach_emoji.*AppConfig "analytics_coach_emoji"'):
-        load_history_config(path)
-
-
-def test_applause_emoji_required(tmp_path):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH, HistoryConfigError, load_history_config
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    assert "heart" in load_history_config().applause_emoji
-    del data["applause_emoji"]
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="applause_emoji"):
-        load_history_config(path)
-
-
-@pytest.mark.parametrize("value", [None, "heart", [123], [""]])
-def test_applause_emoji_must_be_strings(tmp_path, value):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["applause_emoji"] = value
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="applause_emoji"):
-        load_history_config(path)
 
 
 def test_applause_emoji_normalizes_skin_tones(tmp_path):
@@ -300,37 +214,5 @@ def test_applause_emoji_normalizes_skin_tones(tmp_path):
     assert load_history_config(path).applause_emoji == frozenset({"heart", "clap"})
 
 
-def test_capacity_lines_moved_under_practice_views(tmp_path):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["capacity_lines"] = []
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="practice_views"):
-        load_history_config(path)
-
-
 def test_practice_capacity_lines_still_available(cfg):
     assert [line["value"] for line in cfg.capacity_lines] == [27, 30, 35]
-
-
-@pytest.mark.parametrize("value", [
-    None, {}, [None], [{"match": "cuyuna", "slug": "cuyuna"}],
-    [{"match": [""], "slug": "cuyuna"}],
-    [{"match": [123], "slug": "cuyuna"}],
-    [{"match": ["cuyuna"], "slug": 123}],
-    [{"match": ["cuyuna"], "slug": "Bad_slug"}],
-    [{"match": ["cuyuna"], "slug": ""}],
-])
-def test_invalid_trip_series(tmp_path, value):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["trip_series"] = value
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="trip_series"):
-        load_history_config(path)

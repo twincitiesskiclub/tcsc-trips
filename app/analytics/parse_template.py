@@ -1,16 +1,13 @@
 """Pure parsing of date-headed Zapier and hand-posted practice announcements."""
-from datetime import date, datetime, time, timedelta
+from datetime import date, time, timedelta
 from html import unescape
 import re
-from zoneinfo import ZoneInfo
 
 from app.analytics.drafts import ArchivedMessage, LocationRef, SessionDraft
-from app.analytics.history_config import (
-    HistoryConfig, activity_bucket, classify_title, resolve_venue, workout_bucket,
-)
+from app.analytics.history_config import HistoryConfig, classify_title, resolve_venue
+from app.utils import slack_ts_central_date
 
 
-_CENTRAL = ZoneInfo("America/Chicago")
 _WEEKDAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
 _MONTHS = ("January", "February", "March", "April", "May", "June", "July", "August",
            "September", "October", "November", "December")
@@ -58,12 +55,11 @@ def _valid_date(year: int, month: int, day: int) -> date | None:
         return None
 
 
-def parse_header(text: str, posted_at_central: datetime) -> tuple[list[date], list[str]]:
+def parse_header(text: str, posted: date) -> tuple[list[date], list[str]]:
     """Read header dates, correcting stale or impossible dates within the post window."""
     match = _header(text)
     if match is None:
         return [], []
-    posted = posted_at_central.date()
     first, last = posted - timedelta(days=1), posted + timedelta(days=8)
     month = (int(match["nmonth"]) if match["nmonth"] else
              next(i for i, name in enumerate(_MONTHS, 1)
@@ -186,16 +182,12 @@ def extract_template_sessions(
     text = msg.raw.get("text", "")
     if is_weekly_preview(text) or not looks_like_template(text):
         return []
-    posted = datetime.fromtimestamp(float(msg.raw["ts"]), _CENTRAL)
-    dates, flags = parse_header(text, posted)
+    dates, flags = parse_header(text, slack_ts_central_date(msg.raw["ts"]))
     if not dates:
         return []
     title, venue_raw = parse_title(text), parse_venue(text)
-    venue = resolve_venue(venue_raw, cfg, locations)
-    if not venue["matched"]:
-        flags.append("unknown_venue")
-    if venue["rule_kind"] == "location" and venue["location_id"] is None:
-        flags.append("unknown_location_row")
+    venue, venue_flags = resolve_venue(venue_raw, cfg, locations)
+    flags.extend(venue_flags)
     classification = classify_title(title, cfg)
     if not classification["matched"]:
         flags.append("unmatched_title")
@@ -229,11 +221,8 @@ def extract_template_sessions(
     return [SessionDraft(
         session_key=f"{group_key}:{suffix}", group_key=group_key, era="template",
         date=day, start_time=start, title=title, venue_raw=venue_raw,
-        location_id=venue["location_id"], location_name=venue["location_name"],
-        lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
-        activities=list(classification["activities"]), workout_types=list(classification["workout_types"]),
-        activity=activity_bucket(classification["activities"], cfg),
-        workout_type=workout_bucket(classification["workout_types"], cfg), kind=classification["kind"],
+        **venue, activities=list(classification["activities"]), workout_types=list(classification["workout_types"]),
+        kind=classification["kind"],
         format="split" if slot else "single", slot=slot, rsvp_emoji=emoji,
         rsvp_emoji_set=[emoji for emoji, _ in bop] if combined_rsvp else [],
         channel_id=msg.channel_id, source_ts=msg.ts, source_archive_id=msg.archive_id,

@@ -3,6 +3,7 @@
 from datetime import datetime, date
 import pytz
 import re
+from zoneinfo import ZoneInfo
 
 from .constants import (
     TIMEZONE, DATE_FORMAT, DATETIME_FORMAT,
@@ -91,6 +92,12 @@ def today_central() -> date:
     (registration_date, payment_date) rather than datetime.utcnow().date().
     """
     return datetime.now(CENTRAL_TZ).date()
+
+
+def slack_ts_central_date(ts: str) -> date:
+    """Central calendar date of a Slack message timestamp."""
+    # zoneinfo, not CENTRAL_TZ: pytz stops applying DST after 2037.
+    return datetime.fromtimestamp(float(ts), ZoneInfo(TIMEZONE)).date()
 
 
 def get_user_member_type(user) -> str:
