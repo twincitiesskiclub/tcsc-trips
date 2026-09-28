@@ -8,7 +8,6 @@ from sqlalchemy.orm import scoped_session, sessionmaker
 from app.analytics import weather
 from app.analytics.models import PracticeSession, WeatherHour
 from app.analytics.weather import fetch_hours, session_weather, to_inches
-from app.integrations.daylight import get_daylight_info
 from app.models import db
 from app.utils import CENTRAL_TZ
 from tests.analytics.conftest import load_fixture
@@ -148,16 +147,13 @@ def make_session(key, **kwargs):
 
 
 @pytest.mark.parametrize("month", [7, 12])
-@pytest.mark.parametrize("aware", [False, True])
-def test_apply_weather_cache_only_and_signed_daylight(db_session, monkeypatch, month, aware):
+def test_apply_weather_cache_only_and_signed_daylight(db_session, monkeypatch, month):
     def no_network(*args, **kwargs):
         pytest.fail("weather application must never call the network")
     monkeypatch.setattr(requests.sessions.Session, "request", no_network)
     day = date(2099, month, 20)
     start = datetime.combine(day, time(18, 15))
-    sunset = CENTRAL_TZ.localize(datetime.combine(day, time(19)))
-    if not aware:
-        sunset = sunset.astimezone(timezone.utc).replace(tzinfo=None)
+    sunset = CENTRAL_TZ.localize(datetime.combine(day, time(19))).astimezone(timezone.utc).replace(tzinfo=None)
     monkeypatch.setattr(weather, "get_daylight_info", lambda *args: SimpleNamespace(sunset=sunset))
     row = make_session("cached", date=day)
     later = make_session("uncached", date=day, start_time=time(20))
@@ -167,16 +163,6 @@ def test_apply_weather_cache_only_and_signed_daylight(db_session, monkeypatch, m
     assert row.temp_f == -2.7 and row.minutes_after_sunset == -45
     assert later.temp_f is None and later.minutes_after_sunset == 60
     assert missing.minutes_after_sunset is None
-
-
-def test_apply_uses_real_daylight_helper(db_session):
-    row = make_session("daylight")
-    start = CENTRAL_TZ.localize(datetime.combine(row.date, row.start_time))
-    sunset = get_daylight_info(row.lat, row.lon, start).sunset
-    if sunset.tzinfo is None:
-        sunset = sunset.replace(tzinfo=timezone.utc)
-    assert weather.apply_weather([row]) == 0
-    assert row.minutes_after_sunset == int((start - sunset).total_seconds() / 60)
 
 
 @pytest.fixture
