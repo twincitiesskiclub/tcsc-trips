@@ -6,7 +6,7 @@ from zoneinfo import ZoneInfo
 import pytest
 
 from app.analytics.drafts import ArchivedMessage, LocationRef
-from app.analytics.history_config import load_history_config
+from app.analytics.history_config import activity_bucket, load_history_config, workout_bucket
 from app.analytics.parse_template import (
     extract_template_sessions, is_weekly_preview, looks_like_template,
     parse_bop, parse_header, parse_people, parse_times, parse_title, parse_venue,
@@ -52,8 +52,12 @@ def test_golden(case, cfg):
         assert sorted(got.flags) == sorted(want.get("flags", []))
         assert (got.era, got.channel_id, got.source_ts, got.source_archive_id) == (
             "template", case["channel_id"], raw["ts"], 42)
-        for key in ("title", "activities", "workout_types", "activity", "workout_type",
-                    "lead_uids", "coach_uids", "venue_raw", "is_indoor", "location_id",
+        # Buckets are filled by build_lineage from these lists.
+        if "activity" in want:
+            assert activity_bucket(got.activities, cfg) == want["activity"]
+        if "workout_type" in want:
+            assert workout_bucket(got.workout_types, cfg) == want["workout_type"]
+        for key in ("title", "activities", "workout_types", "lead_uids", "coach_uids", "venue_raw", "is_indoor", "location_id",
                     "location_name", "lat", "lon", "rsvp_emoji_set"):
             if key in want:
                 assert getattr(got, key) == want[key], key

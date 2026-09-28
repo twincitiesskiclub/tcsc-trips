@@ -5,9 +5,7 @@ import re
 from zoneinfo import ZoneInfo
 
 from app.analytics.drafts import ArchivedMessage, LocationRef, SessionDraft
-from app.analytics.history_config import (
-    HistoryConfig, activity_bucket, classify_title, resolve_venue, workout_bucket,
-)
+from app.analytics.history_config import HistoryConfig, classify_title, resolve_venue
 
 
 _CENTRAL = ZoneInfo("America/Chicago")
@@ -227,8 +225,7 @@ def extract_template_sessions(
         session_key=f"{group_key}:{suffix}", group_key=group_key, era="template",
         date=day, start_time=start, title=title, venue_raw=venue_raw,
         **venue, activities=list(classification["activities"]), workout_types=list(classification["workout_types"]),
-        activity=activity_bucket(classification["activities"], cfg),
-        workout_type=workout_bucket(classification["workout_types"], cfg), kind=classification["kind"],
+        kind=classification["kind"],
         format="split" if slot else "single", slot=slot, rsvp_emoji=emoji,
         rsvp_emoji_set=[emoji for emoji, _ in bop] if combined_rsvp else [],
         channel_id=msg.channel_id, source_ts=msg.ts, source_archive_id=msg.archive_id,

@@ -4,9 +4,7 @@ from html import unescape
 import re
 
 from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef, SessionDraft
-from app.analytics.history_config import (
-    HistoryConfig, activity_bucket, location_fields, resolve_venue, workout_bucket,
-)
+from app.analytics.history_config import HistoryConfig, location_fields, resolve_venue
 from app.analytics.parse_template import parse_times
 
 
@@ -114,8 +112,6 @@ def extract_app_sessions(
                 date=practice.date.date(), start_time=practice.date.time(), title=title,
                 venue_raw=f"{practice.location_name} - {practice.location_spot}",
                 **venue, activities=list(practice.activities), workout_types=list(practice.types),
-                activity=activity_bucket(practice.activities, cfg),
-                workout_type=workout_bucket(practice.types, cfg),
                 kind="event" if "Kickoff" in practice.activities else "practice",
                 format="split" if split else "single", slot=slot, rsvp_emoji=emoji,
                 status="cancelled" if practice.status == "cancelled" else "held",

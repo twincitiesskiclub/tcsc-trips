@@ -86,7 +86,6 @@ def _created_draft(message, fields, cfg, locations):
         start_time=time.fromisoformat(fields["start_time"]) if "start_time" in fields else None,
         title=title, venue_raw=fields.get("location"),
         **venue, activities=activities, workout_types=types,
-        activity=activity_bucket(activities, cfg), workout_type=workout_bucket(types, cfg),
         kind=kind, category=fields.get("category", ""), status=fields.get("status", "held"),
         rsvp_emoji=emojis[0] if len(emojis) == 1 else None, rsvp_emoji_set=emojis,
         channel_id=message.channel_id, source_ts=message.ts, source_archive_id=message.archive_id,
@@ -119,10 +118,8 @@ def _apply_fields(state, fields, cfg, locations):
             setattr(session, name, value)
     if "activities" in fields:
         session.activities = list(fields["activities"])
-        session.activity = activity_bucket(session.activities, cfg)
     if "types" in fields:
         session.workout_types = list(fields["types"])
-        session.workout_type = workout_bucket(session.workout_types, cfg)
     if "rsvp_emoji" in fields:
         _assign_rsvp_slots(state, fields["rsvp_emoji"])
     if "plan_emoji" in fields:
@@ -293,6 +290,8 @@ def build_lineage(
             if session.reported_count is not None:
                 session.rsvp_count = session.reported_count
                 session.flags.append("identities_lost")
+            session.activity = activity_bucket(session.activities, cfg)
+            session.workout_type = workout_bucket(session.workout_types, cfg)
             session.day_of_week = session.date.strftime("%A")
             session.season_label = season_label(session.date, seasons)
             session.needs_review = bool(session.flags) and not any(

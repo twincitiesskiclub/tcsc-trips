@@ -536,3 +536,15 @@ def test_session_category(kind, activities, override, expected):
     draft = SessionDraft("k", "g", "template", date(2099, 1, 1), None, "t",
                          kind=kind, activities=activities, category=override or "")
     assert session_category(draft) == expected
+
+
+@pytest.mark.parametrize("activities,types,buckets", [
+    (("Strength",), ("Circuit",), ("Strength", "Circuit")),
+    (("Run", "Bike", "Kickoff"), ("Endurance", "Technique"), ("Multisport", "Technique")),
+    ((), (), ("Other", "Other")),
+])
+def test_app_session_buckets(cfg, activities, types, buckets):
+    practice = AppPractice(1, datetime(2099, 1, 7, 18, 30), "scheduled", False, CH, "4083.1", None,
+                           "Balance Fitness Studio", None, activities=activities, types=types)
+    session, = build_lineage([], [practice], LOCS, [], cfg).sessions
+    assert (session.activity, session.workout_type) == buckets
