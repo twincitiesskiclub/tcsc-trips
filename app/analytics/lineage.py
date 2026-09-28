@@ -69,25 +69,19 @@ def session_category(session) -> str:
     return "kickoff" if "Kickoff" in session.activities else "other"
 
 
-def _created_draft(message, fields, cfg, locations):
+def _created_draft(message, fields, cfg):
+    """Defaults for a `create` post; build_lineage then applies its fields."""
     line = next((line for line in message.raw.get("text", "").splitlines() if line.strip()), "")
     title = fields.get("title") or unescape(line).replace("*", "").replace("_", "").strip()[:120]
     classification = classify_title(title, cfg)
-    venue, _ = resolve_venue(fields.get("location"), cfg, locations)
-    activities = list(fields.get("activities", classification["activities"]))
-    types = list(fields.get("types", classification["workout_types"]))
-    emojis = list(fields.get("rsvp_emoji", ["white_check_mark"]))
     key = f"{message.channel_id}:{message.ts}"
-    kind = fields.get("kind") or ("event" if fields.get("category", "practice") != "practice"
-                                  else classification["kind"])
     return SessionDraft(
         session_key=f"{key}:main", group_key=key, era="template",
-        date=date.fromisoformat(fields["date"]),
-        start_time=time.fromisoformat(fields["start_time"]) if "start_time" in fields else None,
-        title=title, venue_raw=fields.get("location"),
-        **venue, activities=activities, workout_types=types,
-        kind=kind, category=fields.get("category", ""), status=fields.get("status", "held"),
-        rsvp_emoji=emojis[0] if len(emojis) == 1 else None, rsvp_emoji_set=emojis,
+        date=date.fromisoformat(fields["date"]), start_time=None, title=title,
+        lat=cfg.default_lat, lon=cfg.default_lon,
+        activities=classification["activities"], workout_types=classification["workout_types"],
+        kind="event" if fields.get("category", "practice") != "practice" else classification["kind"],
+        rsvp_emoji="white_check_mark",
         channel_id=message.channel_id, source_ts=message.ts, source_archive_id=message.archive_id,
     )
 
@@ -251,7 +245,7 @@ def build_lineage(
         fields = corrections.get(f"{message.channel_id}:{message.ts}", {})
         if (fields.get("create") is True and key not in produced_posts
                 and message.channel_id in CANDIDATE_CHANNELS and _top_level(message)):
-            drafts.append(_created_draft(message, fields, cfg, locations))
+            drafts.append(_created_draft(message, fields, cfg))
 
     # Thread broadcasts may occur in channel history as well as in replies.
     replies = defaultdict(dict)
