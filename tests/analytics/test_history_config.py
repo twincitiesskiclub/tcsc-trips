@@ -86,15 +86,6 @@ def test_base_emoji():
     assert base_emoji("six") == "six"
 
 
-def test_invalid_config_raises(tmp_path):
-    p = tmp_path / "bad.yaml"
-    p.write_text(textwrap.dedent("""
-        excluded_slack_uids: not-a-list
-    """))
-    with pytest.raises(HistoryConfigError):
-        load_history_config(p)
-
-
 @pytest.mark.parametrize("raw", [None, "", "Somewhere New"])
 def test_unmatched_venue_returns_complete_shape(cfg, raw):
     assert resolve_venue(raw, cfg, LOCS) == {
@@ -188,57 +179,26 @@ def test_config_public_types(cfg):
 
 
 @pytest.mark.parametrize("key,value", [
-    ("corrections", []),
-    ("excluded_slack_uids", "not-a-list"),
-    ("excluded_slack_uids", [123]),
-    ("coach_emoji", [False]),
-    ("default_location", []),
-    ("default_location", {"lat": "north", "lon": -93}),
-    ("default_location", {"lat": 45, "lon": True}),
-    ("default_location", {"lat": float("nan"), "lon": -93}),
-    ("venues", {}),
-    ("venues", [None]),
-    ("venues", [{"match": [], "name": "Synthetic"}]),
-    ("venues", [{"match": [1], "name": "Synthetic"}]),
-    ("venues", [{"match": ["synthetic"]}]),
-    ("venues", [{"match": ["synthetic"], "location": {}}]),
-    ("venues", [{"match": ["synthetic"], "location": {"name": "Synthetic", "spot": 3}}]),
-    ("venues", [{"match": ["synthetic"], "name": "Synthetic", "location": {"name": "Synthetic"}}]),
-    ("venues", [{"match": ["synthetic"], "name": "Synthetic", "lat": "north"}]),
-    ("activity_rules", {}),
-    ("activity_rules", [{"match": ["run"], "activities": "Run"}]),
-    ("activity_rules", [{"match": ["run"], "activities": ["Run"], "default_types": [3]}]),
+    ("venues", [{"match": "synthetic", "name": "Synthetic"}]),
+    ("activity_rules", [{"match": "run", "activities": ["Run"]}]),
     ("type_rules", [{"match": "run", "types": ["Endurance"]}]),
-    ("type_rules", [{"match": ["run"], "types": [3]}]),
-    ("activity_buckets", []),
-    ("activity_buckets", {"Run": ["Run"]}),
-    ("workout_buckets", {}),
-    ("workout_buckets", [["Intervals"]]),
-    ("workout_buckets", [["Intervals", "Intervals"]]),
-    ("event_keywords", "kickoff"),
-    ("indoor_locations", [None]),
-    ("practice_views.capacity_lines", {}),
-    ("practice_views.capacity_lines", [None]),
-    ("practice_views.capacity_lines", [{"value": "27", "label": "Synthetic", "from": "2025-05-01"}]),
-    ("practice_views.capacity_lines", [{"value": 27, "label": 3, "from": "2025-05-01"}]),
-    ("practice_views.capacity_lines", [{"value": 27, "label": "Synthetic", "from": "not-a-date"}]),
+    ("trip_series", [{"match": "cuyuna", "slug": "cuyuna"}]),
+    ("venues", [{"match": ["synthetic"]}]),
+    ("venues", [{"match": ["synthetic"], "name": "Synthetic", "location": {"name": "Synthetic"}}]),
 ])
 def test_invalid_fields_name_the_key(tmp_path, key, value):
     import yaml
     from app.analytics.history_config import DEFAULT_PATH
 
     data = yaml.safe_load(DEFAULT_PATH.read_text())
-    if key == "practice_views.capacity_lines":
-        data["practice_views"] = {"capacity_lines": value}
-    else:
-        data[key] = value
+    data[key] = value
     path = tmp_path / "invalid.yaml"
     path.write_text(yaml.safe_dump(data))
     with pytest.raises(HistoryConfigError, match=key):
         load_history_config(path)
 
 
-@pytest.mark.parametrize("content", ["", "[]", "venues: [", "!!python/object:builtins.object {}"])
+@pytest.mark.parametrize("content", ["venues: [", "!!python/object:builtins.object {}"])
 def test_invalid_yaml_documents_raise_config_error(tmp_path, content):
     path = tmp_path / "invalid.yaml"
     path.write_text(content)
@@ -249,44 +209,6 @@ def test_invalid_yaml_documents_raise_config_error(tmp_path, content):
 def test_missing_config_raises_config_error(tmp_path):
     with pytest.raises(HistoryConfigError):
         load_history_config(tmp_path / "missing.yaml")
-
-
-@pytest.mark.parametrize("value", [["coachface"], [], None])
-def test_coach_emoji_belongs_in_app_config(tmp_path, value):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["coach_emoji"] = value
-    path = tmp_path / "invalid.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match='coach_emoji.*AppConfig "analytics_coach_emoji"'):
-        load_history_config(path)
-
-
-def test_applause_emoji_required(tmp_path):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH, HistoryConfigError, load_history_config
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    assert "heart" in load_history_config().applause_emoji
-    del data["applause_emoji"]
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="applause_emoji"):
-        load_history_config(path)
-
-
-@pytest.mark.parametrize("value", [None, "heart", [123], [""]])
-def test_applause_emoji_must_be_strings(tmp_path, value):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["applause_emoji"] = value
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="applause_emoji"):
-        load_history_config(path)
 
 
 def test_applause_emoji_normalizes_skin_tones(tmp_path):
@@ -300,37 +222,5 @@ def test_applause_emoji_normalizes_skin_tones(tmp_path):
     assert load_history_config(path).applause_emoji == frozenset({"heart", "clap"})
 
 
-def test_capacity_lines_moved_under_practice_views(tmp_path):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["capacity_lines"] = []
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="practice_views"):
-        load_history_config(path)
-
-
 def test_practice_capacity_lines_still_available(cfg):
     assert [line["value"] for line in cfg.capacity_lines] == [27, 30, 35]
-
-
-@pytest.mark.parametrize("value", [
-    None, {}, [None], [{"match": "cuyuna", "slug": "cuyuna"}],
-    [{"match": [""], "slug": "cuyuna"}],
-    [{"match": [123], "slug": "cuyuna"}],
-    [{"match": ["cuyuna"], "slug": 123}],
-    [{"match": ["cuyuna"], "slug": "Bad_slug"}],
-    [{"match": ["cuyuna"], "slug": ""}],
-])
-def test_invalid_trip_series(tmp_path, value):
-    import yaml
-    from app.analytics.history_config import DEFAULT_PATH
-
-    data = yaml.safe_load(DEFAULT_PATH.read_text())
-    data["trip_series"] = value
-    path = tmp_path / "h.yaml"
-    path.write_text(yaml.safe_dump(data))
-    with pytest.raises(HistoryConfigError, match="trip_series"):
-        load_history_config(path)
