@@ -87,8 +87,7 @@ def load_app_trip_signups() -> list[TripSignup]:
         User, TripRegistration.user_id == User.id).outerjoin(
         SlackUser, User.slack_user_id == SlackUser.id).filter(
         TripRegistration.status != "cancelled").order_by(TripRegistration.id).all()
-    return [TripSignup(slug, edition_year(start.date() if hasattr(start, "date") else start),
-                       start.date() if hasattr(start, "date") else start,
+    return [TripSignup(slug, edition_year(start.date()), start.date(),
                        uid, None, f"trip_registration:{rid}", user_id)
             for rid, slug, start, uid, user_id in rows]
 
@@ -183,7 +182,6 @@ def rebuild() -> dict:
     db.session.flush()
     return {"sessions": len(session_rows), "attendance": len(attendance),
             "needs_review": sum(row.needs_review for row in session_rows),
-            "possible_misses": result.possible_misses,
             "candidates": len(result.possible_misses), "empty_weeks": len(weeks)}
 
 
