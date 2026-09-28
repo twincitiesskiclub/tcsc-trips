@@ -160,15 +160,14 @@ def build(filters):
     points["encoding"]["color"]["legend"] = {"title": "Activity"}
     points["encoding"]["opacity"] = {
         "condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 0.8}
-    blocks.append(Chart("Turnout over time", over_time,
-                        charts.spec(over_time, points),
+    blocks.append(Chart("Turnout over time", over_time, points,
                         time_rows, [("date", "Date"), ("activity", "Activity"), ("location", "Location"),
                                     ("rsvps", "RSVPs"), ("index", "Index"), ("status", "Status")]))
     for key, label in FACTORS:
         factor = factor_rows(rows, key)
         description = (f"Median turnout index by {label.lower()}. Bars run right of 1.0 when practices draw "
                        "more than a typical practice for that season and weekday, left when they draw fewer.")
-        blocks.append(Chart(label, description, charts.spec(description, charts.factor_bars(factor, title=label)),
+        blocks.append(Chart(label, description, charts.factor_bars(factor, title=label),
                             factor, [("value", label), ("median_index", "Median index"),
                                      ("median_rsvps", "Median RSVPs"), ("nights", "Practices")]))
     if any(set(row["formats"]) & {"split", "merged"} for row in rows):

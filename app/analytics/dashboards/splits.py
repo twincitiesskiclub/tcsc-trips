@@ -230,8 +230,7 @@ def split_blocks(sessions, attendance, filters):
     session_spec["padding"] = {"left": 5, "top": 28, "right": 12, "bottom": 5}
     session_description = "Early, late and single RSVPs are stacked by date, with rings below merged nights and capacity reference lines."
     session_chart = Chart(
-        "Every strength session", session_description,
-        charts.spec(session_description, session_spec),
+        "Every strength session", session_description, session_spec,
         rows, [("date", "Date"), ("format", "Format"), ("early", "Early RSVPs"),
                ("late", "Late RSVPs"), ("single", "Single RSVPs"),
                *([("unassigned", "Button, no slot")] if any(r["unassigned"] for r in rows) else []),
@@ -265,7 +264,7 @@ def split_blocks(sessions, attendance, filters):
         ],
     }
     season_chart = Chart(
-        "Season by season", season_description, charts.spec(season_description, season_body),
+        "Season by season", season_description, season_body,
         season_rows, [("season_label", "Season"), ("measure", "Measure"), ("rsvps", "RSVPs a week")])
     season_table = Table("Season summary", summary, [
         ("season_label", "Season"), ("weeks", "Weeks"), ("avg", "Average RSVPs"), ("peak", "Peak RSVPs"),
@@ -293,8 +292,7 @@ def split_blocks(sessions, attendance, filters):
         # Vega's empty line legend produces an unbounded SVG height.
         comparison_body["encoding"]["color"]["legend"] = None
     comparison_chart = Chart(
-        "This season against last", comparison_description,
-        charts.spec(comparison_description, comparison_body),
+        "This season against last", comparison_description, comparison_body,
         comparison, [("season_label", "Season"), ("week", "Week starting"),
                      ("week_of_season", "Week of season"), ("total", "RSVPs")])
 
@@ -310,8 +308,7 @@ def split_blocks(sessions, attendance, filters):
         sort=season_order, axis={"labelAngle": 0, "labelOverlap": "greedy"})
     preference_body["mark"].update(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
     preference_chart = Chart(
-        "Who picks which slot", preference_description,
-        charts.spec(preference_description, preference_body),
+        "Who picks which slot", preference_description, preference_body,
         preferences, [("season_label", "Season"), ("preference", "Slot preference"), ("people", "People")])
 
     return [session_chart, season_chart, season_table, comparison_chart, preference_chart,

@@ -32,7 +32,6 @@ def stacked_columns(rows, *, x, y, color, color_domain, color_range,
         x_encoding["sort"] = x_sort
     return {
         "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"{y_title} by {x_title}",
         "mark": {"type": "bar", "opacity": 1, "size": 24},
         "encoding": {
             "x": x_encoding,
@@ -57,7 +56,6 @@ def grouped_bars(rows, *, x, y, color, color_domain, color_range,
 def line(rows, *, x, y, color, x_title, y_title, tooltip, height=260) -> dict:
     return {
         "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"{y_title} by {x_title}",
         "mark": {"type": "line", "strokeWidth": 2, "point": {"filled": True, "size": 64}},
         "encoding": {
             "x": {"field": x, "type": "ordinal", "title": x_title},
@@ -111,13 +109,9 @@ def reference_lines(lines: list[dict], *, date_domain=None) -> list[dict]:
 
 def layered(base: dict, *extra_layers) -> dict:
     child = deepcopy(base)
-    body = {key: child.pop(key) for key in
-            ("data", "height", "description", "config", "autosize") if key in child}
-    child.pop("$schema", None)
+    body = {key: child.pop(key) for key in ("data", "height") if key in child}
     child.pop("width", None)
-    return {**body, "$schema": SCHEMA, "width": "container",
-            "description": body.get("description", "Chart with reference lines"),
-            "layer": [child, *deepcopy(extra_layers)]}
+    return {**body, "width": "container", "layer": [child, *deepcopy(extra_layers)]}
 
 
 def spec(description: str, body: dict) -> dict:
@@ -137,7 +131,6 @@ def factor_bars(rows, *, title) -> dict:
                       "text": {"field": "nights", "type": "quantitative"}}
     return {
         "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"Median turnout index by {title}",
         "layer": [
             {"mark": {"type": "bar", "cornerRadiusEnd": 3, "clip": False},
              "encoding": {"y": y, "x": x, "x2": {"datum": 1}, "color": color,
@@ -167,7 +160,6 @@ def points(rows, *, x, y, color, tooltip, color_scale=None, height=280) -> dict:
         color_encoding["scale"] = deepcopy(color_scale)
     return {
         "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"{y} over time",
         "mark": {"type": "point", "filled": True, "size": 36, "opacity": 0.8},
         "encoding": {"x": {"field": x, "type": "temporal", "title": None},
                      "y": {"field": y, "type": "quantitative", "title": "RSVPs"},

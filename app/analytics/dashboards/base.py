@@ -1,5 +1,5 @@
 """Dashboard blocks, validated GET filters, and read-only data access."""
-from dataclasses import dataclass, field
+from dataclasses import InitVar, dataclass, field
 from datetime import date, datetime
 from typing import Callable, ClassVar
 
@@ -8,7 +8,7 @@ from sqlalchemy.engine import Row
 from werkzeug.datastructures import MultiDict
 
 from app import utils
-from app.analytics import SYNC_CHANNELS
+from app.analytics import SYNC_CHANNELS, charts
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
 from app.models import AppConfig, db
 from app.practices.models import PracticeLocation
@@ -32,9 +32,13 @@ class Chart:
     kind: ClassVar[str] = "chart"
     title: str
     description: str
-    spec: dict
+    body: InitVar[dict]
     rows: list[dict]
     columns: list[tuple[str, str]]
+    spec: dict = field(init=False)
+
+    def __post_init__(self, body):
+        self.spec = charts.spec(self.description, body)
 
 
 @dataclass

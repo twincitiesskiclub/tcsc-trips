@@ -82,13 +82,12 @@ def build(filters):
     gaps = {"data": {"values": [{"week": week} for week in empty]},
             "mark": {"type": "rule", "color": "#dc2626", "strokeWidth": 1},
             "encoding": {"x": {"field": "week", "type": "temporal"}}}
-    chart_spec = charts.spec(description, charts.layered(body, gaps) if empty else body)
     return [
         tiles,
         Table("Unresolved candidates", candidate_rows, [("date", "Posted"), ("channel", "Channel"),
                                                         ("text", "Text"), ("reactions", "Top reactions"),
                                                         ("post_key", "Post key")]),
-        Chart("Sessions per week", description, chart_spec, weeks,
+        Chart("Sessions per week", description, charts.layered(body, gaps) if empty else body, weeks,
               [("week", "Week of"), ("kind", "Kind"), ("sessions", "Sessions")]),
         Table("Empty weeks", [{"week": week} for week in empty], [("week", "Week of")]),
         Table("Sync freshness", sync, [("channel", "Channel"), ("last_synced", "Last synced (Central)"),

@@ -232,12 +232,10 @@ def build(filters):
         x_sort=_season_sort(row["season_label"] for row in newcomers))
     return [
         tiles,
-        Chart("Coming back next season", retention_description,
-              charts.spec(retention_description, retention_body),
+        Chart("Coming back next season", retention_description, retention_body,
               retained, [("season_label", "Season"), ("group", "Group"), ("people", "People"),
                          ("returned", "Came back"), ("rate", "Rate")]),
-        Chart("How far newcomers get", newcomer_description,
-              charts.spec(newcomer_description, newcomer_body),
+        Chart("How far newcomers get", newcomer_description, newcomer_body,
               newcomers, [("season_label", "Season"), ("bucket", "Sessions"), ("people", "People")]),
         Table("Who comes to what", overlap([(p, s) for p, s in pairs
                                           if not filters.seasons or s.season_label in filters.seasons]),
