@@ -10,11 +10,10 @@ import vl_convert as vlc
 
 from app.analytics.dashboards import splits as ts
 from app.analytics.dashboards.base import Chart, Filters, Note, Table
-from tests.analytics.conftest import FIXTURES
+from tests.analytics.conftest import SCHEMA
 
 WEEKS = [(20, 10), (25, 15), (18, 17), (30, 20)]
 FIRST = date(2099, 9, 17)
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
 
 
 def _session(id, day=FIRST, format="split", season="2099 Fall/Winter", slot=None):

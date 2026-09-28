@@ -4,9 +4,8 @@ import jsonschema
 import pytest
 
 from app.analytics import charts
-from tests.analytics.conftest import FIXTURES
+from tests.analytics.conftest import SCHEMA
 
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
 ROWS = [{"week": "2099-01-05", "slot": "Early", "rsvps": 20},
         {"week": "2099-01-05", "slot": "Late", "rsvps": 12}]
 

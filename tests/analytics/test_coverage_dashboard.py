@@ -1,5 +1,4 @@
 """Coverage dashboard checks with synthetic sessions and archive messages."""
-import json
 from datetime import date, datetime, timedelta
 from unittest.mock import patch
 
@@ -12,9 +11,7 @@ from app.analytics.dashboards import DASHBOARDS, coverage as cv
 from app.analytics.dashboards.base import Chart, Filters, Note, Table, Tiles
 from app.analytics.models import PracticeSession, SlackArchiveMessage
 from app.models import AppConfig
-from tests.analytics.conftest import FIXTURES
-
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
+from tests.analytics.conftest import SCHEMA
 
 
 def test_freshness():

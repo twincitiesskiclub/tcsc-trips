@@ -1,5 +1,4 @@
 """Synthetic people only."""
-import json
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,9 +11,7 @@ from app.analytics.dashboards import people as pp
 from app.analytics.dashboards.base import Chart, Filters, Note, Table, Tiles
 from app.analytics.models import PracticeAttendance, PracticeSession
 from app.models import Season, SlackUser, User, UserSeason
-from tests.analytics.conftest import FIXTURES
-
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
+from tests.analytics.conftest import SCHEMA
 
 
 def _s(id, day, season, kind="practice", reported=None, status="held"):

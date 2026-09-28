@@ -1,5 +1,4 @@
 """Synthetic sessions only."""
-import json
 from datetime import date, time, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -9,9 +8,7 @@ import vl_convert as vlc
 
 from app.analytics.dashboards import practices as p
 from app.analytics.dashboards.base import Chart, Filters, Note, Table, Tiles
-from tests.analytics.conftest import FIXTURES
-
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
+from tests.analytics.conftest import SCHEMA
 
 
 def _s(id, day, rsvps, group=None, activity="Run", fmt="single", temp=50.0, season="2099 Fall/Winter",
