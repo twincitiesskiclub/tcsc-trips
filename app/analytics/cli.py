@@ -44,7 +44,9 @@ def sync(days):
 @analytics_cli.command("rebuild")
 def rebuild_command():
     """Rebuild derived sessions and attendance from archived data."""
-    _print_json(rebuild())
+    stats = rebuild()
+    db.session.commit()
+    _print_json(stats)
 
 
 @analytics_cli.command("fetch-weather")

@@ -151,13 +151,13 @@ def apply_weather(sessions: list[PracticeSession]) -> int:
     return filled
 
 
-def fetch_missing_weather(*, today: date | None = None, http_get=requests.get) -> dict:
+def fetch_missing_weather(*, http_get=requests.get) -> dict:
     """Fetch missing start hours older than the archive delay, then commit.
 
     Each location gets one date range, including the prior day for snowfall.
     Failures leave its hours absent so the next invocation retries them.
     """
-    cutoff = (today if today is not None else today_central()) - timedelta(days=6)
+    cutoff = today_central() - timedelta(days=6)
     stats = {"locations": 0, "hours": 0, "sessions": 0, "errors": 0}
     candidates = PracticeSession.query.filter(PracticeSession.date <= cutoff).all()
     pending = []

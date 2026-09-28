@@ -57,17 +57,6 @@ def test_sync_bot_and_days(app, transaction, days):
     transaction.commit.assert_called_once_with()
 
 
-@pytest.mark.parametrize("command, function", [("rebuild", "rebuild"), ("fetch-weather", "fetch_missing_weather")])
-def test_standalone_steps(app, transaction, command, function):
-    from app.analytics import cli
-    with patch.object(cli, function, return_value={"sessions": 3}) as step:
-        result = app.test_cli_runner().invoke(args=["analytics", command])
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == {"sessions": 3}
-    step.assert_called_once_with()
-    transaction.commit.assert_not_called()  # These functions own their commits.
-
-
 def test_set_coach_emoji(app, transaction):
     from app.analytics import cli
     with patch.object(cli.AppConfig, "set") as setter:
@@ -156,7 +145,6 @@ def test_nightly_stops_at_first_failure(app, transaction, failure, caplog):
 def test_nightly_runs_all_steps_in_order_with_bot(app, transaction):
     from app.analytics import jobs
     order = MagicMock()
-    http_get = MagicMock()
     with patch.object(jobs, "sync_recent", return_value={}) as sync, \
          patch.object(jobs, "rebuild", return_value={"sessions": 1}) as rebuild, \
          patch.object(jobs, "fetch_missing_weather", return_value={"sessions": 0}) as weather, \
@@ -164,25 +152,13 @@ def test_nightly_runs_all_steps_in_order_with_bot(app, transaction):
          patch("app.slack.client.get_slack_user_client") as user:
         for name, mock in (("sync", sync), ("commit", transaction.commit), ("rebuild", rebuild), ("weather", weather)):
             order.attach_mock(mock, name)
-        out = jobs.run_nightly(http_get=http_get)
+        out = jobs.run_nightly()
     assert out == {"step": "done", "ok": True, "sync": {}, "rebuild": {"sessions": 1}, "weather": {"sessions": 0}}
-    assert order.mock_calls == [call.sync(bot.return_value), call.commit(), call.rebuild(), call.weather(http_get=http_get)]
+    assert order.mock_calls == [call.sync(bot.return_value), call.commit(), call.rebuild(), call.commit(),
+                                call.weather()]
     bot.assert_called_once_with()
     user.assert_not_called()
     transaction.rollback.assert_not_called()
-
-
-def test_nightly_injected_client_and_default_weather(app):
-    from app.analytics import jobs
-    client = MagicMock()
-    with patch.object(jobs, "sync_recent", return_value={}) as sync, \
-         patch.object(jobs, "rebuild", return_value={}), \
-         patch.object(jobs, "fetch_missing_weather", return_value={}) as weather, \
-         patch.object(jobs, "get_slack_client") as bot:
-        assert jobs.run_nightly(client=client)["ok"]
-    bot.assert_not_called()
-    sync.assert_called_once_with(client)
-    weather.assert_called_once_with()
 
 
 def test_nightly_continues_after_channel_failure(db_session, transaction):
@@ -200,8 +176,8 @@ def test_nightly_continues_after_channel_failure(db_session, transaction):
 
     with patch.object(jobs, "rebuild", return_value={"sessions": 1}) as rebuild, \
          patch.object(jobs, "fetch_missing_weather", return_value={"sessions": 0}) as weather, \
-         patch.object(jobs, "get_slack_client") as bot:
-        out = jobs.run_nightly(client=FailedChannel())
+         patch.object(jobs, "get_slack_client", return_value=FailedChannel()):
+        out = jobs.run_nightly()
     assert out["ok"] is True and out["step"] == "done"
     assert out["sync"][bad_channel] == {"error": "not_in_channel"}
     assert out["sync"][good_channel]["messages"] == 1
@@ -209,8 +185,7 @@ def test_nightly_continues_after_channel_failure(db_session, transaction):
     assert out["rebuild"] == {"sessions": 1}
     rebuild.assert_called_once_with()
     weather.assert_called_once_with()
-    bot.assert_not_called()
-    transaction.commit.assert_called_once_with()
+    assert transaction.commit.call_count == 2
     transaction.rollback.assert_not_called()
 
 

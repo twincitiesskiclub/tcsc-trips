@@ -10,21 +10,20 @@ from app.slack.client import get_slack_client
 logger = logging.getLogger(__name__)
 
 
-def run_nightly(*, client=None, http_get=None) -> dict:
+def run_nightly() -> dict:
     """Commit the archive before rebuilding; stop at the first failed step."""
     step = "sync"
     try:
         logger.info("Analytics nightly: sync")
-        if client is None:
-            client = get_slack_client()
-        synced = sync_recent(client)
+        synced = sync_recent(get_slack_client())
         db.session.commit()
         step = "rebuild"
         logger.info("Analytics nightly: rebuild")
         rebuilt = rebuild()
+        db.session.commit()
         step = "weather"
         logger.info("Analytics nightly: weather")
-        weather = fetch_missing_weather(**({"http_get": http_get} if http_get is not None else {}))
+        weather = fetch_missing_weather()
     except Exception as exc:
         db.session.rollback()
         logger.exception("Analytics nightly %s failed: %s", step, exc)

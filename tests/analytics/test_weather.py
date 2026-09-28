@@ -196,7 +196,7 @@ def committing_session(app, monkeypatch):
             transaction.rollback()
 
 
-def test_fetch_missing_groups_cutoff_upsert_and_commit(committing_session):
+def test_fetch_missing_groups_cutoff_upsert_and_commit(committing_session, monkeypatch):
     rows = [make_session("first"), make_session("same-rounded", lat=44.981, lon=-93.321),
             make_session("earlier", date=date(2099, 12, 19), start_time=time(23)),
             make_session("other-location", lat=45.12),
@@ -211,7 +211,8 @@ def test_fetch_missing_groups_cutoff_upsert_and_commit(committing_session):
     def http_get(url, **kwargs):
         calls.append(kwargs["params"])
         return sample_get()
-    stats = weather.fetch_missing_weather(today=date(2099, 12, 26), http_get=http_get)
+    monkeypatch.setattr(weather, "today_central", lambda: date(2099, 12, 26))
+    stats = weather.fetch_missing_weather(http_get=http_get)
     assert stats == {"locations": 2, "hours": 52, "sessions": 4, "errors": 0}
     by_lat = {call["latitude"]: call for call in calls}
     assert by_lat[44.98]["start_date"] == "2099-12-18"
@@ -225,7 +226,7 @@ def test_fetch_missing_groups_cutoff_upsert_and_commit(committing_session):
     assert rows[0].temp_f == pytest.approx(-2.7)
     assert rows[0].snowfall_prior_24h_in == pytest.approx(0.1)
     assert rows[4].temp_f is None and rows[7].temp_f is None
-    assert weather.fetch_missing_weather(today=date(2099, 12, 26), http_get=http_get) == {
+    assert weather.fetch_missing_weather(http_get=http_get) == {
         "locations": 0, "hours": 0, "sessions": 0, "errors": 0}
     assert len(calls) == 2
 
@@ -244,7 +245,6 @@ def test_fetch_failure_count_and_retry(committing_session, monkeypatch):
 
 def test_rebuild_fills_real_cached_weather_without_network(db_session, monkeypatch):
     from app.analytics.rebuild import rebuild
-    from app.analytics.history_config import load_history_config
 
     def no_network(*args, **kwargs):
         pytest.fail("rebuild must never call the network")
@@ -257,14 +257,14 @@ def test_rebuild_fills_real_cached_weather_without_network(db_session, monkeypat
     db_session.add(practice)
     db_session.add(WeatherHour(lat=44.98, lon=-93.32, hour_local=datetime(2099, 12, 20, 18), temp_f=-2.7))
     db_session.flush()
-    rebuild(cfg=load_history_config(), commit=False)
+    rebuild()
     row = PracticeSession.query.filter_by(practice_id=practice.id).one()
     assert row.temp_f == pytest.approx(-2.7)
     assert row.minutes_after_sunset is not None
 
 
 @pytest.mark.parametrize("observed_field", [None, *weather.HOURLY_VARS])
-def test_archive_lag_null_hours_remain_missing_and_retry(committing_session, observed_field):
+def test_archive_lag_null_hours_remain_missing_and_retry(committing_session, monkeypatch, observed_field):
     row = make_session("archive-lag")
     committing_session.add(row)
     body = load_fixture("openmeteo_sample.json")
@@ -273,11 +273,11 @@ def test_archive_lag_null_hours_remain_missing_and_retry(committing_session, obs
     start_index = body["hourly"]["time"].index("2099-12-20T18:00")
     if observed_field:
         body["hourly"][observed_field][start_index] = 0
-    stats = weather.fetch_missing_weather(today=date(2099, 12, 26),
-                                         http_get=lambda *a, **k: Resp(200, body))
+    monkeypatch.setattr(weather, "today_central", lambda: date(2099, 12, 26))
+    stats = weather.fetch_missing_weather(http_get=lambda *a, **k: Resp(200, body))
     assert stats["hours"] == (1 if observed_field else 0)
     assert WeatherHour.query.count() == (1 if observed_field else 0)
-    stats = weather.fetch_missing_weather(today=date(2099, 12, 26), http_get=sample_get)
+    stats = weather.fetch_missing_weather(http_get=sample_get)
     if observed_field:
         assert stats["locations"] == 0
     else:
