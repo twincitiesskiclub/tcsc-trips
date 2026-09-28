@@ -15,9 +15,7 @@ from app.analytics.history_config import (
     HistoryConfig, activity_bucket, base_emoji, classify_title, resolve_venue, workout_bucket,
 )
 from app.analytics.parse_app import extract_app_sessions
-from app.analytics.parse_template import (
-    extract_template_sessions, is_weekly_preview, looks_like_template,
-)
+from app.analytics.parse_template import extract_template_sessions
 from app.analytics.parse_trips import is_signup_post, parse_signup, trip_sessions
 from app.analytics.seasons import season_label
 from app.utils import slack_ts_central_date
@@ -231,9 +229,7 @@ def build_lineage(
     drafts = extract_app_sessions(app_practices, indexed, cfg, locations)
     consumed = {(session.channel_id, session.source_ts) for session in drafts}
     for key, message in indexed.items():
-        text = message.raw.get("text", "")
-        if (message.channel_id in SESSION_CHANNELS and key not in consumed and _top_level(message)
-                and not is_weekly_preview(text) and looks_like_template(text)):
+        if message.channel_id in SESSION_CHANNELS and key not in consumed and _top_level(message):
             drafts.extend(extract_template_sessions(message, cfg, locations))
 
     produced_posts = {(session.channel_id, session.source_ts) for session in drafts}
