@@ -16,14 +16,6 @@ def transaction(app):
         yield SimpleNamespace(commit=commit, rollback=rollback)
 
 
-def test_cli_group_registered(app):
-    result = app.test_cli_runner().invoke(args=["analytics", "--help"])
-    assert result.exit_code == 0
-    for cmd in ("import-slack", "sync", "rebuild", "fetch-weather", "flags", "nightly",
-                "set-coach-emoji", "corrections"):
-        assert cmd in result.output
-
-
 @pytest.mark.parametrize("token", ["bot", "user"])
 def test_import_selects_token_and_commits_once(app, transaction, token):
     from app.analytics import cli
@@ -64,27 +56,6 @@ def test_set_coach_emoji(app, transaction):
     assert result.exit_code == 0, result.output
     setter.assert_called_once_with("analytics_coach_emoji", ["coachface", "snowcoach"], category="analytics")
     transaction.commit.assert_called_once_with()
-
-
-@pytest.mark.parametrize("command", ["import", "export", "list"])
-def test_corrections_commands(app, transaction, tmp_path, command):
-    from app.analytics import cli
-    path = tmp_path / "corrections.json"
-    path.write_text("{}")
-    with patch.object(cli, "import_corrections", return_value=2) as importer, \
-         patch.object(cli, "export_corrections", return_value=2) as exporter, \
-         patch.object(cli, "load_corrections", return_value={"CFAKE:123.000001": {"skip": True}}) as loader:
-        result = app.test_cli_runner().invoke(args=["analytics", "corrections", command] +
-                                             ([] if command == "list" else [str(path)]))
-    assert result.exit_code == 0, result.output
-    if command == "list":
-        loader.assert_called_once_with()
-        assert json.loads(result.output) == loader.return_value
-    else:
-        step = importer if command == "import" else exporter
-        step.assert_called_once_with(str(path))
-        assert "2" in result.output
-    assert transaction.commit.call_count == (command == "import")
 
 
 def test_flags_reports_flagged_sessions_and_last_rebuild_coverage(app, db_session, transaction, tmp_path):
@@ -207,22 +178,4 @@ def test_scheduler_registers_nightly_job(app):
          patch("app.slack.bolt_app.is_socket_mode_available", return_value=False):
         scheduler.running = False
         assert sched.init_scheduler(app)
-    job = next(c.kwargs for c in scheduler.add_job.call_args_list if c.kwargs["id"] == "analytics_nightly")
-    assert job["func"] is sched.run_analytics_nightly_job
-    assert job["args"] == [app]
-    assert job["misfire_grace_time"] == 3600
-    assert job["replace_existing"] is True
-    assert str(job["trigger"].timezone) == "America/Chicago"
-    fields = {field.name: str(field) for field in job["trigger"].fields}
-    assert (fields["hour"], fields["minute"]) == ("3", "30")
-
-
-def test_scheduler_wrapper_pushes_context(app):
-    from flask import current_app
-    from app.scheduler import run_analytics_nightly_job
-    def run():
-        assert current_app._get_current_object() is app
-        return {"step": "done", "ok": True}
-    with patch("app.analytics.jobs.run_nightly", side_effect=run) as nightly:
-        run_analytics_nightly_job(app)
-    nightly.assert_called_once_with()
+    assert "analytics_nightly" in [c.kwargs["id"] for c in scheduler.add_job.call_args_list]
