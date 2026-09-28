@@ -2,9 +2,8 @@
 from copy import deepcopy
 
 SCHEMA = "https://vega.github.io/schema/vega-lite/v6.json"
-PALETTE = {"navy": "#1c2c44", "early": "#2a78d6", "late": "#eb6834",
-           "single": "#4a3aa7", "violet": "#4a3aa7", "surface": "#ffffff", "ref": "#6b7076", "grid": "#e3e5e6",
-           "ink": "#1c2c44", "muted": "#6b7280"}
+PALETTE = {"early": "#2a78d6", "late": "#eb6834", "violet": "#4a3aa7", "surface": "#ffffff",
+           "ref": "#6b7076", "grid": "#e3e5e6", "ink": "#1c2c44", "muted": "#6b7280"}
 
 
 def theme() -> dict:
@@ -26,13 +25,12 @@ def _tooltip(fields, y):
 
 
 def stacked_columns(rows, *, x, y, color, color_domain, color_range,
-                    x_title, y_title, tooltip, height=280, x_type="ordinal", x_sort=None) -> dict:
+                    x_title, y_title, tooltip, x_type="ordinal", x_sort=None) -> dict:
     x_encoding = {"field": x, "type": x_type, "title": x_title}
     if x_sort is not None:
         x_encoding["sort"] = x_sort
     return {
-        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"{y_title} by {x_title}",
+        "data": {"values": deepcopy(rows)}, "width": "container", "height": 280,
         "mark": {"type": "bar", "opacity": 1, "size": 24},
         "encoding": {
             "x": x_encoding,
@@ -45,27 +43,14 @@ def stacked_columns(rows, *, x, y, color, color_domain, color_range,
 
 
 def grouped_bars(rows, *, x, y, color, color_domain, color_range,
-                 x_title, y_title, tooltip, height=260, x_sort=None) -> dict:
+                 x_title, y_title, tooltip, x_sort=None) -> dict:
     body = stacked_columns(rows, x=x, y=y, color=color, color_domain=color_domain,
                            color_range=color_range, x_title=x_title, y_title=y_title,
-                           tooltip=tooltip, height=height, x_sort=x_sort)
+                           tooltip=tooltip, x_sort=x_sort)
+    body["height"] = 260
     body["encoding"]["y"]["stack"] = None
     body["encoding"]["xOffset"] = {"field": color, "type": "nominal", "sort": list(color_domain)}
     return body
-
-
-def line(rows, *, x, y, color, x_title, y_title, tooltip, height=260) -> dict:
-    return {
-        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"{y_title} by {x_title}",
-        "mark": {"type": "line", "strokeWidth": 2, "point": {"filled": True, "size": 64}},
-        "encoding": {
-            "x": {"field": x, "type": "ordinal", "title": x_title},
-            "y": {"field": y, "type": "quantitative", "title": y_title},
-            "color": {"field": color, "type": "nominal"},
-            "tooltip": _tooltip(tooltip, y),
-        },
-    }
 
 
 def reference_lines(lines: list[dict], *, date_domain=None) -> list[dict]:
@@ -111,66 +96,11 @@ def reference_lines(lines: list[dict], *, date_domain=None) -> list[dict]:
 
 def layered(base: dict, *extra_layers) -> dict:
     child = deepcopy(base)
-    body = {key: child.pop(key) for key in
-            ("data", "height", "description", "config", "autosize") if key in child}
-    child.pop("$schema", None)
+    body = {key: child.pop(key) for key in ("data", "height") if key in child}
     child.pop("width", None)
-    return {**body, "$schema": SCHEMA, "width": "container",
-            "description": body.get("description", "Chart with reference lines"),
-            "layer": [child, *deepcopy(extra_layers)]}
+    return {**body, "width": "container", "layer": [child, *deepcopy(extra_layers)]}
 
 
 def spec(description: str, body: dict) -> dict:
     return {**deepcopy(body), "$schema": SCHEMA, "config": theme(),
             "description": description, "autosize": {"type": "fit-x", "contains": "padding"}}
-
-
-def factor_bars(rows, *, title) -> dict:
-    height = max(80, 28 * len(rows))
-    y = {"field": "value", "type": "nominal", "title": None, "sort": None}
-    indices = [row["median_index"] for row in rows]
-    domain = [min(0.5, min(indices) - 0.05), max(1.5, max(indices) + 0.05)] if indices else [0.5, 1.5]
-    x = {"field": "median_index", "type": "quantitative", "title": "Median turnout index",
-         "scale": {"domain": domain}}
-    color = {"condition": {"test": "datum.median_index >= 1", "value": PALETTE["early"]}, "value": "#e34948"}
-    text_encoding = {"y": y, "x": {"field": "median_index", "type": "quantitative"},
-                      "text": {"field": "nights", "type": "quantitative"}}
-    return {
-        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"Median turnout index by {title}",
-        "layer": [
-            {"mark": {"type": "bar", "cornerRadiusEnd": 3, "clip": False},
-             "encoding": {"y": y, "x": x, "x2": {"datum": 1}, "color": color,
-                          "opacity": {"condition": {"test": "datum.thin", "value": 0.35}, "value": 1},
-                          "tooltip": [{"field": "value", "title": title},
-                                      {"field": "median_index", "title": "Median index"},
-                                      {"field": "median_rsvps", "title": "Median RSVPs"},
-                                      {"field": "nights", "title": "Practices"}]}},
-            # Two static layers instead of a conditional mark property: align/dx on a
-            # text mark can't be driven by an encoding condition in Vega-Lite.
-            {"transform": [{"filter": "datum.median_index >= 1"}],
-             "mark": {"type": "text", "align": "left", "dx": 4, "color": PALETTE["muted"]},
-             "encoding": deepcopy(text_encoding)},
-            {"transform": [{"filter": "datum.median_index < 1"}],
-             "mark": {"type": "text", "align": "right", "dx": -4, "color": PALETTE["muted"]},
-             "encoding": deepcopy(text_encoding)},
-            {"data": {"values": [{"one": 1}]},
-             "mark": {"type": "rule", "color": PALETTE["ref"], "strokeDash": [4, 3]},
-             "encoding": {"x": {"field": "one", "type": "quantitative"}}},
-        ],
-    }
-
-
-def points(rows, *, x, y, color, tooltip, color_scale=None, height=280) -> dict:
-    color_encoding = {"field": color, "type": "nominal"}
-    if color_scale is not None:
-        color_encoding["scale"] = deepcopy(color_scale)
-    return {
-        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
-        "description": f"{y} over time",
-        "mark": {"type": "point", "filled": True, "size": 36, "opacity": 0.8},
-        "encoding": {"x": {"field": x, "type": "temporal", "title": None},
-                     "y": {"field": y, "type": "quantitative", "title": "RSVPs"},
-                     "color": color_encoding,
-                     "tooltip": _tooltip(tooltip, y)},
-    }

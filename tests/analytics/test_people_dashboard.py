@@ -1,5 +1,4 @@
 """Synthetic people only."""
-import json
 from datetime import date, timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -12,9 +11,7 @@ from app.analytics.dashboards import people as pp
 from app.analytics.dashboards.base import Chart, Filters, Note, Table, Tiles
 from app.analytics.models import PracticeAttendance, PracticeSession
 from app.models import Season, SlackUser, User, UserSeason
-from tests.analytics.conftest import FIXTURES
-
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
+from tests.analytics.conftest import SCHEMA
 
 
 def _s(id, day, season, kind="practice", reported=None, status="held"):
@@ -27,11 +24,6 @@ def _a(session, person, role="rsvp"):
 
 
 F24, F25 = "2098 Fall/Winter", "2099 Fall/Winter"
-
-
-def test_season_key_orders_labels():
-    assert sorted(["2099 Fall/Winter", "2099 Spring/Summer", "2098 Fall/Winter"], key=pp.season_key) == [
-        "2098 Fall/Winter", "2099 Spring/Summer", "2099 Fall/Winter"]
 
 
 def test_pairs_drop_count_only_cancelled_and_declines():
@@ -73,7 +65,6 @@ def test_lapsed_regular():
 
 
 def test_unknown_season_and_empty_history():
-    assert pp.season_key("Unknown") == (0, 0)
     assert pp.attendance_pairs([], []) == []
     assert pp.retention([]) == pp.newcomer_curve([]) == pp.overlap([]) == []
     assert pp.lapsed_regulars([], date(2099, 11, 30)) == []
@@ -340,24 +331,6 @@ def test_people_route_requires_admin(client):
     assert response.status_code == 302
 
 
-@pytest.mark.parametrize("label, today, expected", [
-    ("2099 Spring/Summer", date(2099, 4, 30), False),
-    ("2099 Spring/Summer", date(2099, 5, 1), True),
-    ("2099 Spring/Summer", date(2099, 8, 31), True),
-    ("2099 Spring/Summer", date(2099, 9, 1), False),
-    ("2099 Fall/Winter", date(2099, 8, 31), False),
-    ("2099 Fall/Winter", date(2099, 9, 1), True),
-    ("2099 Fall/Winter", date(2100, 4, 30), True),
-    ("2099 Fall/Winter", date(2100, 5, 1), False),
-    ("Unknown", date(2099, 6, 1), False),
-    ("2099 Unknown", date(2099, 6, 1), False),
-    ("0000 Spring/Summer", date(2099, 6, 1), False),
-    (None, date(2099, 6, 1), False),
-])
-def test_season_in_progress_boundaries(label, today, expected):
-    assert pp.season_in_progress(label, today) is expected
-
-
 def test_in_progress_season_omits_retention_and_labels_newcomers(filtered_build, monkeypatch):
     monkeypatch.setattr(pp.utils, "today_central", lambda: date(2099, 11, 30))
     blocks = filtered_build(Filters())
@@ -372,11 +345,6 @@ def test_in_progress_season_omits_retention_and_labels_newcomers(filtered_build,
     assert any("The current season is still in progress, so it is not yet counted as a next season "
                "in the retention chart, and its newcomer column is partial." in b.text
                for b in blocks if isinstance(b, Note))
-
-
-def test_shift_keeps_season_type_across_years():
-    assert pp._shift("2099 Spring/Summer", 1) == "2100 Spring/Summer"
-    assert pp._shift("2099 Fall/Winter", -1) == "2098 Fall/Winter"
 
 
 def test_season_sort_orders_chronologically_and_so_far_last():
