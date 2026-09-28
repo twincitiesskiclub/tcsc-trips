@@ -113,7 +113,7 @@ def test_empty_chart_keeps_description_and_table_without_embed_target(admin_clie
 
 def test_format_pills_have_readable_labels_and_preserve_query_values(admin_client):
     with patch.object(STUB, "filters", ["format"]), \
-         patch.object(base, "filter_options", return_value={"formats": ["single", "split", "merged"]}):
+         patch.object(base, "filter_options", return_value={"formats": list(base.FORMATS.items())}):
         response = admin_client.get("/admin/analytics/stub?format=split")
     assert response.status_code == 200
     html = response.data.decode()
@@ -127,6 +127,8 @@ def test_filter_form_hidden_when_dashboard_has_no_filters(admin_client):
     with patch.object(STUB, "filters", []):
         response = admin_client.get("/admin/analytics/stub")
     assert response.status_code == 200
+    base.get_filter_domains.assert_not_called()
+    base.filter_options.assert_not_called()
     assert b">Apply<" not in response.data
     assert b">Reset<" not in response.data
     assert b'aria-label="Dashboard filters"' not in response.data

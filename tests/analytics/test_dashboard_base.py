@@ -52,6 +52,10 @@ def test_all_filters_validate_and_disallowed_requests_are_ignored():
     assert ignored.date_to is None
 
 
+def _option_values(dashboard):
+    return {attribute: [value for value, _ in pairs] for attribute, pairs in base.filter_options(dashboard).items()}
+
+
 def _session(key, day, **values):
     return PracticeSession(session_key='task13:' + key, group_key='task13:' + key,
                            era='app', date=day, day_of_week=day.strftime('%A'),
@@ -73,7 +77,7 @@ def test_missing_date_trips_are_hidden(db_session):
 def test_kind_options_only_include_dated_past_sessions(db_session):
     today = date(2099, 1, 5)
     db_session.add_all([
-        _session('social', today, kind='event', category='social'),
+        _session('social', today, kind='event', category='social', format='split'),
         _session('practice', today, category='practice'),
         _session('future-trip', today + timedelta(days=1), kind='trip', category='trip'),
         _session('undated-trip', today, kind='trip', category='trip', flags=['missing_date']),
@@ -81,7 +85,8 @@ def test_kind_options_only_include_dated_past_sessions(db_session):
     db_session.flush()
     with patch('app.utils.today_central', return_value=today):
         options = base.filter_options(D)
-    assert options['kinds'] == ['practice', 'event']
+    assert options['kinds'] == [('practice', 'practice'), ('event', 'event')]
+    assert options['formats'] == [('single', 'One session'), ('split', 'Two sessions')]
 
 
 def test_practices_dashboard_limits_options_and_sessions_to_practices(db_session):
@@ -96,7 +101,7 @@ def test_practices_dashboard_limits_options_and_sessions_to_practices(db_session
     db_session.flush()
     dashboard = practices.DASHBOARD
     with patch('app.utils.today_central', return_value=today):
-        options = base.filter_options(dashboard)
+        options = _option_values(dashboard)
         assert options['activities'] == ['Run']
         assert options['workout_types'] == ['Endurance']
         assert options['kinds'] == ['practice']
@@ -105,7 +110,7 @@ def test_practices_dashboard_limits_options_and_sessions_to_practices(db_session
         assert filters.activities == ['Run'] and filters.workout_types == ['Endurance']
         assert filters.kinds == ['practice']
         assert [s.session_key for s in base.load_sessions(filters)] == ['task13:kind-practice']
-        assert base.filter_options(people.DASHBOARD)['activities'] == ['Event', 'Run']
+        assert _option_values(people.DASHBOARD)['activities'] == ['Event', 'Run']
 
 
 def test_location_options_disambiguate_spots(db_session):
@@ -118,7 +123,7 @@ def test_location_options_disambiguate_spots(db_session):
     ])
     db_session.flush()
     with patch('app.utils.today_central', return_value=date(2099, 1, 5)):
-        options = dict(base.filter_options(D)['locations'])
+        options = dict(base.filter_options(D)['location_ids'])
     assert [options[location.id] for location in locations] == [
         'Test Park - North trail', 'Test Park - South trail', 'Test Park']
 
@@ -134,7 +139,7 @@ def test_load_sessions_and_options_exclude_future_central_dates(db_session):
     db_session.flush()
     with patch('app.utils.today_central', return_value=today):
         sessions = base.load_sessions(base.Filters(seasons=['2099 Test', '2100 Future']))
-        options = base.filter_options(D)
+        options = _option_values(D)
         domains = base.get_filter_domains()
     assert [s.id for s in sessions] == [earlier.id, first.id, second.id]
     assert '2100 Future' not in options['seasons']
@@ -262,11 +267,12 @@ def test_location_filters_and_past_options_ordering(db_session):
     db_session.flush()
     with patch('app.utils.today_central', return_value=date(2099, 1, 5)):
         options = base.filter_options(D)
+        values = _option_values(D)
         assert base.load_sessions(base.Filters(location_ids=[past_location.id])) == [spring]
         assert future_location.id not in base.get_filter_domains()['location_ids']
-    assert (past_location.id, past_location.name) in options['locations']
-    assert (future_location.id, future_location.name) not in options['locations']
-    seasons = [s for s in options['seasons'] if s.startswith('2099')]
+    assert (past_location.id, past_location.name) in options['location_ids']
+    assert (future_location.id, future_location.name) not in options['location_ids']
+    seasons = [s for s in values['seasons'] if s.startswith('2099')]
     assert seasons == ['2099 Fall/Winter', '2099 Spring/Summer']
-    assert options['days'].index('Monday') < options['days'].index('Sunday')
+    assert values['days'].index('Monday') < values['days'].index('Sunday')
 
