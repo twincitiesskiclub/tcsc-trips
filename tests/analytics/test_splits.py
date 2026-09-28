@@ -295,13 +295,6 @@ def test_comparison_keeps_calendar_spacing_and_breaks_lines_at_missing_weeks():
     _render(chart)
 
 
-@pytest.mark.parametrize("label, short", [("2025 Fall/Winter", "Fall 25"),
-    ("2026 Spring/Summer", "Sum 26"), ("2099 Fall/Winter", "Fall 99"),
-    ("Custom season", "Custom season")])
-def test_short_season_label(label, short):
-    assert ts._short_season_label(label) == short
-
-
 def test_session_season_row_always_uses_short_labels_with_full_tooltip():
     chart = _charts(_build(*_long_data()))[0]
     row = next(layer for layer in chart.spec["layer"]

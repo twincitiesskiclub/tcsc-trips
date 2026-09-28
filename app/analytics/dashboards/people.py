@@ -1,6 +1,6 @@
 """Who comes and who drifts. Names are shown; every /admin user can see them."""
 from collections import defaultdict
-from datetime import date, timedelta
+from datetime import timedelta
 
 from app import utils
 from app.analytics import charts
@@ -8,17 +8,11 @@ from app.analytics.dashboards.base import (
     Chart, Dashboard, Filters, Note, Table, Tile, Tiles, load_attendance, load_sessions,
 )
 from app.analytics.models import PracticeAttendance, PracticeSession
+from app.analytics.seasons import season_in_progress, season_key, shift_season
 from app.models import Season, SlackUser, User, UserSeason, db
 
 KIND_LABELS = {"practice": "Practice", "event": "Event", "trip": "Trip"}
 BUCKETS = ("1", "2", "3", "4 to 5", "6 or more")
-
-
-# season_key and _shift rely on "YYYY Spring/Summer" or "YYYY Fall/Winter"
-# labels from app/analytics/seasons.py and Season.name.
-def season_key(label):
-    year, _, kind = label.partition(" ")
-    return (int(year), 1 if kind == "Fall/Winter" else 0) if year.isdigit() else (0, 0)
 
 
 def _season_sort(labels):
@@ -26,26 +20,6 @@ def _season_sort(labels):
     def key(label):
         return season_key(label[:-len(" (so far)")] if label.endswith(" (so far)") else label)
     return sorted(set(labels), key=key)
-
-
-def _shift(label, years):
-    year, _, kind = (label or "").partition(" ")
-    return f"{int(year) + years} {kind}" if year.isdigit() else None
-
-
-def season_in_progress(label, today) -> bool:
-    year, _, kind = (label or "").partition(" ")
-    if len(year) != 4 or not year.isdigit():
-        return False
-    try:
-        year = int(year)
-        if kind == "Spring/Summer":
-            return date(year, 5, 1) <= today <= date(year, 8, 31)
-        if kind == "Fall/Winter":
-            return date(year, 9, 1) <= today <= date(year + 1, 4, 30)
-    except ValueError:
-        pass
-    return False
 
 
 def attendance_pairs(sessions, attendance):
@@ -73,7 +47,7 @@ def _first_season(pairs):
 def retention(pairs):
     seasons, first, rows = _by_season(pairs), _first_season(pairs), []
     for label in sorted(seasons, key=season_key):
-        following = _shift(label, 1)
+        following = shift_season(label, 1)
         if following not in seasons:
             continue
         for group in ("First season", "Returning"):
@@ -117,7 +91,7 @@ def current_label(pairs, today):
 
 def lapsed_regulars(pairs, today):
     current = current_label(pairs, today)
-    previous = _shift(current, -1)
+    previous = shift_season(current, -1)
     practices = [(p, s) for p, s in pairs if s.kind == "practice" and s.date <= today]
     if current is None or not any(s.date >= today - timedelta(days=14) for _, s in practices):
         return []
@@ -134,7 +108,7 @@ def lapsed_regulars(pairs, today):
 
 
 def everyone(pairs, current):
-    previous, rows = _shift(current, -1), {}
+    previous, rows = shift_season(current, -1), {}
     for person, session in pairs:
         row = rows.setdefault(person, {"person_key": person, "first_seen": session.date,
                                        "last_seen": session.date, "practice_this": 0, "event_this": 0,

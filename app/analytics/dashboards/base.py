@@ -10,6 +10,7 @@ from werkzeug.datastructures import MultiDict
 from app import utils
 from app.analytics import SYNC_CHANNELS, charts
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
+from app.analytics.seasons import season_key
 from app.models import AppConfig, db
 from app.practices.models import PracticeLocation
 
@@ -187,9 +188,7 @@ def filter_options(dashboard, domains=None) -> dict:
     days = _distinct(PracticeSession.day_of_week, dashboard.kinds)
     formats = _distinct(PracticeSession.format, dashboard.kinds)
     kinds = _distinct(PracticeSession.kind, dashboard.kinds)
-    # Same-year fall/winter comes after spring/summer; labels begin with the year.
-    seasons = sorted(domains["seasons"], key=lambda value: (
-        value[:4], "Fall/Winter" in value, value), reverse=True)
+    seasons = sorted(domains["seasons"], key=lambda value: (season_key(value), value), reverse=True)
     return {"seasons": [(value, value) for value in seasons],
             "days": [(value, value) for value in DAYS if value in days],
             "activities": [(value, value) for value in sorted(domains["activities"])],

@@ -5,6 +5,7 @@ from datetime import date, time, timedelta
 from app.analytics import charts
 from app.analytics.dashboards.base import Chart, Note, Table
 from app.analytics.history_config import load_history_config
+from app.analytics.seasons import shift_season, short_season_label
 
 
 def _session_rows(sessions, attendance):
@@ -111,10 +112,7 @@ def week_of_season(weeks) -> list[dict]:
     if not weeks:
         return []
     latest = max(weeks, key=lambda w: w["week"])["season_label"]
-    year, _, season_type = latest.partition(" ")
-    labels = {latest}
-    if year.isdigit() and season_type:
-        labels.add(f"{int(year) - 1} {season_type}")
+    labels = {latest, shift_season(latest, -1)}
     starts = {}
     for week in weeks:
         label = week["season_label"]
@@ -132,14 +130,6 @@ def week_of_season(weeks) -> list[dict]:
                      "week_of_season": number, "total": week["total"], "segment": segments[label]})
         previous[label] = number
     return rows
-
-
-def _short_season_label(label):
-    year, _, season_type = label.partition(" ")
-    names = {"Fall/Winter": "Fall", "Spring/Summer": "Sum"}
-    if year.isdigit() and season_type in names:
-        return f"{names[season_type]} {year[-2:]}"
-    return label
 
 
 def _capacity_lines(sessions):
@@ -212,7 +202,7 @@ def split_blocks(sessions, attendance, filters):
         seasons[session.season_label].append(session.date)
     season_labels = [{"date": (min(days) + (max(days) - min(days)) / 2).isoformat(),
                       "season_label": label,
-                      "short_label": _short_season_label(label),
+                      "short_label": short_season_label(label),
                       "span": (max(days) - min(days)).days + 14}
                      for label, days in seasons.items()]
     season_row = {
@@ -236,8 +226,8 @@ def split_blocks(sessions, attendance, filters):
                ("total", "Total RSVPs"), ("status", "Status")])
 
     summary = season_summary(weeks, lines)
-    season_order = [_short_season_label(row["season_label"]) for row in summary]
-    season_rows = [{"season_label": row["season_label"], "short_label": _short_season_label(row["season_label"]),
+    season_order = [short_season_label(row["season_label"]) for row in summary]
+    season_rows = [{"season_label": row["season_label"], "short_label": short_season_label(row["season_label"]),
                     "measure": label, "rsvps": row[key]}
                    for row in summary for key, label in (("avg", "Average"), ("peak", "Peak"))]
     season_description = "Average and peak weekly RSVPs are compared by season."
@@ -298,7 +288,7 @@ def split_blocks(sessions, attendance, filters):
         comparison, [("season_label", "Season"), ("week", "Week starting"),
                      ("week_of_season", "Week of season"), ("total", "RSVPs")])
 
-    preferences = [{**row, "short_label": _short_season_label(row["season_label"])}
+    preferences = [{**row, "short_label": short_season_label(row["season_label"])}
                    for row in slot_preference(sessions, attendance)]
     preference_description = "People who chose only early, only late or both slots are counted by season across split and merged sessions."
     preference_body = charts.grouped_bars(
