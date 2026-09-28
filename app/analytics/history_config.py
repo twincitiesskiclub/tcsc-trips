@@ -77,45 +77,42 @@ def _matches(text: str, keywords: list[str]) -> bool:
     return any(_normalize(keyword) in text for keyword in keywords)
 
 
-def resolve_venue(raw: str | None, cfg: HistoryConfig, locations: list[LocationRef]) -> dict:
-    """Resolve the first matching rule, preserving a missing DB row as a match."""
-    result = {
-        "location_id": None, "location_name": None,
-        "lat": cfg.default_lat, "lon": cfg.default_lon,
-        "is_indoor": False, "matched": False, "rule_kind": None,
+def _is_indoor(cfg: HistoryConfig, *names) -> bool:
+    indoor = {_normalize(name) for name in cfg.indoor_locations}
+    return any(_normalize(name) in indoor for name in names if name is not None)
+
+
+def location_fields(location: LocationRef, cfg: HistoryConfig) -> dict:
+    """Session venue fields for a practice_locations row."""
+    return {
+        "location_id": location.id, "location_name": location.name,
+        "lat": location.lat if location.lat is not None else cfg.default_lat,
+        "lon": location.lon if location.lon is not None else cfg.default_lon,
+        "is_indoor": _is_indoor(cfg, location.name, location.spot),
     }
+
+
+def resolve_venue(raw: str | None, cfg: HistoryConfig,
+                  locations: list[LocationRef]) -> tuple[dict, list[str]]:
+    """Session venue fields for the first matching rule, plus review flags."""
+    fields = {"location_id": None, "location_name": None,
+              "lat": cfg.default_lat, "lon": cfg.default_lon, "is_indoor": False}
     text = _normalize(raw or "")
-    for rule in cfg.venues:
-        if not _matches(text, rule["match"]):
-            continue
-        result["matched"] = True
-        spot = None
-        if "location" in rule:
-            result["rule_kind"] = "location"
-            target = rule["location"]
-            result["location_name"] = target["name"]
-            spot = target.get("spot")
-            location = next((loc for loc in locations if loc.name == target["name"]
-                             and ("spot" not in target or loc.spot == spot)), None)
-            if location is not None:
-                result["location_id"] = location.id
-                spot = location.spot
-                if location.lat is not None:
-                    result["lat"] = location.lat
-                if location.lon is not None:
-                    result["lon"] = location.lon
-        else:
-            result["rule_kind"] = "name"
-            result["location_name"] = rule["name"]
-            result["lat"] = rule.get("lat", cfg.default_lat)
-            result["lon"] = rule.get("lon", cfg.default_lon)
-        indoor = {_normalize(name) for name in cfg.indoor_locations}
-        result["is_indoor"] = any(
-            _normalize(value) in indoor for value in (result["location_name"], spot)
-            if value is not None
-        )
-        return result
-    return result
+    rule = next((rule for rule in cfg.venues if _matches(text, rule["match"])), None)
+    if rule is None:
+        return fields, ["unknown_venue"]
+    if "name" in rule:
+        return {**fields, "location_name": rule["name"],
+                "lat": rule.get("lat", cfg.default_lat), "lon": rule.get("lon", cfg.default_lon),
+                "is_indoor": _is_indoor(cfg, rule["name"])}, []
+    target = rule["location"]
+    location = next((loc for loc in locations if loc.name == target["name"]
+                     and ("spot" not in target or loc.spot == target["spot"])), None)
+    if location is not None:
+        return location_fields(location, cfg), []
+    # A rule naming a missing DB row still counts as a known venue.
+    return {**fields, "location_name": target["name"],
+            "is_indoor": _is_indoor(cfg, target["name"], target.get("spot"))}, ["unknown_location_row"]
 
 
 def classify_title(title: str, cfg: HistoryConfig) -> dict:

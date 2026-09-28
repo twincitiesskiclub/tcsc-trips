@@ -5,7 +5,7 @@ import re
 
 from app.analytics.drafts import AppPractice, ArchivedMessage, LocationRef, SessionDraft
 from app.analytics.history_config import (
-    HistoryConfig, activity_bucket, resolve_venue, workout_bucket,
+    HistoryConfig, activity_bucket, location_fields, resolve_venue, workout_bucket,
 )
 from app.analytics.parse_template import parse_times
 
@@ -62,20 +62,12 @@ def _mapped_emoji(practice: AppPractice, mapping: dict[str, str]) -> str | None:
     return candidates[0] if best and len(candidates) == 1 else None
 
 
-def _venue(practice: AppPractice, cfg: HistoryConfig, locations: list[LocationRef]) -> dict:
+def _venue(practice: AppPractice, cfg: HistoryConfig, locations: list[LocationRef]):
     location = next((loc for loc in locations if loc.name == practice.location_name
                      and loc.spot == practice.location_spot), None)
     if location is None:
         return resolve_venue(f"{practice.location_name} - {practice.location_spot}", cfg, locations)
-    indoor = {name.lower().replace("’", "'") for name in cfg.indoor_locations}
-    return {
-        "location_id": location.id, "location_name": location.name,
-        "lat": location.lat if location.lat is not None else cfg.default_lat,
-        "lon": location.lon if location.lon is not None else cfg.default_lon,
-        "is_indoor": any(value.lower().replace("’", "'") in indoor
-                         for value in (location.name, location.spot) if value),
-        "matched": True, "rule_kind": "location",
-    }
+    return location_fields(location, cfg), []
 
 
 def extract_app_sessions(
@@ -113,20 +105,15 @@ def extract_app_sessions(
                     if emoji is None:
                         flags.append("emoji_unknown")
 
-            venue = _venue(practice, cfg, locations)
-            if not venue["matched"]:
-                flags.append("unknown_venue")
-            if venue["rule_kind"] == "location" and venue["location_id"] is None:
-                flags.append("unknown_location_row")
+            venue, venue_flags = _venue(practice, cfg, locations)
+            flags.extend(venue_flags)
             title = (", ".join(practice.activities) + " - " + ", ".join(practice.types)
                      if practice.activities or practice.types else "Practice")
             sessions.append(SessionDraft(
                 session_key=f"practice:{practice.id}", group_key=f"{channel}:{ts}", era="app",
                 date=practice.date.date(), start_time=practice.date.time(), title=title,
                 venue_raw=f"{practice.location_name} - {practice.location_spot}",
-                location_id=venue["location_id"], location_name=venue["location_name"],
-                lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
-                activities=list(practice.activities), workout_types=list(practice.types),
+                **venue, activities=list(practice.activities), workout_types=list(practice.types),
                 activity=activity_bucket(practice.activities, cfg),
                 workout_type=workout_bucket(practice.types, cfg),
                 kind="event" if "Kickoff" in practice.activities else "practice",

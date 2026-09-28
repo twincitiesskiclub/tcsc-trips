@@ -191,11 +191,8 @@ def extract_template_sessions(
     if not dates:
         return []
     title, venue_raw = parse_title(text), parse_venue(text)
-    venue = resolve_venue(venue_raw, cfg, locations)
-    if not venue["matched"]:
-        flags.append("unknown_venue")
-    if venue["rule_kind"] == "location" and venue["location_id"] is None:
-        flags.append("unknown_location_row")
+    venue, venue_flags = resolve_venue(venue_raw, cfg, locations)
+    flags.extend(venue_flags)
     classification = classify_title(title, cfg)
     if not classification["matched"]:
         flags.append("unmatched_title")
@@ -229,9 +226,7 @@ def extract_template_sessions(
     return [SessionDraft(
         session_key=f"{group_key}:{suffix}", group_key=group_key, era="template",
         date=day, start_time=start, title=title, venue_raw=venue_raw,
-        location_id=venue["location_id"], location_name=venue["location_name"],
-        lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
-        activities=list(classification["activities"]), workout_types=list(classification["workout_types"]),
+        **venue, activities=list(classification["activities"]), workout_types=list(classification["workout_types"]),
         activity=activity_bucket(classification["activities"], cfg),
         workout_type=workout_bucket(classification["workout_types"], cfg), kind=classification["kind"],
         format="split" if slot else "single", slot=slot, rsvp_emoji=emoji,

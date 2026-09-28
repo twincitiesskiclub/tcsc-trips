@@ -27,30 +27,27 @@ def test_real_config_loads(cfg):
 
 
 def test_venue_by_name_and_spot(cfg):
-    v = resolve_venue("The Trailhead @ Wirth", cfg, LOCS)
-    assert (v["location_id"], v["matched"]) == (36, True)
-    assert v["rule_kind"] == "location"
-    v = resolve_venue("Theodore Wirth Trails", cfg, LOCS)
+    v, flags = resolve_venue("The Trailhead @ Wirth", cfg, LOCS)
+    assert (v["location_id"], flags) == (36, [])
+    v, _ = resolve_venue("Theodore Wirth Trails", cfg, LOCS)
     assert v["location_id"] == 34
 
 
 def test_indoor_and_unknown_venue(cfg):
-    assert resolve_venue("Balance Fitness Studio", cfg, LOCS)["is_indoor"] is True
-    v = resolve_venue("Somewhere New", cfg, LOCS)
-    assert v["matched"] is False and v["location_id"] is None
-    assert v["rule_kind"] is None
+    assert resolve_venue("Balance Fitness Studio", cfg, LOCS)[0]["is_indoor"] is True
+    v, flags = resolve_venue("Somewhere New", cfg, LOCS)
+    assert flags == ["unknown_venue"] and v["location_id"] is None
     assert (v["lat"], v["lon"]) == (44.9778, -93.2650)
 
 
 def test_config_only_venue_has_own_coordinates(cfg):
-    v = resolve_venue("Beards Plaisance", cfg, LOCS)
+    v, flags = resolve_venue("Beards Plaisance", cfg, LOCS)
     assert v["location_id"] is None and v["location_name"] == "Beards Plaisance"
-    assert v["rule_kind"] == "name"
-    assert v["lat"] == pytest.approx(44.9215) and v["matched"] is True
+    assert v["lat"] == pytest.approx(44.9215) and flags == []
 
 
 def test_private_home_never_keeps_raw_text(cfg):
-    v = resolve_venue("Somebody's House", cfg, LOCS)
+    v, _ = resolve_venue("Somebody's House", cfg, LOCS)
     assert v["location_name"] == "Member's home"
 
 
@@ -88,35 +85,32 @@ def test_base_emoji():
 
 @pytest.mark.parametrize("raw", [None, "", "Somewhere New"])
 def test_unmatched_venue_returns_complete_shape(cfg, raw):
-    assert resolve_venue(raw, cfg, LOCS) == {
+    assert resolve_venue(raw, cfg, LOCS) == ({
         "location_id": None, "location_name": None,
-        "lat": cfg.default_lat, "lon": cfg.default_lon,
-        "is_indoor": False, "matched": False, "rule_kind": None,
-    }
+        "lat": cfg.default_lat, "lon": cfg.default_lon, "is_indoor": False,
+    }, ["unknown_venue"])
 
 
 def test_missing_location_row_retains_rule_name_and_indoor_spot(cfg):
-    assert resolve_venue("ROYALS ATHLETIC CENTER", cfg, LOCS) == {
+    assert resolve_venue("ROYALS ATHLETIC CENTER", cfg, LOCS) == ({
         "location_id": None, "location_name": "Hopkins Highschool",
-        "lat": cfg.default_lat, "lon": cfg.default_lon,
-        "is_indoor": True, "matched": True, "rule_kind": "location",
-    }
+        "lat": cfg.default_lat, "lon": cfg.default_lon, "is_indoor": True,
+    }, ["unknown_location_row"])
 
 
 def test_indoor_spot_and_nullable_coordinates(cfg):
     locations = [LocationRef(99, "Hopkins Highschool", "Royals Athletic Center", None, None)]
-    venue = resolve_venue("Royals Athletic", cfg, locations)
+    venue, _ = resolve_venue("Royals Athletic", cfg, locations)
     assert venue["location_id"] == 99
     assert venue["is_indoor"] is True
     assert (venue["lat"], venue["lon"]) == (cfg.default_lat, cfg.default_lon)
 
 
 def test_location_spot_must_match(cfg):
-    venue = resolve_venue("The Trailhead", cfg, LOCS[:1])
-    assert venue["matched"] is True
+    venue, flags = resolve_venue("The Trailhead", cfg, LOCS[:1])
+    assert flags == ["unknown_location_row"]
     assert venue["location_id"] is None
     assert venue["location_name"] == "Theodore Wirth"
-    assert venue["rule_kind"] == "location"
 
 
 def test_venue_normalizes_apostrophes_on_both_sides(cfg):
@@ -125,9 +119,9 @@ def test_venue_normalizes_apostrophes_on_both_sides(cfg):
     custom = replace(cfg, venues=[{
         "match": ["FAKE’S FIELD"], "name": "Synthetic Field",
     }])
-    assert resolve_venue("fake's field", custom, [])["matched"] is True
+    assert resolve_venue("fake's field", custom, [])[1] == []
     custom.venues[0]["match"] = ["fake's field"]
-    assert resolve_venue("FAKE’S FIELD", custom, [])["matched"] is True
+    assert resolve_venue("FAKE’S FIELD", custom, [])[1] == []
 
 
 def test_all_type_rules_contribute_in_rule_order(cfg):

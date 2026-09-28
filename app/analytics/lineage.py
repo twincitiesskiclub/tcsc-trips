@@ -73,7 +73,7 @@ def _created_draft(message, fields, cfg, locations):
     line = next((line for line in message.raw.get("text", "").splitlines() if line.strip()), "")
     title = fields.get("title") or unescape(line).replace("*", "").replace("_", "").strip()[:120]
     classification = classify_title(title, cfg)
-    venue = resolve_venue(fields.get("location"), cfg, locations)
+    venue, _ = resolve_venue(fields.get("location"), cfg, locations)
     activities = list(fields.get("activities", classification["activities"]))
     types = list(fields.get("types", classification["workout_types"]))
     emojis = list(fields.get("rsvp_emoji", ["white_check_mark"]))
@@ -85,9 +85,7 @@ def _created_draft(message, fields, cfg, locations):
         date=date.fromisoformat(fields["date"]),
         start_time=time.fromisoformat(fields["start_time"]) if "start_time" in fields else None,
         title=title, venue_raw=fields.get("location"),
-        location_id=venue["location_id"], location_name=venue["location_name"],
-        lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
-        activities=activities, workout_types=types,
+        **venue, activities=activities, workout_types=types,
         activity=activity_bucket(activities, cfg), workout_type=workout_bucket(types, cfg),
         kind=kind, category=fields.get("category", ""), status=fields.get("status", "held"),
         rsvp_emoji=emojis[0] if len(emojis) == 1 else None, rsvp_emoji_set=emojis,
@@ -116,9 +114,9 @@ def _apply_fields(state, fields, cfg, locations):
         session.start_time = time.fromisoformat(value) if isinstance(value, str) else value
     if "location" in fields:
         session.venue_raw = fields["location"]
-        venue = resolve_venue(session.venue_raw, cfg, locations)
-        for name in ("location_id", "location_name", "lat", "lon", "is_indoor"):
-            setattr(session, name, venue[name])
+        venue, _ = resolve_venue(session.venue_raw, cfg, locations)
+        for name, value in venue.items():
+            setattr(session, name, value)
     if "activities" in fields:
         session.activities = list(fields["activities"])
         session.activity = activity_bucket(session.activities, cfg)
