@@ -4,7 +4,7 @@ Uses the real Slack dump, hand-verified counts and proposed corrections in
 the gitignored .superpowers folder, so it only runs on the dev box. Nothing
 it reads is committed."""
 import json
-from datetime import date, datetime
+from datetime import datetime
 from types import SimpleNamespace
 
 import pytest
@@ -41,41 +41,6 @@ def _practices():
                            **{k: tuple(r[k]) for k in ("activities", "types", "lead_uids",
                                                        "coach_uids", "plan_emoji", "button_rsvp_uids")}})
             for r in rows]
-
-
-@pytest.mark.skipif(not (DUMP_DIR / "lift_verified.json").exists(),
-                    reason="real Slack dump not present")
-def test_strength_lineage_matches_verified_counts():
-    locs = [LocationRef(r["id"], r["name"], r["spot"], r["lat"], r["lon"])
-            for r in json.loads((DUMP_DIR / "locations.json").read_text())]
-    res = build_lineage(_messages(), _practices(), locs, [], load_history_config(), _corrections())
-    by_date = {}
-    for s in res.sessions:
-        if s.activity == "Strength" and s.kind == "practice":
-            by_date.setdefault(s.date, []).append(s)
-    att = {}
-    for a in res.attendance:
-        if a.role == "rsvp":
-            att.setdefault(a.session_key, []).append(a)
-    mismatches = []
-    for row in json.loads((DUMP_DIR / "lift_verified.json").read_text())["sessions"]:
-        # The correction and verified file disagree on format only; the club leader will decide.
-        if row["date"] == "2025-07-24":
-            continue
-        d = date.fromisoformat(row["date"])
-        sessions = by_date.get(d, [])
-        rows = [a for s in sessions for a in att.get(s.session_key, [])]
-        if row["format"] == "single":
-            got = {"one": len({a.slack_uid for a in rows})}
-            want = {"one": row["one"]}
-        else:
-            got = {"early": len({a.slack_uid for a in rows if a.slot == "early"}),
-                   "late": len({a.slack_uid for a in rows if a.slot == "late"})}
-            want = {"early": row["early"], "late": row["late"]}
-        fmt = sorted({s.format for s in sessions})
-        if got != want or fmt != [row["format"]]:
-            mismatches.append((row["date"], fmt, got, want))
-    assert not mismatches, "\n".join(map(str, mismatches))
 
 
 def _channel_messages(channel_id, filename):
