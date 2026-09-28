@@ -162,8 +162,7 @@ def split_blocks(sessions, attendance, filters):
     dates = sorted({s.date for s in sessions})
     span = (dates[-1] - dates[0]).days + 14 if dates else 14
     gap = min(((right - left).days for left, right in zip(dates, dates[1:])), default=7)
-    x_axis = {"labelAngle": 0, "labelOverlap": "greedy", "format": "%b %-d",
-              "labelPadding": 16, "tickCount": {"expr": "max(2, floor(width / 85))"}, "grid": False}
+    x_axis = {"format": "%b %-d", "labelPadding": 16, "tickCount": {"expr": "max(2, floor(width / 85))"}, "grid": False}
     x_scale = {"type": "utc"}
     if dates:
         x_scale["domain"] = [(dates[0] - timedelta(days=7)).isoformat(),
@@ -171,7 +170,7 @@ def split_blocks(sessions, attendance, filters):
     opacity = {"condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 1}
     session_body = charts.stacked_columns(
         columns, x="date", y="rsvps", color="slot", color_domain=[label for _, label in slots],
-        color_range=[charts.PALETTE["muted" if key == "unassigned" else key] for key, _ in slots], x_title="Date", y_title="RSVPs",
+        color_range=[charts.PALETTE[{"single": "violet", "unassigned": "muted"}.get(key, key)] for key, _ in slots], x_title="Date", y_title="RSVPs",
         tooltip=["date", "season_label", "format", "slot", "rsvps", "status"], x_type="temporal")
     session_body["encoding"]["order"] = {"field": "slot_order", "type": "quantitative"}
     session_body["encoding"]["x"].update(axis=x_axis, scale=x_scale)
@@ -243,8 +242,7 @@ def split_blocks(sessions, attendance, filters):
                    for row in summary for key, label in (("avg", "Average"), ("peak", "Peak"))]
     season_description = "Average and peak weekly RSVPs are compared by season."
     season_x = {"field": "short_label", "type": "ordinal", "sort": season_order,
-                "title": ["Season", "Bars: average per week. Tick: peak week."],
-                "axis": {"labelAngle": 0, "labelOverlap": "greedy"}}
+                "title": ["Season", "Bars: average per week. Tick: peak week."]}
     season_body = {
         "width": "container", "height": 260,
         "layer": [
@@ -273,21 +271,25 @@ def split_blocks(sessions, attendance, filters):
 
     comparison = week_of_season(weeks)
     comparison_description = "Weekly RSVPs are plotted by week of season for the latest season and the same season type one year earlier."
-    comparison_body = charts.line(
-        comparison, x="week_of_season", y="total", color="season_label",
-        x_title="Week of season", y_title="RSVPs", tooltip=["season_label", "week", "week_of_season", "total"])
-    comparison_body["encoding"]["x"].update(
-        type="quantitative",
-        scale={"domainMin": 1, "domainMax": max([2, *[w["week_of_season"] for w in comparison]]),
-               "zero": False, "nice": False},
-        axis={"format": "d", "tickMinStep": 1})
-    comparison_seasons = list(dict.fromkeys(row["season_label"] for row in comparison))
     current = max(weeks, key=lambda w: w["week"])["season_label"] if weeks else None
-    comparison_body["encoding"]["color"]["scale"] = {
-        "domain": comparison_seasons,
-        "range": [charts.PALETTE["violet" if label == current else "muted"] for label in comparison_seasons],
+    comparison_seasons = list(dict.fromkeys(row["season_label"] for row in comparison))
+    comparison_body = {
+        "data": {"values": comparison}, "width": "container", "height": 260,
+        "mark": {"type": "line", "strokeWidth": 2, "point": {"filled": True, "size": 64}},
+        "encoding": {
+            "x": {"field": "week_of_season", "type": "quantitative", "title": "Week of season",
+                  "scale": {"domainMin": 1, "domainMax": max([2, *[w["week_of_season"] for w in comparison]]),
+                            "zero": False, "nice": False},
+                  "axis": {"format": "d", "tickMinStep": 1}},
+            "y": {"field": "total", "type": "quantitative", "title": "RSVPs"},
+            "color": {"field": "season_label", "type": "nominal", "scale": {
+                "domain": comparison_seasons,
+                "range": [charts.PALETTE["violet" if label == current else "muted"] for label in comparison_seasons]}},
+            "detail": {"field": "segment", "type": "nominal"},
+            "tooltip": [{"field": "season_label", "type": "nominal"}, {"field": "week", "type": "nominal"},
+                        {"field": "week_of_season", "type": "nominal"}, {"field": "total", "type": "quantitative"}],
+        },
     }
-    comparison_body["encoding"]["detail"] = {"field": "segment", "type": "nominal"}
     if not comparison:
         # Vega's empty line legend produces an unbounded SVG height.
         comparison_body["encoding"]["color"]["legend"] = None
@@ -304,8 +306,7 @@ def split_blocks(sessions, attendance, filters):
         color_domain=["Early only", "Late only", "Both"],
         color_range=[charts.PALETTE[key] for key in ("early", "late", "violet")],
         x_title="Season", y_title="People", tooltip=["season_label", "preference", "people"])
-    preference_body["encoding"]["x"].update(
-        sort=season_order, axis={"labelAngle": 0, "labelOverlap": "greedy"})
+    preference_body["encoding"]["x"]["sort"] = season_order
     preference_body["mark"].update(cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
     preference_chart = Chart(
         "Who picks which slot", preference_description, preference_body,

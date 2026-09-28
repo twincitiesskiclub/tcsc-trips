@@ -217,9 +217,8 @@ def test_session_chart_uses_temporal_horizontal_axis_and_entity_colors(blocks):
     s = _charts(blocks)[0].spec
     bar = s["layer"][0]
     assert bar["encoding"]["x"]["type"] == "temporal"
-    assert bar["encoding"]["x"]["axis"]["labelAngle"] == 0
     assert bar["encoding"]["x"]["axis"]["format"] == "%b %-d"
-    assert bar["encoding"]["x"]["axis"]["labelOverlap"]
+    assert s["config"]["axis"]["labelAngle"] == 0 and s["config"]["axis"]["labelOverlap"]
     assert bar["encoding"]["color"]["scale"]["range"] == ["#2a78d6", "#eb6834", "#4a3aa7"]
     gap = next(layer for layer in s["layer"] if layer["mark"]["type"] == "tick")
     assert gap["mark"]["color"] == "#ffffff" and gap["mark"]["thickness"] == 2
@@ -243,7 +242,6 @@ def test_season_chart_uses_average_bars_and_peak_ticks(blocks):
     assert tick["data"]["values"][0]["rsvps"] == 50
     preference = _charts(blocks)[3].spec
     assert preference["encoding"]["color"]["scale"]["range"] == ["#2a78d6", "#eb6834", "#4a3aa7"]
-    assert preference["encoding"]["x"]["axis"]["labelAngle"] == 0
 
 
 def test_long_session_history_validates_and_renders():
@@ -293,6 +291,7 @@ def test_comparison_keeps_calendar_spacing_and_breaks_lines_at_missing_weeks():
     assert x["scale"]["domainMin"] == 1 and x["scale"]["zero"] is False
     assert x["axis"]["tickMinStep"] == 1 and x["axis"]["format"] == "d"
     assert chart.spec["encoding"]["detail"] == {"field": "segment", "type": "nominal"}
+    assert chart.spec["mark"]["strokeWidth"] == 2 and chart.spec["mark"]["point"]["size"] >= 64
     _render(chart)
 
 

@@ -1,5 +1,6 @@
 """What makes a practice draw: turnout by factor, normalized per season and weekday."""
 from collections import defaultdict
+from copy import deepcopy
 from datetime import date
 from statistics import median
 
@@ -115,6 +116,41 @@ def factor_rows(rows, key):
     return sorted(out, key=lambda r: -r["median_index"])
 
 
+def factor_bars(rows, *, title) -> dict:
+    height = max(80, 28 * len(rows))
+    y = {"field": "value", "type": "nominal", "title": None, "sort": None}
+    indices = [row["median_index"] for row in rows]
+    domain = [min(0.5, min(indices) - 0.05), max(1.5, max(indices) + 0.05)] if indices else [0.5, 1.5]
+    x = {"field": "median_index", "type": "quantitative", "title": "Median turnout index",
+         "scale": {"domain": domain}}
+    color = {"condition": {"test": "datum.median_index >= 1", "value": charts.PALETTE["early"]}, "value": "#e34948"}
+    text_encoding = {"y": y, "x": {"field": "median_index", "type": "quantitative"},
+                      "text": {"field": "nights", "type": "quantitative"}}
+    return {
+        "data": {"values": deepcopy(rows)}, "width": "container", "height": height,
+        "layer": [
+            {"mark": {"type": "bar", "cornerRadiusEnd": 3, "clip": False},
+             "encoding": {"y": y, "x": x, "x2": {"datum": 1}, "color": color,
+                          "opacity": {"condition": {"test": "datum.thin", "value": 0.35}, "value": 1},
+                          "tooltip": [{"field": "value", "title": title},
+                                      {"field": "median_index", "title": "Median index"},
+                                      {"field": "median_rsvps", "title": "Median RSVPs"},
+                                      {"field": "nights", "title": "Practices"}]}},
+            # Two static layers instead of a conditional mark property: align/dx on a
+            # text mark can't be driven by an encoding condition in Vega-Lite.
+            {"transform": [{"filter": "datum.median_index >= 1"}],
+             "mark": {"type": "text", "align": "left", "dx": 4, "color": charts.PALETTE["muted"]},
+             "encoding": deepcopy(text_encoding)},
+            {"transform": [{"filter": "datum.median_index < 1"}],
+             "mark": {"type": "text", "align": "right", "dx": -4, "color": charts.PALETTE["muted"]},
+             "encoding": deepcopy(text_encoding)},
+            {"data": {"values": [{"one": 1}]},
+             "mark": {"type": "rule", "color": charts.PALETTE["ref"], "strokeDash": [4, 3]},
+             "encoding": {"x": {"field": "one", "type": "quantitative"}}},
+        ],
+    }
+
+
 def load_baseline_sessions(filters):
     """All practices in the selected seasons, unfiltered by factor, so the index keeps its meaning."""
     baseline = Filters(seasons=filters.seasons, kinds=["practice"])
@@ -154,12 +190,19 @@ def build(filters):
     time_rows = sorted(rows + [{**row, "index": None} for row in nights(sessions, attendance, status="cancelled")],
                        key=lambda row: row["date"])
     over_time = "Every practice night, colored by activity. Cancelled nights are faded."
-    points = charts.points(time_rows, x="date", y="rsvps", color="color_group",
-                           tooltip=["date", "activity", "location", "rsvps", "index", "status"],
-                           color_scale={"domain": COLOR_GROUP_DOMAIN, "range": COLOR_GROUP_RANGE})
-    points["encoding"]["color"]["legend"] = {"title": "Activity"}
-    points["encoding"]["opacity"] = {
-        "condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 0.8}
+    points = {
+        "data": {"values": time_rows}, "width": "container", "height": 280,
+        "mark": {"type": "point", "filled": True, "size": 36, "opacity": 0.8},
+        "encoding": {
+            "x": {"field": "date", "type": "temporal", "title": None},
+            "y": {"field": "rsvps", "type": "quantitative", "title": "RSVPs"},
+            "color": {"field": "color_group", "type": "nominal", "legend": {"title": "Activity"},
+                      "scale": {"domain": COLOR_GROUP_DOMAIN, "range": COLOR_GROUP_RANGE}},
+            "opacity": {"condition": {"test": "datum.status === 'cancelled'", "value": 0.35}, "value": 0.8},
+            "tooltip": [{"field": field, "type": "quantitative" if field == "rsvps" else "nominal"}
+                        for field in ("date", "activity", "location", "rsvps", "index", "status")],
+        },
+    }
     blocks.append(Chart("Turnout over time", over_time, points,
                         time_rows, [("date", "Date"), ("activity", "Activity"), ("location", "Location"),
                                     ("rsvps", "RSVPs"), ("index", "Index"), ("status", "Status")]))
@@ -167,7 +210,7 @@ def build(filters):
         factor = factor_rows(rows, key)
         description = (f"Median turnout index by {label.lower()}. Bars run right of 1.0 when practices draw "
                        "more than a typical practice for that season and weekday, left when they draw fewer.")
-        blocks.append(Chart(label, description, charts.factor_bars(factor, title=label),
+        blocks.append(Chart(label, description, factor_bars(factor, title=label),
                             factor, [("value", label), ("median_index", "Median index"),
                                      ("median_rsvps", "Median RSVPs"), ("nights", "Practices")]))
     if any(set(row["formats"]) & {"split", "merged"} for row in rows):

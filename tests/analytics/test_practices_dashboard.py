@@ -299,3 +299,56 @@ def test_two_night_baseline_has_no_index_even_when_other_groups_are_large():
     assert [r["index"] for r in p.with_index(thin, medians)] == [None, None]
     assert medians[("S", "Tuesday")] == (15, 2)
     assert p.with_index(other[:1], medians)[0]["index"] == 1.0
+
+
+def _check(body):
+    spec = p.charts.spec("Median turnout by activity", body)
+    jsonschema.validate(spec, SCHEMA)
+    assert vlc.vegalite_to_svg(spec)
+
+
+def test_factor_bars_validate_and_render_with_thin_groups():
+    rows = [{"value": "Run", "median_index": 1.2, "median_rsvps": 24, "nights": 5, "thin": False},
+            {"value": "Ski", "median_index": 0.8, "median_rsvps": 16, "nights": 2, "thin": True}]
+    body = p.factor_bars(rows, title="Activity")
+    bar, high_label, low_label, rule = body["layer"]
+    assert bar["encoding"]["opacity"] == {"condition": {"test": "datum.thin", "value": 0.35}, "value": 1}
+    assert bar["encoding"]["x"]["field"] == "median_index"
+    assert bar["encoding"]["y"]["field"] == "value"
+    assert high_label["encoding"]["text"]["field"] == "nights"
+    assert low_label["encoding"]["text"]["field"] == "nights"
+    assert rule["data"]["values"] == [{"one": 1}]
+    assert rule["encoding"]["x"]["field"] == "one"
+    _check(body)
+
+
+def test_factor_bars_diverge_from_one_with_computed_domain_and_color_condition():
+    rows = [{"value": "Run", "median_index": 1.8, "median_rsvps": 24, "nights": 5, "thin": False},
+            {"value": "Ski", "median_index": 0.3, "median_rsvps": 6, "nights": 2, "thin": True}]
+    body = p.factor_bars(rows, title="Activity")
+    bar, high_label, low_label, rule = body["layer"]
+    assert bar["encoding"]["x2"] == {"datum": 1}
+    assert bar["encoding"]["color"] == {
+        "condition": {"test": "datum.median_index >= 1", "value": p.charts.PALETTE["early"]},
+        "value": "#e34948"}
+    assert bar["encoding"]["x"]["scale"] == {"domain": [0.25, 1.85]}
+    assert bar["mark"]["clip"] is False
+    assert high_label["mark"] == {"type": "text", "align": "left", "dx": 4, "color": p.charts.PALETTE["muted"]}
+    assert high_label["transform"] == [{"filter": "datum.median_index >= 1"}]
+    assert low_label["mark"] == {"type": "text", "align": "right", "dx": -4, "color": p.charts.PALETTE["muted"]}
+    assert low_label["transform"] == [{"filter": "datum.median_index < 1"}]
+    assert rule["mark"]["strokeDash"] == [4, 3]
+    _check(body)
+
+
+def test_factor_bars_domain_falls_back_when_no_rows():
+    body = p.factor_bars([], title="Activity")
+    bar = body["layer"][0]
+    assert bar["encoding"]["x"]["scale"]["domain"] == [0.5, 1.5]
+
+
+def test_factor_bar_text_layers_have_independent_encodings():
+    body = p.factor_bars([], title="Activity")
+    high_label, low_label = body["layer"][1:3]
+    high_label["encoding"]["text"]["field"] = "median_rsvps"
+    assert low_label["encoding"]["text"]["field"] == "nights"
