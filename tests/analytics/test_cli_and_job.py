@@ -98,53 +98,38 @@ def test_corrections_commands(app, transaction, tmp_path, command):
     assert transaction.commit.call_count == (command == "import")
 
 
-def test_flags_reads_db_sessions_and_builds_misses_without_writes(app, transaction, tmp_path):
-    from app.analytics import cli
-    from app.analytics.drafts import ArchivedMessage, LineageResult, TripSignup
-    post = ArchivedMessage("CFAKEFLAGS", "4087911600.000100", {"text": "Invented practice"},
-                           replies=({"text": "Invented reply"},), archive_id=17)
-    miss = ArchivedMessage("CFAKEFLAGS", "4087911601.000100", {
-        "text": "Invented reminder", "reactions": [{"name": "six", "count": 7}]})
-    key = f"{post.channel_id}:{post.ts}"
+def test_flags_reports_flagged_sessions_and_last_rebuild_coverage(app, db_session, transaction, tmp_path):
+    from app.analytics.archive import upsert_message
+    from app.analytics.models import PracticeSession
+    from app.models import AppConfig
+
+    post = upsert_message("CFAKEFLAGS", {"ts": "4087911600.000100", "text": "Invented practice"})
+    upsert_message("CFAKEFLAGS", {"ts": "4087911600.000200", "thread_ts": post.ts, "text": "Invented reply"})
+    miss = upsert_message("CFAKEFLAGS", {"ts": "4087911601.000100", "text": "Invented reminder",
+                                         "reactions": [{"name": "six", "count": 7}]})
+    db_session.add(PracticeSession(
+        session_key="flags-test:main", group_key="flags-test", era="template", date=date(2099, 7, 16),
+        day_of_week="Thursday", season_label="2099", title="Invented title", flags=["unknown_venue"],
+        rsvp_count=2, needs_review=True, source_message_id=post.id))
     miss_key = f"{miss.channel_id}:{miss.ts}"
-    flagged = SimpleNamespace(session_key="practice:999", group_key=key, source_message_id=17,
-                              date=date(2099, 7, 16), title="Invented title", flags=["unknown_venue"],
-                              format="single", rsvp_count=2)
-    inputs = ([post, miss], [], [], [])
-    practices = [SimpleNamespace(kind="practice", date=day, season_label="2099 Fall/Winter")
-                 for day in (date(2099, 11, 3), date(2099, 11, 24))]
-    signups = [TripSignup("cuyuna", 2099, date(2099, 7, 16), "UFAKE6001", None,
-                          "trip_registration:999")]
+    AppConfig.set("analytics_coverage", {"computed_at": "2099-07-20T00:00:00",
+                                         "candidates": [{"post_key": miss_key}], "empty_weeks": ["2099-11-09"]})
     output = tmp_path / "flags.json"
-    with patch.object(cli, "load_inputs", return_value=inputs), \
-         patch.object(cli, "load_app_trip_signups", return_value=signups), \
-         patch.object(cli, "load_corrections", return_value={}) as corrections, \
-         patch.object(cli.AppConfig, "get", return_value=["snowcoach"]) as config, \
-         patch.object(cli, "build_lineage", return_value=LineageResult(practices, [], [miss_key])) as build, \
-         patch.object(cli, "flagged_sessions", return_value=[flagged]), \
-         patch.object(cli, "rebuild") as rebuild:
-        result = app.test_cli_runner().invoke(args=["analytics", "flags", "--json", str(output)])
+    result = app.test_cli_runner().invoke(args=["analytics", "flags", "--json", str(output)])
     assert result.exit_code == 0, result.output
-    config.assert_called_once_with("analytics_coach_emoji", [])
-    assert build.call_args.args[:4] == inputs
-    assert build.call_args.args[4].coach_emoji == frozenset({"snowcoach"})
-    assert build.call_args.args[5] == corrections.return_value
-    assert build.call_args.kwargs == {"trip_signups": signups}
-    rebuild.assert_not_called()
-    transaction.commit.assert_not_called()
-    assert "2099-07-16  practice:999  unknown_venue  Invented title" in result.output
+    assert "2099-07-16  flags-test:main  unknown_venue  Invented title" in result.output
     assert f"2099-07-16  {miss_key}  candidate" in result.output
     assert "2099-11-09  empty_week" in result.output
-    assert "2099-11-16  empty_week" in result.output
     data = json.loads(output.read_text())
-    assert data["empty_weeks"] == ["2099-11-09", "2099-11-16"]
-    assert data["flagged_sessions"] == [{
-        "session_key": "practice:999", "post_key": key, "date": "2099-07-16",
+    assert [row for row in data["flagged_sessions"] if row["session_key"] == "flags-test:main"] == [{
+        "session_key": "flags-test:main", "post_key": f"CFAKEFLAGS:{post.ts}", "date": "2099-07-16",
         "title": "Invented title", "flags": ["unknown_venue"], "format": "single",
         "rsvp_count": 2, "text": "Invented practice", "replies": ["Invented reply"],
     }]
     assert data["possible_misses"] == [{"post_key": miss_key, "date": "2099-07-16",
-                                          "text": "Invented reminder", "reactions": {"six": 7}}]
+                                        "text": "Invented reminder", "reactions": {"six": 7}}]
+    assert data["empty_weeks"] == ["2099-11-09"]
+    transaction.commit.assert_not_called()
 
 
 @pytest.mark.parametrize("failure", ["sync", "commit", "rebuild", "weather", "client"])

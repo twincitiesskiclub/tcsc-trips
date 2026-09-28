@@ -203,21 +203,32 @@ def rebuild(*, cfg=None, commit=True) -> dict:
         raise
 
 
-def coverage_snapshot(candidate_keys, weeks) -> dict:
-    pairs = [tuple(key.split(":", 1)) for key in candidate_keys]
-    rows = {f"{row.channel_id}:{row.ts}": row for row in SlackArchiveMessage.query.filter(
-        tuple_(SlackArchiveMessage.channel_id, SlackArchiveMessage.ts).in_(pairs)).all()} \
-        if candidate_keys else {}
+def archive_rows(keys) -> dict[str, SlackArchiveMessage]:
+    """Archived messages by "<channel>:<ts>"."""
+    pairs = [tuple(key.split(":", 1)) for key in keys]
+    return {f"{row.channel_id}:{row.ts}": row for row in SlackArchiveMessage.query.filter(
+        tuple_(SlackArchiveMessage.channel_id, SlackArchiveMessage.ts).in_(pairs)).all()} if keys else {}
+
+
+def candidate_rows(keys) -> list[dict]:
+    """Central date, full text, and reactions (largest first) for each candidate post."""
+    rows = archive_rows(keys)
     candidates = []
-    for key in candidate_keys:
+    for key in keys:
         row = rows.get(key)
-        text = next((line for line in (row.text if row else "").splitlines() if line.strip()), "")
-        reactions = sorted((row.raw.get("reactions", []) if row else []),
-                           key=lambda r: -r.get("count", 0))[:3]
-        candidates.append({"post_key": key, "channel": key.split(":")[0],
+        reactions = sorted((row.raw.get("reactions", []) if row else []), key=lambda r: -r.get("count", 0))
+        candidates.append({"post_key": key,
                            "date": utc_naive_to_central_naive(row.posted_at).date().isoformat() if row else "",
-                           "text": text[:140],
+                           "text": row.text if row else "",
                            "reactions": {r["name"]: r.get("count", 0) for r in reactions}})
+    return candidates
+
+
+def coverage_snapshot(candidate_keys, weeks) -> dict:
+    candidates = [dict(row, channel=row["post_key"].split(":")[0],
+                       text=next((line for line in row["text"].splitlines() if line.strip()), "")[:140],
+                       reactions=dict(list(row["reactions"].items())[:3]))
+                  for row in candidate_rows(candidate_keys)]
     return {"computed_at": datetime.utcnow().isoformat(timespec="seconds"),
             "candidates": candidates, "empty_weeks": [week.isoformat() for week in weeks]}
 
