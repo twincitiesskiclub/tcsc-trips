@@ -60,11 +60,8 @@ def fetch_hours(lat: float, lon: float, start: date, end: date, *, http_get=requ
             raise ValueError("Mismatched hourly array lengths")
         hours = []
         for index, timestamp in enumerate(times):
-            hour = datetime.fromisoformat(timestamp)
-            if hour.tzinfo is not None:
-                hour = hour.astimezone(CENTRAL_TZ).replace(tzinfo=None)
             hours.append({
-                "hour_local": hour,
+                "hour_local": datetime.fromisoformat(timestamp),
                 "temp_f": hourly["temperature_2m"][index],
                 "feels_like_f": hourly["apparent_temperature"][index],
                 "wind_mph": hourly["wind_speed_10m"][index],
@@ -85,8 +82,6 @@ def session_weather(start: datetime, hours: dict[datetime, WeatherHour]) -> dict
     Missing/null observations are excluded from sums. An entirely unknown
     window stays null, rather than being reported as zero precipitation.
     """
-    if start.tzinfo is not None:
-        start = start.astimezone(CENTRAL_TZ).replace(tzinfo=None)
     hour = start.replace(minute=0, second=0, microsecond=0)
     first = hours.get(hour)
     result = {field: getattr(first, field, None) for field in _START_FIELDS}
@@ -140,24 +135,20 @@ def apply_weather(sessions: list[PracticeSession]) -> int:
             start = _start(session)
             for field, value in session_weather(start, hours).items():
                 setattr(session, field, value)
-            sunset = get_daylight_info(session.lat, session.lon, start).sunset
-            # The existing integration stores naive UTC; also accept aware
-            # sunsets as described by the analytics adapter contract.
-            if sunset.tzinfo is None:
-                sunset = sunset.replace(tzinfo=timezone.utc)
+            sunset = get_daylight_info(session.lat, session.lon, start).sunset.replace(tzinfo=timezone.utc)
             session.minutes_after_sunset = int((CENTRAL_TZ.localize(start) - sunset).total_seconds() / 60)
             if start.replace(minute=0, second=0, microsecond=0) in hours:
                 filled += 1
     return filled
 
 
-def fetch_missing_weather(*, today: date | None = None, http_get=requests.get) -> dict:
+def fetch_missing_weather(*, http_get=requests.get) -> dict:
     """Fetch missing start hours older than the archive delay, then commit.
 
     Each location gets one date range, including the prior day for snowfall.
     Failures leave its hours absent so the next invocation retries them.
     """
-    cutoff = (today if today is not None else today_central()) - timedelta(days=6)
+    cutoff = today_central() - timedelta(days=6)
     stats = {"locations": 0, "hours": 0, "sessions": 0, "errors": 0}
     candidates = PracticeSession.query.filter(PracticeSession.date <= cutoff).all()
     pending = []

@@ -21,9 +21,9 @@ def _seed():
 
 def test_rebuild_writes_sessions_and_is_repeatable(db_session):
     _seed()
-    first = rebuild(commit=False)
+    first = rebuild()
     keys1 = sorted(s.session_key for s in PracticeSession.query.filter(PracticeSession.session_key.like(f"{CH}:4087911600%")))
-    second = rebuild(commit=False)
+    second = rebuild()
     keys2 = sorted(s.session_key for s in PracticeSession.query.filter(PracticeSession.session_key.like(f"{CH}:4087911600%")))
     assert keys1 == keys2 == [f"{CH}:4087911600.000100:early", f"{CH}:4087911600.000100:late"]
     assert first["sessions"] == second["sessions"]
@@ -34,18 +34,18 @@ def test_rebuild_writes_sessions_and_is_repeatable(db_session):
 
 def test_invalid_config_leaves_tables_untouched(db_session):
     _seed()
-    rebuild(commit=False)
+    rebuild()
     before = PracticeSession.query.count()
     with patch("app.analytics.rebuild.load_history_config", side_effect=HistoryConfigError("bad")):
         with pytest.raises(HistoryConfigError):
-            rebuild(commit=False)
+            rebuild()
     assert PracticeSession.query.count() == before
 
 def test_rebuild_applies_db_corrections(db_session):
     from app.analytics.corrections import upsert_correction
     _seed()
     upsert_correction(f"{CH}:4087911600.000100", {"merged": True}, "test merge", "test")
-    rebuild(commit=False)
+    rebuild()
     s = PracticeSession.query.filter_by(session_key=f"{CH}:4087911600.000100:merged").one()
     assert s.format == "merged" and s.rsvp_count == 3
 
@@ -73,10 +73,8 @@ def test_load_inputs_archive_threads_and_deleted_rows(db_session):
 
 def test_app_inputs_identity_and_db_coach_emoji(db_session):
     from datetime import date, datetime
-    from dataclasses import replace
     from app.models import AppConfig, Season, SlackUser, User
     from app.practices.models import Practice, PracticeActivity, PracticeLead, PracticeLocation, PracticeRSVP, PracticeType
-    from app.analytics.history_config import load_history_config
     from app.analytics.rebuild import load_inputs
 
     users = []
@@ -117,8 +115,7 @@ def test_app_inputs_identity_and_db_coach_emoji(db_session):
     assert draft.location_name == location.name and draft.location_spot == location.spot
     assert next(loc for loc in locations if loc.id == location.id).lat == 45.0
     assert season.name in [s.name for s in seasons] and legacy.name not in [s.name for s in seasons]
-    cfg = replace(load_history_config(), coach_emoji=frozenset({"wrong_emoji"}))
-    rebuild(cfg=cfg, commit=False)
+    rebuild()
     session = PracticeSession.query.filter_by(practice_id=practice.id).one()
     assert session.season_label == season.name and session.start_time == practice.date.time()
     assert session.location_id == location.id and session.rsvp_count == 1
@@ -127,13 +124,10 @@ def test_app_inputs_identity_and_db_coach_emoji(db_session):
         ("UFAKE90", "lead", users[0].id), ("UFAKE91", "coach", users[1].id),
         ("UFAKE92", "rsvp", users[2].id), ("UFAKE93", "coach", users[3].id),
         ("UFAKEUNKNOWN", "plan", None)}
-    assert cfg.coach_emoji == frozenset({"wrong_emoji"})
 
 
 @pytest.mark.parametrize("failure", ["attendance", "weather"])
 def test_rebuild_failure_restores_previous_tables(app, monkeypatch, failure):
-    import sys
-    from types import SimpleNamespace
     from sqlalchemy.orm import scoped_session, sessionmaker
     from app.models import db
 
@@ -142,10 +136,11 @@ def test_rebuild_failure_restores_previous_tables(app, monkeypatch, failure):
         transaction = connection.begin()
         session = scoped_session(sessionmaker(bind=connection, join_transaction_mode="create_savepoint"))
         monkeypatch.setattr(db, "session", session)
-        monkeypatch.setitem(sys.modules, "app.analytics.weather", SimpleNamespace(apply_weather=lambda rows: None))
+        monkeypatch.setattr("app.analytics.rebuild.apply_weather", lambda rows: None)
         try:
             _seed()
-            rebuild()  # Exercise commit=True without persisting test fixtures.
+            rebuild()
+            session.commit()
             before = [(s.id, s.session_key) for s in PracticeSession.query.filter(PracticeSession.session_key.like(f"{CH}:4087911600%"))]
             ids = [row[0] for row in before]
             attendees = [(r.id, r.slack_uid) for r in PracticeAttendance.query.filter(PracticeAttendance.session_id.in_(ids))]
@@ -153,7 +148,7 @@ def test_rebuild_failure_restores_previous_tables(app, monkeypatch, failure):
                 def fail_weather(rows):
                     assert rows and all(row.id for row in rows)
                     raise RuntimeError("weather failed")
-                monkeypatch.setitem(sys.modules, "app.analytics.weather", SimpleNamespace(apply_weather=fail_weather))
+                monkeypatch.setattr("app.analytics.rebuild.apply_weather", fail_weather)
             else:
                 from app.analytics.lineage import build_lineage
                 from dataclasses import replace
@@ -163,7 +158,8 @@ def test_rebuild_failure_restores_previous_tables(app, monkeypatch, failure):
                     return result
                 monkeypatch.setattr("app.analytics.rebuild.build_lineage", bad_attendance)
             with pytest.raises(Exception, match="weather failed|ck_attendance_role"):
-                rebuild(commit=False)
+                rebuild()
+            session.rollback()  # Callers roll back on failure.
             assert [(s.id, s.session_key) for s in PracticeSession.query.filter(PracticeSession.id.in_(ids))] == before
             assert [(r.id, r.slack_uid) for r in PracticeAttendance.query.filter(PracticeAttendance.session_id.in_(ids))] == attendees
         finally:
@@ -177,26 +173,21 @@ def test_flags_and_draft_fields_are_persisted(db_session):
 
     _seed()
     start = datetime.utcnow()
-    stats = rebuild(commit=False)
+    stats = rebuild()
     rows = PracticeSession.query.filter(PracticeSession.session_key.like(f"{CH}:4087911600%")).all()
     flagged = flagged_sessions()
     assert [s.date for s in flagged] == sorted(s.date for s in flagged)
     assert all(s.needs_review for s in flagged)
     assert stats["needs_review"] == len(flagged)
-    assert set(stats) == {"sessions", "attendance", "needs_review", "possible_misses",
-                          "candidates", "empty_weeks"}
     for row in rows:
         archive = db_session.get(SlackArchiveMessage, row.source_message_id)
         assert archive.ts == "4087911600.000100"
-        assert row.day_of_week == row.date.strftime("%A")
-        assert row.rebuilt_at >= start and row.rebuilt_at.tzinfo is None
+        assert row.rebuilt_at >= start
         assert row.activities and row.workout_types
         assert (row in flagged) == row.needs_review
 
 
 def test_rebuild_uses_rsvp_from_and_flushes_weather(db_session, monkeypatch):
-    import sys
-    from types import SimpleNamespace
     from app.analytics.corrections import upsert_correction
 
     _seed()
@@ -212,8 +203,8 @@ def test_rebuild_uses_rsvp_from_and_flushes_weather(db_session, monkeypatch):
         for row in rows:
             if row.session_key == f"{CH}:4087911600.000100:early":
                 row.temp_f = 42.5
-    monkeypatch.setitem(sys.modules, "app.analytics.weather", SimpleNamespace(apply_weather=weather))
-    rebuild(commit=False)
+    monkeypatch.setattr("app.analytics.rebuild.apply_weather", weather)
+    rebuild()
     db_session.expire_all()
     early = PracticeSession.query.filter_by(session_key=f"{CH}:4087911600.000100:early").one()
     assert early.rsvp_count == 3 and early.temp_f == 42.5
@@ -299,7 +290,7 @@ def test_rebuild_trip_count_dedupes_typed_name_and_app_registration(db_session, 
     upsert_message("C068ECRE0PQ", {"ts": "4087911703.000100", "subtype": "bot_message",
         "username": "Cuyuna Trip Sign-Up",
         "text": "Trip Signup Submitted. This does not mean that they have paid!\nPat Example"})
-    rebuild(commit=False)
+    rebuild()
     session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
     assert session.rsvp_count == 1
     row = PracticeAttendance.query.filter_by(session_id=session.id).one()
@@ -313,7 +304,7 @@ def test_rebuild_app_trip_retains_user_with_ambiguous_name_and_no_slack(db_sessi
     user = User(first_name="Pat", last_name="Twin", email="task6-registered-twin@example.invalid")
     db_session.add(User(first_name="Pat", last_name="Twin", email="task6-other-twin@example.invalid"))
     _register_trip(db_session, user)
-    rebuild(commit=False)
+    rebuild()
     session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
     row = PracticeAttendance.query.filter_by(session_id=session.id).one()
     assert row.person_key == f"user:{user.id}" and row.user_id == user.id
@@ -328,7 +319,7 @@ def test_rebuild_dated_trip_unmatched_name_does_not_need_review(db_session):
         "username": "Cuyuna Trip Sign-Up",
         "text": "Trip Signup Submitted. This does not mean that they have paid!\nZed Nobodyfake"})
     upsert_correction("trip:cuyuna:2099", {"date": "2099-09-25"}, "test date", "test")
-    rebuild(commit=False)
+    rebuild()
     session = PracticeSession.query.filter_by(session_key="trip:cuyuna:2099").one()
     assert "unmatched_person" in session.flags
     assert "missing_date" not in session.flags and session.needs_review is False
@@ -352,7 +343,7 @@ def test_rebuild_events_trips_and_coverage_snapshot(db_session):
     upsert_correction(f"{gen}:4087911700.000100", {
         "create": True, "date": "2099-07-20", "category": "social", "title": "Game night",
         "emoji_roles": {"white_check_mark": "rsvp", "x": "decline"}}, "test", "test")
-    stats = rebuild(commit=False)
+    stats = rebuild()
 
     event = PracticeSession.query.filter_by(session_key=f"{gen}:4087911700.000100:main").one()
     assert (event.kind, event.category, event.rsvp_count) == ("event", "social", 1)

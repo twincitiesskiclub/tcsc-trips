@@ -14,6 +14,7 @@ from app.analytics.history_config import load_history_config
 from app.analytics.lineage import build_lineage
 from app.analytics.models import PracticeAttendance, PracticeSession, SlackArchiveMessage
 from app.analytics.parse_trips import edition_year, normalize_name
+from app.analytics.weather import apply_weather
 from app.models import AppConfig, Season, SlackUser, Trip, User, db
 from app.practices.models import Practice, PracticeLead, PracticeLocation, PracticeRSVP
 from app.trips.models import TripRegistration, TripSeries
@@ -86,8 +87,7 @@ def load_app_trip_signups() -> list[TripSignup]:
         User, TripRegistration.user_id == User.id).outerjoin(
         SlackUser, User.slack_user_id == SlackUser.id).filter(
         TripRegistration.status != "cancelled").order_by(TripRegistration.id).all()
-    return [TripSignup(slug, edition_year(start.date() if hasattr(start, "date") else start),
-                       start.date() if hasattr(start, "date") else start,
+    return [TripSignup(slug, edition_year(start.date()), start.date(),
                        uid, None, f"trip_registration:{rid}", user_id)
             for rid, slug, start, uid, user_id in rows]
 
@@ -144,80 +144,73 @@ def _session_row(draft, rebuilt_at):
     )
 
 
-def load_rebuild_config(cfg=None):
-    """Load rules plus DB coach emoji for both rebuild and read-only reports."""
-    cfg = load_history_config() if cfg is None else cfg
-    return dataclasses.replace(
-        cfg, coach_emoji=frozenset(AppConfig.get("analytics_coach_emoji", []) or []))
+def rebuild() -> dict:
+    """Replace both derived tables and flush; the caller commits."""
+    corrections = load_corrections()
+    cfg = dataclasses.replace(load_history_config(),
+                              coach_emoji=frozenset(AppConfig.get("analytics_coach_emoji", []) or []))
+    result = build_lineage(*load_inputs(), cfg, corrections, trip_signups=load_app_trip_signups())
+    people = resolve_people(result.attendance, load_people())
+    unmatched = {row["session_key"] for row in people if row["unmatched"]}
+    signups = defaultdict(set)
+    for row in people:
+        if row["role"] == "signup":
+            signups[row["session_key"]].add(row["person_key"])
+    for draft in result.sessions:
+        if draft.kind == "trip":
+            draft.rsvp_count = len(signups[draft.session_key])
+        if draft.session_key in unmatched:
+            draft.flags = [*draft.flags, "unmatched_person"]
+    rebuilt_at = datetime.utcnow()
+    session_rows = [_session_row(draft, rebuilt_at) for draft in result.sessions]
+
+    PracticeAttendance.query.delete(synchronize_session="fetch")
+    PracticeSession.query.delete(synchronize_session="fetch")
+    db.session.add_all(session_rows)
+    db.session.flush()
+    session_ids = {row.session_key: row.id for row in session_rows}
+    attendance = [dict(session_id=session_ids[row["session_key"]],
+                       **{k: row[k] for k in ("slack_uid", "user_id", "person_key", "role",
+                                              "emoji", "slot", "source")})
+                  for row in people]
+    if attendance:
+        db.session.execute(insert(PracticeAttendance), attendance)
+    apply_weather(session_rows)
+    weeks = empty_weeks(result.sessions, corrections)
+    AppConfig.set("analytics_coverage", coverage_snapshot(result.possible_misses, weeks),
+                  category="analytics")
+    db.session.flush()
+    return {"sessions": len(session_rows), "attendance": len(attendance),
+            "needs_review": sum(row.needs_review for row in session_rows),
+            "candidates": len(result.possible_misses), "empty_weeks": len(weeks)}
 
 
-def rebuild(*, cfg=None, commit=True) -> dict:
-    """Replace both derived tables atomically; optionally leave commit to caller."""
-    # Configuration errors must not roll back the caller's existing work either.
-    cfg = load_history_config() if cfg is None else cfg
-    try:
-        corrections = load_corrections()
-        cfg = load_rebuild_config(cfg)
-        result = build_lineage(*load_inputs(), cfg, corrections, trip_signups=load_app_trip_signups())
-        people = resolve_people(result.attendance, load_people())
-        unmatched = {row["session_key"] for row in people if row["unmatched"]}
-        signups = defaultdict(set)
-        for row in people:
-            if row["role"] == "signup":
-                signups[row["session_key"]].add(row["person_key"])
-        for draft in result.sessions:
-            if draft.kind == "trip":
-                draft.rsvp_count = len(signups[draft.session_key])
-            if draft.session_key in unmatched:
-                draft.flags = [*draft.flags, "unmatched_person"]
-        rebuilt_at = datetime.utcnow()
-        session_rows = [_session_row(draft, rebuilt_at) for draft in result.sessions]
+def archive_rows(keys) -> dict[str, SlackArchiveMessage]:
+    """Archived messages by "<channel>:<ts>"."""
+    pairs = [tuple(key.split(":", 1)) for key in keys]
+    return {f"{row.channel_id}:{row.ts}": row for row in SlackArchiveMessage.query.filter(
+        tuple_(SlackArchiveMessage.channel_id, SlackArchiveMessage.ts).in_(pairs)).all()} if keys else {}
 
-        PracticeAttendance.query.delete(synchronize_session="fetch")
-        PracticeSession.query.delete(synchronize_session="fetch")
-        db.session.add_all(session_rows)
-        db.session.flush()
-        session_ids = {row.session_key: row.id for row in session_rows}
-        attendance = [dict(session_id=session_ids[row["session_key"]],
-                           **{k: row[k] for k in ("slack_uid", "user_id", "person_key", "role",
-                                                  "emoji", "slot", "source")})
-                      for row in people]
-        if attendance:
-            db.session.execute(insert(PracticeAttendance), attendance)
-        from app.analytics.weather import apply_weather
-        apply_weather(session_rows)
-        weeks = empty_weeks(result.sessions, corrections)
-        AppConfig.set("analytics_coverage", coverage_snapshot(result.possible_misses, weeks),
-                      category="analytics")
-        stats = {"sessions": len(session_rows), "attendance": len(attendance),
-                 "needs_review": sum(row.needs_review for row in session_rows),
-                 "possible_misses": result.possible_misses,
-                 "candidates": len(result.possible_misses), "empty_weeks": len(weeks)}
-        if commit:
-            db.session.commit()
-        else:
-            db.session.flush()
-        return stats
-    except Exception:
-        db.session.rollback()
-        raise
+
+def candidate_rows(keys) -> list[dict]:
+    """Central date, full text, and reactions (largest first) for each candidate post."""
+    rows = archive_rows(keys)
+    candidates = []
+    for key in keys:
+        row = rows.get(key)
+        reactions = sorted((row.raw.get("reactions", []) if row else []), key=lambda r: -r.get("count", 0))
+        candidates.append({"post_key": key,
+                           "date": utc_naive_to_central_naive(row.posted_at).date().isoformat() if row else "",
+                           "text": row.text if row else "",
+                           "reactions": {r["name"]: r.get("count", 0) for r in reactions}})
+    return candidates
 
 
 def coverage_snapshot(candidate_keys, weeks) -> dict:
-    pairs = [tuple(key.split(":", 1)) for key in candidate_keys]
-    rows = {f"{row.channel_id}:{row.ts}": row for row in SlackArchiveMessage.query.filter(
-        tuple_(SlackArchiveMessage.channel_id, SlackArchiveMessage.ts).in_(pairs)).all()} \
-        if candidate_keys else {}
-    candidates = []
-    for key in candidate_keys:
-        row = rows.get(key)
-        text = next((line for line in (row.text if row else "").splitlines() if line.strip()), "")
-        reactions = sorted((row.raw.get("reactions", []) if row else []),
-                           key=lambda r: -r.get("count", 0))[:3]
-        candidates.append({"post_key": key, "channel": key.split(":")[0],
-                           "date": utc_naive_to_central_naive(row.posted_at).date().isoformat() if row else "",
-                           "text": text[:140],
-                           "reactions": {r["name"]: r.get("count", 0) for r in reactions}})
+    candidates = [dict(row, channel=row["post_key"].split(":")[0],
+                       text=next((line for line in row["text"].splitlines() if line.strip()), "")[:140],
+                       reactions=dict(list(row["reactions"].items())[:3]))
+                  for row in candidate_rows(candidate_keys)]
     return {"computed_at": datetime.utcnow().isoformat(timespec="seconds"),
             "candidates": candidates, "empty_weeks": [week.isoformat() for week in weeks]}
 

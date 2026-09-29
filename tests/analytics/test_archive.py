@@ -87,7 +87,7 @@ def test_sync_marks_deleted_and_updates_edits(db_session):
     sync_recent(client, (CH,), days=21, now=now)
     rows = _rows()
     assert rows[t_keep].text == "new text" and rows[t_keep].edited_at is not None
-    assert rows[t_gone].deleted_at is not None
+    assert rows[t_gone].deleted_at == now
     assert rows[t_keep].deleted_at is None
 
 
@@ -179,17 +179,12 @@ def test_sync_empty_history_marks_recent_top_level_message_deleted(db_session):
 
 
 @pytest.mark.parametrize("existing", [False, True])
-def test_sync_records_success_for_active_and_quiet_channels(db_session, monkeypatch, existing):
+def test_sync_records_success_for_active_and_quiet_channels(db_session, existing):
     db_session.query(AppConfig).filter_by(key="analytics_sync_status").delete()
     prior = {CH: "2099-01-01T12:00:00", "CFAKEUNTOUCHED": "2098-12-01T12:00:00"}
     if existing:
         AppConfig.set("analytics_sync_status", prior, category="analytics")
         db_session.flush()
-    completed = iter([datetime(2099, 1, 22, 12, 1, 2, 345678),
-                      datetime(2099, 1, 22, 12, 2, 3, 456789)])
-    monkeypatch.setattr("app.utils.get_current_times",
-                        lambda: {"utc": next(completed)})
-
     class QuietChannel(FakeSlack):
         def conversations_history(self, channel, **kwargs):
             if channel == "CFAKEQUIET":
@@ -200,7 +195,7 @@ def test_sync_records_success_for_active_and_quiet_channels(db_session, monkeypa
                         (CH, "CFAKEQUIET"), now=datetime(2099, 1, 22, 12))
     db_session.flush()
     db_session.expire_all()
-    expected = {CH: "2099-01-22T12:01:02", "CFAKEQUIET": "2099-01-22T12:02:03"}
+    expected = {CH: "2099-01-22T12:00:00", "CFAKEQUIET": "2099-01-22T12:00:00"}
     if existing:
         expected["CFAKEUNTOUCHED"] = prior["CFAKEUNTOUCHED"]
     assert AppConfig.get("analytics_sync_status") == expected
@@ -229,8 +224,6 @@ def test_sync_status_write_failure_preserves_messages_and_continues(db_session, 
     prior = {"CFAKEBAD": "2099-01-01T12:00:00"}
     AppConfig.set("analytics_sync_status", prior, category="analytics")
     db_session.flush()
-    monkeypatch.setattr("app.utils.get_current_times",
-                        lambda: {"utc": datetime(2099, 1, 22, 12, 1)})
     real_set = AppConfig.set
     calls = []
 
@@ -254,7 +247,7 @@ def test_sync_status_write_failure_preserves_messages_and_continues(db_session, 
         assert stats[channel] == {"messages": 1, "replies": 0, "reactions_refetched": 0, "deleted": 0}
         assert SlackArchiveMessage.query.filter_by(channel_id=channel, ts=raw["ts"]).one().raw == raw
     assert AppConfig.get("analytics_sync_status") == {
-        **prior, CH: "2099-01-22T12:01:00", "CFAKENEXT": "2099-01-22T12:01:00"}
+        **prior, CH: "2099-01-22T12:00:00", "CFAKENEXT": "2099-01-22T12:00:00"}
     assert any("CFAKEBAD" in record.message and record.exc_info for record in caplog.records)
 
 
@@ -271,10 +264,8 @@ def test_sync_records_slack_failure_without_marking_deletions(db_session):
 
 
 @pytest.mark.parametrize("channels", [(CH, "CFAKEBAD"), ("CFAKEBAD", CH)])
-def test_sync_isolates_failed_channel_and_rolls_back_partial_import(db_session, caplog, channels, monkeypatch):
+def test_sync_isolates_failed_channel_and_rolls_back_partial_import(db_session, caplog, channels):
     AppConfig.set("analytics_sync_status", {"CFAKEBAD": "2099-01-01T12:00:00"}, category="analytics")
-    monkeypatch.setattr("app.utils.get_current_times",
-                        lambda: {"utc": datetime(2099, 1, 22, 12, 1)})
     existing = _msg("4072435200.000100", text="original text")
     partial = _msg("4072435300.000200", reply_count=1)
     upsert_message("CFAKEBAD", existing)
@@ -300,4 +291,4 @@ def test_sync_isolates_failed_channel_and_rolls_back_partial_import(db_session, 
     db_session.flush()
     db_session.expire_all()
     assert AppConfig.get("analytics_sync_status") == {
-        "CFAKEBAD": "2099-01-01T12:00:00", CH: "2099-01-22T12:01:00"}
+        "CFAKEBAD": "2099-01-01T12:00:00", CH: "2099-01-22T12:00:00"}

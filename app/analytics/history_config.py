@@ -1,7 +1,5 @@
-"""Validated history rules and pure venue/title resolution for analytics."""
+"""History rules and pure venue/title resolution for analytics."""
 from dataclasses import dataclass
-from datetime import date
-from math import isfinite
 from pathlib import Path
 import re
 
@@ -35,139 +33,33 @@ class HistoryConfig:
     trip_series: list[dict]
 
 
-def _mapping(value, key):
-    if not isinstance(value, dict):
-        raise HistoryConfigError(f"{key}: expected a mapping")
-
-
-def _list(value, key):
-    if not isinstance(value, list):
-        raise HistoryConfigError(f"{key}: expected a list")
-
-
-def _string(value, key):
-    if not isinstance(value, str) or not value.strip():
-        raise HistoryConfigError(f"{key}: expected a non-empty string")
-
-
-def _strings(value, key, nonempty=False):
-    _list(value, key)
-    if nonempty and not value:
-        raise HistoryConfigError(f"{key}: expected a non-empty list of strings")
-    for index, item in enumerate(value):
-        _string(item, f"{key}[{index}]")
-
-
-def _number(value, key):
-    if type(value) not in (int, float) or not isfinite(value):
-        raise HistoryConfigError(f"{key}: expected a finite number")
-
-
-def _date(value, key):
-    if type(value) is date:
-        return
-    if isinstance(value, str):
-        try:
-            date.fromisoformat(value)
-            return
-        except ValueError:
-            pass
-    raise HistoryConfigError(f"{key}: expected an ISO date")
-
-
 def base_emoji(name: str) -> str:
     return re.sub(r"::skin-tone-\d+$", "", name)
 
 
 def load_history_config(path: str | Path = DEFAULT_PATH) -> HistoryConfig:
-    """Load rules afresh, rejecting malformed content before any rebuild."""
+    """Load rules afresh, rejecting the mistakes that would silently misparse."""
     try:
         with Path(path).open(encoding="utf-8") as stream:
             data = yaml.safe_load(stream)
     except (OSError, UnicodeError, yaml.YAMLError, ValueError) as exc:
         raise HistoryConfigError(f"config {path}: {exc}") from exc
 
-    _mapping(data, "config")
-    if "corrections" in data:
-        raise HistoryConfigError("corrections: per-post corrections belong in the DB")
-    if "coach_emoji" in data:
-        raise HistoryConfigError('coach_emoji: belongs in AppConfig "analytics_coach_emoji"')
-    if "capacity_lines" in data:
-        raise HistoryConfigError("capacity_lines: moved under practice_views")
-    for key in ("excluded_slack_uids", "applause_emoji", "event_keywords", "indoor_locations"):
-        _strings(data.get(key), key)
-
-    default = data.get("default_location")
-    _mapping(default, "default_location")
-    for key in ("lat", "lon"):
-        _number(default.get(key), f"default_location.{key}")
-
-    for key in ("venues", "activity_rules", "type_rules", "trip_series"):
-        _list(data.get(key), key)
-        for index, entry in enumerate(data[key]):
-            _mapping(entry, f"{key}[{index}]")
-
-    for index, venue in enumerate(data["venues"]):
-        key = f"venues[{index}]"
-        _strings(venue.get("match"), f"{key}.match", nonempty=True)
-        if ("location" in venue) == ("name" in venue):
-            raise HistoryConfigError(f"{key}: expected either location or name")
-        if "location" in venue:
-            location = venue["location"]
-            _mapping(location, f"{key}.location")
-            _string(location.get("name"), f"{key}.location.name")
-            if "spot" in location:
-                _string(location["spot"], f"{key}.location.spot")
-        else:
-            _string(venue["name"], f"{key}.name")
-        for coordinate in ("lat", "lon"):
-            if coordinate in venue:
-                _number(venue[coordinate], f"{key}.{coordinate}")
-
-    for section, output in (("activity_rules", "activities"), ("type_rules", "types")):
+    for section in ("venues", "activity_rules", "type_rules", "trip_series"):
         for index, rule in enumerate(data[section]):
-            key = f"{section}[{index}]"
-            _strings(rule.get("match"), f"{key}.match", nonempty=True)
-            _strings(rule.get(output), f"{key}.{output}")
-            if section == "activity_rules" and "default_types" in rule:
-                _strings(rule["default_types"], f"{key}.default_types")
-
-    _mapping(data.get("activity_buckets"), "activity_buckets")
-    for activity, bucket in data["activity_buckets"].items():
-        _string(activity, "activity_buckets key")
-        _string(bucket, f"activity_buckets.{activity}")
-
-    _list(data.get("workout_buckets"), "workout_buckets")
-    for index, bucket in enumerate(data["workout_buckets"]):
-        key = f"workout_buckets[{index}]"
-        if not isinstance(bucket, list) or len(bucket) != 2:
-            raise HistoryConfigError(f"{key}: expected [name, types]")
-        _string(bucket[0], f"{key}[0]")
-        _strings(bucket[1], f"{key}[1]")
-
-    _mapping(data.get("practice_views"), "practice_views")
-    _list(data["practice_views"].get("capacity_lines"), "practice_views.capacity_lines")
-    for index, line in enumerate(data["practice_views"]["capacity_lines"]):
-        key = f"practice_views.capacity_lines[{index}]"
-        _mapping(line, key)
-        _number(line.get("value"), f"{key}.value")
-        _string(line.get("label"), f"{key}.label")
-        _date(line.get("from"), f"{key}.from")
-        if "to" in line:
-            _date(line["to"], f"{key}.to")
-
-    for index, rule in enumerate(data["trip_series"]):
-        key = f"trip_series[{index}]"
-        _strings(rule.get("match"), f"{key}.match")
-        _string(rule.get("slug"), f"{key}.slug")
-        if not re.fullmatch(r"[a-z0-9-]+", rule["slug"]):
-            raise HistoryConfigError(f"{key}.slug: expected [a-z0-9-]+")
+            # A string would silently match per character.
+            if not isinstance(rule["match"], list):
+                raise HistoryConfigError(f"{section}[{index}].match: expected a list")
+    for index, venue in enumerate(data["venues"]):
+        if ("location" in venue) == ("name" in venue):
+            raise HistoryConfigError(f"venues[{index}]: expected either location or name")
 
     return HistoryConfig(
         excluded_slack_uids=frozenset(data["excluded_slack_uids"]),
         applause_emoji=frozenset(base_emoji(e) for e in data["applause_emoji"]),
         coach_emoji=frozenset(),
-        default_lat=float(default["lat"]), default_lon=float(default["lon"]),
+        default_lat=float(data["default_location"]["lat"]),
+        default_lon=float(data["default_location"]["lon"]),
         venues=data["venues"], activity_rules=data["activity_rules"],
         type_rules=data["type_rules"], activity_buckets=data["activity_buckets"],
         workout_buckets=[(name, types) for name, types in data["workout_buckets"]],
@@ -185,45 +77,42 @@ def _matches(text: str, keywords: list[str]) -> bool:
     return any(_normalize(keyword) in text for keyword in keywords)
 
 
-def resolve_venue(raw: str | None, cfg: HistoryConfig, locations: list[LocationRef]) -> dict:
-    """Resolve the first matching rule, preserving a missing DB row as a match."""
-    result = {
-        "location_id": None, "location_name": None,
-        "lat": cfg.default_lat, "lon": cfg.default_lon,
-        "is_indoor": False, "matched": False, "rule_kind": None,
+def _is_indoor(cfg: HistoryConfig, *names) -> bool:
+    indoor = {_normalize(name) for name in cfg.indoor_locations}
+    return any(_normalize(name) in indoor for name in names if name is not None)
+
+
+def location_fields(location: LocationRef, cfg: HistoryConfig) -> dict:
+    """Session venue fields for a practice_locations row."""
+    return {
+        "location_id": location.id, "location_name": location.name,
+        "lat": location.lat if location.lat is not None else cfg.default_lat,
+        "lon": location.lon if location.lon is not None else cfg.default_lon,
+        "is_indoor": _is_indoor(cfg, location.name, location.spot),
     }
+
+
+def resolve_venue(raw: str | None, cfg: HistoryConfig,
+                  locations: list[LocationRef]) -> tuple[dict, list[str]]:
+    """Session venue fields for the first matching rule, plus review flags."""
+    fields = {"location_id": None, "location_name": None,
+              "lat": cfg.default_lat, "lon": cfg.default_lon, "is_indoor": False}
     text = _normalize(raw or "")
-    for rule in cfg.venues:
-        if not _matches(text, rule["match"]):
-            continue
-        result["matched"] = True
-        spot = None
-        if "location" in rule:
-            result["rule_kind"] = "location"
-            target = rule["location"]
-            result["location_name"] = target["name"]
-            spot = target.get("spot")
-            location = next((loc for loc in locations if loc.name == target["name"]
-                             and ("spot" not in target or loc.spot == spot)), None)
-            if location is not None:
-                result["location_id"] = location.id
-                spot = location.spot
-                if location.lat is not None:
-                    result["lat"] = location.lat
-                if location.lon is not None:
-                    result["lon"] = location.lon
-        else:
-            result["rule_kind"] = "name"
-            result["location_name"] = rule["name"]
-            result["lat"] = rule.get("lat", cfg.default_lat)
-            result["lon"] = rule.get("lon", cfg.default_lon)
-        indoor = {_normalize(name) for name in cfg.indoor_locations}
-        result["is_indoor"] = any(
-            _normalize(value) in indoor for value in (result["location_name"], spot)
-            if value is not None
-        )
-        return result
-    return result
+    rule = next((rule for rule in cfg.venues if _matches(text, rule["match"])), None)
+    if rule is None:
+        return fields, ["unknown_venue"]
+    if "name" in rule:
+        return {**fields, "location_name": rule["name"],
+                "lat": rule.get("lat", cfg.default_lat), "lon": rule.get("lon", cfg.default_lon),
+                "is_indoor": _is_indoor(cfg, rule["name"])}, []
+    target = rule["location"]
+    location = next((loc for loc in locations if loc.name == target["name"]
+                     and ("spot" not in target or loc.spot == target["spot"])), None)
+    if location is not None:
+        return location_fields(location, cfg), []
+    # A rule whose DB row is missing keeps the rule's name and indoor spot.
+    return {**fields, "location_name": target["name"],
+            "is_indoor": _is_indoor(cfg, target["name"], target.get("spot"))}, ["unknown_location_row"]
 
 
 def classify_title(title: str, cfg: HistoryConfig) -> dict:

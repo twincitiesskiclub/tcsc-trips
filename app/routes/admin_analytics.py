@@ -23,10 +23,12 @@ def dashboard(slug):
     definition = dashboards.get_dashboard(slug)
     if definition is None:
         abort(404)
-    domains = base.get_filter_domains(definition)
+    domains, options = {}, {}
+    if definition.filters:
+        domains = base.get_filter_domains(definition.kinds)
+        options = base.filter_options(definition, domains)
     filters = base.parse_filters(request.args, definition, domains)
     return render_template(
         "admin/analytics/dashboard.html", dashboard=definition, blocks=definition.build(filters),
-        filters=filters, options=base.filter_options(definition, domains), footer=base.footer(),
-        request_args=request.args,
+        filters=filters, fields=base.FIELDS, options=options, footer=base.footer(),
     )

@@ -1,5 +1,4 @@
 """Operator commands for the analytics archive and derived data."""
-from datetime import datetime, timezone
 import json
 from pathlib import Path
 
@@ -8,14 +7,12 @@ from flask.cli import AppGroup
 
 from app.analytics.archive import import_channel, sync_recent
 from app.analytics.corrections import export_corrections, import_corrections, load_corrections
-from app.analytics.coverage import empty_weeks
 from app.analytics.jobs import run_nightly
-from app.analytics.lineage import build_lineage
-from app.analytics.rebuild import flagged_sessions, load_app_trip_signups, load_inputs, load_rebuild_config, rebuild
+from app.analytics.models import SlackArchiveMessage
+from app.analytics.rebuild import archive_rows, candidate_rows, flagged_sessions, rebuild
 from app.analytics.weather import fetch_missing_weather
 from app.models import AppConfig, db
 from app.slack.client import get_slack_client, get_slack_user_client
-from app.utils import utc_naive_to_central_naive
 
 analytics_cli = AppGroup("analytics", help="Import and maintain practice analytics.")
 
@@ -47,7 +44,9 @@ def sync(days):
 @analytics_cli.command("rebuild")
 def rebuild_command():
     """Rebuild derived sessions and attendance from archived data."""
-    _print_json(rebuild())
+    stats = rebuild()
+    db.session.commit()
+    _print_json(stats)
 
 
 @analytics_cli.command("fetch-weather")
@@ -56,47 +55,43 @@ def fetch_weather():
     _print_json(fetch_missing_weather())
 
 
+def _post_with_replies(session):
+    """The archived post a flagged session came from, and its live thread replies."""
+    message = session.source_message_id and db.session.get(SlackArchiveMessage, session.source_message_id)
+    message = message or archive_rows([session.group_key]).get(session.group_key)
+    if message is None:
+        return None, []
+    return message, SlackArchiveMessage.query.filter(
+        SlackArchiveMessage.channel_id == message.channel_id, SlackArchiveMessage.thread_ts == message.ts,
+        SlackArchiveMessage.ts != message.ts, SlackArchiveMessage.deleted_at.is_(None),
+    ).order_by(SlackArchiveMessage.ts).all()
+
+
 @analytics_cli.command("flags")
 @click.option("--json", "json_path", type=click.Path(dir_okay=False, writable=True))
 def flags(json_path):
-    """List review sessions, candidates, and empty weeks without changing the DB."""
-    inputs = load_inputs()
-    messages = inputs[0]
-    corrections = load_corrections()
-    lineage = build_lineage(*inputs, load_rebuild_config(), corrections,
-                            trip_signups=load_app_trip_signups())
-    by_id = {message.archive_id: message for message in messages if message.archive_id is not None}
-    by_key = {f"{message.channel_id}:{message.ts}": message for message in messages}
+    """List review sessions, candidates, and empty weeks as of the last rebuild."""
+    snapshot = AppConfig.get("analytics_coverage", {"candidates": [], "empty_weeks": []})
     sessions = []
     for session in flagged_sessions():
-        message = by_id.get(session.source_message_id) or by_key.get(session.group_key)
-        post_key = f"{message.channel_id}:{message.ts}" if message else session.group_key
+        message, replies = _post_with_replies(session)
         sessions.append({
-            "session_key": session.session_key, "post_key": post_key,
+            "session_key": session.session_key,
+            "post_key": f"{message.channel_id}:{message.ts}" if message else session.group_key,
             "date": session.date.isoformat(), "title": session.title,
             "flags": session.flags, "format": session.format, "rsvp_count": session.rsvp_count,
-            "text": message.raw.get("text", "") if message else "",
-            "replies": [reply.get("text", "") for reply in message.replies] if message else [],
+            "text": message.text if message else "",
+            "replies": [reply.text for reply in replies],
         })
         click.echo(f"{session.date}  {session.session_key}  {','.join(session.flags)}  {session.title}")
-    misses = []
-    for key in lineage.possible_misses:
-        message = by_key[key]
-        posted_at = datetime.fromtimestamp(float(message.ts), timezone.utc).replace(tzinfo=None)
-        day = utc_naive_to_central_naive(posted_at).date().isoformat()
-        misses.append({
-            "post_key": key, "date": day, "text": message.raw.get("text", ""),
-            "reactions": {reaction["name"]: reaction.get("count", 0)
-                          for reaction in message.raw.get("reactions", [])},
-        })
-        click.echo(f"{day}  {key}  candidate")
-    weeks = empty_weeks(lineage.sessions, corrections)
-    for monday in weeks:
+    misses = candidate_rows([candidate["post_key"] for candidate in snapshot["candidates"]])
+    for miss in misses:
+        click.echo(f"{miss['date']}  {miss['post_key']}  candidate")
+    for monday in snapshot["empty_weeks"]:
         click.echo(f"{monday}  empty_week")
     if json_path:
         Path(json_path).write_text(json.dumps({
-            "flagged_sessions": sessions, "possible_misses": misses,
-            "empty_weeks": [week.isoformat() for week in weeks],
+            "flagged_sessions": sessions, "possible_misses": misses, "empty_weeks": snapshot["empty_weeks"],
         }, indent=2, sort_keys=True) + "\n", encoding="utf-8")
 
 

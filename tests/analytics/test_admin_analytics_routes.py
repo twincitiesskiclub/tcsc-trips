@@ -82,7 +82,7 @@ def test_partial_dicts_render_and_index_does_not_load_vega(admin_client):
 
 
 def test_module_dispatch_and_all_filter_controls(admin_client):
-    dashboard = Dashboard('all', 'All', 'Question?', list(base.FILTER_NAMES), lambda f: [
+    dashboard = Dashboard('all', 'All', 'Question?', ['season', 'date_range', 'day_of_week', 'activity', 'workout_type', 'location', 'format', 'kind'], lambda f: [
         base.Table('Table', [{'value': '</script><script>alert(1)</script>'}], [('value', 'Value')])])
     with patch.object(dashboards, 'get_dashboard', return_value=dashboard) as lookup, \
          patch.object(base, 'parse_filters', return_value=base.Filters()) as parse:
@@ -91,20 +91,10 @@ def test_module_dispatch_and_all_filter_controls(admin_client):
     parse.assert_called_once()
     assert response.status_code == 200
     html = response.data.decode()
-    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds', 'Categories']:
+    for label in ['Seasons', 'From', 'Through', 'Days', 'Activities', 'Workout types', 'Locations', 'Formats', 'Kinds']:
         assert label in html
     assert '&lt;script&gt;alert' in html
     assert 'method="get"' in html and 'analytics-table' in html
-
-
-def test_category_control_preserves_selection(admin_client):
-    with patch.object(STUB, 'filters', ['category']), \
-         patch.object(base, 'filter_options', return_value={'categories': ['social', 'trip']}):
-        response = admin_client.get('/admin/analytics/stub?category=social')
-    assert response.status_code == 200
-    assert b'name="category" value="social" checked' in response.data
-    assert b'name="category" value="trip" checked' not in response.data
-    assert b'name="category" value="trip"' in response.data
 
 
 def test_empty_chart_keeps_description_and_table_without_embed_target(admin_client):
@@ -123,7 +113,7 @@ def test_empty_chart_keeps_description_and_table_without_embed_target(admin_clie
 
 def test_format_pills_have_readable_labels_and_preserve_query_values(admin_client):
     with patch.object(STUB, "filters", ["format"]), \
-         patch.object(base, "filter_options", return_value={"formats": ["single", "split", "merged"]}):
+         patch.object(base, "filter_options", return_value={"formats": list(base.FORMATS.items())}):
         response = admin_client.get("/admin/analytics/stub?format=split")
     assert response.status_code == 200
     html = response.data.decode()
@@ -137,6 +127,8 @@ def test_filter_form_hidden_when_dashboard_has_no_filters(admin_client):
     with patch.object(STUB, "filters", []):
         response = admin_client.get("/admin/analytics/stub")
     assert response.status_code == 200
+    base.get_filter_domains.assert_not_called()
+    base.filter_options.assert_not_called()
     assert b">Apply<" not in response.data
     assert b">Reset<" not in response.data
     assert b'aria-label="Dashboard filters"' not in response.data
@@ -155,4 +147,4 @@ def test_filter_domains_are_loaded_once_per_dashboard_request(admin_client):
          patch.object(base, "get_filter_domains", wraps=base.get_filter_domains) as domains:
         response = admin_client.get("/admin/analytics/stub")
     assert response.status_code == 200
-    domains.assert_called_once_with(STUB)
+    domains.assert_called_once_with(STUB.kinds)

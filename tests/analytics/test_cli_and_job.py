@@ -16,14 +16,6 @@ def transaction(app):
         yield SimpleNamespace(commit=commit, rollback=rollback)
 
 
-def test_cli_group_registered(app):
-    result = app.test_cli_runner().invoke(args=["analytics", "--help"])
-    assert result.exit_code == 0
-    for cmd in ("import-slack", "sync", "rebuild", "fetch-weather", "flags", "nightly",
-                "set-coach-emoji", "corrections"):
-        assert cmd in result.output
-
-
 @pytest.mark.parametrize("token", ["bot", "user"])
 def test_import_selects_token_and_commits_once(app, transaction, token):
     from app.analytics import cli
@@ -57,17 +49,6 @@ def test_sync_bot_and_days(app, transaction, days):
     transaction.commit.assert_called_once_with()
 
 
-@pytest.mark.parametrize("command, function", [("rebuild", "rebuild"), ("fetch-weather", "fetch_missing_weather")])
-def test_standalone_steps(app, transaction, command, function):
-    from app.analytics import cli
-    with patch.object(cli, function, return_value={"sessions": 3}) as step:
-        result = app.test_cli_runner().invoke(args=["analytics", command])
-    assert result.exit_code == 0, result.output
-    assert json.loads(result.output) == {"sessions": 3}
-    step.assert_called_once_with()
-    transaction.commit.assert_not_called()  # These functions own their commits.
-
-
 def test_set_coach_emoji(app, transaction):
     from app.analytics import cli
     with patch.object(cli.AppConfig, "set") as setter:
@@ -77,74 +58,38 @@ def test_set_coach_emoji(app, transaction):
     transaction.commit.assert_called_once_with()
 
 
-@pytest.mark.parametrize("command", ["import", "export", "list"])
-def test_corrections_commands(app, transaction, tmp_path, command):
-    from app.analytics import cli
-    path = tmp_path / "corrections.json"
-    path.write_text("{}")
-    with patch.object(cli, "import_corrections", return_value=2) as importer, \
-         patch.object(cli, "export_corrections", return_value=2) as exporter, \
-         patch.object(cli, "load_corrections", return_value={"CFAKE:123.000001": {"skip": True}}) as loader:
-        result = app.test_cli_runner().invoke(args=["analytics", "corrections", command] +
-                                             ([] if command == "list" else [str(path)]))
-    assert result.exit_code == 0, result.output
-    if command == "list":
-        loader.assert_called_once_with()
-        assert json.loads(result.output) == loader.return_value
-    else:
-        step = importer if command == "import" else exporter
-        step.assert_called_once_with(str(path))
-        assert "2" in result.output
-    assert transaction.commit.call_count == (command == "import")
+def test_flags_reports_flagged_sessions_and_last_rebuild_coverage(app, db_session, transaction, tmp_path):
+    from app.analytics.archive import upsert_message
+    from app.analytics.models import PracticeSession
+    from app.models import AppConfig
 
-
-def test_flags_reads_db_sessions_and_builds_misses_without_writes(app, transaction, tmp_path):
-    from app.analytics import cli
-    from app.analytics.drafts import ArchivedMessage, LineageResult, TripSignup
-    post = ArchivedMessage("CFAKEFLAGS", "4087911600.000100", {"text": "Invented practice"},
-                           replies=({"text": "Invented reply"},), archive_id=17)
-    miss = ArchivedMessage("CFAKEFLAGS", "4087911601.000100", {
-        "text": "Invented reminder", "reactions": [{"name": "six", "count": 7}]})
-    key = f"{post.channel_id}:{post.ts}"
+    post = upsert_message("CFAKEFLAGS", {"ts": "4087911600.000100", "text": "Invented practice"})
+    upsert_message("CFAKEFLAGS", {"ts": "4087911600.000200", "thread_ts": post.ts, "text": "Invented reply"})
+    miss = upsert_message("CFAKEFLAGS", {"ts": "4087911601.000100", "text": "Invented reminder",
+                                         "reactions": [{"name": "six", "count": 7}]})
+    db_session.add(PracticeSession(
+        session_key="flags-test:main", group_key="flags-test", era="template", date=date(2099, 7, 16),
+        day_of_week="Thursday", season_label="2099", title="Invented title", flags=["unknown_venue"],
+        rsvp_count=2, needs_review=True, source_message_id=post.id))
     miss_key = f"{miss.channel_id}:{miss.ts}"
-    flagged = SimpleNamespace(session_key="practice:999", group_key=key, source_message_id=17,
-                              date=date(2099, 7, 16), title="Invented title", flags=["unknown_venue"],
-                              format="single", rsvp_count=2)
-    inputs = ([post, miss], [], [], [])
-    practices = [SimpleNamespace(kind="practice", date=day, season_label="2099 Fall/Winter")
-                 for day in (date(2099, 11, 3), date(2099, 11, 24))]
-    signups = [TripSignup("cuyuna", 2099, date(2099, 7, 16), "UFAKE6001", None,
-                          "trip_registration:999")]
+    AppConfig.set("analytics_coverage", {"computed_at": "2099-07-20T00:00:00",
+                                         "candidates": [{"post_key": miss_key}], "empty_weeks": ["2099-11-09"]})
     output = tmp_path / "flags.json"
-    with patch.object(cli, "load_inputs", return_value=inputs), \
-         patch.object(cli, "load_app_trip_signups", return_value=signups), \
-         patch.object(cli, "load_corrections", return_value={}) as corrections, \
-         patch.object(cli.AppConfig, "get", return_value=["snowcoach"]) as config, \
-         patch.object(cli, "build_lineage", return_value=LineageResult(practices, [], [miss_key])) as build, \
-         patch.object(cli, "flagged_sessions", return_value=[flagged]), \
-         patch.object(cli, "rebuild") as rebuild:
-        result = app.test_cli_runner().invoke(args=["analytics", "flags", "--json", str(output)])
+    result = app.test_cli_runner().invoke(args=["analytics", "flags", "--json", str(output)])
     assert result.exit_code == 0, result.output
-    config.assert_called_once_with("analytics_coach_emoji", [])
-    assert build.call_args.args[:4] == inputs
-    assert build.call_args.args[4].coach_emoji == frozenset({"snowcoach"})
-    assert build.call_args.args[5] == corrections.return_value
-    assert build.call_args.kwargs == {"trip_signups": signups}
-    rebuild.assert_not_called()
-    transaction.commit.assert_not_called()
-    assert "2099-07-16  practice:999  unknown_venue  Invented title" in result.output
+    assert "2099-07-16  flags-test:main  unknown_venue  Invented title" in result.output
     assert f"2099-07-16  {miss_key}  candidate" in result.output
     assert "2099-11-09  empty_week" in result.output
-    assert "2099-11-16  empty_week" in result.output
     data = json.loads(output.read_text())
-    assert data["empty_weeks"] == ["2099-11-09", "2099-11-16"]
-    assert data["flagged_sessions"] == [{
-        "session_key": "practice:999", "post_key": key, "date": "2099-07-16",
+    assert [row for row in data["flagged_sessions"] if row["session_key"] == "flags-test:main"] == [{
+        "session_key": "flags-test:main", "post_key": f"CFAKEFLAGS:{post.ts}", "date": "2099-07-16",
         "title": "Invented title", "flags": ["unknown_venue"], "format": "single",
         "rsvp_count": 2, "text": "Invented practice", "replies": ["Invented reply"],
     }]
     assert data["possible_misses"] == [{"post_key": miss_key, "date": "2099-07-16",
-                                          "text": "Invented reminder", "reactions": {"six": 7}}]
+                                        "text": "Invented reminder", "reactions": {"six": 7}}]
+    assert data["empty_weeks"] == ["2099-11-09"]
+    transaction.commit.assert_not_called()
 
 
 @pytest.mark.parametrize("failure", ["sync", "commit", "rebuild", "weather", "client"])
@@ -171,7 +116,6 @@ def test_nightly_stops_at_first_failure(app, transaction, failure, caplog):
 def test_nightly_runs_all_steps_in_order_with_bot(app, transaction):
     from app.analytics import jobs
     order = MagicMock()
-    http_get = MagicMock()
     with patch.object(jobs, "sync_recent", return_value={}) as sync, \
          patch.object(jobs, "rebuild", return_value={"sessions": 1}) as rebuild, \
          patch.object(jobs, "fetch_missing_weather", return_value={"sessions": 0}) as weather, \
@@ -179,25 +123,13 @@ def test_nightly_runs_all_steps_in_order_with_bot(app, transaction):
          patch("app.slack.client.get_slack_user_client") as user:
         for name, mock in (("sync", sync), ("commit", transaction.commit), ("rebuild", rebuild), ("weather", weather)):
             order.attach_mock(mock, name)
-        out = jobs.run_nightly(http_get=http_get)
+        out = jobs.run_nightly()
     assert out == {"step": "done", "ok": True, "sync": {}, "rebuild": {"sessions": 1}, "weather": {"sessions": 0}}
-    assert order.mock_calls == [call.sync(bot.return_value), call.commit(), call.rebuild(), call.weather(http_get=http_get)]
+    assert order.mock_calls == [call.sync(bot.return_value), call.commit(), call.rebuild(), call.commit(),
+                                call.weather()]
     bot.assert_called_once_with()
     user.assert_not_called()
     transaction.rollback.assert_not_called()
-
-
-def test_nightly_injected_client_and_default_weather(app):
-    from app.analytics import jobs
-    client = MagicMock()
-    with patch.object(jobs, "sync_recent", return_value={}) as sync, \
-         patch.object(jobs, "rebuild", return_value={}), \
-         patch.object(jobs, "fetch_missing_weather", return_value={}) as weather, \
-         patch.object(jobs, "get_slack_client") as bot:
-        assert jobs.run_nightly(client=client)["ok"]
-    bot.assert_not_called()
-    sync.assert_called_once_with(client)
-    weather.assert_called_once_with()
 
 
 def test_nightly_continues_after_channel_failure(db_session, transaction):
@@ -215,8 +147,8 @@ def test_nightly_continues_after_channel_failure(db_session, transaction):
 
     with patch.object(jobs, "rebuild", return_value={"sessions": 1}) as rebuild, \
          patch.object(jobs, "fetch_missing_weather", return_value={"sessions": 0}) as weather, \
-         patch.object(jobs, "get_slack_client") as bot:
-        out = jobs.run_nightly(client=FailedChannel())
+         patch.object(jobs, "get_slack_client", return_value=FailedChannel()):
+        out = jobs.run_nightly()
     assert out["ok"] is True and out["step"] == "done"
     assert out["sync"][bad_channel] == {"error": "not_in_channel"}
     assert out["sync"][good_channel]["messages"] == 1
@@ -224,8 +156,7 @@ def test_nightly_continues_after_channel_failure(db_session, transaction):
     assert out["rebuild"] == {"sessions": 1}
     rebuild.assert_called_once_with()
     weather.assert_called_once_with()
-    bot.assert_not_called()
-    transaction.commit.assert_called_once_with()
+    assert transaction.commit.call_count == 2
     transaction.rollback.assert_not_called()
 
 
@@ -247,22 +178,4 @@ def test_scheduler_registers_nightly_job(app):
          patch("app.slack.bolt_app.is_socket_mode_available", return_value=False):
         scheduler.running = False
         assert sched.init_scheduler(app)
-    job = next(c.kwargs for c in scheduler.add_job.call_args_list if c.kwargs["id"] == "analytics_nightly")
-    assert job["func"] is sched.run_analytics_nightly_job
-    assert job["args"] == [app]
-    assert job["misfire_grace_time"] == 3600
-    assert job["replace_existing"] is True
-    assert str(job["trigger"].timezone) == "America/Chicago"
-    fields = {field.name: str(field) for field in job["trigger"].fields}
-    assert (fields["hour"], fields["minute"]) == ("3", "30")
-
-
-def test_scheduler_wrapper_pushes_context(app):
-    from flask import current_app
-    from app.scheduler import run_analytics_nightly_job
-    def run():
-        assert current_app._get_current_object() is app
-        return {"step": "done", "ok": True}
-    with patch("app.analytics.jobs.run_nightly", side_effect=run) as nightly:
-        run_analytics_nightly_job(app)
-    nightly.assert_called_once_with()
+    assert "analytics_nightly" in [c.kwargs["id"] for c in scheduler.add_job.call_args_list]

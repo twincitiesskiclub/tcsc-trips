@@ -9,11 +9,6 @@ from app.analytics.models import AnalyticsCorrection
 from app.models import db
 
 
-CORRECTION_FIELDS = {
-    "create", "skip", "kind", "date", "start_time", "status", "merged", "rsvp_emoji",
-    "plan_emoji", "rsvp_from", "add", "remove", "location", "activities", "types", "ok",
-    "title", "category", "emoji_roles", "reported_count", "gap_ok",
-}
 _POST_KEY = r"C[A-Z0-9]+:\d+\.\d+"
 TRIP_KEY = re.compile(r"trip:([a-z0-9-]+):(\d{4})")
 GAP_KEY_PREFIX = "gap:"
@@ -27,6 +22,60 @@ class CorrectionError(ValueError):
     """A correction cannot safely be applied."""
 
 
+def _iso_date(value):
+    if not (isinstance(value, str) and re.fullmatch(r"\d{4}-\d{2}-\d{2}", value)):
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
+
+
+def _strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) for item in value)
+
+
+def _people(value):
+    return isinstance(value, list) and all(
+        isinstance(entry, dict)
+        and isinstance(entry.get("slack_uid"), str)
+        and bool(re.fullmatch(r"[UW][A-Z0-9]{2,19}", entry["slack_uid"]))
+        and entry.get("role") in _ROLES
+        for entry in value)
+
+
+def _emoji_roles(value):
+    return isinstance(value, dict) and bool(value) and all(
+        isinstance(emoji, str) and emoji.strip() and role in ("rsvp", "decline", "plan")
+        for emoji, role in value.items())
+
+
+_BOOL = (lambda value: isinstance(value, bool), "a bool")
+_TEXT = (lambda value: isinstance(value, str) and bool(value.strip()), "a non-empty string")
+_STRINGS = (_strings, "a list of strings")
+_PEOPLE = (_people, "a list of {slack_uid, role}, with role rsvp/plan/lead/coach/signup/decline")
+# field -> (check, what the error says was expected)
+_CHECKS = {
+    "create": _BOOL, "skip": _BOOL, "merged": _BOOL, "ok": _BOOL,
+    "kind": (lambda value: value in ("practice", "event", "trip"), "practice or event or trip"),
+    "status": (lambda value: value in ("held", "cancelled"), "held or cancelled"),
+    "date": (_iso_date, "an ISO date (YYYY-MM-DD)"),
+    "start_time": (lambda value: isinstance(value, str)
+                   and bool(re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value)), "HH:MM"),
+    "location": (lambda value: isinstance(value, str), "a string"),
+    "add": _PEOPLE, "remove": _PEOPLE,
+    "title": _TEXT, "gap_ok": _TEXT,
+    "category": (lambda value: value in CATEGORIES, " or ".join(CATEGORIES)),
+    "reported_count": (lambda value: type(value) is int and value >= 0, "a non-negative integer"),
+    "emoji_roles": (_emoji_roles, "a non-empty {emoji: rsvp|decline|plan} mapping"),
+    "rsvp_emoji": _STRINGS, "plan_emoji": _STRINGS, "activities": _STRINGS, "types": _STRINGS,
+    "rsvp_from": (lambda value: _strings(value) and all(re.fullmatch(_POST_KEY, item) for item in value),
+                  "a list of channel:ts references"),
+}
+CORRECTION_FIELDS = set(_CHECKS)
+
+
 def validate_correction(key: str, fields: dict) -> dict:
     """Validate a key and its fields without changing either."""
     if not isinstance(key, str) or not _KEY.fullmatch(key):
@@ -34,58 +83,10 @@ def validate_correction(key: str, fields: dict) -> dict:
     if not isinstance(fields, dict) or not fields:
         raise CorrectionError("fields: expected a non-empty mapping")
     for field, value in fields.items():
-        if field not in CORRECTION_FIELDS:
+        if field not in _CHECKS:
             raise CorrectionError(f"{field}: unknown correction field")
-        if field in {"create", "skip", "merged", "ok"}:
-            valid = isinstance(value, bool)
-            expected = "a bool"
-        elif field in {"kind", "status"}:
-            choices = ("practice", "event", "trip") if field == "kind" else ("held", "cancelled")
-            valid = value in choices
-            expected = " or ".join(choices)
-        elif field == "date":
-            valid = isinstance(value, str) and bool(re.fullmatch(r"\d{4}-\d{2}-\d{2}", value))
-            if valid:
-                try:
-                    date.fromisoformat(value)
-                except ValueError:
-                    valid = False
-            expected = "an ISO date (YYYY-MM-DD)"
-        elif field == "start_time":
-            valid = isinstance(value, str) and bool(re.fullmatch(r"(?:[01]\d|2[0-3]):[0-5]\d", value))
-            expected = "HH:MM"
-        elif field == "location":
-            valid = isinstance(value, str)
-            expected = "a string"
-        elif field in {"add", "remove"}:
-            valid = isinstance(value, list) and all(
-                isinstance(entry, dict)
-                and isinstance(entry.get("slack_uid"), str)
-                and bool(re.fullmatch(r"[UW][A-Z0-9]{2,19}", entry["slack_uid"]))
-                and entry.get("role") in _ROLES
-                for entry in value)
-            expected = "a list of {slack_uid, role}, with role rsvp/plan/lead/coach/signup/decline"
-        elif field in {"title", "gap_ok"}:
-            valid = isinstance(value, str) and bool(value.strip())
-            expected = "a non-empty string"
-        elif field == "category":
-            valid = value in CATEGORIES
-            expected = " or ".join(CATEGORIES)
-        elif field == "reported_count":
-            valid = type(value) is int and value >= 0
-            expected = "a non-negative integer"
-        elif field == "emoji_roles":
-            valid = isinstance(value, dict) and bool(value) and all(
-                isinstance(emoji, str) and emoji.strip() and role in ("rsvp", "decline", "plan")
-                for emoji, role in value.items())
-            expected = "a non-empty {emoji: rsvp|decline|plan} mapping"
-        else:
-            valid = isinstance(value, list) and all(isinstance(item, str) for item in value)
-            expected = "a list of strings"
-            if field == "rsvp_from":
-                valid = valid and all(re.fullmatch(_POST_KEY, item) for item in value)
-                expected = "a list of channel:ts references"
-        if not valid:
+        check, expected = _CHECKS[field]
+        if not check(value):
             raise CorrectionError(f"{field}: expected {expected}")
     gap = GAP_KEY.fullmatch(key)
     if gap:

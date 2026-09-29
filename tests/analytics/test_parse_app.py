@@ -32,7 +32,7 @@ def test_split_lift_with_saved_emoji(cfg):
     out = extract_app_sessions(ps, {(CH, "4082.1"): ArchivedMessage(CH, "4082.1", {"ts": "4082.1", "text": ""})}, cfg, LOCS)
     assert [(s.slot, s.rsvp_emoji, s.format, s.session_key) for s in out] == [
         ("early", "six", "split", "practice:1"), ("late", "seven", "split", "practice:2")]
-    assert out[0].is_indoor and out[0].activity == "Strength"
+    assert out[0].is_indoor
 
 
 def test_wed_fri_group_reads_mapping_from_post(cfg):
@@ -177,8 +177,7 @@ def test_classification_provenance_and_purity(cfg):
     s, = extract_app_sessions(ps, messages, cfg, LOCS)
     assert (s.era, s.date, s.start_time, s.channel_id, s.source_ts, s.source_archive_id) == (
         "app", ps[0].date.date(), time(18, 30), CH, msg.ts, 99)
-    assert (s.title, s.kind, s.activity, s.workout_type, s.status) == (
-        "Run, Bike, Kickoff - Endurance, Technique", "event", "Multisport", "Technique", "held")
+    assert (s.title, s.kind, s.status) == ("Run, Bike, Kickoff - Endurance, Technique", "event", "held")
     assert (s.activities, s.workout_types, s.lead_uids, s.coach_uids, s.plan_emoji) == (
         ["Run", "Bike", "Kickoff"], ["Endurance", "Technique"], ["UFAKE0001"], ["UFAKE0002"], ["bike"])
     s.activities.append("Strength")
@@ -189,4 +188,4 @@ def test_classification_provenance_and_purity(cfg):
 def test_empty_classification_has_practice_title(cfg):
     p = P(1, datetime(2099, 1, 7, 18, 30), "4083.1", activities=(), types=())
     s, = extract_app_sessions([p], {}, cfg, LOCS)
-    assert (s.title, s.activity, s.workout_type, s.kind) == ("Practice", "Other", "Other", "practice")
+    assert (s.title, s.kind) == ("Practice", "practice")

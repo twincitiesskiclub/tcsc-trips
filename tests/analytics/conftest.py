@@ -16,6 +16,7 @@ from app.models import db
 from tests._db_guard import LOCAL_TEST_DB
 
 FIXTURES = Path(__file__).parent / "fixtures"
+SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
 DUMP_DIR = Path(os.environ.get(
     "TCSC_ANALYTICS_DUMP_DIR",
     "/workspace/tcsc-trips/.superpowers/analytics-slack-dump"))

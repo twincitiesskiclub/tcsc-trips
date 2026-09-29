@@ -5,6 +5,7 @@ from datetime import datetime
 
 from sqlalchemy.dialects.postgresql import ARRAY, JSONB
 
+from app.analytics import CATEGORIES
 from app.models import db
 
 
@@ -103,9 +104,8 @@ class PracticeSession(db.Model):
         db.CheckConstraint("format IN ('single','split','merged')", name="ck_session_format"),
         db.CheckConstraint("status IN ('held','cancelled')", name="ck_session_status"),
         db.CheckConstraint("kind IN ('practice','event','trip')", name="ck_session_kind"),
-        db.CheckConstraint(
-            "category IN ('practice','kickoff','social','board','race','volunteer','banquet','other','trip')",
-            name="ck_session_category"),
+        db.CheckConstraint("category IN ({})".format(",".join(f"'{c}'" for c in CATEGORIES)),
+                           name="ck_session_category"),
     )
 
 

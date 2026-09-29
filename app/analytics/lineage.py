@@ -1,10 +1,9 @@
 """Combine archived posts and app practices into a pure, normalized lineage."""
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
-from datetime import date, datetime, time
+from datetime import date, time
 from html import unescape
 import re
-from zoneinfo import ZoneInfo
 
 from app.analytics import CANDIDATE_CHANNELS, SESSION_CHANNELS, TRIP_CHANNEL
 from app.analytics.coverage import find_candidates
@@ -16,16 +15,14 @@ from app.analytics.history_config import (
     HistoryConfig, activity_bucket, base_emoji, classify_title, resolve_venue, workout_bucket,
 )
 from app.analytics.parse_app import extract_app_sessions
-from app.analytics.parse_template import (
-    extract_template_sessions, is_weekly_preview, looks_like_template,
-)
+from app.analytics.parse_template import extract_template_sessions
 from app.analytics.parse_trips import is_signup_post, parse_signup, trip_sessions
 from app.analytics.seasons import season_label
+from app.utils import slack_ts_central_date
 
 
 MERGE_RE = re.compile(r"\b(combin\w*|merg\w*|one session|single session|one lift)\b", re.I)
 CANCEL_RE = re.compile(r"\bcancel(l?ed|l?ing|s)?\b", re.I)
-_CENTRAL = ZoneInfo("America/Chicago")
 _CLOCK = re.compile(r"(?<![\d:])(\d{1,2}):(\d{2})(?!\d)\s*(AM|PM)?", re.I)
 
 
@@ -41,10 +38,6 @@ class _Session:
 
 def _top_level(message):
     return message.raw.get("thread_ts", message.ts) == message.ts
-
-
-def _reply_date(reply):
-    return datetime.fromtimestamp(float(reply["ts"]), _CENTRAL).date()
 
 
 def _merge_time(text):
@@ -69,28 +62,19 @@ def session_category(session) -> str:
     return "kickoff" if "Kickoff" in session.activities else "other"
 
 
-def _created_draft(message, fields, cfg, locations):
+def _created_draft(message, fields, cfg):
+    """Defaults for a `create` post; build_lineage then applies its fields."""
     line = next((line for line in message.raw.get("text", "").splitlines() if line.strip()), "")
     title = fields.get("title") or unescape(line).replace("*", "").replace("_", "").strip()[:120]
     classification = classify_title(title, cfg)
-    venue = resolve_venue(fields.get("location"), cfg, locations)
-    activities = list(fields.get("activities", classification["activities"]))
-    types = list(fields.get("types", classification["workout_types"]))
-    emojis = list(fields.get("rsvp_emoji", ["white_check_mark"]))
     key = f"{message.channel_id}:{message.ts}"
-    kind = fields.get("kind") or ("event" if fields.get("category", "practice") != "practice"
-                                  else classification["kind"])
     return SessionDraft(
         session_key=f"{key}:main", group_key=key, era="template",
-        date=date.fromisoformat(fields["date"]),
-        start_time=time.fromisoformat(fields["start_time"]) if "start_time" in fields else None,
-        title=title, venue_raw=fields.get("location"),
-        location_id=venue["location_id"], location_name=venue["location_name"],
-        lat=venue["lat"], lon=venue["lon"], is_indoor=venue["is_indoor"],
-        activities=activities, workout_types=types,
-        activity=activity_bucket(activities, cfg), workout_type=workout_bucket(types, cfg),
-        kind=kind, category=fields.get("category", ""), status=fields.get("status", "held"),
-        rsvp_emoji=emojis[0] if len(emojis) == 1 else None, rsvp_emoji_set=emojis,
+        date=date.fromisoformat(fields["date"]), start_time=None, title=title,
+        lat=cfg.default_lat, lon=cfg.default_lon,
+        activities=classification["activities"], workout_types=classification["workout_types"],
+        kind="event" if fields.get("category", "practice") != "practice" else classification["kind"],
+        rsvp_emoji="white_check_mark",
         channel_id=message.channel_id, source_ts=message.ts, source_archive_id=message.archive_id,
     )
 
@@ -116,15 +100,13 @@ def _apply_fields(state, fields, cfg, locations):
         session.start_time = time.fromisoformat(value) if isinstance(value, str) else value
     if "location" in fields:
         session.venue_raw = fields["location"]
-        venue = resolve_venue(session.venue_raw, cfg, locations)
-        for name in ("location_id", "location_name", "lat", "lon", "is_indoor"):
-            setattr(session, name, venue[name])
+        venue, _ = resolve_venue(session.venue_raw, cfg, locations)
+        for name, value in venue.items():
+            setattr(session, name, value)
     if "activities" in fields:
         session.activities = list(fields["activities"])
-        session.activity = activity_bucket(session.activities, cfg)
     if "types" in fields:
         session.workout_types = list(fields["types"])
-        session.workout_type = workout_bucket(session.workout_types, cfg)
     if "rsvp_emoji" in fields:
         _assign_rsvp_slots(state, fields["rsvp_emoji"])
     if "plan_emoji" in fields:
@@ -156,7 +138,8 @@ def _merge_group(group, replies, corrections, cfg, locations):
     if merged_key in corrections and merged_key not in keys:
         keys.append(merged_key)
     decisions = [corrections[key]["merged"] for key in keys if "merged" in corrections[key]]
-    matching = next((reply for reply in replies if _reply_date(reply) == first.date
+    matching = next((reply for reply in replies
+                     if slack_ts_central_date(reply["ts"]) == first.date
                      and MERGE_RE.search(reply.get("text", ""))), None)
     if False in decisions or not (True in decisions or (not decisions and matching)):
         return group
@@ -246,9 +229,7 @@ def build_lineage(
     drafts = extract_app_sessions(app_practices, indexed, cfg, locations)
     consumed = {(session.channel_id, session.source_ts) for session in drafts}
     for key, message in indexed.items():
-        text = message.raw.get("text", "")
-        if (message.channel_id in SESSION_CHANNELS and key not in consumed and _top_level(message)
-                and not is_weekly_preview(text) and looks_like_template(text)):
+        if message.channel_id in SESSION_CHANNELS and key not in consumed and _top_level(message):
             drafts.extend(extract_template_sessions(message, cfg, locations))
 
     produced_posts = {(session.channel_id, session.source_ts) for session in drafts}
@@ -256,7 +237,7 @@ def build_lineage(
         fields = corrections.get(f"{message.channel_id}:{message.ts}", {})
         if (fields.get("create") is True and key not in produced_posts
                 and message.channel_id in CANDIDATE_CHANNELS and _top_level(message)):
-            drafts.append(_created_draft(message, fields, cfg, locations))
+            drafts.append(_created_draft(message, fields, cfg))
 
     # Thread broadcasts may occur in channel history as well as in replies.
     replies = defaultdict(dict)
@@ -286,8 +267,8 @@ def build_lineage(
         thread = sorted(replies[(first.channel_id, first.source_ts)].values(), key=lambda reply: float(reply["ts"]))
         for state in _merge_group(group, thread, corrections, cfg, locations):
             session = state.draft
-            if any(_reply_date(reply) <= session.date and CANCEL_RE.search(reply.get("text", ""))
-                   for reply in thread):
+            if any(slack_ts_central_date(reply["ts"]) <= session.date
+                   and CANCEL_RE.search(reply.get("text", "")) for reply in thread):
                 session.flags.append("cancel_language")
             rows = _attendance(state, indexed, cfg, corrections)
             session.rsvp_count = len({row.slack_uid for row in rows if row.role == "rsvp"})
@@ -295,6 +276,8 @@ def build_lineage(
             if session.reported_count is not None:
                 session.rsvp_count = session.reported_count
                 session.flags.append("identities_lost")
+            session.activity = activity_bucket(session.activities, cfg)
+            session.workout_type = workout_bucket(session.workout_types, cfg)
             session.day_of_week = session.date.strftime("%A")
             session.season_label = season_label(session.date, seasons)
             session.needs_review = bool(session.flags) and not any(

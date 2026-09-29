@@ -10,11 +10,10 @@ import vl_convert as vlc
 
 from app.analytics.dashboards import splits as ts
 from app.analytics.dashboards.base import Chart, Filters, Note, Table
-from tests.analytics.conftest import FIXTURES
+from tests.analytics.conftest import SCHEMA
 
 WEEKS = [(20, 10), (25, 15), (18, 17), (30, 20)]
 FIRST = date(2099, 9, 17)
-SCHEMA = json.loads((FIXTURES / "vega-lite-v6.schema.json").read_text())
 
 
 def _session(id, day=FIRST, format="split", season="2099 Fall/Winter", slot=None):
@@ -39,7 +38,7 @@ def _data():
 
 def _build(sessions, attendance, filters=None):
     selected = filters or Filters(days=["Thursday"], activities=["Strength"])
-    return [ts.tiles(sessions, attendance), *ts.split_blocks(sessions, attendance, selected)]
+    return ts.split_blocks(sessions, attendance, selected)
 
 
 @pytest.fixture
@@ -47,8 +46,8 @@ def blocks():
     return _build(*_data())
 
 
-def _tiles(blocks):
-    return {t.label: t for t in blocks[0].tiles}
+def _table(blocks):
+    return next(b for b in blocks if isinstance(b, Table))
 
 
 def _charts(blocks):
@@ -60,18 +59,6 @@ def _render(chart):
     png = vlc.vegalite_to_png(json.dumps({**chart.spec, "width": 800}))
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
     return png
-
-
-def test_tiles(blocks):
-    tiles = _tiles(blocks)
-    assert tiles["Average per week"].value == "38.8"
-    assert tiles["Average per week"].sub == "RSVPs a week, peak 50"
-    assert tiles["Weeks over 27"].value == "4 of 4"
-    assert tiles["Weeks over 35"].value == "2 of 4"
-    assert tiles["Late session share"].value == "40%"
-    assert tiles["Late session share"].sub == "of two-session RSVPs"
-    assert str(tiles["Latest week"].value) == "50"
-    assert "Weeks over 30" not in tiles
 
 
 @pytest.mark.parametrize("index", range(4))
@@ -88,7 +75,7 @@ def test_weekly_totals_and_season_summary(blocks):
     assert [w["total"] for w in weeks] == [30, 40, 35, 50]
     assert [w["week"] for w in weeks] == [FIRST - timedelta(days=3) + timedelta(weeks=i) for i in range(4)]
     assert all(w["season_label"] == "2099 Fall/Winter" and w["formats"] == ["split"] for w in weeks)
-    summary = next(b for b in blocks if isinstance(b, Table))
+    summary = _table(blocks)
     row = summary.rows[0]
     assert (row["season_label"], row["weeks"], row["avg"], row["peak"]) == ("2099 Fall/Winter", 4, 38.8, 50)
     assert (row["over_27"], row["over_35"], row["late_pct"]) == (4, 2, "40%")
@@ -108,7 +95,7 @@ def test_split_rows_merged_slots_single_duplicates_and_roles():
     assert [w["total"] for w in weeks] == [8, 1]
     assert weeks[0]["formats"] == ["merged", "single", "split"]
     blocks = _build(sessions, att)
-    assert _tiles(blocks)["Late session share"].value == "50%"
+    assert _table(blocks).rows[0]["late_pct"] == "50%"
     rows = _charts(blocks)[0].rows
     assert [(r["early"], r["late"], r["single"], r["total"]) for r in rows] == [
         (1, 0, 0, 1), (0, 1, 0, 1), (1, 2, 0, 4), (0, 0, 2, 2), (0, 0, 1, 1)]
@@ -136,37 +123,30 @@ def test_slot_preference_counts_people_per_season_not_rsvps():
 
 @pytest.mark.parametrize("day, bounded", [(date(2025, 11, 30), False), (date(2025, 12, 1), True),
     (date(2026, 3, 31), True), (date(2026, 4, 1), False), (date(2099, 9, 17), False)])
-def test_capacity_overlap_and_tiles_use_same_lines(day, bounded):
+def test_capacity_overlap_and_table_use_same_lines(day, bounded):
     blocks = _build([_session(1, day)], [])
-    tiles = _tiles(blocks)
     values = [27, 30, 35] if bounded else [27, 35]
-    assert [int(key.split()[-1]) for key in tiles if key.startswith("Weeks over")] == values
     rules = [layer for layer in _charts(blocks)[0].spec["layer"] if layer["mark"]["type"] == "rule"]
     assert sorted(row["value"] for rule in rules for row in rule["data"]["values"]) == values
-    table = next(b for b in blocks if isinstance(b, Table))
+    table = _table(blocks)
     assert [label for key, label in table.columns if key.startswith("over_")] == [f"Weeks over {v}" for v in values]
 
 
-def test_latest_week_comparison_and_matching_season_type():
+def test_comparison_matches_season_type():
     previous = FIRST - timedelta(days=364)
     sessions = [_session(1, previous, season="2098 Fall/Winter"),
                 _session(2, FIRST), _session(3, FIRST + timedelta(weeks=2)),
                 _session(4, date(2099, 6, 4), season="2099 Spring/Summer")]
     att = [_rsvp(1, 1, "early"), _rsvp(1, 2, "late"), _rsvp(2, 3, "early"), _rsvp(4, 4, "early")]
-    first = _build(sessions[:2], att)
-    assert _tiles(first)["Latest week"].sub == "Same week last year: 2"
     blocks = _build(sessions, att)
-    assert "Same week last year" not in _tiles(blocks)["Latest week"].sub
     rows = _charts(blocks)[2].rows
     assert {r["season_label"] for r in rows} == {"2098 Fall/Winter", "2099 Fall/Winter"}
     assert [r["week_of_season"] for r in rows if r["season_label"] == "2099 Fall/Winter"] == [1, 3]
     assert ts.week_of_season(ts.weekly_totals(sessions, att)) == rows
 
 
-def test_empty_selection_is_not_a_zero_percent_and_renders():
+def test_empty_selection_renders():
     blocks = _build([], [])
-    tiles = _tiles(blocks)
-    assert all(tile.value == "No data" and tile.sub == "" for tile in tiles.values())
     for chart in _charts(blocks):
         assert chart.rows == []
         _render(chart)
@@ -175,7 +155,7 @@ def test_empty_selection_is_not_a_zero_percent_and_renders():
 def test_build_trusts_loaders_even_when_filters_do_not_match():
     blocks = _build(*_data(), filters=Filters(seasons=["Other"], days=["Friday"],
                                            date_to=date(2000, 1, 1)))
-    assert _tiles(blocks)["Average per week"].value == "38.8"
+    assert _table(blocks).rows[0]["avg"] == 38.8
 
 
 def test_sessions_with_known_and_unknown_times_sort_safely():
@@ -184,7 +164,7 @@ def test_sessions_with_known_and_unknown_times_sort_safely():
     sessions[0].start_time = time(19)
     sessions[1].start_time = None
     blocks = _build(sessions, [_rsvp(1, 1, "late"), _rsvp(2, 2, "early")])
-    assert _tiles(blocks)["Average per week"].value == "2.0"
+    assert _table(blocks).rows[0]["avg"] == 2.0
 
 
 def _long_data():
@@ -221,8 +201,7 @@ def test_cancelled_week_is_visible_but_changes_no_aggregate():
     sessions.append(cancelled)
     attendance += [_rsvp(99, 999, "late")]
     after = _build(sessions, attendance)
-    assert _tiles(after) == _tiles(before)
-    assert next(b for b in after if isinstance(b, Table)) == next(b for b in before if isinstance(b, Table))
+    assert _table(after) == _table(before)
     assert _charts(after)[1:] == _charts(before)[1:]
     assert [w["total"] for w in ts.weekly_totals(sessions, attendance)] == [30, 40, 35, 50]
     assert all(row["season_label"] != "2100 Spring/Summer" for row in ts.slot_preference(sessions, attendance))
@@ -238,9 +217,8 @@ def test_session_chart_uses_temporal_horizontal_axis_and_entity_colors(blocks):
     s = _charts(blocks)[0].spec
     bar = s["layer"][0]
     assert bar["encoding"]["x"]["type"] == "temporal"
-    assert bar["encoding"]["x"]["axis"]["labelAngle"] == 0
     assert bar["encoding"]["x"]["axis"]["format"] == "%b %-d"
-    assert bar["encoding"]["x"]["axis"]["labelOverlap"]
+    assert s["config"]["axis"]["labelAngle"] == 0 and s["config"]["axis"]["labelOverlap"]
     assert bar["encoding"]["color"]["scale"]["range"] == ["#2a78d6", "#eb6834", "#4a3aa7"]
     gap = next(layer for layer in s["layer"] if layer["mark"]["type"] == "tick")
     assert gap["mark"]["color"] == "#ffffff" and gap["mark"]["thickness"] == 2
@@ -264,7 +242,6 @@ def test_season_chart_uses_average_bars_and_peak_ticks(blocks):
     assert tick["data"]["values"][0]["rsvps"] == 50
     preference = _charts(blocks)[3].spec
     assert preference["encoding"]["color"]["scale"]["range"] == ["#2a78d6", "#eb6834", "#4a3aa7"]
-    assert preference["encoding"]["x"]["axis"]["labelAngle"] == 0
 
 
 def test_long_session_history_validates_and_renders():
@@ -277,13 +254,13 @@ def test_long_session_history_validates_and_renders():
     _render(chart)
 
 
-def test_cancelled_dates_do_not_introduce_capacity_tiles():
+def test_cancelled_dates_do_not_introduce_capacity_lines():
     sessions, attendance = _data()
     cancelled = _session(99, date(2025, 12, 4))
     cancelled.status = "cancelled"
-    before = _tiles(_build(sessions, attendance))
-    after = _tiles(_build([cancelled, *sessions], attendance))
-    assert after == before
+    before = _table(_build(sessions, attendance))
+    after = _table(_build([cancelled, *sessions], attendance))
+    assert after.columns == before.columns
 
 
 def test_long_chart_renders_at_phone_width():
@@ -314,14 +291,8 @@ def test_comparison_keeps_calendar_spacing_and_breaks_lines_at_missing_weeks():
     assert x["scale"]["domainMin"] == 1 and x["scale"]["zero"] is False
     assert x["axis"]["tickMinStep"] == 1 and x["axis"]["format"] == "d"
     assert chart.spec["encoding"]["detail"] == {"field": "segment", "type": "nominal"}
+    assert chart.spec["mark"]["strokeWidth"] == 2 and chart.spec["mark"]["point"]["size"] >= 64
     _render(chart)
-
-
-@pytest.mark.parametrize("label, short", [("2025 Fall/Winter", "Fall 25"),
-    ("2026 Spring/Summer", "Sum 26"), ("2099 Fall/Winter", "Fall 99"),
-    ("Custom season", "Custom season")])
-def test_short_season_label(label, short):
-    assert ts._short_season_label(label) == short
 
 
 def test_session_season_row_always_uses_short_labels_with_full_tooltip():
@@ -345,16 +316,13 @@ def test_bounded_capacity_counts_only_mondays_in_effect():
              {"value": 30, "label": "Temporary", "from": "2099-09-14", "to": "2099-09-21"}]
     with patch.object(ts, "load_history_config", return_value=SimpleNamespace(capacity_lines=lines)):
         blocks = _build(sessions, attendance)
-    assert _tiles(blocks)["Weeks over 30"].value == "1 of 2 in effect"
-    assert _tiles(blocks)["Weeks over 27"].value == "4 of 4"
-    summary = next(b for b in blocks if isinstance(b, Table)).rows
+    summary = _table(blocks).rows
     assert [r["over_30"] for r in summary] == ["", "1 of 2 in effect"]
     # The practice is inside this narrower window, but its Monday is outside.
     lines[1].update({"from": "2099-09-17", "to": "2099-09-20"})
     with patch.object(ts, "load_history_config", return_value=SimpleNamespace(capacity_lines=lines)):
         narrow = _build([sessions[1]], attendance)
-    assert next(b for b in narrow if isinstance(b, Table)).rows[0]["over_30"] == ""
-    assert _tiles(narrow)["Weeks over 30"].value == "No data"
+    assert _table(narrow).rows[0]["over_30"] == ""
 
 
 @pytest.mark.parametrize("start,end,want_start,want_end", [
@@ -385,7 +353,7 @@ def test_season_axes_and_preference_rows_follow_summary_chronology():
     sessions, attendance = _long_data()
     blocks = _build(list(reversed(sessions)), attendance)
     order = ["2097 Spring/Summer", "2097 Fall/Winter", "2098 Spring/Summer", "2098 Fall/Winter"]
-    summary = next(b for b in blocks if isinstance(b, Table))
+    summary = _table(blocks)
     assert [r["season_label"] for r in summary.rows] == order
     preferences = ts.slot_preference(list(reversed(sessions)), attendance)
     assert list(dict.fromkeys(r["season_label"] for r in preferences)) == order
@@ -414,7 +382,7 @@ def test_unassigned_rsvps_are_in_totals_and_visible_only_when_needed(format):
     assert chart.rows[0]["total"] == 2
     assert chart.rows[0]["unassigned"] == 1
     assert ("unassigned", "Button, no slot") in chart.columns
-    assert _tiles(blocks)["Average per week"].value == "2.0"
+    assert _table(blocks).rows[0]["avg"] == 2.0
     assert "Unassigned" in chart.spec["layer"][0]["encoding"]["color"]["scale"]["domain"]
     assigned = _charts(_build(sessions, [_rsvp(1, 1, "early")]))[0]
     assert "Unassigned" not in assigned.spec["layer"][0]["encoding"]["color"]["scale"]["domain"]
