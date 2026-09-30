@@ -4,8 +4,8 @@
 
 /** @type {ReadonlyArray<Readonly<{ tier: SponsorTier; label: string }>>} */
 export const SPONSOR_TIERS = Object.freeze([
-  Object.freeze({ tier: 'trailblazer', label: 'Trailblazer Partners' }),
-  Object.freeze({ tier: 'community_partner', label: 'Community Partners' }),
+  Object.freeze({ tier: 'trailblazer', label: 'Trailblazer partners' }),
+  Object.freeze({ tier: 'community_partner', label: 'Community partners' }),
   Object.freeze({ tier: 'supporter', label: 'Supporters' }),
 ]);
 

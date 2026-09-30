@@ -1,0 +1,32 @@
+---
+interface Props {
+  rhythm?: 'sm' | 'md';
+  flush?: 'top' | 'bottom' | 'both';
+  as?: 'div' | 'section' | 'article';
+  class?: string;
+}
+
+const {
+  rhythm = 'sm',
+  flush,
+  as: Tag = 'section',
+  class: className,
+}: Props = Astro.props;
+const rhythmClass = rhythm === 'md' ? 'band-y' : 'band-y-sm';
+---
+
+<Tag
+  class:list={['prose-column gutter mx-auto max-w-site grid md:grid-cols-12', rhythmClass, className]}
+  data-prose-rhythm={rhythm}
+  data-prose-flush={flush}
+>
+  <div class="reading-column">
+    <slot name="before" />
+    {Astro.slots.has('prose') && (
+      <div class="prose prose-column-body max-w-prose text-ink">
+        <slot name="prose" />
+      </div>
+    )}
+    <slot />
+  </div>
+</Tag>

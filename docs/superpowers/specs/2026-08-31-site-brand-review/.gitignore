@@ -1,0 +1,3 @@
+# Screenshots stay local: ~100MB per phase would double the repo Render clones on every deploy.
+# Agents read them by absolute path on this machine; Rob reviews via the Render preview.
+screens/

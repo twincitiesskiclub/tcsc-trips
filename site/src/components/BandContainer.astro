@@ -1,0 +1,9 @@
+---
+/** Internal site-width container shared by band-level components. */
+interface Props { class?: string; }
+const { class: className } = Astro.props;
+---
+
+<div class:list={['gutter mx-auto max-w-site', className]}>
+  <slot />
+</div>
