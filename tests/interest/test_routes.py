@@ -23,7 +23,7 @@ def test_get_renders_form(client):
     html = resp.get_data(as_text=True)
     assert 'name="email"' in html
     assert "Reply STOP to opt out." in html
-    assert '>Registration<' in html
+    assert '>Registration Contact List Sign-up<' in html
     assert "Leave your info and we'll let you know when registration opens." in html
     assert '>Sign up<' in html
 
