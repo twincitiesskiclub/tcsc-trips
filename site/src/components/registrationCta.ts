@@ -51,7 +51,7 @@ export async function getRegistrationCta(): Promise<RegistrationCta> {
     // CtaForState renders a dead <span> and, before this fix, the flip could
     // not restore a clickable <a> once the state changed away from it.
     url_coming_soon: d?.cta_coming_soon_url ?? d?.cta_closed_url ?? '/join',
-    label_closed: unknown ? 'How to register' : (d?.cta_closed_label ?? 'Get on the list'),
+    label_closed: unknown ? 'How to register' : (d?.cta_closed_label ?? 'Registration'),
     url_closed: unknown ? 'https://tcsc.ski/' : (d?.cta_closed_url ?? '/join'),
   };
 }
