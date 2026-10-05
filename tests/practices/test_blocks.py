@@ -279,3 +279,16 @@ def test_open_sees_status_committed_by_another_connection(db_session, fake_open)
         assert "<@U0FIRST>" in result["error"]
     finally:
         _cleanup(pids, start)
+
+
+def test_reminder_days_follow_the_nudge_rules():
+    opened = datetime(2099, 1, 12, 19, 0)  # Mon evening
+    assert blocks.reminder_days(opened, date(2099, 2, 1), date(2099, 1, 12)) == [
+        date(2099, 1, 15), date(2099, 1, 17), date(2099, 1, 19)]
+    assert blocks.reminder_days(opened, date(2099, 2, 1), date(2099, 1, 17)) == [
+        date(2099, 1, 19)]
+    assert blocks.reminder_days(opened, date(2099, 2, 1), date(2099, 1, 19)) == []
+    # A Wednesday open
+    wed = datetime(2099, 1, 14, 9, 0)
+    assert blocks.reminder_days(wed, date(2099, 2, 1), date(2099, 1, 14)) == [
+        date(2099, 1, 17), date(2099, 1, 19), date(2099, 1, 21)]
