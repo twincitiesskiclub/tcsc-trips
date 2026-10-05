@@ -29,11 +29,12 @@ class FakeQuery:
         return self.rows
 
 
-def practice(practice_id, when):
+def practice(practice_id, when, is_draft=False):
     return SimpleNamespace(
         id=practice_id,
         date=when,
         slack_coach_summary_ts=None,
+        is_draft=is_draft,
     )
 
 
@@ -122,6 +123,15 @@ def run_coach_summary(
         channel_lookup=channel_lookup,
         logger=logger,
     )
+
+
+def test_summary_sweeps_hidden_practices_through_publish_if_ready():
+    hidden = practice(41, datetime(2026, 7, 14, 18, 15), is_draft=True)
+    swept = []
+    with patch("app.practices.publishing.publish_if_ready",
+               lambda p, **k: swept.append(p.id) or False):
+        run_coach_summary([hidden])
+    assert 41 in swept
 
 
 def test_empty_production_week_registers_coach_refresh_identity():

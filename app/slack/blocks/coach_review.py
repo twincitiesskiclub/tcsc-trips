@@ -132,21 +132,17 @@ def build_coach_weekly_summary_blocks(
             if needs_attention:
                 header_text += " :warning:"
 
-            # A draft is invisible to every member-facing surface, so say so on
-            # the row. Without this a coach reads the week and reasonably
-            # assumes the club can already see it.
+            # Hidden practices are what coaches are here to fill in. Say what
+            # keeps each one hidden, in words the team uses.
             if getattr(practice, 'is_draft', False):
-                missing = list(getattr(practice, 'missing_details', []) or [])
-                header_text += "  `DRAFT`"
+                missing = [m for m in (getattr(practice, 'missing_details', []) or [])
+                           if m in ("location", "type", "time")]
+                header_text += "  `HIDDEN`"
                 if missing:
-                    header_text += (
-                        f"\n:warning: _Draft — not visible to members; "
-                        f"needs {', '.join(missing)}_"
-                    )
+                    needs = " and ".join(f"a {m}" for m in missing)
+                    header_text += f"\n:warning: _Hidden from members until it has {needs}_"
                 else:
-                    header_text += (
-                        "\n_Draft — not visible to members until published_"
-                    )
+                    header_text += "\n_Hidden from members_"
 
             # Header section (no accessory - Edit button moved to bottom for mobile)
             blocks.append({
@@ -279,25 +275,18 @@ def build_coach_weekly_summary_blocks(
     # ==========================================================================
     # FOOTER
     # ==========================================================================
-    # Deliberately no Publish button here. The Sunday evening flow (weekly
-    # summary + announcement job) already puts the coming week in front of
-    # members on its own, and gating that on a human click would break a
-    # workflow that works. Practices are published a block at a time from the
-    # availability poll that collected leads for them, weeks earlier — see
-    # app/routes/admin_availability.py. A draft still showing up here means it
-    # never made it into a poll, so it's flagged, not actioned.
-    drafts = [p for p in practices if getattr(p, 'is_draft', False)]
+    hidden = [p for p in practices if getattr(p, 'is_draft', False)]
 
     footer = (
         ":bulb: Click *Edit* to update workout details. Changes will notify "
         "this thread unless unchecked."
     )
-    if drafts:
+    if hidden:
+        n = len(hidden)
         footer += (
-            f"\n:warning: {len(drafts)} "
-            f"{'practice' if len(drafts) == 1 else 'practices'} in this week "
-            f"{'is' if len(drafts) == 1 else 'are'} still a draft and can't be "
-            "seen by members — publish the availability block it belongs to."
+            f"\n:warning: {n} {'practice' if n == 1 else 'practices'} this week "
+            f"{'is' if n == 1 else 'are'} hidden from members until "
+            f"{'its' if n == 1 else 'their'} details are filled in."
         )
     blocks.append({
         "type": "context",

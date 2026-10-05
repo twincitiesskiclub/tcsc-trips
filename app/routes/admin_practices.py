@@ -26,7 +26,7 @@ from ..practices.availability_models import (
 from ..practices.drafting import default_practice_days
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
 from ..practices.lead_candidates import lead_candidates
-from ..practices.publishing import publish_blockers, publish_practices
+from ..practices.publishing import publish_blockers, publish_if_ready
 from ..practices.plan_reaction_queries import (
     PlanReactionSourceSelectionError,
     load_all_plan_reaction_sources,
@@ -352,51 +352,13 @@ def practices_data():
             'cancellation_reason': practice.cancellation_reason or '',
             'workout_description': practice.workout_description or '',
             'logistics_notes': practice.logistics_notes or '',
-            # Drafts are invisible to members until published. The grid needs
-            # both flags: is_draft to badge and offer the row for selection,
-            # missing_details to explain why a row can't be published yet
-            # rather than letting the director find out by clicking.
+            # The list badges practices hidden from members (is_draft), and
+            # missing_details explains what keeps each one hidden.
             'is_draft': practice.is_draft,
             'missing_details': publish_blockers(practice) if practice.is_draft else [],
         })
 
     return jsonify({'practices': practices_data})
-
-
-@admin_practices_bp.route('/publish', methods=['POST'])
-@admin_required
-def publish_practices_route():
-    """Publish specific drafts by id — the escape hatch, not the main route.
-
-    Blocks are normally published from the availability poll that collected
-    leads for them (`POST /admin/availability/polls/<id>/publish`), which is the
-    batch a director actually thinks in. This exists for a draft whose block
-    never got a poll: without it such a practice has no route to being
-    published at all, which is the exact failure the drafting feature would
-    otherwise reintroduce. The practices list drawer is its only caller.
-
-    Nothing here is week-scoped on purpose. The Sunday evening flow already
-    sends the coming week to members with no human in the loop.
-    """
-    data = request.get_json() or {}
-    practice_ids = data.get('practice_ids')
-    if not practice_ids or not isinstance(practice_ids, list):
-        return jsonify({'error': 'practice_ids must be a non-empty list'}), 400
-
-    practices = Practice.query.filter(Practice.id.in_(practice_ids)).all()
-    found = {practice.id for practice in practices}
-    missing_ids = [pid for pid in practice_ids if pid not in found]
-    if missing_ids:
-        # Refuse the whole batch rather than publishing part of a stale grid
-        # selection: publishing is member-visible and awkward to undo, so a
-        # selection that no longer matches the database is worth a re-check.
-        return jsonify({
-            'error': 'unknown practice id(s): '
-                     + ', '.join(str(pid) for pid in missing_ids),
-        }), 404
-
-    result = publish_practices(practices)
-    return jsonify(result)
 
 
 @admin_practices_bp.route('/<int:practice_id>')
@@ -694,6 +656,10 @@ def edit_practice(practice_id):
 
         db.session.commit()
         practice_updated = True
+
+        # A bot-created session goes live the moment it has a location and a
+        # type. Runs before the refresh below so every post sees it visible.
+        publish_if_ready(practice)
 
         # Rescheduling a practice INTO an open poll's range leaves it with no
         # letter emoji and no availability, exactly like creating one there --

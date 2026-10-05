@@ -415,6 +415,20 @@ def log_practice_edit(practice: Practice, slack_user_id: str) -> dict:
         return {'success': False, 'error': error_msg}
 
 
+def _publish_ready_hidden(week_start, week_end) -> None:
+    """Catch anything a script or missed save path left hidden while complete."""
+    from app.practices import publishing
+    from app.practices.service import coach_visible_practices
+
+    for hidden in coach_visible_practices().filter(
+        Practice.is_draft.is_(True),
+        Practice.date >= week_start,
+        Practice.date < week_end,
+    ).all():
+        if getattr(hidden, "is_draft", False):
+            publishing.publish_if_ready(hidden)
+
+
 def post_coach_weekly_summary(
     week_start: datetime,
     channel_override: Optional[str] = None
@@ -453,6 +467,7 @@ def post_coach_weekly_summary(
     # hiding them made every drafted slot render as an empty "Add Practice"
     # placeholder, inviting a second practice on top of the draft.
     week_end = week_start + timedelta(days=7)
+    _publish_ready_hidden(week_start, week_end)
     practices = coach_visible_practices().filter(
         Practice.date >= week_start,
         Practice.date < week_end

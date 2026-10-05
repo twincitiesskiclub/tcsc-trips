@@ -516,3 +516,47 @@ def test_detail_page_script_renders_a_missing_location_as_null(
         if stored is not None:
             db.session.delete(stored)
             db.session.commit()
+
+
+def test_admin_edit_publishes_a_hidden_practice_once_complete(
+    db_session, monkeypatch, admin_client
+):
+    """Filling in location and type on the edit page makes it member-visible."""
+    from app.models import db
+    from app.practices.models import Practice, PracticeLocation, PracticeType
+
+    db.session.rollback()
+    location = PracticeLocation(name="TEST A2 Location")
+    ptype = PracticeType(name="TEST A2 Type")
+    practice = Practice(date=datetime(2099, 4, 7, 18, 15), day_of_week="Tuesday",
+                        is_draft=True, leads_needed=2)
+    db.session.add_all([location, ptype, practice])
+    db.session.commit()
+    ids = (practice.id, location.id, ptype.id)
+    monkeypatch.setattr("app.slack.practices.refresh_practice_posts",
+                        lambda *a, **k: {"announcement": {"skipped": "absent"}})
+    try:
+        response = admin_client.post(
+            f"/admin/practices/{ids[0]}/edit",
+            json={"date": "2099-04-07T18:15", "location_id": ids[1],
+                  "type_ids": [ids[2]]},
+        )
+        assert response.status_code == 200, response.get_json()
+        db.session.expire_all()
+        assert db.session.get(Practice, ids[0]).is_draft is False
+    finally:
+        db.session.rollback()
+        p = db.session.get(Practice, ids[0])
+        if p is not None:
+            db.session.delete(p)
+        db.session.commit()
+        for model, row_id in ((PracticeLocation, ids[1]), (PracticeType, ids[2])):
+            row = db.session.get(model, row_id)
+            if row is not None:
+                db.session.delete(row)
+        db.session.commit()
+
+
+def test_publish_routes_are_gone(admin_client):
+    assert admin_client.post("/admin/practices/publish", json={}).status_code == 404
+    assert admin_client.post("/admin/availability/polls/1/publish").status_code == 404

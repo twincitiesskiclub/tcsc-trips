@@ -60,9 +60,11 @@ def drafted_week(db_session):
     ptype = PracticeType(name=f"{_MARKER} Type")
     db.session.add_all([location, ptype])
     db.session.flush()
+    # No location on purpose: a complete draft is published by the sweep, so
+    # only an incomplete one stays hidden and shows up in the post.
     draft = Practice(
         date=_WEEK_START + timedelta(days=1, hours=18, minutes=15),
-        day_of_week="Tuesday", is_draft=True, location_id=location.id,
+        day_of_week="Tuesday", is_draft=True,
         workout_description=f"{_MARKER} workout", logistics_notes=_MARKER,
     )
     draft.practice_types = [ptype]
@@ -105,7 +107,7 @@ def test_the_sunday_post_shows_a_drafted_practice(db_session, drafted_week):
     assert result["success"] is True
     text = json.dumps(client.chat_postMessage.call_args.kwargs["blocks"])
     assert _MARKER in text, "the drafted practice must appear in the post"
-    assert "Draft" in text
+    assert "HIDDEN" in text
     assert "publish_week_drafts" not in text, (
         "flagged, not actioned — publishing belongs to the availability poll"
     )

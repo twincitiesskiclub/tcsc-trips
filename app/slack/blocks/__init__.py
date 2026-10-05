@@ -51,9 +51,6 @@ from app.slack.blocks.recap import (
 from app.slack.blocks.dispatch import (
     build_dispatch_submission_section,
 )
-from app.slack.blocks.practice_drafts import (
-    build_readiness_digest_blocks,
-)
 from app.slack.blocks.trips import (
     build_confirmation_dm_blocks,
     build_registration_dm_blocks,
@@ -111,8 +108,6 @@ __all__ = [
     "build_daily_practice_recap_blocks",
     # dispatch
     "build_dispatch_submission_section",
-    # practice_drafts
-    "build_readiness_digest_blocks",
     # trips
     "build_confirmation_dm_blocks",
     "build_registration_dm_blocks",

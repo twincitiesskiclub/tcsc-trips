@@ -51,21 +51,16 @@ def _practice(day, *, is_draft=False, missing=None, id=1):
 
 
 def test_a_draft_is_labelled_as_not_yet_visible():
-    """A coach reading the week must be able to tell what members can see."""
     blocks = build_coach_weekly_summary_blocks(
-        [_practice(5, is_draft=True)], _EXPECTED_DAYS, _WEEK_START)
+        [_practice(5, is_draft=True, missing=["location"])], _EXPECTED_DAYS, _WEEK_START)
     text = json.dumps(blocks)
-
-    assert "Draft" in text
-    assert "not visible to members" in text.lower()
-
+    assert "HIDDEN" in text
+    assert "Hidden from members until it has a location" in text
+    assert "Draft" not in text
 
 def test_a_published_practice_is_not_labelled_a_draft():
-    blocks = build_coach_weekly_summary_blocks(
-        [_practice(5)], _EXPECTED_DAYS, _WEEK_START)
-
-    assert "Draft" not in json.dumps(blocks)
-
+    blocks = build_coach_weekly_summary_blocks([_practice(5)], _EXPECTED_DAYS, _WEEK_START)
+    assert "HIDDEN" not in json.dumps(blocks)
 
 def test_a_draft_slot_does_not_also_offer_add_practice():
     """The duplicate-practice trap.
@@ -93,14 +88,9 @@ def test_a_draft_slot_does_not_also_offer_add_practice():
 
 
 def test_a_draft_missing_details_says_what_it_needs():
-    """Location/type/time are what a lead needs to judge availability and what a
-    member needs to show up, so the post names the gap."""
     blocks = build_coach_weekly_summary_blocks(
-        [_practice(5, is_draft=True, missing=["location"])],
-        _EXPECTED_DAYS, _WEEK_START)
-
-    assert "needs location" in json.dumps(blocks)
-
+        [_practice(5, is_draft=True, missing=["location", "type"])], _EXPECTED_DAYS, _WEEK_START)
+    assert "until it has a location and a type" in json.dumps(blocks)
 
 def test_the_post_offers_no_publish_button():
     """Publishing is not this post's job.
@@ -124,19 +114,13 @@ def test_the_post_offers_no_publish_button():
 
 
 def test_a_lingering_draft_is_flagged_in_the_footer():
-    """A draft still sitting in the coming week means it never made it into a
-    poll -- worth saying out loud, since nothing else will catch it."""
     blocks = build_coach_weekly_summary_blocks(
-        [_practice(5, is_draft=True)], _EXPECTED_DAYS, _WEEK_START)
-    footer = json.dumps(blocks[-1])
-
-    assert "still a draft" in footer
-    assert "availability block" in footer
-
+        [_practice(5, is_draft=True, missing=["location"])], _EXPECTED_DAYS, _WEEK_START)
+    footer = blocks[-1]["elements"][0]["text"]
+    assert "1 practice this week is hidden from members" in footer
+    assert "availability block" not in footer
 
 def test_a_week_with_no_drafts_says_nothing_about_drafts():
-    blocks = build_coach_weekly_summary_blocks(
-        [_practice(5)], _EXPECTED_DAYS, _WEEK_START)
-    footer = json.dumps(blocks[-1])
-
-    assert "draft" not in footer.lower()
+    blocks = build_coach_weekly_summary_blocks([_practice(5)], _EXPECTED_DAYS, _WEEK_START)
+    footer = blocks[-1]["elements"][0]["text"]
+    assert "hidden" not in footer.lower()
