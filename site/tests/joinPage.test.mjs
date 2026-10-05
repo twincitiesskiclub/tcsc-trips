@@ -24,7 +24,7 @@ test('join page posts a plain form to tcsc.ski', () => {
   assert.ok(form.querySelector('input[name="name"][required]'));
   assert.ok(!form.querySelector('input[name="phone"][required]'), 'phone stays optional');
   assert.ok(form.textContent.includes("We'll text you when registration opens. Reply STOP to opt out."));
-  assert.equal(form.querySelector('button[type="submit"]').textContent.trim(), 'Keep me posted');
+  assert.equal(form.querySelector('button[type="submit"]').textContent.trim(), 'Sign up');
 });
 
 test('join page reads in the club voice', () => {

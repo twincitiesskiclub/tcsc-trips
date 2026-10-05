@@ -25,7 +25,7 @@ def test_get_renders_form(client):
     assert "Reply STOP to opt out." in html
     assert 'Get on the list' in html
     assert "Leave your info and we'll let you know when registration opens." in html
-    assert 'Keep me posted' in html
+    assert '>Sign up<' in html
 
 
 def test_post_saves_and_thanks(app, client):
