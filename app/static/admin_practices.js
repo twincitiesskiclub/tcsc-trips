@@ -218,7 +218,11 @@ function attachEventListeners() {
   document.getElementById('pl-scrim').addEventListener('click', closeDrawer);
   document.getElementById('pl-cancel-btn').addEventListener('click', () => { if (currentDrawerId) openCancelModal(currentDrawerId); });
   document.getElementById('pl-delete-btn').addEventListener('click', () => { if (currentDrawerId) deletePractice(currentDrawerId); });
-  document.getElementById('pl-poll-btn').addEventListener('click', openAvailabilityPoll);
+  document.getElementById('pl-block-job-btn').addEventListener('click', runBlockJob);
+  document.getElementById('pl-polls').addEventListener('click', (e) => {
+    const btn = e.target.closest('.pl-poll-open');
+    if (btn) openBlockPoll(parseInt(btn.dataset.pollId));
+  });
 
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -408,59 +412,8 @@ async function deletePractice(id) {
   } catch (e) { showToast('Failed to delete practice', 'error'); }
 }
 
-/* ---------- lead availability poll trigger ---------- */
-async function openAvailabilityPoll() {
-  const startsOn = document.getElementById('pl-poll-start').value;
-  const endsOn = document.getElementById('pl-poll-end').value;
-  if (!startsOn || !endsOn) { showToast('Pick a start and end date for the poll', 'error'); return; }
-
-  const btn = document.getElementById('pl-poll-btn');
-  btn.disabled = true;
-  try {
-    // Step 1: build the DRAFT poll. The route refuses (400) when the
-    // range has no sessions or too many for the letters; that message is
-    // shown verbatim, not replaced with a generic one. This step only writes a DRAFT row;
-    // nothing is posted to Slack yet.
-    const createResult = await fetch('/admin/availability/polls/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ starts_on: startsOn, ends_on: endsOn }),
-    }).then(r => r.json());
-    if (!createResult.success) {
-      showToast(createResult.error || 'Failed to create poll', 'error');
-      return;
-    }
-
-    const proceed = confirm('This will post the availability poll to #coord-practices-leads-assists. Continue?');
-    if (!proceed) {
-      showToast('Poll created as a draft; not posted to Slack', 'success');
-      return;
-    }
-
-    // Step 2: open it -- posts to Slack and seeds reactions. Refuses (400)
-    // if any custom letter emoji is missing from the workspace; that error
-    // names the missing emoji verbatim too.
-    const openResult = await fetch(`/admin/availability/polls/${createResult.poll_id}/open`, {
-      method: 'POST',
-    }).then(r => r.json());
-    if (!openResult.success) {
-      showToast(openResult.error || 'Failed to open poll', 'error');
-      return;
-    }
-
-    showToast('Availability poll posted to #coord-practices-leads-assists', 'success');
-  } catch (e) {
-    showToast('Failed to open availability poll', 'error');
-  } finally {
-    btn.disabled = false;
-    // A poll may have been created (even the "draft only, not posted" path),
-    // so the poll cards below the toolbar need to pick it up.
-    await loadAvailabilityPolls();
-    renderPolls();
-  }
-}
-
-const POLL_STATUS_LABEL = {draft: 'Draft', open: 'Open', closed: 'Closed'};
+/* ---------- lead availability blocks ---------- */
+const POLL_STATUS_LABEL = {draft: 'Not opened', open: 'Open', closed: 'Closed'};
 
 async function loadAvailabilityPolls() {
   try {
@@ -482,10 +435,49 @@ function pollRangeLabel(poll) {
 function pollCardHtml(poll) {
   const st = poll.status || 'draft';
   const n = (c, w) => `${c} ${w}${c === 1 ? '' : 's'}`;
+  let act = '';
+  if (st === 'draft') {
+    act = `<button type="button" class="pl-poll-open" data-poll-id="${esc(poll.id)}">Open poll</button>`;
+  } else if (st === 'closed' && !poll.posted) {
+    act = '<span class="pl-poll-note">Assign only</span>';
+  }
   return `<div class="pl-poll">`
     + `<span class="pl-poll-range">${esc(pollRangeLabel(poll))}</span>`
     + `<span class="pl-poll-status is-${esc(st)}">${esc(POLL_STATUS_LABEL[st] || st)}</span>`
-    + `<span class="pl-poll-sessions">${n(poll.sessions, 'session')}</span></div>`;
+    + `<span class="pl-poll-sessions">${n(poll.sessions, 'session')}</span>`
+    + `<span class="pl-poll-act">${act}</span></div>`;
+}
+
+async function openBlockPoll(pollId) {
+  const btn = document.querySelector(`.pl-poll-open[data-poll-id="${pollId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+  try {
+    const r = await fetch(`/admin/availability/polls/${pollId}/open`, {method: 'POST'});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+    showToast('Lead poll posted to #coord-practices-leads-assists', 'success');
+  } catch (e) {
+    showToast(e.message || 'Could not open the poll', 'error');
+  } finally {
+    await loadAvailabilityPolls();
+    renderPolls();
+  }
+}
+
+async function runBlockJob() {
+  const btn = document.getElementById('pl-block-job-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/admin/availability/block-job/run', {method: 'POST'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Block job ran', 'success');
+  } catch (e) {
+    showToast('Block job failed', 'error');
+  } finally {
+    btn.disabled = false;
+    await loadAvailabilityPolls();
+    renderPolls();
+  }
 }
 
 function renderPolls() {
