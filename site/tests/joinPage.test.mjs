@@ -29,7 +29,7 @@ test('join page posts a plain form to tcsc.ski', () => {
 
 test('join page reads in the club voice', () => {
   const { document } = new JSDOM(page('join')).window;
-  assert.equal(document.querySelector('h1').textContent.trim(), 'Registration');
+  assert.equal(document.querySelector('h1').textContent.trim(), 'Registration Contact List Sign-up');
   // Eligibility stays explicit so prospects can self-select before signing up.
   assert.ok(document.body.textContent.includes('For skiers ages 21-35 with intermediate skills. No racing required.'));
   assert.doesNotMatch(document.body.textContent, /\u2014/, 'no em dashes in copy');
