@@ -260,3 +260,22 @@ def test_failed_open_leaves_the_poll_draft(db_session, monkeypatch):
         assert poll.practices == []
     finally:
         _cleanup(pids, start)
+
+
+def test_open_sees_status_committed_by_another_connection(db_session, fake_open):
+    """A poll already loaded in this session must be refreshed under the lock."""
+    start = date(2099, 1, 19)
+    pids = [_practice(20)]
+    try:
+        poll = blocks.create_block_poll(start, date(2099, 2, 1))
+        poll_id = poll.id
+        assert db.session.get(LeadAvailabilityPoll, poll_id).status == PollStatus.DRAFT
+        with db.engine.begin() as other:
+            other.execute(text(
+                "UPDATE lead_availability_polls SET status='open', "
+                "opened_by_slack_uid='U0FIRST' WHERE id=:id"), {"id": poll_id})
+        result = blocks.open_block_poll(poll_id, "U0SECOND")
+        assert result["success"] is False
+        assert "<@U0FIRST>" in result["error"]
+    finally:
+        _cleanup(pids, start)

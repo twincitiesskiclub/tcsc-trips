@@ -122,6 +122,7 @@ def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:
         poll = (
             LeadAvailabilityPoll.query
             .filter_by(id=poll_id)
+            .populate_existing()
             .with_for_update(nowait=True)
             .one()
         )
