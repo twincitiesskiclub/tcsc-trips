@@ -26,7 +26,7 @@ from ..practices.availability_models import (
 from ..practices.drafting import default_practice_days
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
 from ..practices.lead_candidates import lead_candidates
-from ..practices.publishing import publish_blockers
+from ..practices.publishing import publish_blockers, publish_if_ready
 from ..practices.plan_reaction_queries import (
     PlanReactionSourceSelectionError,
     load_all_plan_reaction_sources,
@@ -352,10 +352,8 @@ def practices_data():
             'cancellation_reason': practice.cancellation_reason or '',
             'workout_description': practice.workout_description or '',
             'logistics_notes': practice.logistics_notes or '',
-            # Drafts are invisible to members until published. The grid needs
-            # both flags: is_draft to badge and offer the row for selection,
-            # missing_details to explain why a row can't be published yet
-            # rather than letting the director find out by clicking.
+            # The list badges practices hidden from members (is_draft), and
+            # missing_details explains what keeps each one hidden.
             'is_draft': practice.is_draft,
             'missing_details': publish_blockers(practice) if practice.is_draft else [],
         })
@@ -658,6 +656,10 @@ def edit_practice(practice_id):
 
         db.session.commit()
         practice_updated = True
+
+        # A bot-created session goes live the moment it has a location and a
+        # type. Runs before the refresh below so every post sees it visible.
+        publish_if_ready(practice)
 
         # Rescheduling a practice INTO an open poll's range leaves it with no
         # letter emoji and no availability, exactly like creating one there --

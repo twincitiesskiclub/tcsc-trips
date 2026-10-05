@@ -10,14 +10,13 @@ regardless of whatever the config flag says later when someone opens it.
 
 from datetime import date
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, jsonify, request
 
 from ..auth import admin_required
 from ..models import AppConfig
 from ..practices.availability import PollNotReadyError, build_poll, open_poll
 from ..practices.availability_emoji import EmojiSupplyError
 from ..practices.availability_models import LeadAvailabilityPoll
-from ..practices.publishing import publish_blockers
 
 admin_availability_bp = Blueprint(
     "admin_availability", __name__, url_prefix="/admin/availability")
@@ -52,32 +51,8 @@ def dashboard():
             "status": p.status,
             "is_shadow": p.is_shadow,
             "sessions": len(p.practices),
-            # A closed poll whose practices are still drafts is the failure this
-            # surfaces: availability was collected, leads were assigned, and
-            # nobody ever sent the block live. Both counts are shown because
-            # "2 unpublished, 0 publishable" is a different problem from
-            # "2 unpublished, 2 publishable" -- the first needs details filled
-            # in, the second just needs the button.
-            **_publish_counts(p),
         } for p in polls],
     })
-
-
-def _poll_practices(poll):
-    """The Practice rows a poll covers, in poll order."""
-    return [
-        mapping.practice for mapping in poll.practices
-        if mapping.practice is not None
-    ]
-
-
-def _publish_counts(poll) -> dict:
-    practices = _poll_practices(poll)
-    drafts = [p for p in practices if p.is_draft]
-    return {
-        "unpublished": len(drafts),
-        "publishable": sum(1 for p in drafts if not publish_blockers(p)),
-    }
 
 
 @admin_availability_bp.route("/polls/create", methods=["POST"])

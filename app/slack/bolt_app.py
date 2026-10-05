@@ -2799,6 +2799,9 @@ def _run_practice_edit_full_post_save(
                 }
             }
         else:
+            from app.practices.publishing import publish_if_ready
+
+            publish_if_ready(practice)
             announcement_notice = build_announcement_change_notice(
                 previous_date=previous_date,
                 previous_location_id=previous_location_id,
