@@ -112,11 +112,10 @@ def surfaces():
         "available_text": "Available: Katrin S, Micah R, Dana P",
         "available": [(1, "Katrin S"), (2, "Micah R"), (3, "Dana P")],
         "others": [(4, "Augie L"), (5, "Chris F")], "initial_ids": [1]})
-    # Slack rejects input blocks in a message, so show the modal's text and list its select.
+    # Input blocks are not allowed in messages, but a section with the same select as its accessory is.
     shown = [b for b in modal["blocks"] if b["type"] != "input"]
-    groups = modal["blocks"][-1]["element"]["option_groups"]
-    shown.append({"type": "section", "text": {"type": "mrkdwn", "text": "*Leads dropdown* (multi-select, Katrin S preselected)\n" + "\n".join(
-        f"_{g['label']['text']}_: " + ", ".join(o["text"]["text"] for o in g["options"]) for g in groups)}})
+    select = next(b for b in modal["blocks"] if b["type"] == "input")["element"]
+    shown.append({"type": "section", "text": {"type": "mrkdwn", "text": "*Leads*"}, "accessory": select})
     yield "Assign modal (shown as a message, the real one opens from Assign)", shown
     yield "leads poll in #coord-practices-leads-assists", build_poll_blocks(
         leads_poll_rows(ROWS + [LATE]), "October 26", "Nov 8", done=DONE)
