@@ -89,6 +89,16 @@ def bind_flask_app(flask_app) -> None:
     _flask_app = flask_app
 
 
+def _save_block_assign(view) -> None:
+    """Persist an Assign modal submission."""
+    practice_id = int(view["private_metadata"])
+    selected = (view["state"]["values"]["leads"]["leads_select"].get("selected_options") or [])
+    with get_app_context():
+        from app.practices import blocks
+
+        blocks.save_assigned_leads(practice_id, [int(o["value"]) for o in selected])
+
+
 def _ack_practice_reaction_action(ack) -> None:
     """Primary Bolt action listener: send the transport acknowledgment only."""
     ack()
@@ -520,6 +530,27 @@ if _bot_token:
             if channel:
                 client.chat_postEphemeral(channel=channel, user=user_id,
                                           text=f":warning: {result.get('error')}")
+
+    @bolt_app.action("block_assign")
+    def handle_block_assign(ack, body, action, client, logger):
+        ack()
+        with get_app_context():
+            from app.practices.blocks import assign_modal_data
+            from app.slack.blocks.block_post import build_assign_modal
+
+            data = assign_modal_data(int(action["value"]))
+        if data is None:
+            channel = (body.get("channel") or {}).get("id")
+            if channel:
+                client.chat_postEphemeral(channel=channel, user=body["user"]["id"],
+                                          text=":warning: That practice no longer exists.")
+            return
+        client.views_open(trigger_id=body["trigger_id"], view=build_assign_modal(data))
+
+    @bolt_app.view("block_assign_submit")
+    def handle_block_assign_submit(ack, body, view, client, logger):
+        ack()
+        _save_block_assign(view)
 
     @bolt_app.action("edit_practice_full")
     def handle_edit_practice_full(ack, body, action, client, logger):
