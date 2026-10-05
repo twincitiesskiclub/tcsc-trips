@@ -48,6 +48,7 @@ def season_page(season_id):
     return render_template(
         "admin/crews/season.html", season=season, config=config, settings=settings,
         balancing=[TRAIT_LABELS[t].lower() for t in TRAITS if settings["levels"][t] != "off"],
+        crews=service.crew_count(len(rows), settings["size"]), sizes=service.describe_sizes(len(rows), settings["size"]),
         rows=rows, names={r.user_id: r.person.name for r in rows}, drafts=drafts,
         final=next((d for d, _ in drafts if d.status == "final"), None), seasons=_seasons().all(),
         traits=TRAITS, trait_labels=TRAIT_LABELS, levels=list(LEVELS), genders=service.GENDERS,
@@ -114,7 +115,8 @@ def add_rule(season_id):
     season = db.get_or_404(Season, season_id)
     config = service.get_config(season, create=True)
     member_ids = {r.user_id for r in load_members(season, config)}
-    rule, error = service.parse_rule(request.form, member_ids, int(service.config_settings(config)["crews"]))
+    crews = service.crew_count(len(member_ids), service.config_settings(config)["size"])
+    rule, error = service.parse_rule(request.form, member_ids, crews)
     if error:
         flash(error, "error")
     elif rule in config.rules:
@@ -164,8 +166,15 @@ def save_draft(draft_id):
     except ValueError as e:
         db.session.rollback()
         flash(str(e), "error")
+        return redirect(url_for(".draft_page", draft_id=draft.id))
+    db.session.commit()  # names are saved even if Slack fails below
+    failed = slack.rename_channels(draft) if draft.crew_channels else {}
+    db.session.commit()
+    if failed:
+        flash("Saved, but these Slack channels kept their old names: "
+              + ", ".join(f"crew {n} ({err})" for n, err in failed.items())
+              + ". Save again or use Update crews in Slack to retry.", "warning")
     else:
-        db.session.commit()
         flash("Saved.", "success")
     return redirect(url_for(".draft_page", draft_id=draft.id))
 
@@ -204,7 +213,7 @@ def launch(draft_id):
     draft, back = _final_or_back(draft_id)
     if back:
         return back
-    results = slack.launch(draft, service.crews_of(draft), draft.season.year)
+    results = slack.launch(draft, service.crews_of(draft))
     db.session.commit()
     return render_template("admin/crews/launch.html", draft=draft, results=results, plan=None)
 

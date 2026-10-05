@@ -8,7 +8,7 @@ from app.crews.models import CrewConfig, CrewDraft
 from app.crews.roster import load_members
 from app.models import db
 
-DEFAULT_SETTINGS = {"crews": 12, "levels": {t: "normal" for t in TRAITS}, "board_rule": True}
+DEFAULT_SETTINGS = {"size": 12, "levels": {t: "normal" for t in TRAITS}, "board_rule": True}
 GENDERS = ["F", "M", "X", "?"]
 PERSON_FIELDS = ("gender", "age", "ski", "tenure", "thot", "board")
 DRAFTS_PER_BATCH = 5
@@ -33,6 +33,20 @@ def config_settings(config):
     return {**DEFAULT_SETTINGS, **saved, "levels": {**DEFAULT_SETTINGS["levels"], **saved.get("levels", {})}}
 
 
+def crew_count(members, size):
+    """Crews for a target size: members / size rounded half up, at least 1."""
+    return max(1, int(members / size + 0.5))
+
+
+def describe_sizes(members, size):
+    """'144 members, 12 crews of 12' or '143 members, 11 crews of 12 and 1 of 11'."""
+    k = crew_count(members, size)
+    base, extra = divmod(members, k)
+    parts = [(n, s) for n, s in ((extra, base + 1), (k - extra, base)) if n]
+    first = f"{parts[0][0]} {'crew' if parts[0][0] == 1 else 'crews'} of {parts[0][1]}"
+    return f"{members} members, {first}" + "".join(f" and {n} of {s}" for n, s in parts[1:])
+
+
 def to_settings(settings, rules):
     return Settings(crews=int(settings["crews"]), levels=settings["levels"],
                     board_rule=bool(settings["board_rule"]),
@@ -43,15 +57,15 @@ def to_settings(settings, rules):
 def parse_settings(form):
     """Settings from the settings form; returns (settings, error)."""
     try:
-        crews = int(form.get("crews", ""))
+        size = int(form.get("size", ""))
     except ValueError:
-        return None, "Number of crews must be a whole number."
-    if not 2 <= crews <= 40:
-        return None, "Number of crews must be between 2 and 40."
+        return None, "People per crew must be a whole number."
+    if not 2 <= size <= 100:
+        return None, "People per crew must be between 2 and 100."
     levels = {t: form.get(f"level_{t}", "normal") for t in TRAITS}
     if any(v not in LEVELS for v in levels.values()):
         return None, "Unknown weight."
-    return {"crews": crews, "levels": levels, "board_rule": form.get("board_rule") == "on"}, None
+    return {"size": size, "levels": levels, "board_rule": form.get("board_rule") == "on"}, None
 
 
 def parse_rule(form, member_ids, crews):
@@ -91,8 +105,9 @@ def set_overrides(config, rows, form):
 
 
 def make_drafts(season, config):
-    settings = config_settings(config)
     rows = load_members(season, config)
+    settings = config_settings(config)
+    settings["crews"] = crew_count(len(rows), settings["size"])  # drafts keep the count they were made with
     people = [r.person for r in rows]
     last = db.session.query(db.func.max(CrewDraft.seed)).filter_by(season_id=season.id).scalar()
     start = FIRST_SEED if last is None else last + 1

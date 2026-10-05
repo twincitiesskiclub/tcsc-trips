@@ -63,7 +63,7 @@ def final_draft(admin_client, world):
     world.people = {n: world.member(n, "Test", board=b, slack_uid=None if n == "Eve" else f"U{n.upper()}{world.tag}")
                     for n, b in people}
     db.session.commit()
-    form = {"crews": "2", "board_rule": "on", **{f"level_{t}": "normal" for t in ("thot", "tenure", "gender", "ski", "age")}}
+    form = {"size": "3", "board_rule": "on", **{f"level_{t}": "normal" for t in ("thot", "tenure", "gender", "ski", "age")}}
     admin_client.post(f"/admin/crews/season/{world.fall.id}/settings", data=form)
     admin_client.post(f"/admin/crews/season/{world.fall.id}/drafts")
     draft = CrewDraft.query.filter_by(season_id=world.fall.id, seed=FIRST_SEED).one()
@@ -143,3 +143,82 @@ def test_one_crew_failing_does_not_stop_the_others(admin_client, final_draft, wo
     launch(admin_client, final_draft, fake)
     db.session.refresh(final_draft)
     assert set(final_draft.crew_channels) == {"1", "2"}
+
+
+class RenamingSlack(FakeSlack):
+    def __init__(self, fail_rename=None, **kw):
+        super().__init__(**kw)
+        self.fail_rename, self.renames = fail_rename, []
+
+    def conversations_rename(self, channel, name):
+        if self.fail_rename:
+            self._err(self.fail_rename)
+        if name in self.taken or any(c["name"] == name for cid, c in self.channels.items() if cid != channel):
+            self._err("name_taken")
+        self.channels[channel]["name"] = name
+        self.renames.append((channel, name))
+        return {"ok": True, "channel": {"id": channel, "name": name}}
+
+
+def save(admin_client, draft, fake, **names):
+    form = {f"crew_{m['user_id']}": str(m["crew"]) for m in draft.members}
+    form.update({"name_1": draft.crew_names.get("1", ""), **names})
+    with patch("app.crews.slack.get_slack_client", return_value=fake):
+        return admin_client.post(f"/admin/crews/draft/{draft.id}", data=form, follow_redirects=True).data.decode()
+
+
+def test_save_renames_a_launched_channel(admin_client, final_draft):
+    fake = RenamingSlack()
+    launch(admin_client, final_draft, fake)
+    html = save(admin_client, final_draft, fake, name_1="Mighty Moose", name_2="Quick Quokkas")
+    db.session.refresh(final_draft)
+    assert final_draft.crew_names == {"1": "Mighty Moose", "2": "Quick Quokkas"}
+    assert final_draft.crew_channels["1"] == {"id": "G001", "name": "crew-mighty-moose"}
+    assert final_draft.crew_channels["2"]["name"] == "crew-quick-quokkas"
+    assert "Saved." in html
+    fake.renames.clear()
+    save(admin_client, final_draft, fake, name_1="Mighty Moose", name_2="Quick Quokkas")
+    assert fake.renames == []  # nothing drifted, nothing renamed
+
+
+def test_save_rename_retries_name_taken_with_the_year(admin_client, final_draft, world):
+    fake = RenamingSlack(taken={"crew-mighty-moose"})
+    launch(admin_client, final_draft, fake)
+    save(admin_client, final_draft, fake, name_1="Mighty Moose")
+    db.session.refresh(final_draft)
+    assert final_draft.crew_channels["1"]["name"] == f"crew-mighty-moose-{world.fall.year}"
+    fake.renames.clear()
+    save(admin_client, final_draft, fake, name_1="Mighty Moose")
+    assert fake.renames == []  # the year form counts as in line
+
+
+def test_failed_rename_keeps_the_name_and_retries_later(admin_client, final_draft):
+    fake = RenamingSlack()
+    launch(admin_client, final_draft, fake)
+    fake.fail_rename = "ratelimited"
+    html = save(admin_client, final_draft, fake, name_1="Mighty Moose", name_2="")
+    db.session.refresh(final_draft)
+    assert final_draft.crew_names == {"1": "Mighty Moose"}
+    assert final_draft.crew_channels["1"]["name"] == "crew-brave-badgers"
+    assert "kept their old names: crew 1 (ratelimited)" in html
+    # the confirm page shows the pending rename, and Update crews in Slack does it
+    with patch("app.crews.slack.get_slack_client", return_value=fake):
+        confirm = admin_client.get(f"/admin/crews/draft/{final_draft.id}/launch").data.decode()
+    assert "#crew-mighty-moose" in confirm and "renames #crew-brave-badgers" in confirm
+    fake.fail_rename = None
+    result = launch(admin_client, final_draft, fake)
+    db.session.refresh(final_draft)
+    assert final_draft.crew_channels["1"]["name"] == "crew-mighty-moose" and "Renamed" in result
+
+
+def test_clearing_a_name_falls_back_to_the_crew_number(admin_client, final_draft):
+    fake = RenamingSlack()
+    launch(admin_client, final_draft, fake)
+    save(admin_client, final_draft, fake, name_1="")
+    db.session.refresh(final_draft)
+    assert final_draft.crew_channels["1"]["name"] == "crew-1"
+
+
+def test_save_without_a_launch_never_calls_slack(admin_client, final_draft):
+    with patch("app.crews.slack.get_slack_client", side_effect=AssertionError("no Slack before launch")):
+        save(admin_client, final_draft, None, name_1="Mighty Moose")

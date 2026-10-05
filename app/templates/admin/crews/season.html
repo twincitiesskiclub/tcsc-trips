@@ -65,13 +65,14 @@
 
   <details class="{{ card }}" id="settings">
     <summary class="{{ summary_cls }}">Crew settings
-      <span class="block text-sm font-normal text-zinc-600 sm:inline">{{ settings.crews }} crews{% if settings.board_rule %}, every crew gets a board member{% endif %},
+      <span class="block text-sm font-normal text-zinc-600 sm:inline">{{ sizes }}{% if settings.board_rule %}, every crew gets a board member{% endif %},
         balancing {{ balancing|join(', ') if balancing else 'nothing' }}.</span></summary>
     <form method="post" action="{{ url_for('admin_crews.save_settings', season_id=season.id) }}" class="mt-4 space-y-4">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="flex flex-wrap items-center gap-4">
-        <label class="text-sm font-medium">Number of crews
-          <input class="{{ input }} ml-1 w-20" type="number" name="crews" min="2" max="40" value="{{ settings.crews }}">
+        <label class="text-sm font-medium">People per crew
+          <input class="{{ input }} ml-1 w-20" type="number" name="size" min="2" max="100" value="{{ settings.size }}">
+          <span class="mt-1 block font-normal text-zinc-600">{{ sizes }}</span>
         </label>
         <label class="flex items-center gap-2 text-sm">
           <input type="checkbox" name="board_rule" {% if settings.board_rule %}checked{% endif %}>
@@ -133,7 +134,7 @@
         </select>
       </label>
       <label class="hidden text-sm font-medium" data-rule-crew>Crew
-        <input class="{{ input }} mt-1 block w-20" type="number" name="crew" min="1" max="{{ settings.crews }}" value="1">
+        <input class="{{ input }} mt-1 block w-20" type="number" name="crew" min="1" max="{{ crews }}" value="1">
       </label>
       <button class="{{ btn2 }} py-2">Add rule</button>
     </form>

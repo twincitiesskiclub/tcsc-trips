@@ -36,8 +36,13 @@ Run the tests against a scratch DB at main's head:
    - `channel_name`, `launch_plan` and `launch`.
    - Launch routes `GET` and `POST /draft/<id>/launch`, final drafts only.
    - `launch.html` shows the confirm and result states.
+   - `rename_channels` runs after Save on a launched draft, and `launch`
+     also renames drifted channels.
    - Tests use a fake Slack client with no real calls: idempotent rerun,
-     `name_taken` retry, per-user errors, and one crew failing.
+     `name_taken` retry, per-user errors, one crew failing, and renames
+     (success, `name_taken`, failure keeps the name and retries).
+   - People per crew replaces the number of crews (`crew_count`,
+     `describe_sizes`).
 8. **Verification**:
    - The full crews, analytics and top-level suites, plus the migration
      release test.

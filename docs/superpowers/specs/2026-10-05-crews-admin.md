@@ -28,7 +28,7 @@ Drafts (best first)
   Draft 4   imbalance 52.1          all rules met
   Draft 3   imbalance 131.0         1 crew with no board member
 
-> Crew settings: 12 crews, every crew gets a board member, balancing speedy group,
+> Crew settings: 144 members, 12 crews of 12, every crew gets a board member, balancing speedy group,
   seasons on team, gender, ski experience, age.
 > Rules (2)
 > Members: 0 with no gender, 6 board.
@@ -40,7 +40,11 @@ Drafts (best first)
   score, a "Best" or "Final" badge, and two red flags: crews with no board
   member, and rules not met.
 - **Crew settings** (collapsed):
-  - Number of crews.
+  - People per crew (default 12). The number of crews is computed as members
+    divided by size, rounded half up, at least 1, and shown in words: "144
+    members, 12 crews of 12" or "143 members, 11 crews of 12 and 1 of 11".
+    This is the only size input. Keeping a crew-count input as well would
+    mean two inputs that can disagree.
   - The board rule: every crew gets at least one board member.
   - A weight of off, low, normal or high for each of speedy group, seasons on
     team, gender, ski experience and age.
@@ -84,9 +88,18 @@ Slack account.
   80 characters), or `crew-<number>` when the crew has no name. The prefix
   keeps the channels together in Slack's sidebar and clear of existing
   channels.
-- **Not in v1:** renaming a channel when a crew is renamed, archiving
-  channels, removing people who moved crews after launch, setting a topic or
-  welcome post, and adding a non-member admin (Mitchell) to every channel.
+- **Channel names follow crew names.** When Save changes a crew name on a
+  launched draft, the bot renames that channel right away
+  (`conversations.rename`, with the same `name_taken` retry). Clearing a name
+  falls back to `crew-<number>`. If Slack fails, the crew name stays saved,
+  the channel keeps its old name, and the flash names the crews that didn't
+  rename. A later Save or "Update crews in Slack" retries, because both bring
+  every channel name in line with its crew (a `-<year>` suffix from a retry
+  counts as in line). The confirm page shows a pending rename as "(renames
+  #old)".
+- **Not in v1:** archiving channels, removing people who moved crews after
+  launch, setting a topic or welcome post, and adding a non-member admin
+  (Mitchell) to every channel.
 
 ## Method (defaults reproduce the 10/5 scratchpad draw)
 

@@ -24,7 +24,7 @@ def url(season, path=""):
 
 
 def settings_form(**over):
-    form = {"crews": "2", "board_rule": "on",
+    form = {"size": "3", "board_rule": "on",
             **{f"level_{t}": "normal" for t in ("thot", "tenure", "gender", "ski", "age")}}
     form.update(over)
     return form
@@ -50,21 +50,21 @@ def test_season_page_shows_summary_and_defaults_without_saving(admin_client, sea
     assert r.status_code == 200
     assert "6 members" in html and "Board members 2" in html and "Final crews:" in html
     assert f"Make {DRAFTS_PER_BATCH} drafts" in html
-    assert re.search(r'name="crews"[^>]*value="12"', html)
+    assert re.search(r'name="size"[^>]*value="12"', html) and "6 members, 1 crew of 6" in html
     assert "Fox Test" in html and "BOARD_MEMBER" in html
     assert CrewConfig.query.filter_by(season_id=season.id).count() == 0  # a GET writes nothing
 
 
 def test_save_settings_and_reject_bad_crew_count(admin_client, season):
-    admin_client.post(url(season, "/settings"), data=settings_form(crews="3", level_gender="high"))
+    admin_client.post(url(season, "/settings"), data=settings_form(size="4", level_gender="high"))
     config = CrewConfig.query.filter_by(season_id=season.id).one()
-    assert config.settings == {"crews": 3, "board_rule": True,
+    assert config.settings == {"size": 4, "board_rule": True,
                                "levels": {"thot": "normal", "tenure": "normal", "gender": "high",
                                           "ski": "normal", "age": "normal"}}
-    r = admin_client.post(url(season, "/settings"), data=settings_form(crews="1"), follow_redirects=True)
-    assert b"between 2 and 40" in r.data
+    r = admin_client.post(url(season, "/settings"), data=settings_form(size="1"), follow_redirects=True)
+    assert b"between 2 and 100" in r.data
     db.session.refresh(config)
-    assert config.settings["crews"] == 3
+    assert config.settings["size"] == 4
 
 
 def test_member_overrides_keep_only_differences(admin_client, season, world):
@@ -180,3 +180,19 @@ def test_delete_draft(admin_client, season):
     draft = CrewDraft.query.filter_by(season_id=season.id, seed=FIRST_SEED).one()
     admin_client.post(f"/admin/crews/draft/{draft.id}/delete")
     assert CrewDraft.query.filter_by(season_id=season.id).count() == DRAFTS_PER_BATCH - 1
+
+
+def test_crew_count_and_size_text():
+    from app.crews.service import crew_count, describe_sizes
+    assert crew_count(144, 12) == 12 and crew_count(143, 12) == 12 and crew_count(5, 12) == 1
+    assert crew_count(5, 2) == 3  # 2.5 rounds up
+    assert describe_sizes(144, 12) == "144 members, 12 crews of 12"
+    assert describe_sizes(143, 12) == "143 members, 11 crews of 12 and 1 of 11"
+    assert describe_sizes(6, 12) == "6 members, 1 crew of 6"
+
+
+def test_drafts_use_the_crew_count_from_people_per_crew(admin_client, season):
+    admin_client.post(url(season, "/settings"), data=settings_form(size="2"))
+    admin_client.post(url(season, "/drafts"))
+    draft = CrewDraft.query.filter_by(season_id=season.id, seed=FIRST_SEED).one()
+    assert draft.settings["crews"] == 3 and sorted(set(crews(draft).values())) == [1, 2, 3]
