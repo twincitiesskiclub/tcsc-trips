@@ -23,12 +23,17 @@ def test_get_renders_form(client):
     html = resp.get_data(as_text=True)
     assert 'name="email"' in html
     assert "Reply STOP to opt out." in html
+    assert '>Registration<' in html
+    assert "Leave your info and we'll let you know when registration opens." in html
+    assert '>Sign up<' in html
 
 
 def test_post_saves_and_thanks(app, client):
     resp = post(client)
     assert resp.status_code == 200
-    assert "You're on the list" in resp.get_data(as_text=True)
+    html = resp.get_data(as_text=True)
+    assert "You're on the list" in html
+    assert "Thanks! We'll email you when registration opens" in html
     assert count(app) == 1
 
 
@@ -73,7 +78,8 @@ def test_cross_origin_post_needs_no_csrf_token(app):
     assert c.post('/admin/trips/999999999/delete').status_code == 400
 
 
-def test_home_page_shows_form_when_registration_closed(client):
-    # The scratch DB has no season with an open window today.
+def test_home_page_has_no_interest_form(client):
+    # Rob, 10/5: the tcsc.ski home page stays registration-only. The form
+    # lives on the marketing site's /join, closed season pages and /interest.
     html = client.get('/').get_data(as_text=True)
-    assert 'action="/interest"' in html
+    assert 'action="/interest"' not in html

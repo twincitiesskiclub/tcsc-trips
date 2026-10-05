@@ -94,11 +94,11 @@ Field names are the contract between the two forms: `name`, `email`,
 - Partial `app/templates/_interest_form.html`, styled with the existing
   `main.css` card and form classes.
 - Included on:
-  - the home page (`index.html`) when `is_season_registration_open` is
-    false
   - the season detail page (`season_detail.html`) when
     `is_registration_open` is false
   - the standalone `interest.html` page served by `GET /interest`
+- Not on the tcsc.ski home page (removed 2026-10-05 at Rob's request; the
+  home page stays registration-only).
 - `interest_thanks.html` for success.
 
 ## Admin

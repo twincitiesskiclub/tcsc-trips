@@ -8,7 +8,7 @@
 // The page is static but registration can open after the build, so the top
 // section joins registrationFlip.ts: a CTA plus, in the same <section>, a
 // subhead with every state's copy baked in. When registration is open the
-// browser swaps in "Registration is open right now" and a Register button,
+// browser swaps in "Registration is open now" and a Register button,
 // so nobody signs up to be told about a window that is already open.
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import CtaForState from '@/components/CtaForState.astro';
@@ -21,13 +21,13 @@ const dates = datesLine(cta.windows);
 
 // Non-open states point at the form below. A fallback build keeps its closed
 // CTA (tcsc.ski), because it can't tell whether registration is open.
-const here = { label: 'Get notified below', url: '#join-form' };
+const here = { label: 'Registration', url: '#join-form' };
 const closed = cta.source === 'api' ? here : { label: cta.label_closed, url: cta.url_closed };
 
 const subheads = {
-  open: 'Registration is open right now, so skip the list and register.',
+  open: 'Registration is open now. Skip the list and register.',
   coming_soon: dates ? `Registration opens: ${dates}.` : 'Registration opens soon.',
-  closed: "We'll reach out as soon as the next registration dates are set.",
+  closed: "Next season's dates aren't set yet. We'll let you know when they are.",
 };
 
 const input =
@@ -35,9 +35,9 @@ const input =
 const label = 'block text-sm font-semibold text-navy';
 ---
 <InnerPageLayout
-  title="Get notified · Twin Cities Ski Club"
-  description="Leave your email and we'll tell you when Twin Cities Ski Club registration opens."
-  headline="Get notified when registration opens"
+  title="Registration · Twin Cities Ski Club"
+  description="Leave your email and we'll let you know when Twin Cities Ski Club registration opens."
+  headline="Registration"
 >
   <section class="safe-inline-6 mx-auto max-w-xl px-6 pt-12">
     <p
@@ -47,7 +47,10 @@ const label = 'block text-sm font-semibold text-navy';
       data-soon-subhead={subheads.coming_soon}
       data-closed-subhead={subheads.closed}
     >{subheads[cta.state]}</p>
-    <div class="mt-5">
+    <p class="mt-2 text-sm text-ink/70">For skiers ages 21-35 with intermediate skills. No racing required.</p>
+    {/* Shown only while registration is open: otherwise the form below is
+        the one action on the page. Keys off data-state, which the flip sets. */}
+    <div class="mt-5 [&>[data-registration]:not([data-state=open])]:hidden">
       <CtaForState
         {...cta}
         variant="on-paper"
@@ -77,10 +80,10 @@ const label = 'block text-sm font-semibold text-navy';
         <label for="join-leave-blank">Leave this empty</label>
         <input id="join-leave-blank" name="leave_blank" type="text" tabindex="-1" autocomplete="off" />
       </div>
-      <button type="submit" class="inline-flex items-center px-6 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep">Notify me</button>
+      <button type="submit" class="inline-flex items-center px-6 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep">Sign up</button>
     </form>
     <p class="mt-10 text-sm text-ink/70">
-      Already a member? Registration and your account live at
+      Already a member? Register at
       <a href="https://tcsc.ski/" class="font-semibold text-navy underline underline-offset-4">tcsc.ski</a>.
     </p>
   </div>
