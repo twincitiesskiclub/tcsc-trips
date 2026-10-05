@@ -105,3 +105,46 @@ def test_never_posted_block_reads_collected_outside_the_app():
     assert "Availability collected outside the app" in text
     assert ":letter_" not in text
     assert "block_assign" in text
+
+
+from app.slack.blocks.block_post import build_assign_modal
+
+
+def _data(**over):
+    data = {"practice_id": 5, "title": "Assign leads · Tue 10/27",
+            "detail": "6:15p · TEST Wirth · Bounding · needs 2",
+            "available_text": "Available: Katrin S, Micah R",
+            "available": [(1, "Katrin S"), (2, "Micah R")],
+            "others": [(3, "Augie L")], "initial_ids": [1]}
+    data.update(over)
+    return data
+
+
+def test_assign_modal_shows_available_line_and_grouped_dropdown():
+    view = build_assign_modal(_data())
+    text = json.dumps(view)
+    assert view["callback_id"] == "block_assign_submit"
+    assert view["private_metadata"] == "5"
+    assert "Available: Katrin S, Micah R" in text
+    select = view["blocks"][-1]["element"]
+    assert [g["label"]["text"] for g in select["option_groups"]] == ["Available", "Everyone else"]
+    assert select["initial_options"][0]["value"] == "1"
+    assert "max_selected_items" not in select
+
+
+def test_assign_modal_with_no_poll_has_no_available_line_and_skips_empty_group():
+    view = build_assign_modal(_data(available_text=None, available=[], initial_ids=[]))
+    select = view["blocks"][-1]["element"]
+    assert [g["label"]["text"] for g in select["option_groups"]] == ["Everyone else"]
+    assert "initial_options" not in select
+    assert "Available:" not in json.dumps(view)
+
+
+def test_assign_modal_caps_options_and_initial_options_match_groups():
+    others = [(100 + i, f"Person {i}") for i in range(150)]
+    view = build_assign_modal(_data(others=others, initial_ids=[1, 100, 249]))
+    select = view["blocks"][-1]["element"]
+    shown = [o for g in select["option_groups"] for o in g["options"]]
+    assert len(shown) == 100
+    assert all(o in shown for o in select["initial_options"])
+    assert [o["value"] for o in select["initial_options"]] == ["1", "100"]

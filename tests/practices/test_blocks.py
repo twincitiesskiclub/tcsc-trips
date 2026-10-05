@@ -292,3 +292,71 @@ def test_reminder_days_follow_the_nudge_rules():
     wed = datetime(2099, 1, 14, 9, 0)
     assert blocks.reminder_days(wed, date(2099, 2, 1), date(2099, 1, 14)) == [
         date(2099, 1, 17), date(2099, 1, 19), date(2099, 1, 21)]
+
+
+def test_save_assigned_leads_replaces_only_lead_rows(db_session, monkeypatch):
+    from app.models import User
+    from app.practices.models import PracticeLead
+
+    calls = []
+    monkeypatch.setattr("app.slack.practices.refresh_practice_posts",
+                        lambda *a, **k: calls.append(k) or {})
+    db.session.rollback()
+    users = [User(first_name=f"TEST C2 {i}", last_name="Assign",
+                  email=f"test-c2-{i}@example.invalid") for i in range(3)]
+    db.session.add_all(users)
+    db.session.commit()
+    user_ids = [u.id for u in users]
+    pid = _practice(20)
+    try:
+        practice = db.session.get(Practice, pid)
+        practice.leads.append(PracticeLead(user_id=user_ids[0], role="coach"))
+        practice.leads.append(PracticeLead(user_id=user_ids[1], role="lead"))
+        db.session.commit()
+        blocks.save_assigned_leads(pid, [user_ids[2], user_ids[2]])
+        db.session.expire_all()
+        roles = sorted((l.user_id, l.role) for l in db.session.get(Practice, pid).leads)
+        assert roles == sorted([(user_ids[0], "coach"), (user_ids[2], "lead")])
+        assert calls == [{"change_type": "edit", "notify": False}]
+    finally:
+        _cleanup([pid])
+        db.session.rollback()
+        for uid in user_ids:
+            u = db.session.get(User, uid)
+            if u is not None:
+                db.session.delete(u)
+        db.session.commit()
+
+
+def test_assign_modal_data_lists_available_first(db_session):
+    from app.models import User
+    from app.practices.availability_models import LeadAvailabilityResponse
+
+    db.session.rollback()
+    u = User(first_name="TEST C2", last_name="Avail", email="test-c2-av@example.invalid")
+    db.session.add(u)
+    db.session.commit()
+    uid = u.id
+    pid = _practice(21)
+    starts = date(2099, 1, 19)
+    try:
+        assert blocks.assign_modal_data(999999999) is None
+        data = blocks.assign_modal_data(pid)
+        assert data["available_text"] is None and data["available"] == []
+        poll = LeadAvailabilityPoll(starts_on=starts, ends_on=date(2099, 2, 1),
+                                    status=PollStatus.OPEN, message_ts="1.1", channel_id="CTEST")
+        db.session.add(poll)
+        db.session.commit()
+        db.session.add(LeadAvailabilityResponse(poll_id=poll.id, practice_id=pid, user_id=uid))
+        db.session.commit()
+        data = blocks.assign_modal_data(pid)
+        assert data["available_text"] == "Available: TEST C2 A"
+        assert [i for i, _ in data["available"]] == [uid]
+        assert data["practice_id"] == pid and data["initial_ids"] == []
+    finally:
+        _cleanup([pid], starts_on=starts)
+        db.session.rollback()
+        u = db.session.get(User, uid)
+        if u is not None:
+            db.session.delete(u)
+        db.session.commit()
