@@ -315,3 +315,23 @@ test('candidates outside the lead pool are labelled and classed', () => {
   assert.equal(rows[0].querySelector('input').checked, true,
     'an assigned out-of-pool lead stays checked, so saving keeps them');
 });
+
+test('blockJobMessage reports errors, sent posts, or nothing to do', () => {
+  const dom = new JSDOM('<!doctype html><div></div>');
+  const module = {exports: {}};
+  new Function('module', 'exports', 'window', 'document',
+    SOURCE + '\nmodule.exports = {blockJobMessage};'
+  )(module, module.exports, dom.window, dom.window.document);
+  const {blockJobMessage} = module.exports;
+  assert.deepEqual(
+    blockJobMessage([{posted: 'True'}, {error: 'boom'}]),
+    {text: 'Block job had errors: boom', tone: 'error'});
+  assert.deepEqual(
+    blockJobMessage([{posted: 'True'}, {posted: 'False'}, {posted: 'True'}]),
+    {text: 'Block job ran: 2 block post(s) sent', tone: 'success'});
+  assert.deepEqual(
+    blockJobMessage([{posted: 'False'}]),
+    {text: 'Block job ran: nothing to do', tone: 'success'});
+  assert.deepEqual(blockJobMessage([]),
+    {text: 'Block job ran: nothing to do', tone: 'success'});
+});

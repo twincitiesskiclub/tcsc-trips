@@ -142,6 +142,22 @@ def test_summary_sweeps_hidden_practices_through_publish_if_ready():
     assert 41 in swept
 
 
+def test_one_failing_publish_does_not_block_the_sweep():
+    first = practice(41, datetime(2026, 7, 14, 18, 15), is_draft=True)
+    second = practice(42, datetime(2026, 7, 16, 18, 15), is_draft=True)
+    swept = []
+
+    def fake(p, **k):
+        swept.append(p.id)
+        if p.id == 41:
+            raise RuntimeError("boom")
+        return False
+
+    with patch("app.practices.publishing.publish_if_ready", fake):
+        run_coach_summary([first, second])
+    assert swept == [41, 42]
+
+
 def test_empty_production_week_registers_coach_refresh_identity():
     outcome = run_coach_summary([])
 

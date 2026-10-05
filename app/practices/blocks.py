@@ -109,7 +109,6 @@ def ensure_block(start: date, today: date) -> dict:
     reminded = False
     if (
         poll.status == PollStatus.DRAFT
-        and poll.block_post_ts
         and poll.wednesday_reminder_sent_at is None
         and today >= start - timedelta(days=REMINDER_DAYS_AHEAD)
     ):
@@ -120,7 +119,15 @@ def ensure_block(start: date, today: date) -> dict:
 
 def run_block_job(today: date | None = None) -> list[dict]:
     today = today or today_central()
-    return [ensure_block(start, today) for start in blocks_due(today, block_anchor())]
+    results = []
+    for start in blocks_due(today, block_anchor()):
+        try:
+            results.append(ensure_block(start, today))
+        except Exception as exc:  # noqa: BLE001 - one block must not stop the next
+            db.session.rollback()
+            current_app.logger.exception("Block job failed for block %s", start)
+            results.append({"start": start, "error": str(exc)})
+    return results
 
 
 def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:
@@ -283,3 +290,67 @@ def footer_text(poll, today: date) -> str | None:
         joined = names[0] if len(names) == 1 else ", ".join(names[:-1]) + " and " + names[-1]
         text += f" Reminders go to the rest {joined}."
     return text
+
+
+def assign_modal_data(practice_id: int) -> dict | None:
+    """What the Assign modal shows for one session, or None if it is gone."""
+    from app.models import User
+    from app.practices.models import Practice
+    from app.slack.blocks.block_post import short_name, where_label
+
+    practice = db.session.get(Practice, practice_id)
+    if practice is None:
+        return None
+    poll = poll_for_date(practice.date.date())
+
+    available_users = []
+    if poll is not None and poll.message_ts:
+        ids = [r.user_id for r in LeadAvailabilityResponse.query.filter_by(
+            poll_id=poll.id, practice_id=practice.id).all()]
+        if ids:
+            available_users = (User.query.filter(User.id.in_(ids))
+                               .order_by(User.first_name, User.last_name).all())
+
+    if poll is None or (poll.status == PollStatus.CLOSED and not poll.message_ts):
+        available_text = None
+    elif poll.status == PollStatus.DRAFT:
+        available_text = "Available: poll not opened yet"
+    elif available_users:
+        available_text = "Available: " + ", ".join(short_name(u) for u in available_users)
+    else:
+        available_text = "Available: nobody yet"
+
+    current = [l.user for l in practice.leads if l.role == "lead" and l.user]
+    available_ids = {u.id for u in available_users}
+    pool = [u for u in eligible_leads() if u.id not in available_ids]
+    pool_ids = {u.id for u in pool}
+    outside = [u for u in current if u.id not in available_ids and u.id not in pool_ids]
+    others = sorted(pool + outside, key=lambda u: (u.first_name or "", u.last_name or ""))
+
+    when = practice.date
+    return {
+        "practice_id": practice.id,
+        "title": f"Assign leads · {when.strftime('%a %-m/%-d')}",
+        "detail": f"{when.strftime('%-I:%M%p').replace('PM', 'p').replace('AM', 'a')} · "
+                  f"{where_label(practice)} · needs {practice.leads_needed or 2}",
+        "available_text": available_text,
+        "available": [(u.id, short_name(u)) for u in available_users],
+        "others": [(u.id, short_name(u)) for u in others],
+        "initial_ids": [u.id for u in current],
+    }
+
+
+def save_assigned_leads(practice_id: int, user_ids: list[int]) -> None:
+    """Replace a session's lead rows (coaches untouched) and refresh its posts."""
+    from app.practices.models import Practice, PracticeLead
+    from app.slack.practices import refresh_practice_posts
+
+    practice = db.session.get(Practice, practice_id)
+    if practice is None:
+        return
+    for lead in [l for l in practice.leads if l.role == "lead"]:
+        practice.leads.remove(lead)
+    for user_id in dict.fromkeys(user_ids):
+        practice.leads.append(PracticeLead(user_id=user_id, role="lead"))
+    db.session.commit()
+    refresh_practice_posts(practice, change_type="edit", notify=False)

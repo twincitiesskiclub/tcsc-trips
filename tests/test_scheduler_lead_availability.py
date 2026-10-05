@@ -226,6 +226,8 @@ def test_close_job_closes_unopened_drafts(app, monkeypatch):
     from app.scheduler import run_close_expired_polls_job
 
     monkeypatch.setattr("app.practices.blocks.refresh_block_post", lambda poll, **k: True)
+    # Only polls ending before this are eligible, so the job leaves real rows alone.
+    monkeypatch.setattr("app.scheduler.today_central", lambda: date(2000, 1, 17))
     with app.app_context():
         db.session.rollback()
         poll = LeadAvailabilityPoll(starts_on=date(2000, 1, 3), ends_on=date(2000, 1, 16),

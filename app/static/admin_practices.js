@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   attachEventListeners();
   render();
   renderPolls();
-  flashPendingAvailabilityWarning();
 });
 
 async function loadPractices() {
@@ -464,13 +463,22 @@ async function openBlockPoll(pollId) {
   }
 }
 
+function blockJobMessage(results) {
+  const failed = results.find(r => r.error);
+  if (failed) return {text: 'Block job had errors: ' + failed.error, tone: 'error'};
+  const posted = results.filter(r => r.posted === 'True').length;
+  if (posted) return {text: 'Block job ran: ' + posted + ' block post(s) sent', tone: 'success'};
+  return {text: 'Block job ran: nothing to do', tone: 'success'};
+}
+
 async function runBlockJob() {
   const btn = document.getElementById('pl-block-job-btn');
   btn.disabled = true;
   try {
     const r = await fetch('/admin/availability/block-job/run', {method: 'POST'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    showToast('Block job ran', 'success');
+    const msg = blockJobMessage((await r.json()).results || []);
+    showToast(msg.text, msg.tone);
   } catch (e) {
     showToast('Block job failed', 'error');
   } finally {
@@ -488,23 +496,6 @@ function renderPolls() {
     return;
   }
   root.innerHTML = pollsData.map(pollCardHtml).join('');
-}
-
-/* ---------- availability_warning handoff (from the create form) ----------
-
-   create_practice() warns when a new practice lands inside an OPEN poll's
-   range: the poll's emoji mapping is already fixed, so the practice gets no
-   letter and collects no availability. The create page stashes that warning
-   (see _detail_script.js) because it redirects here immediately — the toast
-   has to survive the navigation to be seen by the admin who caused it. */
-
-function flashPendingAvailabilityWarning() {
-  let warning = null;
-  try {
-    warning = window.sessionStorage.getItem('tcsc-availability-warning');
-    if (warning) window.sessionStorage.removeItem('tcsc-availability-warning');
-  } catch (e) { return; /* storage blocked; the server already logged it */ }
-  if (warning) showToast(warning, 'warning');
 }
 
 /* ---------- lead candidates picker (practice create/edit form) ---------- */

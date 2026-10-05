@@ -25,7 +25,6 @@ function load() {
   const module = {exports: {}};
   new Function('module', 'exports', 'window', 'document', 'showToast',
     SOURCE + '\nmodule.exports = {draftPublishHtml, rowHtml, pollCardHtml, '
-    + 'flashPendingAvailabilityWarning, '
     + '_setPractices: (d) => { practicesData = d; }};'
   )(module, module.exports, dom.window, dom.window.document,
     (msg, type) => toasts.push({msg, type}));
@@ -107,23 +106,6 @@ test('the date-range poll toolbar is gone', () => {
   assert.doesNotMatch(SOURCE, /pl-poll-start|openAvailabilityPoll/);
 });
 
-/* ---------- availability_warning handoff from the create form ---------- */
-
-test('a stashed availability warning is toasted once on the list page, then cleared', () => {
-  const {flashPendingAvailabilityWarning, dom, toasts} = load();
-  dom.window.sessionStorage.setItem(
-    'tcsc-availability-warning', 'TEST practice has no poll letter');
-  flashPendingAvailabilityWarning();
-  assert.deepEqual(toasts,
-    [{msg: 'TEST practice has no poll letter', type: 'warning'}]);
-  assert.equal(
-    dom.window.sessionStorage.getItem('tcsc-availability-warning'), null);
-  flashPendingAvailabilityWarning();
-  assert.equal(toasts.length, 1, 'the warning must not re-toast on reload');
-});
-
-test('no stashed warning means no toast', () => {
-  const {flashPendingAvailabilityWarning, toasts} = load();
-  flashPendingAvailabilityWarning();
-  assert.deepEqual(toasts, []);
+test('the open-poll warning handoff is gone', () => {
+  assert.doesNotMatch(SOURCE, /tcsc-availability-warning|flashPendingAvailabilityWarning/);
 });

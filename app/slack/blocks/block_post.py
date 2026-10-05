@@ -103,7 +103,10 @@ def _status_line(poll, permalink) -> str:
     if poll.status == "closed":
         when = poll.closed_at.strftime("%a %-m/%-d") if poll.closed_at else ""
         return f"Poll closed {when}".strip()
+    when = poll.opened_at.strftime("%a %-m/%-d") if poll.opened_at else ""
     opener = f"Opened by <@{poll.opened_by_slack_uid}>" if poll.opened_by_slack_uid else "Opened"
+    if when:
+        opener = f"{opener}, {when}" if poll.opened_by_slack_uid else f"{opener} {when}"
     return f"{opener} · <{permalink}|see the poll>" if permalink else opener
 
 
@@ -115,3 +118,47 @@ def build_block_post(poll, rows, *, permalink, footer) -> list[dict]:
     if footer and poll.status == "open":
         blocks.append(_context(footer))
     return blocks
+
+
+MAX_SELECT_OPTIONS = 100
+
+
+def _option(user_id, name) -> dict:
+    return {"text": {"type": "plain_text", "text": name[:75]}, "value": str(user_id)}
+
+
+def build_assign_modal(data: dict) -> dict:
+    """The Assign modal: one available line, one grouped lead dropdown."""
+    available = data["available"][:MAX_SELECT_OPTIONS]
+    others = data["others"][: MAX_SELECT_OPTIONS - len(available)]
+    groups = []
+    if available:
+        groups.append({"label": {"type": "plain_text", "text": "Available"},
+                       "options": [_option(*p) for p in available]})
+    if others:
+        groups.append({"label": {"type": "plain_text", "text": "Everyone else"},
+                       "options": [_option(*p) for p in others]})
+    names = dict(available + others)
+    select = {"type": "multi_static_select", "action_id": "leads_select",
+              "placeholder": {"type": "plain_text", "text": "Choose leads"},
+              "option_groups": groups}
+    initial = [_option(uid, names[uid]) for uid in data["initial_ids"] if uid in names]
+    if initial:
+        select["initial_options"] = initial
+
+    blocks = [{"type": "header", "text": {"type": "plain_text", "text": data["title"][:150]}},
+              {"type": "context", "elements": [{"type": "mrkdwn", "text": data["detail"]}]}]
+    if data["available_text"]:
+        blocks.append({"type": "section",
+                       "text": {"type": "mrkdwn", "text": data["available_text"]}})
+    blocks.append({"type": "input", "block_id": "leads", "optional": True,
+                   "label": {"type": "plain_text", "text": "Leads"}, "element": select})
+    return {
+        "type": "modal",
+        "callback_id": "block_assign_submit",
+        "private_metadata": str(data["practice_id"]),
+        "title": {"type": "plain_text", "text": "Assign leads"},
+        "submit": {"type": "plain_text", "text": "Save"},
+        "close": {"type": "plain_text", "text": "Cancel"},
+        "blocks": blocks,
+    }
