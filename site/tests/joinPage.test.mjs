@@ -24,6 +24,15 @@ test('join page posts a plain form to tcsc.ski', () => {
   assert.ok(form.querySelector('input[name="name"][required]'));
   assert.ok(!form.querySelector('input[name="phone"][required]'), 'phone stays optional');
   assert.ok(form.textContent.includes("We'll text you when registration opens. Reply STOP to opt out."));
+  assert.equal(form.querySelector('button[type="submit"]').textContent.trim(), 'Keep me posted');
+});
+
+test('join page reads in the club voice', () => {
+  const { document } = new JSDOM(page('join')).window;
+  assert.equal(document.querySelector('h1').textContent.trim(), 'Get on the list');
+  // Eligibility stays explicit so prospects can self-select before signing up.
+  assert.ok(document.body.textContent.includes('For skiers ages 21-35 with intermediate skills. No racing required.'));
+  assert.doesNotMatch(document.body.textContent, /\u2014/, 'no em dashes in copy');
 });
 
 test('join page shows the opening dates when the season has them', () => {
@@ -53,7 +62,7 @@ test('join page flips to a Register button when registration opens', () => {
   assert.ok(cta, 'subhead must share a <section> with a [data-registration] CTA');
 
   assert.equal(cta.getAttribute('data-open-url'), 'https://tcsc.ski/');
-  assert.match(subhead.getAttribute('data-open-subhead'), /Registration is open right now/);
+  assert.equal(subhead.getAttribute('data-open-subhead'), 'Registration is open now. Skip the list and sign up.');
   assert.equal(cta.getAttribute('data-soon-url'), '#join-form');
   assert.ok(document.getElementById('join-form'), 'the scroll target must exist');
 

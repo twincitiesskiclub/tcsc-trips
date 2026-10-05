@@ -4,8 +4,8 @@
 {% set v = values or {} %}
 {% set e = errors or {} %}
 <div class="card">
-  <span class="card__title">Get notified when registration opens</span>
-  <p class="form-field__hint">Not a member yet? Leave your info and we'll reach out when the next registration window opens.</p>
+  <span class="card__title">Get on the list</span>
+  <p class="form-field__hint">Leave your info and we'll let you know when registration opens.</p>
   <form method="post" action="{{ url_for('interest.interest_submit') }}">
     <div class="form-field">
       <label class="form-field__label" for="interest-name">Name</label>
@@ -27,6 +27,6 @@
       <label for="interest-leave-blank">Leave this empty</label>
       <input id="interest-leave-blank" name="leave_blank" type="text" tabindex="-1" autocomplete="off">
     </div>
-    <button class="btn btn--full" type="submit">Notify me</button>
+    <button class="btn btn--full" type="submit">Keep me posted</button>
   </form>
 </div>
