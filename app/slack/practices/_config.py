@@ -50,6 +50,14 @@ def get_default_duration_minutes():
         return 90
 
 
+def get_training_plan_url() -> Optional[str]:
+    """Training plan link for the weekly summary, or None to omit the line."""
+    value = (
+        _load_practice_config().get("weekly_summary") or {}
+    ).get("training_plan_url")
+    return str(value or "").strip() or None
+
+
 def reload_config():
     """Force reload of config from disk (useful for testing or config changes)."""
     global _config_cache, _practice_config_cache
