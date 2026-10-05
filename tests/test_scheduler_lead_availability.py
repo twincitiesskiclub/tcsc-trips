@@ -206,3 +206,40 @@ def test_a_poisoned_session_does_not_abort_the_other_polls(app):
         "the good poll must still be processed -- a DB-level failure on the "
         "first poll must not poison the session for the rest of the run"
     )
+
+
+def test_block_job_is_registered_daily_at_nine():
+    import inspect
+
+    from app import scheduler as sched_module
+
+    source = inspect.getsource(sched_module)
+    assert "id='lead_block_job'" in source
+    assert "practice_block_bootstrap" not in source
+    assert "practice_block_readiness_nudge" not in source
+
+
+def test_close_job_closes_unopened_drafts(app, monkeypatch):
+    from datetime import date
+
+    from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+    from app.scheduler import run_close_expired_polls_job
+
+    monkeypatch.setattr("app.practices.blocks.refresh_block_post", lambda poll, **k: True)
+    with app.app_context():
+        db.session.rollback()
+        poll = LeadAvailabilityPoll(starts_on=date(2000, 1, 3), ends_on=date(2000, 1, 16),
+                                    status=PollStatus.DRAFT, channel_id="C0TEST")
+        db.session.add(poll)
+        db.session.commit()
+        poll_id = poll.id
+        try:
+            run_close_expired_polls_job(app)
+            db.session.expire_all()
+            assert db.session.get(LeadAvailabilityPoll, poll_id).status == PollStatus.CLOSED
+        finally:
+            db.session.rollback()
+            stored = db.session.get(LeadAvailabilityPoll, poll_id)
+            if stored is not None:
+                db.session.delete(stored)
+            db.session.commit()

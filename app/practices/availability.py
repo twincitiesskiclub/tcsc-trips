@@ -520,7 +520,8 @@ def close_poll(poll) -> dict:
     if poll.status == PollStatus.CLOSED:
         return {"success": True, "already_closed": True}
 
-    reconcile_result = reconcile_poll(poll)
+    # A never-opened draft has no post to reconcile against.
+    reconcile_result = reconcile_poll(poll) if poll.message_ts else {}
     poll.status = PollStatus.CLOSED
     poll.closed_at = now_central_naive()
     db.session.commit()

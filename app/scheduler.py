@@ -21,6 +21,7 @@ Scheduled Jobs:
 - 8:00 AM Sunday: Coach weekly review summary (collab-coaches-practices)
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
+- 9:00 AM: Lead block job → create, post and remind for two-week lead blocks
 - Hourly: Expire pending cancellation proposals (fail-open)
 - 8:05 AM: Season registration recap → #leadership-registration (window-gated)
 """
@@ -831,6 +832,7 @@ def run_lead_availability_nudge_job(app: Flask):
     """
     with app.app_context():
         from app.practices.availability import send_nudges, sync_participants
+        from app.practices.blocks import refresh_block_post
         from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
         from app.slack.practices.availability_reactions import reconcile_poll
 
@@ -860,6 +862,7 @@ def run_lead_availability_nudge_job(app: Flask):
                     f"Poll {poll.id} nudges: sent={result.get('sent', 0)}, "
                     f"skipped={result.get('skipped', 0)}"
                 )
+                refresh_block_post(poll)
             except Exception as e:
                 # Rollback FIRST. Every poll in this run shares one session
                 # (one app_context), so an exception that left a failed flush
@@ -873,6 +876,19 @@ def run_lead_availability_nudge_job(app: Flask):
                 app.logger.error(
                     f"Lead availability nudge failed for poll {poll.id}: {e}", exc_info=True
                 )
+
+
+def run_lead_block_job(app: Flask):
+    """Daily 09:00: create, post and remind for two-week lead blocks."""
+    with app.app_context():
+        from app.practices.blocks import run_block_job
+
+        try:
+            results = run_block_job()
+            app.logger.info(f"Lead block job: {results}")
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Lead block job failed: {e}", exc_info=True)
 
 
 def run_close_expired_polls_job(app: Flask):
@@ -890,16 +906,18 @@ def run_close_expired_polls_job(app: Flask):
     """
     with app.app_context():
         from app.practices.availability import close_poll
+        from app.practices.blocks import refresh_block_post
         from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
 
         today = today_central()
         expired = LeadAvailabilityPoll.query.filter(
-            LeadAvailabilityPoll.status == PollStatus.OPEN,
+            LeadAvailabilityPoll.status.in_([PollStatus.OPEN, PollStatus.DRAFT]),
             LeadAvailabilityPoll.ends_on < today,
         ).all()
         for poll in expired:
             try:
                 close_poll(poll)
+                refresh_block_post(poll)
             except Exception as e:
                 # See run_lead_availability_nudge_job: shared session, so a
                 # poisoned one would leave every later expired poll OPEN and
@@ -1264,6 +1282,17 @@ def init_scheduler(app: Flask) -> bool:
         name='Lead Availability Nudge',
         replace_existing=True,
         misfire_grace_time=3600
+    )
+
+    # Daily: two-week lead blocks (block post, Wednesday reminder)
+    scheduler.add_job(
+        func=run_lead_block_job,
+        args=[app],
+        trigger=CronTrigger(hour=9, minute=0, timezone='America/Chicago'),
+        id='lead_block_job',
+        name='Lead Block Job',
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     # Daily: close availability polls whose block has ended
