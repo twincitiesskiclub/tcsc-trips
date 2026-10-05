@@ -1,0 +1,55 @@
+{% extends 'admin/admin_base.html' %}
+{% block title %}{{ draft.label }} | Crews{% endblock %}
+{% block content %}
+{% set card = "rounded-lg border border-solid border-zinc-200 bg-white p-4 sm:p-5" %}
+{% set btn = "inline-flex items-center justify-center rounded-lg bg-tcsc-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90" %}
+{% set btn2 = "inline-flex items-center justify-center rounded-lg border border-solid border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-tcsc-navy hover:bg-zinc-50" %}
+{% set input = "rounded-lg border border-solid border-zinc-300 px-3 py-2 text-sm" %}
+<div class="space-y-6" data-crews-page>
+  <div>
+    <a class="text-sm text-zinc-500 underline" href="{{ url_for('admin_crews.season_page', season_id=draft.season_id) }}#drafts">Back to all drafts</a>
+    <div class="mt-1 flex flex-wrap items-center gap-2">
+      <h1 class="text-2xl font-semibold text-tcsc-navy">{{ draft.label }}</h1>
+      {% if draft.status == 'final' %}<span class="rounded bg-green-600 px-2 py-0.5 text-xs font-semibold text-white">Final</span>{% endif %}
+    </div>
+    <p class="text-sm text-zinc-600">{{ draft.season.name }} · {{ draft.members|length }} members in {{ draft.settings.crews }} crews.
+      Move someone with the crew picker next to their name. The balance table updates right away.</p>
+  </div>
+
+  <div class="flex flex-wrap gap-2">
+    <a class="{{ btn2 }}" href="{{ url_for('admin_crews.export', draft_id=draft.id) }}">Download CSV</a>
+    {% if draft.status != 'final' %}
+    <form method="post" action="{{ url_for('admin_crews.mark_final', draft_id=draft.id) }}" data-confirm="Use {{ draft.label }} as the final crews for {{ draft.season.name }}?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="{{ btn }}">Mark as final</button>
+    </form>
+    {% endif %}
+    <form method="post" action="{{ url_for('admin_crews.delete_draft', draft_id=draft.id) }}" data-confirm="Delete {{ draft.label }}?">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="{{ btn2 }}">Delete</button>
+    </form>
+  </div>
+
+  {% include 'admin/crews/_draft_body.html' %}
+
+  <section class="{{ card }}">
+    <h2 class="text-lg font-semibold">Names</h2>
+    <form method="post" action="{{ url_for('admin_crews.save_names', draft_id=draft.id) }}" class="mt-2 space-y-3">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="block text-sm font-medium">Draft name
+        <input class="{{ input }} mt-1 block w-full max-w-sm box-border" name="label" value="{{ draft.label }}" maxlength="120">
+      </label>
+      <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {% for crew in crews %}
+        <label class="min-w-0 text-sm font-medium">Crew {{ loop.index }}
+          <input class="{{ input }} mt-1 block w-full box-border" name="name_{{ loop.index }}" maxlength="80"
+                 value="{{ draft.crew_names.get(loop.index|string, '') }}" placeholder="Add a name">
+        </label>
+        {% endfor %}
+      </div>
+      <button class="{{ btn }}">Save names</button>
+    </form>
+  </section>
+</div>
+{% endblock %}
+{% block extra_js %}<script src="{{ url_for('static', filename='admin_crews.js') }}"></script>{% endblock %}
