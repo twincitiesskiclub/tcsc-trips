@@ -22,7 +22,6 @@ Scheduled Jobs:
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
-- 9:00 AM daily: Nudge coaches/directors while drafted practices lack details
 - 8:05 AM: Season registration recap → #leadership-registration (window-gated)
 """
 import os
