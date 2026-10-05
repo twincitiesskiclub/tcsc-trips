@@ -24,18 +24,33 @@ from app import create_app  # noqa: E402
 def manual_block(start: date) -> None:
     from app.models import db
     from app.practices.availability import create_block_poll
-    from app.practices.availability_models import PollStatus
-    from app.practices.blocks import post_block_post
+    from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
+    from app.practices.blocks import block_anchor, post_block_post
     from app.utils import now_central_naive
 
-    poll = create_block_poll(start, start + timedelta(days=13))
-    if poll.block_post_ts:
-        print(f"poll {poll.id} already has a block post ({poll.block_post_ts}); nothing to do")
-        return
+    end = start + timedelta(days=13)
+    if start.weekday() != 0:
+        print(f"refusing: {start} is not a Monday")
+        sys.exit(1)
+    if start >= block_anchor():
+        print(f"refusing: {start} is not before the block anchor {block_anchor()}; "
+              "the block job owns it")
+        sys.exit(1)
+    existing = LeadAvailabilityPoll.query.filter_by(starts_on=start, ends_on=end).first()
+    if existing is not None and not (
+            existing.status == PollStatus.CLOSED and not existing.block_post_ts):
+        print(f"refusing: poll {existing.id} for {start} already exists "
+              f"(status {existing.status}, block post {existing.block_post_ts})")
+        sys.exit(1)
+
+    poll = existing or create_block_poll(start, end)
     poll.status = PollStatus.CLOSED
-    poll.closed_at = now_central_naive()
+    poll.closed_at = poll.closed_at or now_central_naive()
     db.session.commit()
-    print("posted" if post_block_post(poll) else "POST FAILED", "for poll", poll.id)
+    if not post_block_post(poll):
+        print("POST FAILED for poll", poll.id)
+        sys.exit(1)
+    print("posted for poll", poll.id)
 
 
 def _thread_messages(client, channel: str, ts: str) -> list[dict]:
@@ -67,13 +82,26 @@ def digest_cleanup(delete: bool) -> None:
         messages = _thread_messages(client, channel, record.message_ts)
         print(f"{record.week_start} parent {record.message_ts}: "
               f"{max(len(messages) - 1, 0)} replies")
+        for reply in messages[1:]:
+            author = reply.get("user") or f"bot {reply.get('bot_id')}"
+            snippet = (reply.get("text") or "").replace("\n", " ")[:80]
+            print(f"  reply {reply['ts']} by {author}: {snippet}")
         if not delete:
             continue
-        for message in reversed(messages):  # replies first, parent last
+        failed = False
+        for reply in reversed(messages[1:]):  # replies first, parent last
             try:
-                client.chat_delete(channel=channel, ts=message["ts"])
+                client.chat_delete(channel=channel, ts=reply["ts"])
             except Exception as exc:  # noqa: BLE001
-                print("  could not delete", message["ts"], exc)
+                failed = True
+                print("  could not delete reply", reply["ts"], exc)
+        if failed:
+            print(f"  kept parent {record.message_ts} (a reply could not be deleted)")
+            continue
+        try:
+            client.chat_delete(channel=channel, ts=record.message_ts)
+        except Exception as exc:  # noqa: BLE001
+            print("  could not delete parent", record.message_ts, exc)
 
 
 if __name__ == "__main__":

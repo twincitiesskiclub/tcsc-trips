@@ -343,6 +343,40 @@ def test_admin_edit_publishes_a_hidden_practice_once_complete(
         db.session.commit()
 
 
+def test_admin_edit_survives_a_publish_failure_and_still_refreshes(
+    db_session, monkeypatch, admin_client
+):
+    from app.models import db
+    from app.practices.models import Practice
+
+    db.session.rollback()
+    practice = Practice(date=datetime(2099, 4, 7, 18, 15), day_of_week="Tuesday",
+                        is_draft=True, leads_needed=2)
+    db.session.add(practice)
+    db.session.commit()
+    pid = practice.id
+    refreshed = []
+
+    def boom(*a, **k):
+        raise RuntimeError("publish blew up")
+
+    monkeypatch.setattr("app.routes.admin_practices.publish_if_ready", boom)
+    monkeypatch.setattr(
+        "app.slack.practices.refresh_practice_posts",
+        lambda *a, **k: refreshed.append(1) or {"announcement": {"skipped": "absent"}})
+    try:
+        response = admin_client.post(f"/admin/practices/{pid}/edit",
+                                     json={"date": "2099-04-07T18:15"})
+        assert response.status_code == 200, response.get_json()
+        assert refreshed
+    finally:
+        db.session.rollback()
+        p = db.session.get(Practice, pid)
+        if p is not None:
+            db.session.delete(p)
+        db.session.commit()
+
+
 def test_publish_routes_are_gone(admin_client):
     assert admin_client.post("/admin/practices/publish", json={}).status_code == 404
     assert admin_client.post("/admin/availability/polls/1/publish").status_code == 404

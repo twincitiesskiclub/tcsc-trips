@@ -322,6 +322,7 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
         )
         from app.slack.blocks import build_coach_weekly_summary_blocks
         from app.slack.client import get_slack_client
+        from app.slack.practices.coach_review import _unopened_block_poll_id
         from app.slack.practices._config import (
             COACH_SUMMARY_FALLBACK_CHANNEL_ID,
             COLLAB_CHANNEL_ID,
@@ -358,6 +359,7 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
             practice_infos,
             expected_days,
             week_start,
+            open_poll_id=_unopened_block_poll_id(week_start),
         )
 
         resolved_channel = summary_post_channel(record)

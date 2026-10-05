@@ -360,3 +360,33 @@ def test_assign_modal_data_lists_available_first(db_session):
         if u is not None:
             db.session.delete(u)
         db.session.commit()
+
+
+def test_run_block_job_isolates_a_failing_block(db_session, monkeypatch):
+    starts = [date(2099, 1, 5), date(2099, 1, 19)]
+    ran = []
+
+    def fake_ensure(start, today):
+        if start == starts[0]:
+            raise RuntimeError("boom")
+        ran.append(start)
+        return {"start": start, "posted": True}
+
+    monkeypatch.setattr(blocks, "blocks_due", lambda today, anchor: starts)
+    monkeypatch.setattr(blocks, "ensure_block", fake_ensure)
+    results = blocks.run_block_job(date(2099, 1, 1))
+    assert ran == [starts[1]]
+    assert results[0] == {"start": starts[0], "error": "boom"}
+    assert results[1]["posted"] is True
+
+
+def test_wednesday_reply_does_not_need_the_block_post(db_session, slack_posts, monkeypatch):
+    start = date(2099, 1, 19)
+    pid = _practice(20)
+    try:
+        monkeypatch.setattr(blocks, "post_block_post", lambda poll: False)
+        blocks.ensure_block(start, today=date(2099, 1, 15))
+        assert LeadAvailabilityPoll.query.filter_by(starts_on=start).one().block_post_ts is None
+        assert len(slack_posts["wed"]) == 1
+    finally:
+        _cleanup([pid], start)

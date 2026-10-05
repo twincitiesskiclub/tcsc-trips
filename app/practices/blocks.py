@@ -109,7 +109,6 @@ def ensure_block(start: date, today: date) -> dict:
     reminded = False
     if (
         poll.status == PollStatus.DRAFT
-        and poll.block_post_ts
         and poll.wednesday_reminder_sent_at is None
         and today >= start - timedelta(days=REMINDER_DAYS_AHEAD)
     ):
@@ -120,7 +119,15 @@ def ensure_block(start: date, today: date) -> dict:
 
 def run_block_job(today: date | None = None) -> list[dict]:
     today = today or today_central()
-    return [ensure_block(start, today) for start in blocks_due(today, block_anchor())]
+    results = []
+    for start in blocks_due(today, block_anchor()):
+        try:
+            results.append(ensure_block(start, today))
+        except Exception as exc:  # noqa: BLE001 - one block must not stop the next
+            db.session.rollback()
+            current_app.logger.exception("Block job failed for block %s", start)
+            results.append({"start": start, "error": str(exc)})
+    return results
 
 
 def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:

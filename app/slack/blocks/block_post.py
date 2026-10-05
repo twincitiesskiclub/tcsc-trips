@@ -103,7 +103,10 @@ def _status_line(poll, permalink) -> str:
     if poll.status == "closed":
         when = poll.closed_at.strftime("%a %-m/%-d") if poll.closed_at else ""
         return f"Poll closed {when}".strip()
+    when = poll.opened_at.strftime("%a %-m/%-d") if poll.opened_at else ""
     opener = f"Opened by <@{poll.opened_by_slack_uid}>" if poll.opened_by_slack_uid else "Opened"
+    if when:
+        opener = f"{opener}, {when}" if poll.opened_by_slack_uid else f"{opener} {when}"
     return f"{opener} · <{permalink}|see the poll>" if permalink else opener
 
 

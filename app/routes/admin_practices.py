@@ -591,7 +591,12 @@ def edit_practice(practice_id):
 
         # A bot-created session goes live the moment it has a location and a
         # type. Runs before the refresh below so every post sees it visible.
-        publish_if_ready(practice)
+        try:
+            publish_if_ready(practice)
+        except Exception:
+            db.session.rollback()
+            current_app.logger.exception(
+                "publish_if_ready failed for practice %s", practice_id)
 
         # Update all Slack posts
         from app.slack.practices import refresh_practice_posts

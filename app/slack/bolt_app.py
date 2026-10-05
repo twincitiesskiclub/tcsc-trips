@@ -524,7 +524,12 @@ if _bot_token:
         with get_app_context():
             from app.practices.blocks import open_block_poll
 
-            result = open_block_poll(int(action["value"]), user_id)
+            try:
+                result = open_block_poll(int(action["value"]), user_id)
+            except Exception:
+                logger.exception("open_block_poll failed for poll %s", action.get("value"))
+                result = {"success": False,
+                          "error": "Could not open the poll. Try again or use the admin page."}
         if not result.get("success"):
             channel = (body.get("channel") or {}).get("id")
             if channel:
@@ -2848,9 +2853,14 @@ def _run_practice_edit_full_post_save(
                 }
             }
         else:
+            from app.models import db
             from app.practices.publishing import publish_if_ready
 
-            publish_if_ready(practice)
+            try:
+                publish_if_ready(practice)
+            except Exception:
+                db.session.rollback()
+                logger.exception("publish_if_ready failed for practice %s", practice_id)
             announcement_notice = build_announcement_change_notice(
                 previous_date=previous_date,
                 previous_location_id=previous_location_id,

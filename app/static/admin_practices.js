@@ -463,13 +463,22 @@ async function openBlockPoll(pollId) {
   }
 }
 
+function blockJobMessage(results) {
+  const failed = results.find(r => r.error);
+  if (failed) return {text: 'Block job had errors: ' + failed.error, tone: 'error'};
+  const posted = results.filter(r => r.posted === 'True').length;
+  if (posted) return {text: 'Block job ran: ' + posted + ' block post(s) sent', tone: 'success'};
+  return {text: 'Block job ran: nothing to do', tone: 'success'};
+}
+
 async function runBlockJob() {
   const btn = document.getElementById('pl-block-job-btn');
   btn.disabled = true;
   try {
     const r = await fetch('/admin/availability/block-job/run', {method: 'POST'});
     if (!r.ok) throw new Error('HTTP ' + r.status);
-    showToast('Block job ran', 'success');
+    const msg = blockJobMessage((await r.json()).results || []);
+    showToast(msg.text, msg.tone);
   } catch (e) {
     showToast('Block job failed', 'error');
   } finally {

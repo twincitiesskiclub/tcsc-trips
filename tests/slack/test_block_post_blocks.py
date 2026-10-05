@@ -5,10 +5,11 @@ from types import SimpleNamespace
 from app.slack.blocks.block_post import block_range_label, build_block_post
 
 
-def _poll(status="draft", message_ts=None, opened_by=None, closed_at=None, pid=7):
+def _poll(status="draft", message_ts=None, opened_by=None, closed_at=None, pid=7,
+          opened_at=None):
     return SimpleNamespace(id=pid, starts_on=date(2099, 1, 19), ends_on=date(2099, 2, 1),
                            status=status, message_ts=message_ts,
-                           opened_by_slack_uid=opened_by, opened_at=None,
+                           opened_by_slack_uid=opened_by, opened_at=opened_at,
                            closed_at=closed_at)
 
 
@@ -148,3 +149,14 @@ def test_assign_modal_caps_options_and_initial_options_match_groups():
     assert len(shown) == 100
     assert all(o in shown for o in select["initial_options"])
     assert [o["value"] for o in select["initial_options"]] == ["1", "100"]
+
+
+def test_status_line_includes_the_open_date():
+    from datetime import datetime
+    opened = datetime(2099, 1, 12, 9, 0)  # a Monday
+    with_uid = build_block_post(_poll("open", "2.0", "U0CHRIS", opened_at=opened), [_row(1)],
+                                permalink="https://x/p", footer=None)
+    assert "Opened by <@U0CHRIS>, Mon 1/12 · <https://x/p|see the poll>" in _text(with_uid)
+    no_uid = build_block_post(_poll("open", "2.0", opened_at=opened), [_row(1)],
+                              permalink="https://x/p", footer=None)
+    assert "Opened Mon 1/12 · <https://x/p|see the poll>" in _text(no_uid)

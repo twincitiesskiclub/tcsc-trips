@@ -426,7 +426,12 @@ def _publish_ready_hidden(week_start, week_end) -> None:
         Practice.date < week_end,
     ).all():
         if getattr(hidden, "is_draft", False):
-            publishing.publish_if_ready(hidden)
+            try:
+                publishing.publish_if_ready(hidden)
+            except Exception:  # noqa: BLE001 - never block the Sunday summary
+                db.session.rollback()
+                current_app.logger.exception(
+                    "publish_if_ready failed for practice %s", getattr(hidden, "id", None))
 
 
 def _unopened_block_poll_id(week_start):
