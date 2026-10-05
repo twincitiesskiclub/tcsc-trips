@@ -79,6 +79,12 @@
           </div>
         </div>
 
+        {% if not is_registration_open %}
+        <div style="margin-top: 24px;">
+          {% include '_interest_form.html' %}
+        </div>
+        {% endif %}
+
         <div style="text-align: center; margin-top: 24px;">
           <a href="/" class="btn btn--secondary">&larr; Back to Home</a>
         </div>

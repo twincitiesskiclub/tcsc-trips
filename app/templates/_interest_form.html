@@ -1,0 +1,32 @@
+{# Interest-list signup form. Field names are a contract with
+   site/src/pages/join.astro and app/interest/service.py FIELDS;
+   tests/interest/test_form_contract.py checks them. #}
+{% set v = values or {} %}
+{% set e = errors or {} %}
+<div class="card">
+  <span class="card__title">Get notified when registration opens</span>
+  <p class="form-field__hint">Not a member yet? Leave your info and we'll reach out when the next registration window opens.</p>
+  <form method="post" action="{{ url_for('interest.interest_submit') }}">
+    <div class="form-field">
+      <label class="form-field__label" for="interest-name">Name</label>
+      <input class="form-input{% if e.name %} field-error{% endif %}" id="interest-name" name="name" type="text" autocomplete="name" maxlength="200" required value="{{ v.name or '' }}">
+      {% if e.name %}<p class="form-field__hint" style="color: #c53030;">{{ e.name }}</p>{% endif %}
+    </div>
+    <div class="form-field">
+      <label class="form-field__label" for="interest-email">Email</label>
+      <input class="form-input{% if e.email %} field-error{% endif %}" id="interest-email" name="email" type="email" autocomplete="email" maxlength="255" required value="{{ v.email or '' }}">
+      {% if e.email %}<p class="form-field__hint" style="color: #c53030;">{{ e.email }}</p>{% endif %}
+    </div>
+    <div class="form-field">
+      <label class="form-field__label" for="interest-phone">Cell phone (optional)</label>
+      <input class="form-input{% if e.phone %} field-error{% endif %}" id="interest-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" value="{{ v.phone or '' }}">
+      {% if e.phone %}<p class="form-field__hint" style="color: #c53030;">{{ e.phone }}</p>{% endif %}
+      <p class="form-field__hint">We'll text you when registration opens. Reply STOP to opt out.</p>
+    </div>
+    <div aria-hidden="true" style="position: absolute; left: -10000px;">
+      <label for="interest-website">Leave this empty</label>
+      <input id="interest-website" name="website" type="text" tabindex="-1" autocomplete="off">
+    </div>
+    <button class="btn btn--full" type="submit">Notify me</button>
+  </form>
+</div>
