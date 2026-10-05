@@ -117,3 +117,24 @@ def test_member_status_blank_without_match(app):
         rows = [r for r in service.rows_with_member_status()
                 if r['signup'].email == EMAIL]
         assert rows[0]['member_status'] == ''
+
+
+def test_validate_rejects_junk_characters_in_email(app):
+    for bad in ('a b@x.com', '<b>x</b>@x.com', 'a@b@x.com', 'sam@.x.com', 'sam@x.com.'):
+        _, errors = service.validate(form(email=bad))
+        assert 'email' in errors, bad
+
+
+def test_validate_accepts_common_email_shapes(app):
+    for good in ('first.last+tag@mail.example.co.uk', "o'brien@x.org"):
+        _, errors = service.validate(form(email=good))
+        assert 'email' not in errors, good
+
+
+def test_honeypot_name_is_not_an_autofill_target():
+    # Password managers and contact autofill fill fields with these names. A
+    # filled honeypot silently drops a real signup behind a thanks page.
+    assert service.HONEYPOT not in {
+        'website', 'url', 'homepage', 'company', 'organization', 'fax',
+        'address', 'phone2', 'middle_name', 'nickname',
+    }

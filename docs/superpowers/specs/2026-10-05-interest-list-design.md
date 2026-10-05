@@ -54,7 +54,7 @@ The only write. Both forms post here.
 - `@csrf.exempt`: the marketing site is another origin and cannot carry
   the app's CSRF token. The route does nothing a forged POST could abuse
   beyond adding a row, which a direct POST could do anyway.
-- Honeypot: a hidden `website` field. If it is filled, render the thanks
+- Honeypot: a hidden `leave_blank` field (named so autofill never fills it). If it is filled, render the thanks
   page and save nothing.
 - Validation: name and email required, email must contain `@` and a dot
   after it, a non-empty phone must normalize to E.164. On failure,
@@ -70,7 +70,7 @@ The only write. Both forms post here.
 re-render uses the same template.
 
 Field names are the contract between the two forms: `name`, `email`,
-`phone`, `website` (honeypot).
+`phone`, `leave_blank` (honeypot).
 
 ## Marketing site
 

@@ -3,6 +3,7 @@
 They are not members. Nothing here writes to User; rows_with_member_status
 only reads it so admins can see who has since joined.
 """
+import re
 from datetime import datetime
 
 from sqlalchemy import func, or_
@@ -17,10 +18,14 @@ from .models import InterestSignup
 # app/templates/_interest_form.html. tests/interest/test_form_contract.py
 # checks both templates against these names.
 FIELDS = ('name', 'email', 'phone')
-HONEYPOT = 'website'
+# Named so no autofill tool fills it in: a filled honeypot drops the signup.
+HONEYPOT = 'leave_blank'
 
 MAX_NAME = 200
 MAX_EMAIL = 255
+# One @, a dotted domain that doesn't start or end with a dot, and no
+# whitespace or markup characters anywhere.
+EMAIL_RE = re.compile(r'^[^\s<>"@]+@[^\s<>"@.][^\s<>"@]*\.[^\s<>"@.]+$')
 
 
 def validate(form):
@@ -35,8 +40,7 @@ def validate(form):
         errors['name'] = 'That name is too long.'
 
     email = normalize_email(values['email'])
-    local, _, domain = email.partition('@')
-    if not local or '.' not in domain or domain.startswith('.') or domain.endswith('.'):
+    if not EMAIL_RE.match(email):
         errors['email'] = 'Enter a valid email address.'
     elif len(email) > MAX_EMAIL:
         errors['email'] = 'That email address is too long.'

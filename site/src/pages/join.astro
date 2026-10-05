@@ -4,13 +4,31 @@
 // answers with its own thanks or error page on tcsc.ski. Field names are a
 // contract with app/interest/service.py (tests/interest/test_form_contract.py).
 // The static site's CSP must allow this form-action (render.yaml).
+//
+// The page is static but registration can open after the build, so the top
+// section joins registrationFlip.ts: a CTA plus, in the same <section>, a
+// subhead with every state's copy baked in. When registration is open the
+// browser swaps in "Registration is open right now" and a Register button,
+// so nobody signs up to be told about a window that is already open.
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import CtaForState from '@/components/CtaForState.astro';
 import { getRegistrationCta } from '@/components/registrationCta';
 import { datesLine } from '@/lib/registrationCopy';
 
 const action = import.meta.env.PUBLIC_INTEREST_URL ?? 'https://tcsc.ski/interest';
 const cta = await getRegistrationCta();
 const dates = datesLine(cta.windows);
+
+// Non-open states point at the form below. A fallback build keeps its closed
+// CTA (tcsc.ski), because it can't tell whether registration is open.
+const here = { label: 'Get notified below', url: '#join-form' };
+const closed = cta.source === 'api' ? here : { label: cta.label_closed, url: cta.url_closed };
+
+const subheads = {
+  open: 'Registration is open right now, so skip the list and register.',
+  coming_soon: dates ? `Registration opens: ${dates}.` : 'Registration opens soon.',
+  closed: "We'll reach out as soon as the next registration dates are set.",
+};
 
 const input =
   'mt-1 block w-full rounded-md border border-ink/20 bg-white px-3 py-2 text-ink focus:border-mint-deep focus:outline-none focus:ring-2 focus:ring-mint';
@@ -20,10 +38,28 @@ const label = 'block text-sm font-semibold text-navy';
   title="Get notified · Twin Cities Ski Club"
   description="Leave your email and we'll tell you when Twin Cities Ski Club registration opens."
   headline="Get notified when registration opens"
-  subhead={dates ? `Next registration: ${dates}.` : "We'll reach out as soon as the next registration dates are set."}
 >
+  <section class="safe-inline-6 mx-auto max-w-xl px-6 pt-12">
+    <p
+      class="text-lg text-ink"
+      data-registration-subhead
+      data-open-subhead={subheads.open}
+      data-soon-subhead={subheads.coming_soon}
+      data-closed-subhead={subheads.closed}
+    >{subheads[cta.state]}</p>
+    <div class="mt-5">
+      <CtaForState
+        {...cta}
+        variant="on-paper"
+        label_coming_soon={here.label}
+        url_coming_soon={here.url}
+        label_closed={closed.label}
+        url_closed={closed.url}
+      />
+    </div>
+  </section>
   <div class="safe-inline-6 mx-auto max-w-xl px-6 py-12">
-    <form method="post" action={action} class="space-y-5">
+    <form id="join-form" method="post" action={action} class="space-y-5 scroll-mt-24">
       <div>
         <label class={label} for="join-name">Name</label>
         <input class={input} id="join-name" name="name" type="text" autocomplete="name" maxlength="200" required />
@@ -38,8 +74,8 @@ const label = 'block text-sm font-semibold text-navy';
         <p class="mt-1 text-sm text-ink/70">We'll text you when registration opens. Reply STOP to opt out.</p>
       </div>
       <div aria-hidden="true" class="absolute -left-[10000px]">
-        <label for="join-website">Leave this empty</label>
-        <input id="join-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+        <label for="join-leave-blank">Leave this empty</label>
+        <input id="join-leave-blank" name="leave_blank" type="text" tabindex="-1" autocomplete="off" />
       </div>
       <button type="submit" class="inline-flex items-center px-6 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep">Notify me</button>
     </form>

@@ -41,3 +41,23 @@ test('static site CSP lets the join form post to tcsc.ski', () => {
   const blueprint = readFileSync(new URL('../../render.yaml', import.meta.url), 'utf8');
   assert.match(blueprint, /form-action 'self' https:\/\/tcsc\.ski;/);
 });
+
+test('join page flips to a Register button when registration opens', () => {
+  // registrationFlip.ts swaps a [data-registration] CTA and, in the same
+  // <section>, its [data-registration-subhead]. Assert the baked contract it
+  // needs; the flip mechanism itself is covered by registrationFlip.test.mjs.
+  const { document } = new JSDOM(page('join')).window;
+  const subhead = document.querySelector('main [data-registration-subhead]');
+  assert.ok(subhead, 'join page needs a flip-aware subhead');
+  const cta = subhead.closest('section').querySelector('[data-registration]');
+  assert.ok(cta, 'subhead must share a <section> with a [data-registration] CTA');
+
+  assert.equal(cta.getAttribute('data-open-url'), 'https://tcsc.ski/');
+  assert.match(subhead.getAttribute('data-open-subhead'), /Registration is open right now/);
+  assert.equal(cta.getAttribute('data-soon-url'), '#join-form');
+  assert.ok(document.getElementById('join-form'), 'the scroll target must exist');
+
+  // The fixture build is coming_soon: dates show, no "open" copy.
+  assert.equal(cta.getAttribute('data-state'), 'coming_soon');
+  assert.match(subhead.textContent, /Registration opens: Returning members \w{3} \d{1,2}/);
+});

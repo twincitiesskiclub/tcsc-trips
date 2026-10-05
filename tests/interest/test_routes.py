@@ -1,3 +1,4 @@
+from app.interest import service
 from app.interest.models import InterestSignup
 
 from .conftest import TEST_DOMAIN
@@ -6,7 +7,7 @@ EMAIL = f'pat{TEST_DOMAIN}'
 
 
 def post(client, **fields):
-    data = {'name': 'Pat Prospect', 'email': EMAIL, 'phone': '', 'website': ''}
+    data = {'name': 'Pat Prospect', 'email': EMAIL, 'phone': '', service.HONEYPOT: ''}
     data.update(fields)
     return client.post('/interest', data=data)
 
@@ -40,7 +41,7 @@ def test_resubmit_shows_same_thanks(app, client):
 
 
 def test_honeypot_thanks_but_saves_nothing(app, client):
-    resp = post(client, website='http://spam.example')
+    resp = post(client, **{service.HONEYPOT: 'http://spam.example'})
     assert resp.status_code == 200
     assert "You're on the list" in resp.get_data(as_text=True)
     assert count(app) == 0
