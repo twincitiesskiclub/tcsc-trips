@@ -1,0 +1,353 @@
+# Lead availability, simplified
+
+2026-10-05. Revises `docs/superpowers/specs/2026-07-25-lead-availability-design.md`
+(PR #224, deployed 2026-07-27, never used). The lead side of that design stays.
+The practices team's side is rebuilt.
+
+## Problem
+
+PR #224 works, but nobody uses it, and its draft step has already cost real
+practices.
+
+- **The poll could not open.** `build_poll()` refuses until every draft in range
+  has a location and a type. Drafts are created with neither, two months ahead.
+  Chris fills a practice about a week out, so the poll was never openable.
+- **The readiness digest is noise.** It chases two months of drafts every morning
+  in #collab-coaches-practices and has said "0 ready" daily since Sep 1. Its copy
+  ("the poll unlocks once all of them are set") is also wrong for a scoped poll.
+- **Manual publish fails silently.** Drafts for Sep 1, Sep 3 (x2) and Sep 10 (x2)
+  were never published and never announced, and no other practice exists on
+  those dates. The Sep 10 rows were edited on 9/6 and still stayed hidden.
+  Practice 101 (kickoff) needed a script to publish.
+- **Results are invisible.** The only place to see who can lead is one practice
+  edit page at a time, each listing the whole 60-person pool.
+- **Publishing races the weekly summary.** Chris publishes on Sunday at about
+  20:30, the minute the member weekly summary runs.
+
+## Goals
+
+- Every two weeks, the practices team (Chris, Ellie, Jacob) spends a few minutes
+  in one Slack post: open the poll, see coverage, assign leads.
+- A bot-created practice can never be silently held back. It shows up for members
+  as soon as it has the details members need.
+- Leads keep the reaction poll exactly as designed in July.
+
+## Non-goals
+
+- Changing how leads answer (reactions on one public post, ✅ for done, DM
+  reminders).
+- Automatic assignment. A person picks every lead.
+- Automatic poll opening. A person presses the button.
+- Substitutions, capability profiles, coach scheduling (same as July).
+
+## Decisions
+
+| Question | Decision |
+|---|---|
+| What must a session have before the poll opens? | Date and time only. Missing details show as "Location TBD"; the poll line updates when they are filled in. |
+| Block length and timing | Two weeks, Monday to Sunday, handled one week ahead. Same scope for the team and for leads. |
+| Draft and publish | No publish step. A bot-created session becomes member-visible automatically once it has a location and a type. |
+| Who opens the poll | A person, from a button in Slack (main path) or on the admin page (fallback). |
+| Results and assignment | One live block post in #collab-coaches-practices with an Assign button per session. |
+| Assign modal | Available people as one line of text, plus one dropdown to choose leads. |
+| Coaches | Shown on the session row, not counted toward leads needed. |
+| Rollout | Cut over at deploy. No shadow phase. |
+
+## Rhythm
+
+Blocks start on Mondays two weeks apart, anchored on **Mon 2026-10-26**. The
+anchor is the AppConfig key `lead_availability.block_anchor`, so the cycle can be
+shifted without a deploy.
+
+For each block starting on Monday `S`:
+
+| When | What |
+|---|---|
+| `S - 7` Mon 09:00 | Bot creates the block's sessions, the block's poll row (DRAFT) and the block post. |
+| `S - 7` onward | Someone on the team presses Open poll. |
+| `S - 5` Wed 09:00 | One thread reply on the block post if the poll is still unopened. |
+| Poll day 3, then 2+ days apart, max 3, 08:00 | Nudge DMs to leads who have not answered (unchanged rules). |
+| Every Sun 08:00 | Coach weekly summary, which now also covers hidden practices and lead shortfalls for the coming week. |
+| `S + 14` Mon 08:30 | Poll closes (unchanged: the morning after `ends_on`). |
+
+First regular cycle: block post Mon Oct 19 for Oct 26 to Nov 8. The current block
+(Oct 12 to 25) is handled by the cutover (see Rollout).
+
+## Sessions and visibility
+
+### Creating sessions
+
+The block job calls `generate_draft_block(S, S + 13)` (unchanged, idempotent on
+exact datetime) and creates the block's `LeadAvailabilityPoll` row in DRAFT. The
+job is idempotent on the poll's `(starts_on, ends_on)`: a re-run finds the row and
+only retries the block post if `block_post_ts` is null. The monthly bootstrap job
+and `undrafted_next_month()` go away. If `practice_days` yields no slots for a
+block, the job logs an error and posts nothing.
+
+`build_poll()`'s "replace an abandoned DRAFT poll" branch goes away: DRAFT now
+means "block post is up, poll not opened yet", which is a normal state.
+
+Each `practice_days` slot may carry `leads_needed` in its `defaults` (Thursday
+strength might be 1). Drafted sessions take it, else 2.
+
+`is_draft` keeps its meaning in the code ("hidden from members") and its
+boundary: `published_practices()` for member surfaces, `coach_visible_practices()`
+for team surfaces. In copy, the team sees "hidden from members", never "draft".
+
+### Visible when ready
+
+`publish_if_ready(practice)` in `app/practices/publishing.py`: if the practice is
+hidden and `publish_blockers()` is empty (location set, a practice type or
+activity set, not cancelled), set `is_draft = False`, commit, and fan out
+`refresh_practice_posts(change_type='create')` as `publish_practice()` does
+today. Otherwise do nothing. One way only: clearing a location later never hides
+a practice again.
+
+Called after every save that can complete a practice:
+
+- admin edit route (`app/routes/admin_practices.py`)
+- Slack full edit modal submission (`app/slack/bolt_app.py`)
+- the Sunday coach summary run (a sweep for anything a script or missed path left
+  behind)
+
+Practices created by hand (admin create form, Slack create modal) keep today's
+behavior: visible immediately. Only bot-created sessions start hidden.
+
+**Late publish gets announced.** The announcement job posts today's evening
+practices at 08:00 and tomorrow's morning practices at 20:00. If
+`publish_if_ready()` publishes a practice whose announcement run has already
+passed and it has no `slack_message_ts`, it calls `post_practice_announcement()`
+(`app/slack/practices/announcements.py`) directly. A Tuesday session filled in
+at 10:00 Tuesday is announced at 10:00.
+
+### Sunday coach summary
+
+`post_coach_weekly_summary()` (Sun 08:00, #collab-coaches-practices) already lists
+the coming week's practices, hidden ones included, with Edit buttons. Changes:
+
+- It first sweeps the week's hidden practices through `publish_if_ready()`.
+- Hidden-practice copy becomes "Hidden from members until it has a location"
+  (or "a type"). The footer stops saying "publish the availability block it
+  belongs to" and says how many practices members can't see yet, and why.
+- It adds a line for sessions with fewer leads than `leads_needed`, and, if the
+  coming week's block poll is still DRAFT, an Open poll button.
+
+No separate Saturday job.
+
+## Block post
+
+One message per block in #collab-coaches-practices (`COLLAB_CHANNEL_ID`). Its
+channel and ts live on the block's poll row. Channel membership is the only
+permission gate, the same as the existing Fill in and Edit buttons.
+
+### Before opening
+
+```
+Lead poll · Oct 26 – Nov 8
+Tue 10/27 · 6:15p · Theodore Wirth · Bounding
+Thu 10/29 · 6:05p · Balance Fitness Studio · Strength
+Thu 10/29 · 7:20p · Balance Fitness Studio · Strength
+Tue 11/3 · 6:15p · location TBD
+...
+Opening posts this list to #coord-practices-leads-assists for leads to react to.
+Missing details are fine; the poll updates when you fill them in.
+[Open poll]  [Edit a session ▾]
+```
+
+"Edit a session" is a select of the block's sessions that opens the existing full
+edit modal. Cancelled sessions are not listed.
+
+### Opening
+
+Open poll (block post button, Wednesday reply button, Sunday summary button, or
+the admin card) calls one service function, `open_block_poll(poll, opened_by)`:
+
+1. Atomically claim the poll: `UPDATE ... SET status='opening' WHERE id=? AND
+   status='draft'`, checking the row count before any Slack call. Zero rows means
+   someone else got there first: answer the clicker with an ephemeral "Chris
+   already opened this poll" and stop. Today's `open_poll()` checks status in
+   Python and has no such guard.
+2. Map letters to every non-cancelled practice in the block's date range, in date
+   order, hidden or not. (Today's `build_poll()` maps drafts only, which under
+   "visible when ready" would drop every session the team already filled in.)
+3. Validate emoji, post to #coord-practices-leads-assists, seed reactions, mark
+   OPEN with `opened_by_user_id`. On failure, return the claim to `draft` and
+   show the error to the clicker.
+4. Re-render the block post in its open state.
+
+No readiness gate. The 22-session cap stays (a two-week block is 6 today).
+
+### After opening
+
+```
+Lead poll · Oct 26 – Nov 8
+Opened by Chris F, Mon 10/19 · see the poll
+🟡 A  Tue 10/27 · 6:15p · Theodore Wirth · Bounding        [Assign]
+      Leads: Katrin S · needs 1 more
+🟢 B  Thu 10/29 · 6:05p · Balance Fitness Studio · Strength [Assign]
+      Coach: KJ · Leads: Ellie T
+🔴 C  Thu 10/29 · 7:20p · Balance Fitness Studio · Strength [Assign]
+      No leads yet
+...
+31 of 60 leads have answered. Reminders go to the rest Sat and Mon.
+```
+
+- Dot: green when assigned leads ≥ `leads_needed`; yellow when some are assigned
+  or someone is available; red when nobody is assigned and nobody is available.
+  Coaches are shown ("Coach: KJ") and not counted.
+- An assigned lead with no current reaction for that session shows "(no longer
+  available)" after their name and does not count toward green.
+- A session cancelled after opening stays on the post, struck through, with its
+  letter, so the letters still line up with the leads poll.
+- The footer counts only people in the lead pool. Its reminder days are computed
+  from `opened_at` and the nudge rules, and the sentence disappears after the
+  last nudge.
+
+Re-rendered by `refresh_block_post(poll)`:
+
+- after an Assign save or any practice edit, as a new `refresh_practice_posts`
+  surface, so every edit path updates it
+- each morning at 08:15, after the 08:00 nudge run's reconcile
+
+Not on individual reactions. Only the bot edits this message.
+
+### Wednesday reply
+
+Wed 09:00 of the post week, if the poll is still DRAFT, one reply: "Nobody has
+opened the lead poll for Oct 26 – Nov 8 yet. The first practice is Tue 10/27."
+with [Open poll]. Threaded on the block post, or posted top-level if the block
+post is missing. Sent once (`wednesday_reminder_sent_at`).
+
+### Admin fallback
+
+`/admin/practices/` loses the date pickers and the Open Availability Poll toolbar
+button. The current block's card shows an Open poll button while it is DRAFT,
+calling the same `open_block_poll()`. Cards lose their publish buttons.
+
+## Assign modal
+
+```
+Assign leads · Tue 10/27
+6:15p · Theodore Wirth · Bounding · needs 2
+Available: Katrin S, Micah R, Dana P
+Leads  [ Katrin S ×  ▾ ]
+```
+
+- "Available" is everyone with a response row for this session, by name. "nobody
+  yet" when the poll is open and empty; "poll not opened yet" before opening; no
+  line at all for a block with no poll (see Rollout).
+- One `multi_static_select` with two option groups: "Available" and "Everyone
+  else" (the rest of `eligible_leads()`, alphabetical, plus anyone already
+  assigned who is outside the pool). Prefilled with current leads. No maximum.
+  60 people is under Slack's 100-option cap.
+- Saving replaces this practice's `role='lead'` rows only (coaches untouched),
+  then calls `refresh_practice_posts(change_type='update')`, which re-renders the
+  block post and any announcement already posted.
+
+The admin edit page's lead picker and the full edit modal's lead field stay. All
+three write `role='lead'` rows, and the full modal already keeps assignees who
+are outside its own list.
+
+## Leads side
+
+Unchanged from July and PR #224: poll copy, letter emoji, ✅, reconcile, nudge
+rules, auto-close. Changes:
+
+- **Missing details.** `poll_rows()` already renders "TBD" and "Practice". Copy
+  becomes "Location TBD".
+- **Late sessions get a letter.** A practice created in, or moved into, an open
+  poll's range gets the next letter, appended at the end, its reaction seeded,
+  and the poll message rewritten. Existing letters never move.
+- **Letters only count up.** The poll stores `next_position`. Deleting a practice
+  cascades its mapping away but leaves its pill and reactions on the message, so
+  reusing its letter would hand a new session someone else's answers. A new
+  session always takes `next_position`.
+- **Both save paths.** The append runs from `refresh_practice_posts()` on create
+  and edit, so the admin form and the Slack modal both trigger it. It replaces
+  `_uncovered_by_open_poll_warning()`, which only the admin path called. If no
+  letter is left (22 cap), keep the warning.
+- **Moved out of range.** A session rescheduled outside its poll's dates drops
+  out of that poll's message and block post (mapping kept, so history stays)
+  and is picked up by whichever block covers its new date.
+
+## Removed
+
+- `run_practice_block_bootstrap_job`, `run_practice_readiness_nudge_job`,
+  `post_readiness_digest`, the readiness digest blocks and their summary-post
+  bookkeeping
+- the readiness gate and draft-only filter in `build_poll()`, and its
+  abandoned-DRAFT replacement
+- poll date pickers and `POST /admin/availability/polls/create` as a date-range
+  API
+- `POST /admin/practices/publish`, `POST /admin/availability/polls/<id>/publish`,
+  the drawer's Publish this practice button, poll card publish buttons
+- `tests/js/draft_publish.test.js`'s "no week-level publish" assertions, replaced
+  by "no publish control exists"; the `lead-availability` skill's invariant about
+  automatic publish, rewritten to describe visible-when-ready
+
+## Data changes
+
+On `lead_availability_polls`:
+
+- `block_post_channel_id`, `block_post_ts` (nullable strings)
+- `opened_by_user_id` (nullable FK to users)
+- `wednesday_reminder_sent_at` (nullable timestamp)
+- `next_position` (integer, default 0; backfilled from existing mappings)
+- status gains `opening` (transient claim) and `manual` (block with no poll)
+
+New AppConfig key `lead_availability.block_anchor` (ISO date, default
+`2026-10-26`).
+
+## Error handling
+
+- Every Slack call in the new code follows the existing never-raise pattern and
+  logs at WARNING or above (Render shows only WARNING+).
+- Block post fails to post: the poll row still exists, the admin card still
+  offers Open poll, and the next run of the block job retries.
+- Block post edit fails: logged; the next edit or the next morning's refresh
+  repairs it.
+
+## Testing
+
+Follow `tests/practices/conftest.py` exactly (real dev DB, 2099 dates, `TEST `
+prefixes, rollback-first cleanup). New coverage:
+
+- `publish_if_ready` from each save path; one way; cancelled stays hidden;
+  hand-created practices unaffected; late publish triggers the announcement
+- block job: idempotent on range, anchor arithmetic, no slots → no post
+- `open_block_poll`: concurrent claim, failure returns the claim, published and
+  hidden sessions both mapped, letters in date order
+- letters: append keeps positions; a deleted session's letter is never reused
+- block post render: dot rules, coaches shown not counted, withdrawn lead,
+  cancelled struck through, `leads_needed` 1 and 3, footer days from `opened_at`
+- Assign: replaces only lead rows, outside-pool assignees preserved, option groups
+- Sunday summary: sweep, hidden copy, shortfall line, Open poll when DRAFT
+
+## Rollout
+
+Cut over at deploy. No shadow phase.
+
+**Before merge: demo.** A demo script posts every surface to Rob's DM with the
+TCSC bot, built from the real Block Kit builders with example data: block post
+before and after opening, Wednesday reply, Assign modal (open and empty states,
+rendered as messages since a modal needs a click to open), leads poll with a TBD
+row and a late-added letter, nudge DM, Sunday summary changes. Admin screens
+(practice list card, drawer) as screenshots. Rob gives feedback before merge.
+
+**At deploy (prod one-offs, `TCSC_MIGRATION_ONLY=1`, `SLACK_APP_TOKEN` unset):**
+
+1. Set `lead_availability.shadow_mode` to `false`.
+2. **Oct 12 to 25 assignment post.** Chris already collected availability by hand
+   for this block. Create its poll row with status `manual` and post its block
+   post: session rows with Assign buttons, no Open poll button, no Available line,
+   no leads poll in #coord-practices-leads-assists.
+3. **Clean up #collab-coaches-practices.** Delete every readiness digest post the
+   bot made since Aug 1 and every reply in their threads (`conversations.replies`,
+   then `chat.delete`; the bot can delete its own messages). List them for Rob
+   before deleting.
+4. Delete stale drafts 111-115 (Sep 1, 3, 3, 10, 10).
+5. Mon Oct 19 09:00: the first regular block post (Oct 26 to Nov 8) goes out on
+   its own.
+
+**After launch:** explainer artifact for Chris, Ellie and Jacob, written against
+the shipped build.
