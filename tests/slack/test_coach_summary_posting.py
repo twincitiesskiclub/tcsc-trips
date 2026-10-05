@@ -45,6 +45,7 @@ def run_coach_summary(
     post_response=None,
     commit_effects=None,
     cleanup_error=None,
+    open_poll_id=None,
 ):
     client = MagicMock()
     client.chat_postMessage.return_value = (
@@ -107,7 +108,9 @@ def run_coach_summary(
     ), patch(
         "app.slack.blocks.build_coach_weekly_summary_blocks",
         return_value=blocks,
-    ) as build_blocks:
+    ) as build_blocks, patch.object(
+        coach_review, "_unopened_block_poll_id", return_value=open_poll_id
+    ):
         result = coach_review.post_coach_weekly_summary(
             WEEK_START,
             channel_override=channel_override,
@@ -123,6 +126,11 @@ def run_coach_summary(
         channel_lookup=channel_lookup,
         logger=logger,
     )
+
+
+def test_summary_passes_the_unopened_poll_to_the_blocks():
+    run = run_coach_summary([], open_poll_id=12)
+    assert run.build_blocks.call_args.kwargs["open_poll_id"] == 12
 
 
 def test_summary_sweeps_hidden_practices_through_publish_if_ready():
