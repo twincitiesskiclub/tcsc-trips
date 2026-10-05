@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   attachEventListeners();
   render();
   renderPolls();
-  flashPendingAvailabilityWarning();
 });
 
 async function loadPractices() {
@@ -488,23 +487,6 @@ function renderPolls() {
     return;
   }
   root.innerHTML = pollsData.map(pollCardHtml).join('');
-}
-
-/* ---------- availability_warning handoff (from the create form) ----------
-
-   create_practice() warns when a new practice lands inside an OPEN poll's
-   range: the poll's emoji mapping is already fixed, so the practice gets no
-   letter and collects no availability. The create page stashes that warning
-   (see _detail_script.js) because it redirects here immediately — the toast
-   has to survive the navigation to be seen by the admin who caused it. */
-
-function flashPendingAvailabilityWarning() {
-  let warning = null;
-  try {
-    warning = window.sessionStorage.getItem('tcsc-availability-warning');
-    if (warning) window.sessionStorage.removeItem('tcsc-availability-warning');
-  } catch (e) { return; /* storage blocked; the server already logged it */ }
-  if (warning) showToast(warning, 'warning');
 }
 
 /* ---------- lead candidates picker (practice create/edit form) ---------- */

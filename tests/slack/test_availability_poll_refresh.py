@@ -321,4 +321,70 @@ def test_registry_includes_the_availability_poll_surface():
     # The poll's ts lives on the poll row, not the practice, so the
     # practice-level presence gate must not apply.
     assert surface.ts_field is None
-    assert surface.applies_to == {"edit", "cancel", "delete"}
+    assert surface.applies_to == {"create", "edit", "cancel", "delete"}
+
+
+def test_a_practice_created_inside_an_open_poll_gets_the_next_letter(db_session):
+    db.session.rollback()
+    practices = [_practice(4, "TEST C1 Loc A", "TEST C1 Type A"),
+                 _practice(6, "TEST C1 Loc B", "TEST C1 Type B")]
+    poll = _poll(practices, PollStatus.OPEN, "1.000")
+    poll.next_position = 2
+    new = Practice(date=datetime(2099, 8, 11, 18, 15), day_of_week="Tuesday", is_draft=True)
+    db.session.add(new)
+    db.session.commit()
+    new_id, poll_id = new.id, poll.id
+    ids = _capture(practices + [new], [poll])
+    client = MagicMock()
+    try:
+        with patch("app.slack.client.get_slack_client", return_value=client), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            _refresh_availability_poll(new, "create")
+        mapping = LeadAvailabilityPollPractice.query.filter_by(
+            poll_id=poll_id, practice_id=new_id).one()
+        assert (mapping.emoji, mapping.position) == ("letter_c", 2)
+        client.reactions_add.assert_any_call(
+            channel="TEST_C_POLL", timestamp="1.000", name="letter_c")
+    finally:
+        _cleanup(ids)
+
+
+def test_a_deleted_sessions_letter_is_never_reused(db_session):
+    db.session.rollback()
+    practices = [_practice(4, "TEST C1 Loc C", "TEST C1 Type C"),
+                 _practice(6, "TEST C1 Loc D", "TEST C1 Type D")]
+    poll = _poll(practices, PollStatus.OPEN, "1.000")
+    poll.next_position = 2
+    db.session.commit()
+    ids = _capture(practices, [poll])
+    poll_id = poll.id
+    client = MagicMock()
+    try:
+        db.session.delete(practices[1])      # held letter_b; its pill stays on Slack
+        new = Practice(date=datetime(2099, 8, 11, 18, 15), day_of_week="Tuesday", is_draft=True)
+        db.session.add(new)
+        db.session.commit()
+        ids["practice_ids"].append(new.id)
+        with patch("app.slack.client.get_slack_client", return_value=client), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            _refresh_availability_poll(new, "create")
+        mapping = LeadAvailabilityPollPractice.query.filter_by(
+            poll_id=poll_id, practice_id=new.id).one()
+        assert mapping.emoji == "letter_c"
+    finally:
+        _cleanup(ids)
+
+
+def test_poll_rows_say_location_tbd(db_session):
+    from app.practices.availability import poll_rows
+
+    db.session.rollback()
+    bare = Practice(date=datetime(2099, 8, 4, 18, 15), day_of_week="Tuesday", is_draft=True)
+    db.session.add(bare)
+    db.session.flush()
+    poll = _poll([bare], PollStatus.OPEN, "1.000")
+    ids = _capture([bare], [poll])
+    try:
+        assert poll_rows(poll)[0]["location"] == "Location TBD"
+    finally:
+        _cleanup(ids)

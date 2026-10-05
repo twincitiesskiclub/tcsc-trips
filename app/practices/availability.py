@@ -9,6 +9,7 @@ from sqlalchemy.orm import joinedload
 from app.constants import UserStatus
 from app.models import Tag, User, db
 from app.practices.availability_emoji import (
+    EmojiSupplyError,
     done_emoji,
     letter_emoji,
     validate_emoji_available,
@@ -154,6 +155,32 @@ def map_sessions(poll: LeadAvailabilityPoll) -> None:
     db.session.flush()
 
 
+def append_session(poll, practice) -> str | None:
+    """Give a practice added to an OPEN poll's range the next letter.
+
+    Letters only count up (poll.next_position): a deleted session's pill and
+    reactions stay on the message, so its letter is never handed out again.
+    Returns the new emoji name, or None when the poll is out of letters.
+    """
+    try:
+        name = letter_emoji(poll.next_position + 1)[-1]
+    except EmojiSupplyError:
+        current_app.logger.error(
+            "Poll %s is out of letters; practice %s (%s) collects no availability. "
+            "Assign its leads by hand.", poll.id, practice.id, practice.date)
+        return None
+    db.session.add(LeadAvailabilityPollPractice(
+        poll_id=poll.id, practice_id=practice.id, emoji=name, position=poll.next_position))
+    poll.next_position += 1
+    db.session.commit()
+    try:
+        get_slack_client().reactions_add(
+            channel=poll.channel_id, timestamp=poll.message_ts, name=name)
+    except Exception as exc:  # noqa: BLE001 - the letter still works without the seed
+        current_app.logger.warning("Could not seed :%s: on poll %s: %s", name, poll.id, exc)
+    return name
+
+
 def poll_rows(
     poll: LeadAvailabilityPoll, *, exclude_practice_id: int | None = None
 ) -> list[dict]:
@@ -180,7 +207,7 @@ def poll_rows(
         rows.append({
             "emoji": mapping.emoji,
             "date": practice.date,
-            "location": practice.location.name if practice.location else "TBD",
+            "location": practice.location.name if practice.location else "Location TBD",
             "kind": ", ".join(t.name for t in practice.practice_types) or "Practice",
             "week_label": _week_label(practice.date),
         })

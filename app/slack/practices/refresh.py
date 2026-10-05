@@ -567,6 +567,9 @@ def _refresh_availability_poll(practice, change_type, **_context):
     out of the rebuilt message via poll_rows' status filter; a deleted one
     is excluded explicitly because the delete route refreshes before the
     row disappears.
+
+    It also appends the next letter for a practice created in, or moved
+    into, an open poll's date range (see append_session).
     """
     try:
         from app.practices.availability import poll_rows
@@ -581,21 +584,31 @@ def _refresh_availability_poll(practice, change_type, **_context):
         )
         from app.slack.client import get_slack_client
 
-        polls = (
+        from app.practices.availability import append_session
+        from app.practices.interfaces import PracticeStatus
+
+        mapped = (
             LeadAvailabilityPoll.query
-            .join(
-                LeadAvailabilityPollPractice,
-                LeadAvailabilityPollPractice.poll_id
-                == LeadAvailabilityPoll.id,
-            )
-            .filter(
-                LeadAvailabilityPoll.status == PollStatus.OPEN,
-                LeadAvailabilityPollPractice.practice_id == practice.id,
-            )
+            .join(LeadAvailabilityPollPractice,
+                  LeadAvailabilityPollPractice.poll_id == LeadAvailabilityPoll.id)
+            .filter(LeadAvailabilityPoll.status == PollStatus.OPEN,
+                    LeadAvailabilityPollPractice.practice_id == practice.id)
             .all()
         )
+        if not mapped and change_type in ("create", "edit") \
+                and practice.status != PracticeStatus.CANCELLED.value:
+            day = practice.date.date()
+            covering = LeadAvailabilityPoll.query.filter(
+                LeadAvailabilityPoll.status == PollStatus.OPEN,
+                LeadAvailabilityPoll.starts_on <= day,
+                LeadAvailabilityPoll.ends_on >= day,
+            ).all()
+            for poll in covering:
+                if append_session(poll, practice):
+                    mapped.append(poll)
+        polls = mapped
         if not polls:
-            # The normal case for any ordinary practice edit — nothing to
+            # The normal case for any ordinary practice edit; nothing to
             # do here. Deliberately NOT "absent": _log_refresh_results()
             # warns about "absent" as a genuinely missing linked post.
             return {"skipped": "no_poll"}
@@ -676,7 +689,7 @@ WEEKLY_CHANGE_TYPES = tuple(
 
 # The poll lists date/location/type per session, so only changes that can
 # alter those lines (or remove a session) apply — not rsvp/workout churn.
-AVAILABILITY_POLL_CHANGE_TYPES = ("edit", "cancel", "delete")
+AVAILABILITY_POLL_CHANGE_TYPES = ("edit", "cancel", "delete", "create")
 
 
 PRACTICE_SURFACES = [

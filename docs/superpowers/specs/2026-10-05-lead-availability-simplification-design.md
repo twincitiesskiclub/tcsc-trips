@@ -339,7 +339,7 @@ rules, auto-close. Changes:
   so an unmapped practice never matches) and appends a mapping at
   `next_position` when missing. The admin form and the Slack modal both reach it.
   It replaces `_uncovered_by_open_poll_warning()`, which only the admin path
-  called. If no letter is left (22 cap), keep the warning.
+  called. If no letter is left (22 cap), log an error; the session's leads are assigned by hand.
 - **Moved out of range.** Rare, and left alone. A session rescheduled into
   another block keeps its letter and line in its original poll (the line shows
   the new date, and reactions still mean "I can lead this practice"). Block posts
