@@ -114,7 +114,7 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   assert.equal(yamlScalar(source.home, 'cta_coming_soon_label'), 'Fall registration dates');
   assert.equal(yamlScalar(source.home, 'cta_coming_soon_url'), `${MARKETING_ORIGIN}/join`);
   assert.equal(yamlScalar(source.home, 'cta_closed_url'), `${MARKETING_ORIGIN}/join`);
-  assert.equal(yamlScalar(source.home, 'cta_closed_label'), 'Get notified');
+  assert.equal(yamlScalar(source.home, 'cta_closed_label'), 'Get on the list');
   assert.equal(yamlScalar(source.home, 'mission_paragraph'), MISSION);
 
   assert.match(source.ctaStrip, /\bid\?: string;/);

@@ -47,6 +47,9 @@ def test_validate_rejects_bad_phone(app):
 def test_validate_rejects_oversized_fields(app):
     _, errors = service.validate(form(name='x' * 201, email='x' * 250 + TEST_DOMAIN))
     assert set(errors) == {'name', 'email'}
+    # Errors say how to fix the field, not just what is wrong.
+    assert errors['name'] == 'Use 200 characters or fewer.'
+    assert errors['email'] == 'Use an email address under 255 characters.'
 
 
 def test_save_creates_row_without_phone(app):

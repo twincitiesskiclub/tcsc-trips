@@ -37,13 +37,13 @@ def validate(form):
     if not values['name']:
         errors['name'] = 'Enter your name.'
     elif len(values['name']) > MAX_NAME:
-        errors['name'] = 'That name is too long.'
+        errors['name'] = 'Use 200 characters or fewer.'
 
     email = normalize_email(values['email'])
     if not EMAIL_RE.match(email):
         errors['email'] = 'Enter a valid email address.'
     elif len(email) > MAX_EMAIL:
-        errors['email'] = 'That email address is too long.'
+        errors['email'] = 'Use an email address under 255 characters.'
 
     if values['phone'] and not normalize_phone_e164(values['phone']):
         errors['phone'] = 'Enter a 10-digit US cell number, or leave it blank.'

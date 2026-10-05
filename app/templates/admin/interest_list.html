@@ -6,8 +6,7 @@
 <div class="flex items-center justify-between mb-6 flex-wrap gap-4">
     <div>
         <h1 class="text-2xl font-semibold text-tcsc-navy m-0">Interest list ({{ rows|length }})</h1>
-        <p class="mt-1 text-sm text-zinc-500">People who asked to hear when registration opens. They are not members.
-            "Member" shows a matching account by email or phone.</p>
+        <p class="mt-1 text-sm text-zinc-500">People who want to hear when registration opens. The Member column shows anyone who already has an account.</p>
     </div>
     <a href="{{ url_for('admin_interest.interest_list_csv') }}" class="bg-tcsc-navy text-white px-4 py-3 rounded-tcsc text-sm font-medium hover:opacity-90 transition-all">Export CSV</a>
 </div>

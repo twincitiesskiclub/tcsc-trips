@@ -30,6 +30,8 @@ def test_page_lists_rows_with_member_status(app, admin_client):
     assert f'pat{TEST_DOMAIN}' in html
     assert f'mem{TEST_DOMAIN}' in html
     assert 'ACTIVE' in html
+    assert 'People who want to hear when registration opens.' in html
+    assert 'They are not members' not in html
 
 
 def test_csv_has_every_row_and_raw_phone(app, admin_client):

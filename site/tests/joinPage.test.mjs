@@ -62,8 +62,12 @@ test('join page flips to a Register button when registration opens', () => {
   assert.ok(cta, 'subhead must share a <section> with a [data-registration] CTA');
 
   assert.equal(cta.getAttribute('data-open-url'), 'https://tcsc.ski/');
-  assert.equal(subhead.getAttribute('data-open-subhead'), 'Registration is open now. Skip the list and sign up.');
+  assert.equal(subhead.getAttribute('data-open-subhead'), 'Registration is open now. Skip the list and register.');
   assert.equal(cta.getAttribute('data-soon-url'), '#join-form');
+  // One primary action per screen: the top CTA shows only when registration
+  // is open. Outside that, the form right below is the action. CSS keys off
+  // data-state, which registrationFlip.ts updates, so this needs no JS.
+  assert.match(cta.parentElement.className, /\[&>\[data-registration\]:not\(\[data-state=open\]\)\]:hidden/);
   assert.ok(document.getElementById('join-form'), 'the scroll target must exist');
 
   // The fixture build is coming_soon: dates show, no "open" copy.

@@ -8,7 +8,7 @@
 // The page is static but registration can open after the build, so the top
 // section joins registrationFlip.ts: a CTA plus, in the same <section>, a
 // subhead with every state's copy baked in. When registration is open the
-// browser swaps in "Registration is open right now" and a Register button,
+// browser swaps in "Registration is open now" and a Register button,
 // so nobody signs up to be told about a window that is already open.
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import CtaForState from '@/components/CtaForState.astro';
@@ -21,11 +21,11 @@ const dates = datesLine(cta.windows);
 
 // Non-open states point at the form below. A fallback build keeps its closed
 // CTA (tcsc.ski), because it can't tell whether registration is open.
-const here = { label: 'Sign up below', url: '#join-form' };
+const here = { label: 'Get on the list', url: '#join-form' };
 const closed = cta.source === 'api' ? here : { label: cta.label_closed, url: cta.url_closed };
 
 const subheads = {
-  open: 'Registration is open now. Skip the list and sign up.',
+  open: 'Registration is open now. Skip the list and register.',
   coming_soon: dates ? `Registration opens: ${dates}.` : 'Registration opens soon.',
   closed: "Next season's dates aren't set yet. We'll let you know when they are.",
 };
@@ -48,7 +48,9 @@ const label = 'block text-sm font-semibold text-navy';
       data-closed-subhead={subheads.closed}
     >{subheads[cta.state]}</p>
     <p class="mt-2 text-sm text-ink/70">For skiers ages 21-35 with intermediate skills. No racing required.</p>
-    <div class="mt-5">
+    {/* Shown only while registration is open: otherwise the form below is
+        the one action on the page. Keys off data-state, which the flip sets. */}
+    <div class="mt-5 [&>[data-registration]:not([data-state=open])]:hidden">
       <CtaForState
         {...cta}
         variant="on-paper"
