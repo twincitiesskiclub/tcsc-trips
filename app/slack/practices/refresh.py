@@ -651,6 +651,25 @@ def _refresh_availability_poll(practice, change_type, **_context):
         return {"success": False, "error": str(exc)}
 
 
+def _refresh_block_post(practice, change_type, **_context):
+    """Re-render the team's block post for the block covering this practice."""
+    try:
+        from app.practices.blocks import poll_for_date, refresh_block_post
+
+        poll = poll_for_date(practice.date.date())
+        if poll is None or not poll.block_post_ts:
+            return {"skipped": "no_block_post"}
+        exclude = practice.id if change_type == "delete" else None
+        ok = refresh_block_post(poll, exclude_practice_id=exclude)
+        return {"success": True} if ok else {"success": False, "error": "refresh failed"}
+    except Exception as exc:
+        logger.warning("Block post refresh for practice #%s failed: %s", practice.id, exc)
+        return {"success": False, "error": str(exc)}
+
+
+BLOCK_POST_CHANGE_TYPES = ("edit", "cancel", "delete", "create")
+
+
 WEEKLY_CHANGE_TYPES = tuple(
     change_type for change_type in ALL_CHANGE_TYPES if change_type != "rsvp"
 )
@@ -680,6 +699,12 @@ PRACTICE_SURFACES = [
         None,
         AVAILABILITY_POLL_CHANGE_TYPES,
         _refresh_availability_poll,
+    ),
+    PracticeSurface(
+        "block_post",
+        None,
+        BLOCK_POST_CHANGE_TYPES,
+        _refresh_block_post,
     ),
 ]
 

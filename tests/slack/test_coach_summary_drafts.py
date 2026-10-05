@@ -124,3 +124,17 @@ def test_a_week_with_no_drafts_says_nothing_about_drafts():
     blocks = build_coach_weekly_summary_blocks([_practice(5)], _EXPECTED_DAYS, _WEEK_START)
     footer = blocks[-1]["elements"][0]["text"]
     assert "hidden" not in footer.lower()
+
+
+def test_unopened_block_poll_offers_open_poll():
+    blocks = build_coach_weekly_summary_blocks(
+        [_practice(5)], _EXPECTED_DAYS, _WEEK_START, open_poll_id=12)
+    text = json.dumps(blocks)
+    assert '"action_id": "block_poll_open"' in text
+    assert '"value": "12"' in text
+    assert "Publish" not in text
+
+
+def test_no_open_poll_button_by_default():
+    blocks = build_coach_weekly_summary_blocks([_practice(5)], _EXPECTED_DAYS, _WEEK_START)
+    assert "block_poll_open" not in json.dumps(blocks)

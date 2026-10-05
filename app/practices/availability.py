@@ -7,7 +7,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import joinedload
 
 from app.constants import UserStatus
-from app.models import AppConfig, SlackUser, Tag, User, db
+from app.models import Tag, User, db
 from app.practices.availability_emoji import (
     done_emoji,
     letter_emoji,
@@ -20,7 +20,6 @@ from app.practices.availability_models import (
     ParticipantStatus,
     PollStatus,
 )
-from app.practices.drafting import missing_fields
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
 from app.slack.practices._config import COORD_CHANNEL_ID
@@ -40,16 +39,7 @@ COACH_TAGS = frozenset({"HEAD_COACH", "ASSISTANT_COACH"})
 
 
 class PollNotReadyError(RuntimeError):
-    """Raised when practices in range still lack location, type or time."""
-
-
-class DuplicatePollError(PollNotReadyError):
-    """Raised when a DRAFT/OPEN poll already covers an overlapping range.
-
-    Subclasses PollNotReadyError so existing callers (the admin route's
-    `except PollNotReadyError` -> 400 with the message verbatim) keep working
-    without change.
-    """
+    """Raised when a poll has no practices to map."""
 
 
 def eligible_leads() -> list[User]:
@@ -99,111 +89,69 @@ def _week_label(when: datetime) -> str:
     return f"Week of {monday.strftime('%b %-d')}"
 
 
-def build_poll(starts_on: date, ends_on: date) -> LeadAvailabilityPoll:
-    """Create a DRAFT poll with its emoji mapping, or refuse if drafts are incomplete.
+def create_block_poll(starts_on: date, ends_on: date) -> LeadAvailabilityPoll:
+    """The block's poll row, created when its block post goes up.
 
-    Leads decide availability from location, activity type and time,
-    so every practice in range must have all three before a poll can be
-    built — the error names which practice needs what, since the director
-    is the one who has to go fix it.
-
-    Refuses to build a second poll whose range overlaps an existing OPEN
-    poll. Two overlapping live polls would both nudge the same leads about the
-    same sessions, and reactions on the older one become invisible to
-    whichever poll a lead happens to answer -- a confusing, silent way to
-    under-count availability. CLOSED polls don't block a rebuild of the same
-    range.
-
-    An overlapping *unopened DRAFT* is replaced rather than treated as a
-    blocker. The admin flow creates the DRAFT before asking the director to
-    confirm the channel it's about to post to, so cancelling that dialog left
-    a DRAFT behind that nothing could open or discard: there is
-    no UI or route for either, and the close job only touches OPEN polls. The
-    range was then permanently unpollable, recoverable only by hand-editing
-    the database. Nothing has been posted for a DRAFT poll, so deleting it
-    cannot orphan a reaction; its baked channel_id is stale anyway.
-
-    Only DRAFT practices are polled. A poll exists to collect availability for
-    a block that hasn't been published yet, so including already-published
-    practices would ask leads to cover sessions that are already settled, and
-    -- worse -- one published practice missing a location would refuse the
-    whole poll over a field the director has no reason to fill in.
+    DRAFT with no letters: sessions can still be added or cancelled during
+    the week before someone presses Open poll, so letters are assigned then
+    (map_sessions). Idempotent on the exact range.
     """
-    overlapping = (
-        LeadAvailabilityPoll.query
-        .filter(LeadAvailabilityPoll.status == PollStatus.OPEN)
-        .filter(LeadAvailabilityPoll.starts_on <= ends_on,
-                LeadAvailabilityPoll.ends_on >= starts_on)
-        .first()
-    )
-    if overlapping is not None:
-        raise DuplicatePollError(
-            f"poll #{overlapping.id} ({overlapping.status}, "
-            f"{overlapping.starts_on}..{overlapping.ends_on}) already covers "
-            f"this range -- close it before building another"
-        )
-
-    abandoned = (
-        LeadAvailabilityPoll.query
-        .filter(LeadAvailabilityPoll.status == PollStatus.DRAFT)
-        .filter(LeadAvailabilityPoll.starts_on <= ends_on,
-                LeadAvailabilityPoll.ends_on >= starts_on)
-        .all()
-    )
-    for stale_poll in abandoned:
-        current_app.logger.info(
-            "Replacing abandoned DRAFT availability poll %s (%s..%s), never "
-            "posted to Slack", stale_poll.id, stale_poll.starts_on, stale_poll.ends_on,
-        )
-        db.session.delete(stale_poll)
-    if abandoned:
-        db.session.flush()
-
-    practices = (
-        Practice.query
-        .filter(Practice.date >= datetime.combine(starts_on, datetime.min.time()),
-                Practice.date <= datetime.combine(ends_on, datetime.max.time()),
-                Practice.status != PracticeStatus.CANCELLED.value,
-                Practice.is_draft.is_(True))
-        .order_by(Practice.date)
-        .all()
-    )
-    if not practices:
-        raise PollNotReadyError(
-            f"no unpublished practices between {starts_on} and {ends_on}"
-        )
-
-    incomplete = [(p, missing_fields(p)) for p in practices if missing_fields(p)]
-    if incomplete:
-        detail = "; ".join(
-            f"{p.date:%a %-m/%-d} needs {', '.join(fields)}" for p, fields in incomplete
-        )
-        raise PollNotReadyError(
-            f"{len(incomplete)} practice(s) still need details: {detail}"
-        )
-
-    emoji = letter_emoji(len(practices))
-
+    poll = LeadAvailabilityPoll.query.filter_by(
+        starts_on=starts_on, ends_on=ends_on).first()
+    if poll is not None:
+        return poll
     poll = LeadAvailabilityPoll(
         starts_on=starts_on,
         ends_on=ends_on,
+        status=PollStatus.DRAFT,
         is_shadow=False,
         channel_id=COORD_CHANNEL_ID,
-        # Snapshot the done emoji alongside the letter mapping: a config
-        # edit while this poll is open must not change which reactions count
-        # as "done" (see LeadAvailabilityPoll.done_emoji).
+        # Snapshot, so a config edit mid-poll can't change what counts as done.
         done_emoji=done_emoji(),
     )
     db.session.add(poll)
-    db.session.flush()
-
-    for position, (practice, name) in enumerate(zip(practices, emoji)):
-        db.session.add(LeadAvailabilityPollPractice(
-            poll_id=poll.id, practice_id=practice.id, emoji=name, position=position,
-        ))
-
     db.session.commit()
     return poll
+
+
+def block_practices(starts_on: date, ends_on: date) -> list[Practice]:
+    """Every practice in the range, cancelled included, in date order."""
+    return (
+        Practice.query
+        .filter(Practice.date >= datetime.combine(starts_on, datetime.min.time()),
+                Practice.date <= datetime.combine(ends_on, datetime.max.time()))
+        .order_by(Practice.date, Practice.id)
+        .all()
+    )
+
+
+def map_sessions(poll: LeadAvailabilityPoll) -> None:
+    """Give every non-cancelled practice in the poll's range a letter.
+
+    DRAFT polls only. Nothing has been posted yet, so the previous mapping
+    (if any) is replaced outright. Hidden and visible practices are both
+    mapped: the team may have filled some in already. Flushes, never commits.
+    """
+    if poll.status != PollStatus.DRAFT:
+        raise PollNotReadyError(f"poll {poll.id} is {poll.status}, not draft")
+    practices = [
+        p for p in block_practices(poll.starts_on, poll.ends_on)
+        if p.status != PracticeStatus.CANCELLED.value
+    ]
+    if not practices:
+        raise PollNotReadyError(
+            f"no practices between {poll.starts_on} and {poll.ends_on}")
+    names = letter_emoji(len(practices))
+
+    poll.practices.clear()
+    # Flush the deletes before inserting: uq_poll_emoji would otherwise trip
+    # on the same letters being re-added in one flush.
+    db.session.flush()
+    for position, (practice, name) in enumerate(zip(practices, names)):
+        poll.practices.append(LeadAvailabilityPollPractice(
+            practice_id=practice.id, emoji=name, position=position))
+    poll.next_position = len(practices)
+    db.session.flush()
 
 
 def poll_rows(
@@ -212,7 +160,7 @@ def poll_rows(
     """Render rows for the block builder.
 
     Cancelled practices are skipped — a poll must not keep soliciting
-    availability for a session that isn't happening (build_poll never maps
+    availability for a session that isn't happening (map_sessions never maps
     them, but a practice can be cancelled after the poll opens).
     `exclude_practice_id` drops a practice that is mid-delete: the delete
     route refreshes Slack posts *before* removing the row, so the doomed
@@ -572,7 +520,8 @@ def close_poll(poll) -> dict:
     if poll.status == PollStatus.CLOSED:
         return {"success": True, "already_closed": True}
 
-    reconcile_result = reconcile_poll(poll)
+    # A never-opened draft has no post to reconcile against.
+    reconcile_result = reconcile_poll(poll) if poll.message_ts else {}
     poll.status = PollStatus.CLOSED
     poll.closed_at = now_central_naive()
     db.session.commit()

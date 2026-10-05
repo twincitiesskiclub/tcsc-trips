@@ -429,6 +429,15 @@ def _publish_ready_hidden(week_start, week_end) -> None:
             publishing.publish_if_ready(hidden)
 
 
+def _unopened_block_poll_id(week_start):
+    """The poll id for this week's block if nobody has opened it yet."""
+    from app.practices.availability_models import PollStatus
+    from app.practices.blocks import poll_for_date
+
+    poll = poll_for_date(week_start.date())
+    return poll.id if poll is not None and poll.status == PollStatus.DRAFT else None
+
+
 def post_coach_weekly_summary(
     week_start: datetime,
     channel_override: Optional[str] = None
@@ -477,7 +486,9 @@ def post_coach_weekly_summary(
     practice_infos = [convert_practice_to_info(p) for p in practices]
 
     # Build blocks
-    blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
+    blocks = build_coach_weekly_summary_blocks(
+        practice_infos, expected_days, week_start,
+        open_poll_id=_unopened_block_poll_id(week_start))
 
     # Determine channel - use override if provided
     if channel_override:

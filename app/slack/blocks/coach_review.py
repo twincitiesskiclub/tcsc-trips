@@ -26,7 +26,8 @@ def _practice_needs_attention(practice: PracticeInfo) -> bool:
 def build_coach_weekly_summary_blocks(
     practices: list[PracticeInfo],
     expected_days: list[dict],
-    week_start: 'datetime'
+    week_start: 'datetime',
+    open_poll_id: int | None = None,
 ) -> list[dict]:
     """Build Block Kit blocks for weekly coach review summary.
 
@@ -288,6 +289,15 @@ def build_coach_weekly_summary_blocks(
             f"{'is' if n == 1 else 'are'} hidden from members until "
             f"{'its' if n == 1 else 'their'} details are filled in."
         )
+    if open_poll_id is not None:
+        blocks.append({
+            "type": "section",
+            "text": {"type": "mrkdwn",
+                     "text": ":ballot_box_with_ballot: The lead poll for this week's block hasn't been opened."},
+            "accessory": {"type": "button", "style": "primary", "action_id": "block_poll_open",
+                          "value": str(open_poll_id),
+                          "text": {"type": "plain_text", "text": "Open poll"}},
+        })
     blocks.append({
         "type": "context",
         "elements": [{

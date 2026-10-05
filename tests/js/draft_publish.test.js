@@ -88,6 +88,25 @@ test('a poll card shows range, status and session count, and no publish button',
   assert.doesNotMatch(html, /Publish/);
 });
 
+test('an unopened block offers Open poll on its card', () => {
+  const {pollCardHtml} = load();
+  const html = pollCardHtml({id: 9, starts_on: '2099-05-04', ends_on: '2099-05-17',
+    status: 'draft', sessions: 6, posted: false});
+  assert.match(html, /pl-poll-open/);
+  assert.match(html, /data-poll-id="9"/);
+});
+
+test('a block that never had a poll reads Assign only', () => {
+  const {pollCardHtml} = load();
+  const html = pollCardHtml({id: 9, starts_on: '2099-05-04', ends_on: '2099-05-17',
+    status: 'closed', sessions: 6, posted: false});
+  assert.match(html, /Assign only/);
+});
+
+test('the date-range poll toolbar is gone', () => {
+  assert.doesNotMatch(SOURCE, /pl-poll-start|openAvailabilityPoll/);
+});
+
 /* ---------- availability_warning handoff from the create form ---------- */
 
 test('a stashed availability warning is toasted once on the list page, then cleared', () => {

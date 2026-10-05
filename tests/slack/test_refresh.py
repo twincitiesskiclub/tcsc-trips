@@ -478,7 +478,7 @@ class TestSurfaceRegistry:
         names = {s.name for s in PRACTICE_SURFACES}
         assert names == {
             "announcement", "collab", "coach_summary", "weekly_summary",
-            "availability_poll",
+            "availability_poll", "block_post",
         }
 
     def test_surface_skips_when_ts_absent(self):

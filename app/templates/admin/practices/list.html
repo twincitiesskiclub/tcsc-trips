@@ -88,6 +88,10 @@
 #practice-list .pl-poll-status.is-draft{background:#fef3c7;color:#92400e}
 #practice-list .pl-poll-sessions{color:#64748b}
 #practice-list .pl-poll-act{margin-left:auto;display:inline-flex;align-items:center;gap:9px;flex-wrap:wrap}
+#practice-list .pl-poll-open{font:inherit;font-size:12px;font-weight:600;padding:4px 11px;border-radius:8px;border:1px solid #1c2c44;background:#1c2c44;color:#fff;cursor:pointer}
+#practice-list .pl-poll-open:hover{background:#fff;color:#1c2c44}
+#practice-list .pl-poll-open:disabled{opacity:.6;cursor:default}
+#practice-list .pl-poll-open:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
 #practice-list .pl-poll-note{color:#64748b}
 #practice-list .pl-poll-note.warn{color:#854d0e;font-weight:600}
 
@@ -197,11 +201,8 @@
   </div>
 
   <div class="pl-toolbar" style="margin-top:-10px">
-    <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em">Availability poll</span>
-    <input type="date" id="pl-poll-start" class="pl-select" aria-label="Poll start date">
-    <span style="color:#94a3b8;font-size:13px">to</span>
-    <input type="date" id="pl-poll-end" class="pl-select" aria-label="Poll end date">
-    <button type="button" id="pl-poll-btn" class="pl-btn pl-btn-ghost">Open Availability Poll</button>
+    <span style="font-size:12px;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.04em">Lead polls</span>
+    <button type="button" id="pl-block-job-btn" class="pl-btn pl-btn-ghost">Run block job now</button>
   </div>
 
   <!-- Recent lead polls, one per two-week block. -->
