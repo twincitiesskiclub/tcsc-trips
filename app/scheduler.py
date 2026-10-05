@@ -22,7 +22,6 @@ Scheduled Jobs:
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
 - Hourly: Expire pending cancellation proposals (fail-open)
-- 8:00 AM on the 1st: Draft practices through the end of next month, post readiness digest
 - 9:00 AM daily: Nudge coaches/directors while drafted practices lack details
 - 8:05 AM: Season registration recap → #leadership-registration (window-gated)
 """
@@ -37,14 +36,6 @@ from flask import Flask
 
 from app.models import db
 from app.utils import now_central_naive, today_central
-from app.practices.drafting import (
-    drafted_practices_in_window,
-    end_of_next_month,
-    generate_draft_block,
-    is_ready,
-    undrafted_next_month,
-)
-from app.slack.practices.drafts import post_readiness_digest
 
 
 # Lock file for single-worker guard
@@ -391,129 +382,6 @@ def run_expire_proposals_job(app: Flask):
 
         except Exception as e:
             app.logger.error(f"Expire proposals failed: {e}", exc_info=True)
-
-
-def _block_anchor(today):
-    """The draft block's identity date: the 1st of the month it was drafted in.
-
-    Blocks are drafted on the 1st (the bootstrap job's cadence). The bootstrap
-    job records the readiness digest under this anchor, and the daily nudge
-    computes it again to find the post to thread onto — so both jobs MUST use
-    this one helper. If the two computations diverge, every nudge silently
-    posts top-level instead of threading.
-    """
-    return today.replace(day=1)
-
-
-def run_practice_block_bootstrap_job(app: Flask):
-    """Monthly: draft through the end of next month, report what needs details.
-
-    The horizon is end_of_next_month(), not a week count: the job fires on
-    the 1st, and consecutive runs deliberately overlap by a whole month so no
-    month's tail is ever left undrafted. generate_draft_block() is
-    idempotent, so a re-run (redeploy, manual trigger, misfire grace, the
-    monthly overlap) creates nothing twice — and when nothing new was
-    created, no digest is posted, since posting anyway would spam the channel
-    with a duplicate every time the job re-fires.
-
-    Args:
-        app: Flask application instance for context.
-    """
-    with app.app_context():
-        from app.utils import today_central
-
-        app.logger.info("Starting practice block bootstrap job")
-
-        start = today_central()
-        horizon = end_of_next_month(start)
-        created = generate_draft_block(start, horizon)
-        if not created:
-            app.logger.info("Draft bootstrap: nothing to create, block already drafted")
-            return
-
-        # Summarise the WHOLE drafted window, not just this run's new rows.
-        # After the first run, `created` only ever contains the following
-        # month's rows — the current month was drafted by the previous run
-        # and idempotency skips it — so a digest computed over `created`
-        # would state a range that includes the current month while omitting
-        # its drafts from both the count and the incomplete list. A director
-        # reading that digest would conclude the month is fully specified
-        # while drafts may still be missing location or type. The window
-        # query is what the digest claims to describe, so it is what gets
-        # summarised, and the labels come from the drafts it actually covers.
-        drafts = drafted_practices_in_window(start, horizon) or created
-        first = min(p.date for p in drafts)
-        end = max(p.date for p in drafts)
-        result = post_readiness_digest(
-            drafts,
-            first.strftime("%b %-d"),
-            end.strftime("%b %-d"),
-            block_start=_block_anchor(start),
-        )
-        if result.get("success"):
-            app.logger.info(
-                f"Draft bootstrap: drafted {len(created)} new practices, "
-                f"digest posted over {len(drafts)} in window"
-            )
-        else:
-            app.logger.warning(
-                f"Drafted {len(created)} practices but the digest failed: {result.get('error')}"
-            )
-
-
-def run_practice_readiness_nudge_job(app: Flask):
-    """Daily: chase incomplete drafts in the original digest's thread.
-
-    A daily "all good" post trains people to ignore the channel, so this
-    stays silent whenever every drafted practice already has its details.
-    When drafts ARE incomplete, the digest goes out as a reply in the
-    thread of the block's original digest post (recorded by the bootstrap
-    job) rather than a fresh channel message — daily top-level re-posts
-    train people to ignore the channel just as fast. post_readiness_digest
-    falls back to a recorded top-level post when no digest is on record.
-
-    Args:
-        app: Flask application instance for context.
-    """
-    with app.app_context():
-        from app.utils import today_central
-
-        start = today_central()
-        # Same horizon as the bootstrap job: the nudge must chase every draft
-        # the bootstrap created, and a shorter window would silently stop
-        # chasing the tail of the drafted block.
-        drafts = drafted_practices_in_window(start, end_of_next_month(start))
-
-        # "No drafts" is ambiguous: it means everything is published and fine,
-        # OR that the monthly bootstrap never ran and a whole month has no
-        # practices at all. The second is silent by construction -- this job
-        # only chases drafts that exist -- so two missed runs could leave 31
-        # undrafted days with nothing anywhere saying so. Detect and alert
-        # rather than drafting here: drafting daily would resurrect any draft
-        # a coach deliberately deleted, the next morning.
-        missing = undrafted_next_month(start)
-        if missing:
-            app.logger.error(
-                "Practice drafting has a hole: all %d configured slots in "
-                "%s have no practice. The monthly bootstrap job (1st, 08:00 "
-                "Central) has probably not run -- check its logs, then "
-                "trigger it manually. Nothing else will notice this.",
-                len(missing), missing[0].strftime("%B %Y"),
-            )
-
-        if not drafts or all(is_ready(p) for p in drafts):
-            app.logger.info("Readiness nudge: nothing outstanding, staying quiet")
-            return
-
-        end = max(p.date for p in drafts)
-        result = post_readiness_digest(
-            drafts,
-            start.strftime("%b %-d"),
-            end.strftime("%b %-d"),
-            block_start=_block_anchor(start),
-        )
-        if not result.get("success"):
-            app.logger.warning(f"Readiness nudge digest failed: {result.get('error')}")
 
 
 def _is_strength_practice(practice) -> bool:
@@ -1378,41 +1246,6 @@ def init_scheduler(app: Flask) -> bool:
         name='Newsletter Monthly Orchestrator',
         replace_existing=True,
         misfire_grace_time=3600  # 1 hour grace
-    )
-
-    # ========================================================================
-    # Practice Availability Drafting
-    # ========================================================================
-
-    # Monthly: draft practices through the end of next month on the 1st at 8:00 AM
-    scheduler.add_job(
-        func=run_practice_block_bootstrap_job,
-        args=[app],
-        trigger=CronTrigger(
-            day=1,
-            hour=8,
-            minute=0,
-            timezone='America/Chicago'
-        ),
-        id='practice_block_bootstrap',
-        name='Practice Block Bootstrap',
-        replace_existing=True,
-        misfire_grace_time=7200  # 2 hour grace; generation is idempotent
-    )
-
-    # Daily: nudge coaches/directors while drafted practices lack details
-    scheduler.add_job(
-        func=run_practice_readiness_nudge_job,
-        args=[app],
-        trigger=CronTrigger(
-            hour=9,
-            minute=0,
-            timezone='America/Chicago'
-        ),
-        id='practice_block_readiness_nudge',
-        name='Practice Readiness Nudge',
-        replace_existing=True,
-        misfire_grace_time=3600
     )
 
     # ========================================================================

@@ -20,7 +20,7 @@ from app.practices.availability_models import (
     ParticipantStatus,
     PollStatus,
 )
-from app.practices.drafting import is_ready, missing_fields
+from app.practices.drafting import missing_fields
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
 from app.slack.blocks.availability import build_poll_blocks, poll_fallback_text
@@ -209,7 +209,7 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
             f"no unpublished practices between {starts_on} and {ends_on}"
         )
 
-    incomplete = [(p, missing_fields(p)) for p in practices if not is_ready(p)]
+    incomplete = [(p, missing_fields(p)) for p in practices if missing_fields(p)]
     if incomplete:
         detail = "; ".join(
             f"{p.date:%a %-m/%-d} needs {', '.join(fields)}" for p, fields in incomplete
