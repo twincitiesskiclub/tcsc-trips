@@ -89,14 +89,39 @@ def bind_flask_app(flask_app) -> None:
     _flask_app = flask_app
 
 
-def _save_block_assign(view) -> None:
-    """Persist an Assign modal submission."""
+def _parse_block_assign(view) -> dict:
+    """Read an Assign modal submission into save_assignment keyword arguments."""
+    values = view["state"]["values"]
+
+    def picked(block, action):
+        return (values.get(block, {}).get(action) or {})
+
+    location = picked("location", "location_select").get("selected_option")
+    return {
+        "lead_ids": [int(o["value"]) for o in picked("leads", "leads_select").get("selected_options") or []],
+        "location_id": int(location["value"]) if location else None,
+        "type_ids": [int(o["value"]) for o in picked("types", "type_ids").get("selected_options") or []],
+        "activity_ids": [int(o["value"]) for o in picked("activities", "activity_ids").get("selected_options") or []],
+    }
+
+
+def _save_block_assign(view, ack=lambda **_: None) -> None:
+    """Validate and persist an Assign modal submission.
+
+    Invalid choices ack with modal errors and save nothing; otherwise ack
+    first, then save.
+    """
     practice_id = int(view["private_metadata"])
-    selected = (view["state"]["values"]["leads"]["leads_select"].get("selected_options") or [])
+    parsed = _parse_block_assign(view)
     with get_app_context():
         from app.practices import blocks
 
-        blocks.save_assigned_leads(practice_id, [int(o["value"]) for o in selected])
+        error = blocks.validate_assignment(parsed["type_ids"], parsed["activity_ids"])
+        if error:
+            ack(response_action="errors", errors={error[0]: error[1]})
+            return
+        ack()
+        blocks.save_assignment(practice_id, **parsed)
 
 
 def _ack_practice_reaction_action(ack) -> None:
@@ -544,18 +569,19 @@ if _bot_token:
             from app.slack.blocks.block_post import build_assign_modal
 
             data = assign_modal_data(int(action["value"]))
+            ref_data = _load_modal_ref_data() if data is not None else ((), (), ())
         if data is None:
             channel = (body.get("channel") or {}).get("id")
             if channel:
                 client.chat_postEphemeral(channel=channel, user=body["user"]["id"],
                                           text=":warning: That practice no longer exists.")
             return
-        client.views_open(trigger_id=body["trigger_id"], view=build_assign_modal(data))
+        client.views_open(trigger_id=body["trigger_id"], view=build_assign_modal(
+            data, locations=ref_data[0], all_types=ref_data[2], all_activities=ref_data[1]))
 
     @bolt_app.view("block_assign_submit")
     def handle_block_assign_submit(ack, body, view, client, logger):
-        ack()
-        _save_block_assign(view)
+        _save_block_assign(view, ack)
 
     @bolt_app.action("edit_practice_full")
     def handle_edit_practice_full(ack, body, action, client, logger):

@@ -294,38 +294,128 @@ def test_reminder_days_follow_the_nudge_rules():
         date(2099, 1, 17), date(2099, 1, 19), date(2099, 1, 21)]
 
 
-def test_save_assigned_leads_replaces_only_lead_rows(db_session, monkeypatch):
-    from app.models import User
-    from app.practices.models import PracticeLead
+def _ref(kind, name, reactions=()):
+    from app.practices.models import PracticeActivity, PracticeType
+    model = PracticeType if kind == "type" else PracticeActivity
+    row = model(name=name, default_plan_reactions=list(reactions))
+    db.session.add(row)
+    db.session.commit()
+    return row.id
 
+
+def _delete_rows(model, ids):
+    db.session.rollback()
+    for i in ids:
+        row = db.session.get(model, i)
+        if row is not None:
+            db.session.delete(row)
+    db.session.commit()
+
+
+@pytest.fixture()
+def refresh_calls(monkeypatch):
     calls = []
     monkeypatch.setattr("app.slack.practices.refresh_practice_posts",
                         lambda *a, **k: calls.append(k) or {})
+    return calls
+
+
+def test_save_assignment_replaces_only_lead_rows_and_writes_details(
+        db_session, refresh_calls):
+    from app.models import User
+    from app.practices.models import (
+        PracticeActivity, PracticeLead, PracticeLocation, PracticeType)
+
     db.session.rollback()
     users = [User(first_name=f"TEST C2 {i}", last_name="Assign",
                   email=f"test-c2-{i}@example.invalid") for i in range(3)]
     db.session.add_all(users)
+    loc = PracticeLocation(name="TEST Assign Loc")
+    db.session.add(loc)
     db.session.commit()
     user_ids = [u.id for u in users]
+    loc_id = loc.id
+    type_id = _ref("type", "TEST Assign Type")
+    act_id = _ref("activity", "TEST Assign Act")
     pid = _practice(20)
     try:
         practice = db.session.get(Practice, pid)
         practice.leads.append(PracticeLead(user_id=user_ids[0], role="coach"))
         practice.leads.append(PracticeLead(user_id=user_ids[1], role="lead"))
         db.session.commit()
-        blocks.save_assigned_leads(pid, [user_ids[2], user_ids[2]])
+        blocks.save_assignment(pid, lead_ids=[user_ids[2], user_ids[2]],
+                               location_id=loc_id, type_ids=[type_id],
+                               activity_ids=[act_id])
         db.session.expire_all()
-        roles = sorted((l.user_id, l.role) for l in db.session.get(Practice, pid).leads)
+        practice = db.session.get(Practice, pid)
+        roles = sorted((l.user_id, l.role) for l in practice.leads)
         assert roles == sorted([(user_ids[0], "coach"), (user_ids[2], "lead")])
-        assert calls == [{"change_type": "edit", "notify": False}]
+        assert practice.location_id == loc_id
+        assert [t.id for t in practice.practice_types] == [type_id]
+        assert [a.id for a in practice.activities] == [act_id]
+        assert practice.is_draft is False  # location + type made it visible
+        assert len(refresh_calls) == 1
+        assert refresh_calls[0]["change_type"] == "edit"
+        assert refresh_calls[0]["notify"] is False
+        # location None keeps the existing one
+        blocks.save_assignment(pid, lead_ids=[], location_id=None,
+                               type_ids=[type_id], activity_ids=[act_id])
+        db.session.expire_all()
+        assert db.session.get(Practice, pid).location_id == loc_id
     finally:
         _cleanup([pid])
         db.session.rollback()
+        _delete_rows(PracticeType, [type_id])
+        _delete_rows(PracticeActivity, [act_id])
+        _delete_rows(PracticeLocation, [loc_id])
         for uid in user_ids:
             u = db.session.get(User, uid)
             if u is not None:
                 db.session.delete(u)
         db.session.commit()
+
+
+def test_save_assignment_type_change_resets_plan_reactions_but_unchanged_keeps(
+        db_session, refresh_calls):
+    from app.practices.models import PracticeType
+
+    db.session.rollback()
+    old_id = _ref("type", "TEST Assign Old", [{"emoji": "snowflake", "label": "Old"}])
+    new_id = _ref("type", "TEST Assign New", [{"emoji": "fire", "label": "New"}])
+    pid = _practice(22)
+    custom = [{"emoji": "tada", "label": "Custom"}]
+    try:
+        practice = db.session.get(Practice, pid)
+        practice.practice_types = [db.session.get(PracticeType, old_id)]
+        practice.plan_reactions = custom
+        db.session.commit()
+        blocks.save_assignment(pid, lead_ids=[], location_id=None,
+                               type_ids=[old_id], activity_ids=[])
+        db.session.expire_all()
+        assert db.session.get(Practice, pid).plan_reactions == custom
+        blocks.save_assignment(pid, lead_ids=[], location_id=None,
+                               type_ids=[new_id], activity_ids=[])
+        db.session.expire_all()
+        reactions = db.session.get(Practice, pid).plan_reactions
+        assert [r["emoji"] for r in reactions] == ["fire"]
+        assert refresh_calls[-1]["previous_plan_reactions"] == custom
+    finally:
+        _cleanup([pid])
+        _delete_rows(PracticeType, [old_id, new_id])
+
+
+def test_validate_assignment_flags_conflicting_type_defaults(db_session):
+    from app.practices.models import PracticeType
+
+    db.session.rollback()
+    a = _ref("type", "TEST Assign A", [{"emoji": "fire", "label": "One"}])
+    b = _ref("type", "TEST Assign B", [{"emoji": "fire", "label": "Two"}])
+    try:
+        assert blocks.validate_assignment([a], []) is None
+        block_id, message = blocks.validate_assignment([a, b], [])
+        assert block_id == "types" and message
+    finally:
+        _delete_rows(PracticeType, [a, b])
 
 
 def test_assign_modal_data_lists_available_first(db_session):
@@ -353,6 +443,8 @@ def test_assign_modal_data_lists_available_first(db_session):
         assert data["available_text"] == "Available: TEST C2 A"
         assert [i for i, _ in data["available"]] == [uid]
         assert data["practice_id"] == pid and data["initial_ids"] == []
+        assert data["location_id"] is None
+        assert data["type_ids"] == [] and data["activity_ids"] == []
     finally:
         _cleanup([pid], starts_on=starts)
         db.session.rollback()

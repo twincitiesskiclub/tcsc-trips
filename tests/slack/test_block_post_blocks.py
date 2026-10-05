@@ -160,3 +160,36 @@ def test_status_line_includes_the_open_date():
     no_uid = build_block_post(_poll("open", "2.0", opened_at=opened), [_row(1)],
                               permalink="https://x/p", footer=None)
     assert "Opened Mon 1/12 · <https://x/p|see the poll>" in _text(no_uid)
+
+
+def _by_id(view):
+    return {b["block_id"]: b for b in view["blocks"] if b.get("block_id")}
+
+
+def test_assign_modal_has_prefilled_location_type_and_activity():
+    view = build_assign_modal(
+        _data(location_id=2, type_ids=[11], activity_ids=[21, 22]),
+        locations=[(1, "Wirth - Chalet"), (2, "Hyland")],
+        all_types=[(10, "Intervals"), (11, "Distance")],
+        all_activities=[(21, "Classic"), (22, "Skate"), (23, "Run")])
+    blocks = _by_id(view)
+    assert list(blocks) == ["leads", "location", "types", "activities"]
+    loc = blocks["location"]["element"]
+    assert loc["type"] == "static_select" and loc["action_id"] == "location_select"
+    assert loc["initial_option"]["value"] == "2"
+    assert blocks["location"]["optional"] is True
+    types = blocks["types"]["element"]
+    assert types["action_id"] == "type_ids"
+    assert [o["value"] for o in types["initial_options"]] == ["11"]
+    acts = blocks["activities"]["element"]
+    assert acts["action_id"] == "activity_ids"
+    assert [o["value"] for o in acts["initial_options"]] == ["21", "22"]
+
+
+def test_assign_modal_omits_location_without_locations_and_keeps_available_above_leads():
+    view = build_assign_modal(_data(), all_types=[(10, "Intervals")])
+    blocks = _by_id(view)
+    assert "location" not in blocks and "types" in blocks
+    kinds = [b["type"] for b in view["blocks"]]
+    assert kinds.index("section") < view["blocks"].index(blocks["leads"])
+    assert "initial_option\"" not in json.dumps(view)

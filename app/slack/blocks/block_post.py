@@ -127,8 +127,13 @@ def _option(user_id, name) -> dict:
     return {"text": {"type": "plain_text", "text": name[:75]}, "value": str(user_id)}
 
 
-def build_assign_modal(data: dict) -> dict:
-    """The Assign modal: one available line, one grouped lead dropdown."""
+def build_assign_modal(data: dict, *, locations=(), all_types=(), all_activities=()) -> dict:
+    """The Assign modal: available line, lead dropdown, then location, type, activity.
+
+    Slack selects need at least one option, so an empty list omits its block.
+    """
+    from app.slack.modals import _build_activity_type_multi_select, _build_location_select
+
     available = data["available"][:MAX_SELECT_OPTIONS]
     others = data["others"][: MAX_SELECT_OPTIONS - len(available)]
     groups = []
@@ -153,6 +158,18 @@ def build_assign_modal(data: dict) -> dict:
                        "text": {"type": "mrkdwn", "text": data["available_text"]}})
     blocks.append({"type": "input", "block_id": "leads", "optional": True,
                    "label": {"type": "plain_text", "text": "Leads"}, "element": select})
+    location = _build_location_select(locations, data.get("location_id"), "location_select")
+    extras = [("location", "Location", location)]
+    if all_types:
+        extras.append(("types", "Type", _build_activity_type_multi_select(
+            "type_ids", "Choose types", all_types, data.get("type_ids", []))))
+    if all_activities:
+        extras.append(("activities", "Activity", _build_activity_type_multi_select(
+            "activity_ids", "Choose activities", all_activities, data.get("activity_ids", []))))
+    for block_id, label, element in extras:
+        if element:
+            blocks.append({"type": "input", "block_id": block_id, "optional": True,
+                           "label": {"type": "plain_text", "text": label}, "element": element})
     return {
         "type": "modal",
         "callback_id": "block_assign_submit",
