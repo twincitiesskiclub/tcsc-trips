@@ -35,6 +35,7 @@ from .routes.admin import admin
 from .routes.admin_analytics import admin_analytics_bp
 from .routes.admin_availability import admin_availability_bp
 from .routes.admin_events import admin_events_bp
+from .routes.admin_interest import admin_interest_bp
 from .routes.admin_newsletter import admin_newsletter_bp
 from .routes.admin_practices import admin_practices_bp
 from .routes.admin_scheduled_tasks import admin_scheduled_tasks
@@ -87,6 +88,7 @@ def create_app(environment=None):
     app.register_blueprint(admin_analytics_bp)
     app.register_blueprint(admin_availability_bp)
     app.register_blueprint(admin_events_bp)
+    app.register_blueprint(admin_interest_bp)
     app.register_blueprint(admin_newsletter_bp)
     app.register_blueprint(admin_practices_bp)
     app.register_blueprint(admin_scheduled_tasks)
