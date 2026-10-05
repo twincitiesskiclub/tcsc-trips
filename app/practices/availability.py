@@ -23,6 +23,7 @@ from app.practices.availability_models import (
 from app.practices.drafting import missing_fields
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice
+from app.slack.practices._config import COORD_CHANNEL_ID
 from app.slack.blocks.availability import build_poll_blocks, poll_fallback_text
 from app.slack.client import get_slack_client
 from app.slack.practices.availability_reactions import reconcile_poll
@@ -93,48 +94,12 @@ def _may_be_asked(user) -> bool:
     return any(tag.name in COACH_TAGS for tag in user.tags)
 
 
-def shadow_roster_leads() -> list[User]:
-    """Resolve the shadow-mode participant pool.
-
-    Fails closed on purpose: an unset or empty `lead_availability.shadow_roster`
-    returns an empty list rather than falling back to eligible_leads(). Shadow
-    mode exists specifically so a misconfiguration cannot DM the live 10-17
-    person tag pool -- silently falling back to that pool on a missing config
-    key would recreate the exact disaster this fix closes.
-    """
-    slack_uids = AppConfig.get("lead_availability.shadow_roster") or []
-    if not slack_uids:
-        current_app.logger.warning(
-            "lead_availability.shadow_roster is unset or empty -- shadow poll "
-            "participant pool is empty (failing closed, not falling back to "
-            "the live tag pool)"
-        )
-        return []
-
-    users = []
-    for slack_uid in slack_uids:
-        slack_user = SlackUser.query.filter_by(slack_uid=slack_uid).first()
-        if slack_user and slack_user.user:
-            users.append(slack_user.user)
-    return users
-
-
 def _week_label(when: datetime) -> str:
     monday = when.date() - timedelta(days=when.weekday())
     return f"Week of {monday.strftime('%b %-d')}"
 
 
-def _target_channel(is_shadow: bool) -> str:
-    from app.slack.practices._config import COORD_CHANNEL_ID
-
-    if is_shadow:
-        # #collab-asset-mgmt-practices — see docs/superpowers/specs/
-        # 2026-07-25-lead-availability-design.md "Phase 1 — Shadow mode".
-        return AppConfig.get("lead_availability.shadow_channel_id", "C0B3Y71PG92")
-    return COORD_CHANNEL_ID
-
-
-def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> LeadAvailabilityPoll:
+def build_poll(starts_on: date, ends_on: date) -> LeadAvailabilityPoll:
     """Create a DRAFT poll with its emoji mapping, or refuse if drafts are incomplete.
 
     Leads decide availability from location, activity type and time,
@@ -151,9 +116,8 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
 
     An overlapping *unopened DRAFT* is replaced rather than treated as a
     blocker. The admin flow creates the DRAFT before asking the director to
-    confirm the channel it's about to post to, so cancelling that dialog --
-    which is exactly what the dialog is for, since it's the shadow-mode safety
-    prompt -- left a DRAFT behind that nothing could open or discard: there is
+    confirm the channel it's about to post to, so cancelling that dialog left
+    a DRAFT behind that nothing could open or discard: there is
     no UI or route for either, and the close job only touches OPEN polls. The
     range was then permanently unpollable, recoverable only by hand-editing
     the database. Nothing has been posted for a DRAFT poll, so deleting it
@@ -223,8 +187,8 @@ def build_poll(starts_on: date, ends_on: date, *, is_shadow: bool = False) -> Le
     poll = LeadAvailabilityPoll(
         starts_on=starts_on,
         ends_on=ends_on,
-        is_shadow=is_shadow,
-        channel_id=_target_channel(is_shadow),
+        is_shadow=False,
+        channel_id=COORD_CHANNEL_ID,
         # Snapshot the done emoji alongside the letter mapping: a config
         # edit while this poll is open must not change which reactions count
         # as "done" (see LeadAvailabilityPoll.done_emoji).
@@ -472,18 +436,13 @@ def sync_participants(poll) -> int:
     A lead who joins mid-block (new tag assignment) is picked up the next
     time this runs, since eligible_leads() is computed live rather than
     snapshotted when the poll opened.
-
-    Shadow polls (poll.is_shadow) use the shadow roster instead of the live
-    tag pool, so nudge DMs during the shadow month reach only the small test
-    roster -- never the real 10-17 person lead/coach pool. See
-    shadow_roster_leads() for the fail-closed behavior on a missing roster.
     """
     existing = {
         row.user_id for row in
         LeadAvailabilityParticipant.query.filter_by(poll_id=poll.id).all()
     }
     added = 0
-    pool = shadow_roster_leads() if poll.is_shadow else eligible_leads()
+    pool = eligible_leads()
     for user in pool:
         if user.id not in existing:
             db.session.add(LeadAvailabilityParticipant(poll_id=poll.id, user_id=user.id))
@@ -523,10 +482,8 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
     Slack-linked user who reacts, with no pool check, and reconcile_poll --
     which the nudge job runs immediately before send_nudges -- resets such a
     row to PENDING once its reaction is withdrawn. Selecting on poll_id +
-    PENDING alone therefore defeated the two containment rules that matter
-    most: shadow mode (the shadow channel holds real coaches who are not on
-    the roster, and the point of the shadow month is that no real lead is
-    DMed) and the ALUMNI exclusion (a lapsed lead-tagged alumnus is out of the
+    PENDING alone therefore defeated the containment rule that matters
+    most: the ALUMNI exclusion (a lapsed lead-tagged alumnus is out of the
     pool because DMing them every block is how the bot gets muted). It also
     means a lead dropped from the club mid-block stops being nudged, which
     sync_participants cannot do since it only ever adds.
@@ -543,11 +500,8 @@ def participants_to_nudge(poll, *, now: datetime) -> list[LeadAvailabilityPartic
         return []
 
     # Resolved once, and fails closed: an empty pool means nobody is nudged,
-    # never "no filter, so everyone" (see shadow_roster_leads).
-    may_be_asked = {
-        user.id for user in
-        (shadow_roster_leads() if poll.is_shadow else eligible_leads())
-    }
+    # never "no filter, so everyone".
+    may_be_asked = {user.id for user in eligible_leads()}
 
     due = []
     for participant in LeadAvailabilityParticipant.query.filter_by(

@@ -420,31 +420,18 @@ def test_build_poll_excludes_cancelled_practices(db_session):
         _cleanup_practices([live, cancelled], poll)
 
 
-def test_build_poll_targets_channel_by_shadow_flag(db_session):
-    """is_shadow=True must route to the shadow channel, never the live
-    #coord-practices-leads-assists channel -- during the shadow month that
-    is the one thing standing between a test poll and 64 real members.
-    """
+def test_polls_always_target_the_leads_channel(db_session):
     from app.slack.practices._config import COORD_CHANNEL_ID
 
-    live_practice = _ready_practice(4)
+    practices = [_ready_practice(4)]
     db_session.commit()
-    live_poll = None
+    poll = None
     try:
-        live_poll = build_poll(_START, _END, is_shadow=False)
-        assert live_poll.channel_id == COORD_CHANNEL_ID
+        poll = build_poll(_START, _END)
+        assert poll.channel_id == COORD_CHANNEL_ID
+        assert poll.is_shadow is False
     finally:
-        _cleanup_practices([live_practice], live_poll)
-
-    shadow_practice = _ready_practice(4)
-    db_session.commit()
-    shadow_poll = None
-    try:
-        shadow_poll = build_poll(_START, _END, is_shadow=True)
-        assert shadow_poll.channel_id == "C0B3Y71PG92"
-        assert shadow_poll.channel_id != COORD_CHANNEL_ID
-    finally:
-        _cleanup_practices([shadow_practice], shadow_poll)
+        _cleanup_practices(practices, poll)
 
 
 def test_open_poll_refuses_to_re_post_an_already_open_poll(db_session, app):
@@ -481,8 +468,7 @@ def test_build_poll_replaces_an_abandoned_draft_over_the_same_range(db_session):
     """A DRAFT poll nobody opened must not brick the range.
 
     The admin flow creates the DRAFT and *then* asks the director to confirm
-    which channel it's about to post to — the shadow-mode safety prompt. So
-    cancelling that dialog is the intended use of the dialog, and it left a
+    before posting. Cancelling that dialog left a
     DRAFT behind that nothing could open or discard: no UI, no route, and the
     close job only touches OPEN polls. Every overlapping range then refused
     forever, recoverable only by editing the database. Nothing has been posted

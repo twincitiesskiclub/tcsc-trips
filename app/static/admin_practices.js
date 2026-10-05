@@ -469,20 +469,6 @@ async function deletePractice(id) {
 }
 
 /* ---------- lead availability poll trigger ---------- */
-// Friendly names for the only two channels a poll can ever target -- see
-// app/practices/availability.py's _target_channel(). Falls back to the raw
-// id below for anything unrecognized rather than guessing a name.
-const AVAILABILITY_CHANNEL_NAMES = {
-  'C02J4DGCFL2': '#coord-practices-leads-assists (the live, 64-member channel)',
-  'C0B3Y71PG92': '#collab-asset-mgmt-practices (shadow test channel)',
-};
-
-function describeAvailabilityChannel(channelId, isShadow) {
-  const known = AVAILABILITY_CHANNEL_NAMES[channelId];
-  if (known) return known;
-  return isShadow ? `${channelId} (shadow)` : `${channelId} (live)`;
-}
-
 async function openAvailabilityPoll() {
   const startsOn = document.getElementById('pl-poll-start').value;
   const endsOn = document.getElementById('pl-poll-end').value;
@@ -506,14 +492,7 @@ async function openAvailabilityPoll() {
       return;
     }
 
-    // Confirm before the one step that actually posts to Slack, naming the
-    // resolved target channel explicitly -- a one-click "Open Availability
-    // Poll" button with no confirmation is how a shadow-mode misconfig
-    // reaches all 64 real members instead of the 5-person test channel.
-    const channelLabel = describeAvailabilityChannel(createResult.channel_id, createResult.is_shadow);
-    const proceed = confirm(
-      `This will post the availability poll to ${channelLabel}. Continue?`
-    );
+    const proceed = confirm('This will post the availability poll to #coord-practices-leads-assists. Continue?');
     if (!proceed) {
       showToast('Poll created as a draft; not posted to Slack', 'success');
       return;
@@ -530,7 +509,7 @@ async function openAvailabilityPoll() {
       return;
     }
 
-    showToast(`Availability poll posted to ${channelLabel}`, 'success');
+    showToast('Availability poll posted to #coord-practices-leads-assists', 'success');
   } catch (e) {
     showToast('Failed to open availability poll', 'error');
   } finally {
