@@ -5,7 +5,9 @@ from datetime import date
 from flask import Blueprint, jsonify, request
 
 from ..auth import admin_required
-from ..practices.availability import PollNotReadyError, build_poll, open_poll
+from ..models import db
+from ..practices.availability import (
+    PollNotReadyError, create_block_poll, map_sessions, open_poll)
 from ..practices.availability_emoji import EmojiSupplyError
 from ..practices.availability_models import LeadAvailabilityPoll
 
@@ -41,15 +43,12 @@ def create_poll():
         return jsonify({"error": "starts_on and ends_on must be YYYY-MM-DD"}), 400
 
     try:
-        poll = build_poll(starts_on, ends_on)
-    except PollNotReadyError as exc:
-        # Surfaced verbatim: the director needs to know which practice to fix.
-        return jsonify({"error": str(exc)}), 400
-    except EmojiSupplyError as exc:
-        # A range with more sessions than there are configured letter emoji is
-        # bad input, not a server fault -- and the message names the two real
-        # fixes (add letters, or split the block), so it has to reach the
-        # director rather than becoming an opaque 500.
+        poll = create_block_poll(starts_on, ends_on)
+        map_sessions(poll)
+        db.session.commit()
+    except (PollNotReadyError, EmojiSupplyError) as exc:
+        # Surfaced verbatim: the message names the real fix.
+        db.session.rollback()
         return jsonify({"error": str(exc)}), 400
 
     # channel_id is surfaced so the admin UI can name the target

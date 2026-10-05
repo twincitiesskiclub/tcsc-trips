@@ -23,13 +23,15 @@ from app.constants import UserStatus
 from app.models import Tag, User, db
 from app.practices.availability import (
     PollNotReadyError,
-    build_poll,
+    create_block_poll,
     eligible_leads,
+    map_sessions,
     open_poll,
 )
 from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
 from app.practices.interfaces import PracticeStatus
 from app.practices.models import Practice, PracticeLocation, PracticeType
+from tests.practices.poll_helpers import make_mapped_poll
 
 _START = date(2099, 8, 1)
 _END = date(2099, 8, 31)
@@ -187,14 +189,14 @@ def test_eligible_leads_still_excludes_dropped_coaches(db_session):
         _cleanup_users([dropped])
 
 
-def test_build_poll_assigns_emoji_in_chronological_order(db_session):
+def test_map_sessions_assigns_emoji_in_chronological_order(db_session):
     later = _ready_practice(6)
     earlier = _ready_practice(4)
     db_session.commit()
 
     poll = None
     try:
-        poll = build_poll(_START, _END)
+        poll = make_mapped_poll(_START, _END)
 
         assert [m.practice_id for m in poll.practices] == [earlier.id, later.id]
         assert [m.emoji for m in poll.practices] == ["letter_a", "letter_b"]
@@ -204,31 +206,10 @@ def test_build_poll_assigns_emoji_in_chronological_order(db_session):
         _cleanup_practices([earlier, later], poll)
 
 
-def test_build_poll_refuses_incomplete_drafts(db_session):
-    ready = _ready_practice(4)
-    bare = Practice(date=datetime(2099, 8, 6, 18, 15), day_of_week="Thursday", is_draft=True)
-    db_session.add(bare)
-    db_session.commit()
-
-    poll = None
-    try:
-        with pytest.raises(PollNotReadyError) as exc:
-            build_poll(_START, _END)
-        assert "location" in str(exc.value)
-        # Scoped to DRAFT: this suite runs against the real dev database, so
-        # asserting "no poll at all covers this range" breaks on any leaked or
-        # genuinely pre-existing row rather than on the behaviour under test.
-        assert LeadAvailabilityPoll.query.filter_by(
-            starts_on=_START, ends_on=_END, status=PollStatus.DRAFT
-        ).first() is None, "a refused build must leave no poll row behind"
-    finally:
-        _cleanup_practices([ready, bare], poll)
-
-
 def test_open_poll_refuses_when_emoji_are_missing(db_session, app):
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
 
     try:
         client = MagicMock()
@@ -250,7 +231,7 @@ def test_open_poll_posts_and_seeds_reactions(db_session, app):
     first = _ready_practice(4)
     second = _ready_practice(6)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
 
     try:
         client = MagicMock()
@@ -288,7 +269,7 @@ def test_open_poll_seeding_survives_a_reaction_failure(db_session, app):
     first = _ready_practice(4)
     second = _ready_practice(6)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
 
     try:
         client = MagicMock()
@@ -329,7 +310,7 @@ def test_open_poll_commit_failure_deletes_the_orphaned_message(db_session, app):
     """
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
     poll_id = poll.id
     channel_id = poll.channel_id
 
@@ -370,7 +351,7 @@ def test_open_poll_commit_failure_reports_the_live_ts_when_delete_fails(db_sessi
     """
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
     poll_id = poll.id
 
     try:
@@ -399,7 +380,7 @@ def test_open_poll_commit_failure_reports_the_live_ts_when_delete_fails(db_sessi
         _cleanup_practices([ready], poll)
 
 
-def test_build_poll_excludes_cancelled_practices(db_session):
+def test_map_sessions_excludes_cancelled_practices(db_session):
     """A cancelled practice must not get a letter emoji or block the poll --
     otherwise leads are asked to cover a session that isn't happening, and a
     cancelled-but-incomplete practice would refuse the whole poll for a
@@ -412,7 +393,7 @@ def test_build_poll_excludes_cancelled_practices(db_session):
 
     poll = None
     try:
-        poll = build_poll(_START, _END)
+        poll = make_mapped_poll(_START, _END)
 
         assert [m.practice_id for m in poll.practices] == [live.id]
         assert [m.emoji for m in poll.practices] == ["letter_a"]
@@ -427,7 +408,7 @@ def test_polls_always_target_the_leads_channel(db_session):
     db_session.commit()
     poll = None
     try:
-        poll = build_poll(_START, _END)
+        poll = make_mapped_poll(_START, _END)
         assert poll.channel_id == COORD_CHANNEL_ID
         assert poll.is_shadow is False
     finally:
@@ -443,7 +424,7 @@ def test_open_poll_refuses_to_re_post_an_already_open_poll(db_session, app):
     """
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
     poll.status = PollStatus.OPEN
     poll.message_ts = "111111.1111"
     db_session.commit()
@@ -464,82 +445,6 @@ def test_open_poll_refuses_to_re_post_an_already_open_poll(db_session, app):
         _cleanup_practices([ready], poll)
 
 
-def test_build_poll_replaces_an_abandoned_draft_over_the_same_range(db_session):
-    """A DRAFT poll nobody opened must not brick the range.
-
-    The admin flow creates the DRAFT and *then* asks the director to confirm
-    before posting. Cancelling that dialog left a
-    DRAFT behind that nothing could open or discard: no UI, no route, and the
-    close job only touches OPEN polls. Every overlapping range then refused
-    forever, recoverable only by editing the database. Nothing has been posted
-    for a DRAFT, so replacing it cannot orphan a reaction.
-    """
-    first_practice = _ready_practice(4)
-    db_session.commit()
-    abandoned = build_poll(_START, _END)
-    abandoned_id = abandoned.id
-    assert abandoned.status == PollStatus.DRAFT
-
-    replacement = None
-    try:
-        replacement = build_poll(_START, _END)
-
-        assert replacement.id != abandoned_id, "a fresh poll, not the old row"
-        assert db.session.get(LeadAvailabilityPoll, abandoned_id) is None, \
-            "the abandoned draft must be gone, not left to block the range again"
-        # DRAFT-scoped for the same reason as above.
-        assert LeadAvailabilityPoll.query.filter_by(
-            starts_on=_START, ends_on=_END, status=PollStatus.DRAFT
-        ).count() == 1, "exactly one draft poll may cover the range"
-        assert [m.emoji for m in replacement.practices] == ["letter_a"], \
-            "the replacement gets its own complete emoji mapping"
-    finally:
-        _cleanup_practices([first_practice], replacement)
-
-
-def test_build_poll_refuses_a_partially_overlapping_open_poll(db_session):
-    """The guard must compare ranges, not require an exact match."""
-    from datetime import date as _date
-
-    first_practice = _ready_practice(4)
-    db_session.commit()
-    first_poll = build_poll(_START, _END)
-    first_poll.status = PollStatus.OPEN
-    db_session.commit()
-
-    later_start = _date(2099, 8, 20)
-    later_end = _date(2099, 9, 15)
-    try:
-        with pytest.raises(PollNotReadyError) as exc:
-            build_poll(later_start, later_end)
-        assert str(first_poll.id) in str(exc.value)
-    finally:
-        _cleanup_practices([first_practice], first_poll)
-
-
-def test_build_poll_allows_a_new_poll_once_the_old_one_is_closed(db_session):
-    """A CLOSED poll must not block rebuilding the same range."""
-    first_practice = _ready_practice(4)
-    db_session.commit()
-    first_poll = build_poll(_START, _END)
-    first_poll.status = PollStatus.CLOSED
-    db_session.commit()
-
-    second_practice = _ready_practice(6)
-    db_session.commit()
-    second_poll = None
-    try:
-        second_poll = build_poll(_START, _END)
-        assert second_poll.id != first_poll.id
-    finally:
-        # first_poll must be removed (and its poll-practice mapping to
-        # first_practice cascaded away) before first_practice itself is
-        # deleted below, or the FK from poll-practice -> practice would
-        # dangle mid-cleanup.
-        _cleanup_practices([], first_poll)
-        _cleanup_practices([first_practice, second_practice], second_poll)
-
-
 def test_open_poll_survives_a_non_slack_api_error(db_session, app):
     """get_slack_client() raises plain ValueError when SLACK_BOT_TOKEN is
     unset, and transport failures raise TimeoutError -- neither is a
@@ -548,7 +453,7 @@ def test_open_poll_survives_a_non_slack_api_error(db_session, app):
     """
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
 
     try:
         with patch("app.practices.availability.validate_emoji_available", return_value=(True, [])), \
@@ -571,7 +476,7 @@ def test_open_poll_survives_a_non_slack_api_error(db_session, app):
 # ---------------------------------------------------------------------------
 
 
-def test_build_poll_snapshots_the_done_emoji(db_session):
+def test_map_sessions_snapshots_the_done_emoji(db_session):
     ready = _ready_practice(4)
     db_session.commit()
     poll = None
@@ -580,9 +485,9 @@ def test_build_poll_snapshots_the_done_emoji(db_session):
             "app.slack.practices._config._load_practice_config",
             return_value={"lead_availability": {"done_emoji": "TEST_snap_done"}},
         ):
-            poll = build_poll(_START, _END)
+            poll = make_mapped_poll(_START, _END)
         assert poll.done_emoji == "TEST_snap_done", (
-            "build_poll must persist the config's done emoji on the poll row, "
+            "map_sessions must persist the config's done emoji on the poll row, "
             "exactly as it persists the letter mapping"
         )
     finally:
@@ -592,7 +497,7 @@ def test_build_poll_snapshots_the_done_emoji(db_session):
 def test_open_poll_validates_and_seeds_the_snapshotted_done_emoji(db_session, app):
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
     poll.done_emoji = "TEST_snap_done"
     db_session.commit()
     try:
@@ -629,7 +534,7 @@ def test_open_poll_missing_done_emoji_names_the_done_config_key(db_session, app)
     the wrong key."""
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
     poll.done_emoji = "TEST_custom_done"
     db_session.commit()
     try:
@@ -664,7 +569,7 @@ def test_open_poll_keeps_the_message_when_the_commit_actually_landed(db_session,
     """
     ready = _ready_practice(4)
     db_session.commit()
-    poll = build_poll(_START, _END)
+    poll = make_mapped_poll(_START, _END)
     poll_id = poll.id
 
     real_commit = db.session.commit
@@ -704,61 +609,80 @@ def test_open_poll_keeps_the_message_when_the_commit_actually_landed(db_session,
         _cleanup_practices([ready], poll)
 
 
-def test_build_poll_covers_only_unpublished_practices(db_session):
-    """A poll collects availability for a block that isn't published yet.
 
-    Including already-published practices would ask leads to cover sessions
-    that are already settled and burn letter emoji on them. Previously
-    build_poll filtered only on CANCELLED, so this was undefined rather than
-    decided, and no test pinned it either way.
-    """
-    draft = _ready_practice(4)
-    published = _ready_practice(6)
-    published.is_draft = False
-    db_session.commit()
 
+def _bare_practice(day, *, is_draft=True, status=None):
+    p = Practice(date=datetime(2099, 8, day, 18, 15), day_of_week="Tuesday",
+                 is_draft=is_draft)
+    if status:
+        p.status = status
+    db.session.add(p)
+    db.session.flush()
+    return p
+
+
+def test_map_sessions_needs_only_date_and_time(db_session):
+    practices = [_bare_practice(4), _bare_practice(6)]
     poll = None
     try:
-        poll = build_poll(_START, _END)
-
-        assert [m.practice_id for m in poll.practices] == [draft.id], \
-            "only the unpublished practice belongs in the poll"
-        assert [m.emoji for m in poll.practices] == ["letter_a"], \
-            "and the published one must not consume a letter"
+        poll = make_mapped_poll(_START, _END)
+        assert [m.practice_id for m in poll.practices] == [p.id for p in practices]
     finally:
-        _cleanup_practices([draft, published], poll)
+        _cleanup_practices(practices, poll)
 
 
-def test_a_published_practice_missing_details_cannot_block_a_poll(db_session):
-    """The sharper edge of the same rule.
-
-    build_poll refuses when any practice in range lacks location/type/time.
-    While published practices were in scope, one published row missing a
-    location refused the entire poll over a field the director has no reason
-    to fill in — and no draft-side action could clear it.
-    """
-    draft = _ready_practice(4)
-    # Built incomplete from the start rather than by nulling out a ready
-    # practice: _cleanup_practices derives the location/type rows to delete
-    # from the practice's own attributes, so clearing them first would strip
-    # cleanup of the ids and leak both rows into the shared dev database (the
-    # unique PracticeType name then breaks every later run of this file).
-    published_incomplete = Practice(
-        date=datetime(2099, 8, 6, 18, 15), day_of_week="Thursday",
-        is_draft=False, location_id=None,
-    )
-    db_session.add(published_incomplete)
-    db_session.commit()
-    incomplete_id = published_incomplete.id
-
+def test_map_sessions_includes_visible_and_hidden_practices(db_session):
+    practices = [_bare_practice(4, is_draft=False), _bare_practice(6, is_draft=True)]
     poll = None
     try:
-        poll = build_poll(_START, _END)  # must not raise
-        assert [m.practice_id for m in poll.practices] == [draft.id]
+        poll = make_mapped_poll(_START, _END)
+        assert len(poll.practices) == 2
+        assert poll.next_position == 2
     finally:
-        db.session.rollback()
-        stranded = db.session.get(Practice, incomplete_id)
-        if stranded is not None:
-            db.session.delete(stranded)
+        _cleanup_practices(practices, poll)
+
+
+def test_map_sessions_skips_cancelled(db_session):
+    practices = [_bare_practice(4), _bare_practice(6, status=PracticeStatus.CANCELLED.value)]
+    poll = None
+    try:
+        poll = make_mapped_poll(_START, _END)
+        assert [m.practice_id for m in poll.practices] == [practices[0].id]
+    finally:
+        _cleanup_practices(practices, poll)
+
+
+def test_map_sessions_refuses_an_empty_range(db_session):
+    poll = None
+    try:
+        poll = create_block_poll(date(2099, 9, 1), date(2099, 9, 14))
+        with pytest.raises(PollNotReadyError):
+            map_sessions(poll)
+    finally:
+        _cleanup_practices([], poll)
+
+
+def test_create_block_poll_is_idempotent_on_the_range(db_session):
+    poll = None
+    try:
+        poll = create_block_poll(date(2099, 9, 1), date(2099, 9, 14))
+        again = create_block_poll(date(2099, 9, 1), date(2099, 9, 14))
+        assert again.id == poll.id
+        assert poll.status == PollStatus.DRAFT
+        assert poll.practices == []
+    finally:
+        _cleanup_practices([], poll)
+
+
+def test_map_sessions_replaces_a_draft_mapping(db_session):
+    practices = [_bare_practice(4)]
+    poll = None
+    try:
+        poll = make_mapped_poll(_START, _END)
+        practices.append(_bare_practice(6))
+        map_sessions(poll)
         db.session.commit()
-        _cleanup_practices([draft], poll)
+        assert [m.position for m in poll.practices] == [0, 1]
+        assert [m.emoji for m in poll.practices] == ["letter_a", "letter_b"]
+    finally:
+        _cleanup_practices(practices, poll)

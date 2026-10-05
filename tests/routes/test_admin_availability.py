@@ -19,7 +19,7 @@ _DEFAULT_TEST_END = "2099-09-30"
 
 
 def test_create_reports_incomplete_drafts_as_a_400(admin_client):
-    with patch("app.routes.admin_availability.build_poll",
+    with patch("app.routes.admin_availability.create_block_poll",
                side_effect=PollNotReadyError("Tue 8/11 needs location")):
         response = admin_client.post("/admin/availability/polls/create", json={
             "starts_on": "2026-08-01", "ends_on": "2026-08-31",
@@ -36,7 +36,7 @@ def test_create_reports_emoji_shortage_as_a_400(admin_client):
     letters to config/practices.yaml, or split the block), so it has to reach
     them instead of being swallowed by the generic error handler.
     """
-    with patch("app.routes.admin_availability.build_poll",
+    with patch("app.routes.admin_availability.create_block_poll",
                side_effect=EmojiSupplyError(
                    "poll needs 30 distinct emoji but only 26 are configured")):
         response = admin_client.post("/admin/availability/polls/create", json={
@@ -48,7 +48,7 @@ def test_create_reports_emoji_shortage_as_a_400(admin_client):
 
 
 def _ready_practice_range():
-    """One complete draft practice so build_poll() succeeds end-to-end."""
+    """One complete draft practice so create_block_poll() + map_sessions() succeeds end-to-end."""
     suffix = uuid.uuid4().hex[:8]
     location = PracticeLocation(name=f"TEST Create Poll Location {suffix}")
     ptype = PracticeType(name=f"TEST Create Poll Type {suffix}")

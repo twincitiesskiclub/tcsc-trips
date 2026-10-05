@@ -417,10 +417,9 @@ async function openAvailabilityPoll() {
   const btn = document.getElementById('pl-poll-btn');
   btn.disabled = true;
   try {
-    // Step 1: build the DRAFT poll. build_poll() refuses (400) if any
-    // practice in range is missing location/type/time -- that error names
-    // exactly which practice needs what, so it's shown verbatim, not
-    // replaced with a generic message. This step only writes a DRAFT row;
+    // Step 1: build the DRAFT poll. The route refuses (400) when the
+    // range has no sessions or too many for the letters; that message is
+    // shown verbatim, not replaced with a generic one. This step only writes a DRAFT row;
     // nothing is posted to Slack yet.
     const createResult = await fetch('/admin/availability/polls/create', {
       method: 'POST',
