@@ -506,13 +506,31 @@ if _bot_token:
                     text=f":warning: Could not update post: {result.get('error')}"
                 )
 
+    @bolt_app.action("block_poll_open")
+    def handle_block_poll_open(ack, body, action, client, logger):
+        """Open poll on the block post, its Wednesday reply or the Sunday summary."""
+        ack()
+        user_id = body["user"]["id"]
+        with get_app_context():
+            from app.practices.blocks import open_block_poll
+
+            result = open_block_poll(int(action["value"]), user_id)
+        if not result.get("success"):
+            channel = (body.get("channel") or {}).get("id")
+            if channel:
+                client.chat_postEphemeral(channel=channel, user=user_id,
+                                          text=f":warning: {result.get('error')}")
+
     @bolt_app.action("edit_practice_full")
     def handle_edit_practice_full(ack, body, action, client, logger):
         """Handle edit button click from collab channel - opens full edit modal."""
         ack()
 
         user_id = body["user"]["id"]
-        practice_id = int(action["value"])
+        # Fill in buttons send a value; the block post's "Edit a session"
+        # select sends the chosen option.
+        raw = action.get("value") or (action.get("selected_option") or {}).get("value")
+        practice_id = int(raw)
         trigger_id = body.get("trigger_id")
 
         if not trigger_id:

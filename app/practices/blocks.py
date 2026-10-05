@@ -38,7 +38,9 @@ from app.practices.availability_models import (
 )
 from app.practices.drafting import generate_draft_block
 from app.practices.interfaces import PracticeStatus
-from app.utils import today_central
+from app.slack.client import get_slack_client
+from app.slack.practices._config import COLLAB_CHANNEL_ID
+from app.utils import now_central_naive, today_central
 
 BLOCK_DAYS = 14
 DEFAULT_ANCHOR = date(2026, 10, 26)
@@ -165,16 +167,69 @@ def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:
 
 # --- Slack side: implemented in Task B5. Module-level so tests can patch. ---
 
+def _render(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
+    from app.slack.blocks.block_post import block_range_label, build_block_post
+    from app.slack.practices.availability_nudge import poll_permalink
+
+    permalink = poll_permalink(poll) if poll.message_ts else None
+    rows = block_post_rows(poll, exclude_practice_id=exclude_practice_id)
+    rendered = build_block_post(poll, rows, permalink=permalink,
+                                footer=footer_text(poll, today_central()))
+    return rendered, f"Lead poll {block_range_label(poll.starts_on, poll.ends_on)}"
+
+
 def post_block_post(poll) -> bool:
-    raise NotImplementedError
+    try:
+        rendered, text = _render(poll)
+        response = get_slack_client().chat_postMessage(
+            channel=COLLAB_CHANNEL_ID, blocks=rendered, text=text)
+        ts = response["ts"]
+    except Exception as exc:  # noqa: BLE001 - never raise; the job retries tomorrow
+        current_app.logger.warning("Block post for poll %s failed: %s", poll.id, exc)
+        return False
+    poll.block_post_ts = ts
+    db.session.commit()
+    return True
 
 
 def refresh_block_post(poll, *, exclude_practice_id=None) -> bool:
-    raise NotImplementedError
+    if not poll.block_post_ts:
+        return False
+    try:
+        rendered, text = _render(poll, exclude_practice_id=exclude_practice_id)
+        get_slack_client().chat_update(
+            channel=COLLAB_CHANNEL_ID, ts=poll.block_post_ts, blocks=rendered, text=text)
+    except Exception as exc:  # noqa: BLE001 - never raise; next edit or morning repairs it
+        current_app.logger.warning("Block post refresh for poll %s failed: %s", poll.id, exc)
+        return False
+    return True
 
 
 def post_wednesday_reply(poll) -> bool:
-    raise NotImplementedError
+    from app.slack.blocks.block_post import block_range_label
+
+    rows = [r for r in block_post_rows(poll) if not r["cancelled"]]
+    first = f" The first practice is {rows[0]['when'].strftime('%a %-m/%-d')}." if rows else ""
+    label = block_range_label(poll.starts_on, poll.ends_on)
+    rendered = [{
+        "type": "section",
+        "text": {"type": "mrkdwn",
+                 "text": f"Nobody has opened the lead poll for *{label}* yet.{first}"},
+        "accessory": {"type": "button", "style": "primary", "action_id": "block_poll_open",
+                      "value": str(poll.id), "text": {"type": "plain_text", "text": "Open poll"}},
+    }]
+    kwargs = {"channel": COLLAB_CHANNEL_ID, "blocks": rendered,
+              "text": f"Nobody has opened the lead poll for {label} yet."}
+    if poll.block_post_ts:
+        kwargs["thread_ts"] = poll.block_post_ts
+    try:
+        get_slack_client().chat_postMessage(**kwargs)
+    except Exception as exc:  # noqa: BLE001 - never raise
+        current_app.logger.warning("Wednesday reply for poll %s failed: %s", poll.id, exc)
+        return False
+    poll.wednesday_reminder_sent_at = now_central_naive()
+    db.session.commit()
+    return True
 
 
 def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
