@@ -28,7 +28,9 @@ test('a build against a dead API still succeeds and announces itself', () => {
     assert.equal(cta.getAttribute('data-state'), 'closed');
   }
 
-  // And the destination is the app, which reads the database live.
+  // A fallback build does not know the state, so it must not route people to
+  // the interest list: registration may be open. The app reads the database
+  // live and shows either the Register button or its own interest form.
   const strip = document.querySelector('#registration a[href]');
   assert.equal(strip.getAttribute('href'), 'https://tcsc.ski/');
 });

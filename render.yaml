@@ -111,7 +111,7 @@ projects:
               # permits Astro's inline modules/styles and the conditions API.
               - path: /*
                 name: Content-Security-Policy
-                value: "default-src 'self'; base-uri 'self'; connect-src 'self' https://tcsc.ski; font-src 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests"
+                value: "default-src 'self'; base-uri 'self'; connect-src 'self' https://tcsc.ski; font-src 'self'; form-action 'self' https://tcsc.ski; frame-ancestors 'none'; img-src 'self' data:; object-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; upgrade-insecure-requests"
               - path: /*
                 name: Permissions-Policy
                 value: "camera=(), geolocation=(), microphone=(), payment=(), usb=()"
@@ -154,6 +154,9 @@ projects:
                 name: Cache-Control
                 value: "public, max-age=0, must-revalidate"
               - path: /dry-tri*
+                name: Cache-Control
+                value: "public, max-age=0, must-revalidate"
+              - path: /join*
                 name: Cache-Control
                 value: "public, max-age=0, must-revalidate"
               - path: /extra-training-fun*

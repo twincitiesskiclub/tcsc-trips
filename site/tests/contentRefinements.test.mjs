@@ -112,10 +112,9 @@ function htmlFiles(directory) {
 
 test('wires the confirmed fall registration copy to the home CTA target', () => {
   assert.equal(yamlScalar(source.home, 'cta_coming_soon_label'), 'Fall registration dates');
-  assert.equal(
-    yamlScalar(source.home, 'cta_coming_soon_url'),
-    `${MARKETING_ORIGIN}/#registration`,
-  );
+  assert.equal(yamlScalar(source.home, 'cta_coming_soon_url'), `${MARKETING_ORIGIN}/join`);
+  assert.equal(yamlScalar(source.home, 'cta_closed_url'), `${MARKETING_ORIGIN}/join`);
+  assert.equal(yamlScalar(source.home, 'cta_closed_label'), 'Get notified');
   assert.equal(yamlScalar(source.home, 'mission_paragraph'), MISSION);
 
   assert.match(source.ctaStrip, /\bid\?: string;/);
@@ -156,18 +155,19 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
     'test build must use the fixture API — run via npm run test:refinement',
   );
 
+  // While registration is coming_soon, the hero, nav and mobile CTAs send
+  // people to the interest-list form on /join.
   const outsideStrip = html.home.replace(registration, '');
-  const anchorTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
+  const joinTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
     .map(([, attributes]) => attributes.match(/\bhref=(['"])(.*?)\1/i))
     .filter(Boolean)
     .map((href) => new URL(decodeHtml(href[2]), MARKETING_ORIGIN))
-    .filter((url) => url.origin === MARKETING_ORIGIN && url.hash === '#registration');
+    .filter((url) => url.origin === MARKETING_ORIGIN && url.pathname === '/join');
 
   assert.ok(
-    anchorTargets.length > 0,
-    'hero/nav/mobile CTAs must target #registration while registration is coming_soon',
+    joinTargets.length > 0,
+    'hero/nav/mobile CTAs must target /join while registration is coming_soon',
   );
-  for (const url of anchorTargets) assert.equal(url.pathname, '/');
   assert.equal(
     (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
       .length,
