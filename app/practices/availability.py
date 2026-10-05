@@ -162,22 +162,31 @@ def append_session(poll, practice) -> str | None:
     reactions stay on the message, so its letter is never handed out again.
     Returns the new emoji name, or None when the poll is out of letters.
     """
+    poll_id, practice_id, practice_date = poll.id, practice.id, practice.date
     try:
         name = letter_emoji(poll.next_position + 1)[-1]
     except EmojiSupplyError:
         current_app.logger.error(
             "Poll %s is out of letters; practice %s (%s) collects no availability. "
-            "Assign its leads by hand.", poll.id, practice.id, practice.date)
+            "Assign its leads by hand.", poll_id, practice_id, practice_date)
         return None
-    db.session.add(LeadAvailabilityPollPractice(
-        poll_id=poll.id, practice_id=practice.id, emoji=name, position=poll.next_position))
-    poll.next_position += 1
-    db.session.commit()
+    try:
+        db.session.add(LeadAvailabilityPollPractice(
+            poll_id=poll_id, practice_id=practice_id, emoji=name,
+            position=poll.next_position))
+        poll.next_position += 1
+        db.session.commit()
+    except Exception as exc:  # noqa: BLE001 - e.g. a concurrent append hit a unique key
+        db.session.rollback()
+        current_app.logger.warning(
+            "Could not append :%s: to poll %s for practice %s: %s",
+            name, poll_id, practice_id, exc)
+        return None
     try:
         get_slack_client().reactions_add(
             channel=poll.channel_id, timestamp=poll.message_ts, name=name)
     except Exception as exc:  # noqa: BLE001 - the letter still works without the seed
-        current_app.logger.warning("Could not seed :%s: on poll %s: %s", name, poll.id, exc)
+        current_app.logger.warning("Could not seed :%s: on poll %s: %s", name, poll_id, exc)
     return name
 
 

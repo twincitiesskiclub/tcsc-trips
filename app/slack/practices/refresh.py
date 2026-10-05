@@ -571,6 +571,7 @@ def _refresh_availability_poll(practice, change_type, **_context):
     It also appends the next letter for a practice created in, or moved
     into, an open poll's date range (see append_session).
     """
+    practice_id = practice.id
     try:
         from app.practices.availability import poll_rows
         from app.practices.availability_models import (
@@ -641,7 +642,7 @@ def _refresh_availability_poll(practice, change_type, **_context):
                     "Failed to refresh availability poll #%s for practice "
                     "#%s: %s",
                     poll.id,
-                    practice.id,
+                    practice_id,
                     exc,
                 )
                 errors.append(f"poll #{poll.id}: {exc}")
@@ -658,7 +659,7 @@ def _refresh_availability_poll(practice, change_type, **_context):
     except Exception as exc:
         logger.warning(
             "Failed to refresh availability polls for practice #%s: %s",
-            practice.id,
+            practice_id,
             exc,
         )
         return {"success": False, "error": str(exc)}

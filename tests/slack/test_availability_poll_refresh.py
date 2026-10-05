@@ -388,3 +388,105 @@ def test_poll_rows_say_location_tbd(db_session):
         assert poll_rows(poll)[0]["location"] == "Location TBD"
     finally:
         _cleanup(ids)
+
+
+def _open_poll_with_two(label):
+    practices = [_practice(4, f"TEST C1 {label} A", f"TEST C1 {label} TA"),
+                 _practice(6, f"TEST C1 {label} B", f"TEST C1 {label} TB")]
+    poll = _poll(practices, PollStatus.OPEN, "1.000")
+    poll.next_position = 2
+    return practices, poll
+
+
+def test_append_rewrites_the_poll_message_with_the_new_letter(db_session):
+    db.session.rollback()
+    practices, poll = _open_poll_with_two("Msg")
+    new = Practice(date=datetime(2099, 8, 11, 18, 15), day_of_week="Tuesday", is_draft=True)
+    db.session.add(new)
+    db.session.commit()
+    ids = _capture(practices + [new], [poll])
+    client = MagicMock()
+    try:
+        with patch("app.slack.client.get_slack_client", return_value=client), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            _refresh_availability_poll(new, "create")
+        blocks = client.chat_update.call_args.kwargs["blocks"]
+        assert ":letter_c:" in json.dumps(blocks)
+    finally:
+        _cleanup(ids)
+
+
+def test_a_practice_moved_into_an_open_poll_range_gets_the_next_letter(db_session):
+    db.session.rollback()
+    practices, poll = _open_poll_with_two("Move")
+    outside = Practice(date=datetime(2099, 9, 22, 18, 15), day_of_week="Tuesday", is_draft=True)
+    db.session.add(outside)
+    db.session.commit()
+    outside_id, poll_id = outside.id, poll.id
+    ids = _capture(practices + [outside], [poll])
+    client = MagicMock()
+    try:
+        outside.date = datetime(2099, 8, 11, 18, 15)
+        db.session.commit()
+        with patch("app.slack.client.get_slack_client", return_value=client), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            _refresh_availability_poll(outside, "edit")
+        mapping = LeadAvailabilityPollPractice.query.filter_by(
+            poll_id=poll_id, practice_id=outside_id).one()
+        assert mapping.emoji == "letter_c"
+    finally:
+        _cleanup(ids)
+
+
+def test_a_cancelled_practice_in_range_gets_no_letter(db_session):
+    db.session.rollback()
+    practices, poll = _open_poll_with_two("Canc")
+    new = Practice(date=datetime(2099, 8, 11, 18, 15), day_of_week="Tuesday", is_draft=True,
+                   status=PracticeStatus.CANCELLED.value)
+    db.session.add(new)
+    db.session.commit()
+    new_id, poll_id = new.id, poll.id
+    ids = _capture(practices + [new], [poll])
+    client = MagicMock()
+    try:
+        with patch("app.slack.client.get_slack_client", return_value=client), \
+             patch("app.practices.availability.get_slack_client", return_value=client):
+            _refresh_availability_poll(new, "create")
+        assert LeadAvailabilityPollPractice.query.filter_by(
+            poll_id=poll_id, practice_id=new_id).count() == 0
+        client.reactions_add.assert_not_called()
+    finally:
+        _cleanup(ids)
+
+
+def test_a_failed_append_commit_rolls_back_and_never_escapes(db_session):
+    db.session.rollback()
+    practices, poll = _open_poll_with_two("Fail")
+    new = Practice(date=datetime(2099, 8, 11, 18, 15), day_of_week="Tuesday", is_draft=True)
+    db.session.add(new)
+    db.session.commit()
+    new_id, poll_id = new.id, poll.id
+    ids = _capture(practices + [new], [poll])
+    client = MagicMock()
+    real_commit = db.session.commit
+    calls = {"n": 0}
+
+    def flaky_commit():
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise RuntimeError("TEST commit boom")
+        return real_commit()
+
+    try:
+        with patch("app.slack.client.get_slack_client", return_value=client), \
+             patch("app.practices.availability.get_slack_client", return_value=client), \
+             patch.object(db.session, "commit", side_effect=flaky_commit):
+            result = _refresh_availability_poll(new, "create")
+        assert result == {"skipped": "no_poll"}
+        assert LeadAvailabilityPollPractice.query.filter_by(
+            poll_id=poll_id, practice_id=new_id).count() == 0
+        assert db.session.get(Practice, new_id) is not None
+        client.reactions_add.assert_not_called()
+    finally:
+        db.session.rollback()
+        _cleanup(ids)
