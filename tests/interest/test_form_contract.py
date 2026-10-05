@@ -14,3 +14,7 @@ def names_in(relative):
 
 def test_app_partial_posts_the_fields_the_route_reads():
     assert names_in('app/templates/_interest_form.html') == EXPECTED
+
+
+def test_join_page_posts_the_fields_the_route_reads():
+    assert names_in('site/src/pages/join.astro') == EXPECTED

@@ -27,8 +27,9 @@ export interface RegistrationCta {
 // drift out of sync with reality.
 //
 // With no season data the state is `closed`, which is the safe direction: its
-// destination is tcsc.ski, which reads the database live and shows the real
-// opening date regardless of what this static build believes. Falling back to
+// destination is the /join interest-list form, which links members on to
+// tcsc.ski, where the database is read live, regardless of what this static
+// build believes. Falling back to
 // `open` would send members at a form that may refuse them.
 export async function getRegistrationCta(): Promise<RegistrationCta> {
   const home = await getEntry('home', 'home');
@@ -47,8 +48,8 @@ export async function getRegistrationCta(): Promise<RegistrationCta> {
     // Falls back like every other variant: a url-less coming_soon means
     // CtaForState renders a dead <span> and, before this fix, the flip could
     // not restore a clickable <a> once the state changed away from it.
-    url_coming_soon: d?.cta_coming_soon_url ?? d?.cta_closed_url ?? 'https://tcsc.ski/',
-    label_closed: d?.cta_closed_label ?? 'Register',
-    url_closed: d?.cta_closed_url ?? 'https://tcsc.ski/',
+    url_coming_soon: d?.cta_coming_soon_url ?? d?.cta_closed_url ?? '/join',
+    label_closed: d?.cta_closed_label ?? 'Get notified',
+    url_closed: d?.cta_closed_url ?? '/join',
   };
 }

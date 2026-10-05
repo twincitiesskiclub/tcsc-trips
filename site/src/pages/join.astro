@@ -1,0 +1,51 @@
+---
+// /join: the interest-list form. Every non-open registration CTA lands here.
+// A plain HTML form, no client JS: it posts straight to the Flask app, which
+// answers with its own thanks or error page on tcsc.ski. Field names are a
+// contract with app/interest/service.py (tests/interest/test_form_contract.py).
+// The static site's CSP must allow this form-action (render.yaml).
+import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import { getRegistrationCta } from '@/components/registrationCta';
+import { datesLine } from '@/lib/registrationCopy';
+
+const action = import.meta.env.PUBLIC_INTEREST_URL ?? 'https://tcsc.ski/interest';
+const cta = await getRegistrationCta();
+const dates = datesLine(cta.windows);
+
+const input =
+  'mt-1 block w-full rounded-md border border-ink/20 bg-white px-3 py-2 text-ink focus:border-mint-deep focus:outline-none focus:ring-2 focus:ring-mint';
+const label = 'block text-sm font-semibold text-navy';
+---
+<InnerPageLayout
+  title="Get notified · Twin Cities Ski Club"
+  description="Leave your email and we'll tell you when Twin Cities Ski Club registration opens."
+  headline="Get notified when registration opens"
+  subhead={dates ? `Next registration: ${dates}.` : "We'll reach out as soon as the next registration dates are set."}
+>
+  <div class="safe-inline-6 mx-auto max-w-xl px-6 py-12">
+    <form method="post" action={action} class="space-y-5">
+      <div>
+        <label class={label} for="join-name">Name</label>
+        <input class={input} id="join-name" name="name" type="text" autocomplete="name" maxlength="200" required />
+      </div>
+      <div>
+        <label class={label} for="join-email">Email</label>
+        <input class={input} id="join-email" name="email" type="email" autocomplete="email" maxlength="255" required />
+      </div>
+      <div>
+        <label class={label} for="join-phone">Cell phone <span class="font-normal text-ink/60">(optional)</span></label>
+        <input class={input} id="join-phone" name="phone" type="tel" inputmode="tel" autocomplete="tel" />
+        <p class="mt-1 text-sm text-ink/70">We'll text you when registration opens. Reply STOP to opt out.</p>
+      </div>
+      <div aria-hidden="true" class="absolute -left-[10000px]">
+        <label for="join-website">Leave this empty</label>
+        <input id="join-website" name="website" type="text" tabindex="-1" autocomplete="off" />
+      </div>
+      <button type="submit" class="inline-flex items-center px-6 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep">Notify me</button>
+    </form>
+    <p class="mt-10 text-sm text-ink/70">
+      Already a member? Registration and your account live at
+      <a href="https://tcsc.ski/" class="font-semibold text-navy underline underline-offset-4">tcsc.ski</a>.
+    </p>
+  </div>
+</InnerPageLayout>
