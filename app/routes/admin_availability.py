@@ -17,7 +17,7 @@ from ..models import AppConfig
 from ..practices.availability import PollNotReadyError, build_poll, open_poll
 from ..practices.availability_emoji import EmojiSupplyError
 from ..practices.availability_models import LeadAvailabilityPoll
-from ..practices.publishing import publish_blockers, publish_practices
+from ..practices.publishing import publish_blockers
 
 admin_availability_bp = Blueprint(
     "admin_availability", __name__, url_prefix="/admin/availability")
@@ -78,38 +78,6 @@ def _publish_counts(poll) -> dict:
         "unpublished": len(drafts),
         "publishable": sum(1 for p in drafts if not publish_blockers(p)),
     }
-
-
-@admin_availability_bp.route("/polls/<int:poll_id>/publish", methods=["POST"])
-@admin_required
-def publish_poll_block(poll_id):
-    """Send this block's practices live — the one human publish gate.
-
-    The poll is the unit because it is the batch the director already thinks
-    in: one block of practices goes out to the leads for availability, gets its
-    leads assigned, and then goes live together.
-
-    Deliberately not tied to the coming week. The Sunday evening flow (weekly
-    summary + the announcement job, both reading published_practices()) already
-    puts the coming week in front of members with no human in the loop, and
-    gating that on a click would break a workflow that works. A block is
-    published weeks before any of its practices reach their own Sunday.
-
-    Partial success is normal and reported rather than raised: a block with one
-    practice still missing its location should send the other eleven, and name
-    the one it held back.
-    """
-    poll = LeadAvailabilityPoll.query.get_or_404(poll_id)
-    practices = _poll_practices(poll)
-    if not practices:
-        return jsonify({"error": f"poll #{poll_id} covers no practices"}), 400
-
-    result = publish_practices(practices)
-    current_app.logger.info(
-        "Poll %s publish by admin: %d published, %d skipped",
-        poll_id, len(result["published"]), len(result["skipped"]),
-    )
-    return jsonify(result)
 
 
 @admin_availability_bp.route("/polls/create", methods=["POST"])

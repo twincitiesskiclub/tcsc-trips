@@ -26,7 +26,7 @@ from ..practices.availability_models import (
 from ..practices.drafting import default_practice_days
 from ..practices.interfaces import PracticeStatus, LeadRole, RSVPStatus, CancellationStatus
 from ..practices.lead_candidates import lead_candidates
-from ..practices.publishing import publish_blockers, publish_practices
+from ..practices.publishing import publish_blockers
 from ..practices.plan_reaction_queries import (
     PlanReactionSourceSelectionError,
     load_all_plan_reaction_sources,
@@ -361,42 +361,6 @@ def practices_data():
         })
 
     return jsonify({'practices': practices_data})
-
-
-@admin_practices_bp.route('/publish', methods=['POST'])
-@admin_required
-def publish_practices_route():
-    """Publish specific drafts by id — the escape hatch, not the main route.
-
-    Blocks are normally published from the availability poll that collected
-    leads for them (`POST /admin/availability/polls/<id>/publish`), which is the
-    batch a director actually thinks in. This exists for a draft whose block
-    never got a poll: without it such a practice has no route to being
-    published at all, which is the exact failure the drafting feature would
-    otherwise reintroduce. The practices list drawer is its only caller.
-
-    Nothing here is week-scoped on purpose. The Sunday evening flow already
-    sends the coming week to members with no human in the loop.
-    """
-    data = request.get_json() or {}
-    practice_ids = data.get('practice_ids')
-    if not practice_ids or not isinstance(practice_ids, list):
-        return jsonify({'error': 'practice_ids must be a non-empty list'}), 400
-
-    practices = Practice.query.filter(Practice.id.in_(practice_ids)).all()
-    found = {practice.id for practice in practices}
-    missing_ids = [pid for pid in practice_ids if pid not in found]
-    if missing_ids:
-        # Refuse the whole batch rather than publishing part of a stale grid
-        # selection: publishing is member-visible and awkward to undo, so a
-        # selection that no longer matches the database is worth a re-check.
-        return jsonify({
-            'error': 'unknown practice id(s): '
-                     + ', '.join(str(pid) for pid in missing_ids),
-        }), 404
-
-    result = publish_practices(practices)
-    return jsonify(result)
 
 
 @admin_practices_bp.route('/<int:practice_id>')

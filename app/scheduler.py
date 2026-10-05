@@ -611,7 +611,7 @@ def _get_upcoming_strength_practices(now, app) -> list:
     return strength_practices
 
 
-def run_practice_announcements_job(app: Flask, channel_override: str = None):
+def run_practice_announcements_job(app: Flask, channel_override: str = None, now_override=None):
     """Execute the daily practice announcement job within app context.
 
     Posts practice announcements with smart timing:
@@ -644,7 +644,9 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
         # Convert to naive datetime for database comparisons (Practice.date is naive)
         central_tz = ZoneInfo('America/Chicago')
         now_central = datetime.now(central_tz)
-        now = now_central.replace(tzinfo=None)  # Naive datetime in Central time
+        # now_override lets publish_if_ready() replay a window that already
+        # ran, for a practice that became visible after its run.
+        now = now_override or now_central.replace(tzinfo=None)  # Naive Central
         app.logger.info(f"Current time (Central): {now_central.strftime('%Y-%m-%d %H:%M %Z')}")
         practices_to_announce = []
 
