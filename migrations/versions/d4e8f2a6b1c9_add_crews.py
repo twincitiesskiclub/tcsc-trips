@@ -39,6 +39,7 @@ def upgrade():
         sa.Column("rules", JSONB(), nullable=False, server_default="[]"),
         sa.Column("members", JSONB(), nullable=False, server_default="[]"),
         sa.Column("crew_names", JSONB(), nullable=False, server_default="{}"),
+        sa.Column("crew_channels", JSONB(), nullable=False, server_default="{}"),
         sa.Column("created_at", sa.DateTime(), nullable=False),
         sa.Column("updated_at", sa.DateTime(), nullable=False),
         sa.CheckConstraint("status IN ('draft','final')", name="ck_crew_draft_status"),

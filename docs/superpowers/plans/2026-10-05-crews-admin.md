@@ -32,7 +32,13 @@ Run the tests against a scratch DB at main's head:
    - `draft.html`: one form and Save.
    - `admin_crews.js`: season picker, rule fields and confirm prompts.
    - A sidebar link.
-7. **Verification**:
+7. **Slack launch** (`app/crews/slack.py`):
+   - `channel_name`, `launch_plan` and `launch`.
+   - Launch routes `GET` and `POST /draft/<id>/launch`, final drafts only.
+   - `launch.html` shows the confirm and result states.
+   - Tests use a fake Slack client with no real calls: idempotent rerun,
+     `name_taken` retry, per-user errors, and one crew failing.
+8. **Verification**:
    - The full crews, analytics and top-level suites, plus the migration
      release test.
    - The read-only prod equivalence check at seed 2026.

@@ -59,6 +59,35 @@ balance table, one row per crew plus an "All" row, then one form:
 
 One Save posts the whole form. The page reloads with the new balance table.
 
+**Launch crews in Slack** (final draft only). The button opens a confirmation
+page that lists each crew's channel name, how many members will be invited,
+and anyone who can't be invited because no Slack account is linked. Nothing
+happens until "Make channels and invite" is pressed. For each crew, the TCSC
+bot creates a private channel (so the app is a member) and invites the crew in
+one call (`conversations.invite`, `force=true`). The channel ID and name are
+stored per crew on the draft. A result page then shows, per crew: New or
+existing, invited, already in, could not invite (with the Slack error), and no
+Slack account.
+
+- **Idempotent:** a crew with a stored channel is not created again. The
+  launch reads the channel members and invites only the missing ones. After
+  the first launch, the button reads "Update crews in Slack".
+- **Errors stay per crew:**
+  - `name_taken`: retry once as `<name>-<season year>`.
+  - `already_in_channel`: counted as already in.
+  - `user_not_found` and other per-user errors: listed by name.
+  - Anything else (rate limited after the client's retries, a deleted
+    channel): marks that crew "Stopped" and the launch moves on to the next
+    crew.
+- **Channel names:** `crew-` plus the crew name as a Slack-safe slug
+  (lowercase, runs of anything but a-z, 0-9, `-` and `_` become `-`, at most
+  80 characters), or `crew-<number>` when the crew has no name. The prefix
+  keeps the channels together in Slack's sidebar and clear of existing
+  channels.
+- **Not in v1:** renaming a channel when a crew is renamed, archiving
+  channels, removing people who moved crews after launch, setting a topic or
+  welcome post, and adding a non-member admin (Mitchell) to every channel.
+
 ## Method (defaults reproduce the 10/5 scratchpad draw)
 
 1. Pinned people and keep-together groups are placed first and don't move.
@@ -107,7 +136,7 @@ crews as the scratchpad.
   - Snapshots of the settings and rules used.
   - A members snapshot of {user_id, name, email, gender, age, ski, tenure,
     thot, board, crew}.
-  - crew_names.
+  - crew_names, and crew_channels ({crew: {id, name}}), which the Slack launch sets.
   - A partial unique index allows one final draft per season.
   - The score is computed when the draft is read, not stored.
 
@@ -132,8 +161,8 @@ adventures@twincitiesskiclub.org.
 
 ## Out of scope
 
-Creating Slack channels or posting crews. `app/crews/slack.py` is where that
-goes.
+Syncing Slack after launch beyond inviting missing members (see "Not in v1"
+above).
 
 ## Open decisions
 

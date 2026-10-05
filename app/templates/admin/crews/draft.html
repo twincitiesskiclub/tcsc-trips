@@ -21,6 +21,9 @@
       <button class="{{ btn }}">Mark as final</button>
     </form>
     {% endif %}
+    {% if draft.status == 'final' %}
+    <a class="{{ btn }}" href="{{ url_for('admin_crews.launch_confirm', draft_id=draft.id) }}">{{ 'Update crews in Slack' if draft.crew_channels else 'Launch crews in Slack' }}</a>
+    {% endif %}
     <a class="{{ btn2 }}" href="{{ url_for('admin_crews.export', draft_id=draft.id) }}">Download CSV</a>
     <form method="post" action="{{ url_for('admin_crews.delete_draft', draft_id=draft.id) }}" data-confirm="Delete {{ draft.label }}?">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">

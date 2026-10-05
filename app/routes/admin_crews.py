@@ -8,6 +8,7 @@ from app.crews import service
 from app.crews.engine import LEVELS, TRAIT_LABELS, TRAITS
 from app.crews.models import CrewDraft
 from app.crews.roster import load_members
+from app.crews import slack
 from app.crews.slack import SPEEDY_CHANNEL_NAME, channel_member_user_ids
 from app.models import Season, db
 
@@ -177,6 +178,35 @@ def mark_final(draft_id):
     db.session.commit()
     flash(f"{draft.label} is now the final crews for {draft.season.name}.", "success")
     return redirect(url_for(".draft_page", draft_id=draft.id))
+
+
+def _final_or_back(draft_id):
+    draft = db.get_or_404(CrewDraft, draft_id)
+    if draft.status != "final":
+        flash("Mark this draft as final before launching it in Slack.", "error")
+        return draft, redirect(url_for(".draft_page", draft_id=draft.id))
+    return draft, None
+
+
+@admin_crews_bp.get("/draft/<int:draft_id>/launch")
+@admin_required
+def launch_confirm(draft_id):
+    draft, back = _final_or_back(draft_id)
+    if back:
+        return back
+    return render_template("admin/crews/launch.html", draft=draft, results=None,
+                           plan=slack.launch_plan(draft, service.crews_of(draft)))
+
+
+@admin_crews_bp.post("/draft/<int:draft_id>/launch")
+@admin_required
+def launch(draft_id):
+    draft, back = _final_or_back(draft_id)
+    if back:
+        return back
+    results = slack.launch(draft, service.crews_of(draft), draft.season.year)
+    db.session.commit()
+    return render_template("admin/crews/launch.html", draft=draft, results=results, plan=None)
 
 
 @admin_crews_bp.post("/draft/<int:draft_id>/delete")

@@ -37,6 +37,7 @@ class CrewDraft(db.Model):
     rules = db.Column(JSONB, nullable=False, default=list)
     members = db.Column(JSONB, nullable=False, default=list)
     crew_names = db.Column(JSONB, nullable=False, default=dict)  # "1" -> name
+    crew_channels = db.Column(JSONB, nullable=False, default=dict)  # "1" -> {id, name}, set by the Slack launch
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

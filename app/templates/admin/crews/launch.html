@@ -1,0 +1,77 @@
+{% extends 'admin/admin_base.html' %}
+{% block title %}Launch in Slack | {{ draft.label }}{% endblock %}
+{% block content %}
+{% set card = "rounded-lg border border-solid border-zinc-200 bg-white p-4 sm:p-5" %}
+{% set btn = "inline-flex items-center justify-center rounded-lg bg-tcsc-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90" %}
+{% set btn2 = "inline-flex items-center justify-center rounded-lg border border-solid border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-tcsc-navy hover:bg-zinc-50" %}
+<div class="space-y-5">
+  <div>
+    <a class="text-sm text-zinc-500 underline" href="{{ url_for('admin_crews.draft_page', draft_id=draft.id) }}">Back to {{ draft.label }}</a>
+    <h1 class="mt-1 text-2xl font-semibold text-tcsc-navy">{{ 'Slack launch results' if results else 'Launch crews in Slack' }}</h1>
+    {% if not results %}
+    <p class="text-sm text-zinc-600">This makes one private channel per crew and invites its members. The TCSC app makes the
+      channels, so it is in each one. Running it again only invites people who are missing.</p>
+    {% endif %}
+  </div>
+
+  {% if results %}
+  {% set errors = results | selectattr('error') | list %}
+  {% set failed = results | map(attribute='failed') | map('length') | sum %}
+  <div class="rounded-lg border border-solid px-4 py-3 text-sm {{ 'border-amber-200 bg-amber-50 text-amber-800' if errors or failed else 'border-green-200 bg-green-50 text-green-800' }}">
+    {% if errors %}{{ errors|length }} crew{{ '' if errors|length == 1 else 's' }} had a problem. The rest went through.
+    {% else %}Done. Every crew has its channel.{% endif %}
+    {% if failed %}{{ failed }} {{ 'person' if failed == 1 else 'people' }} could not be invited, see below.{% endif %}
+    {% if errors or failed %}Running it again only does what is missing.{% endif %}
+  </div>
+  <ul class="list-none space-y-3 pl-0">
+    {% for r in results %}
+    <li class="{{ card }} text-sm">
+      <p class="mt-0 font-semibold">Crew {{ r.crew }}: #{{ r.name }}
+        {% if r.created %}<span class="ml-1 rounded bg-green-600 px-1.5 py-0.5 text-xs font-semibold text-white">New</span>{% endif %}</p>
+      {% if r.error %}
+      <p class="mt-1 text-red-700">Stopped: {{ r.error }}.</p>
+      {% else %}
+      <p class="mt-1 text-zinc-700">Invited {{ r.invited }}. Already in the channel {{ r.already }}.</p>
+      {% endif %}
+      {% if r.failed %}<p class="mt-1 text-red-700">Could not invite: {% for uid, err in r.failed.items() %}{{ r.people.get(uid, uid) }} ({{ err }}){{ ', ' if not loop.last }}{% endfor %}.</p>{% endif %}
+      {% if r.no_slack %}<p class="mt-1 text-zinc-500">No Slack account linked: {{ r.no_slack|join(', ') }}.</p>{% endif %}
+    </li>
+    {% endfor %}
+  </ul>
+  <a class="{{ btn2 }}" href="{{ url_for('admin_crews.draft_page', draft_id=draft.id) }}">Back to {{ draft.label }}</a>
+
+  {% else %}
+  {% set no_slack = plan | sum(attribute='no_slack', start=[]) %}
+  <section class="{{ card }}">
+    <div class="overflow-x-auto">
+      <table class="min-w-full text-sm">
+        <thead class="text-left text-xs uppercase tracking-wide text-zinc-500">
+          <tr><th class="py-2 pr-3">Crew</th><th class="py-2 pr-3">Channel</th><th class="py-2">Invites</th></tr>
+        </thead>
+        <tbody class="divide-y divide-zinc-100">
+          {% for p in plan %}
+          <tr class="align-top">
+            <td class="py-2 pr-3">{{ p.crew }}</td>
+            <td class="py-2 pr-3">#{{ p.name }}{% if p.channel_id %} <span class="text-xs text-zinc-500">(made already)</span>{% endif %}
+              {% if p.no_slack %}<span class="block text-xs text-zinc-500">Can't invite: {{ p.no_slack|join(', ') }}</span>{% endif %}</td>
+            <td class="py-2 tabular-nums">{{ p.invite|length }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% if no_slack %}
+    <p class="mt-3 text-sm text-zinc-600">{{ no_slack|length }} member{{ '' if no_slack|length == 1 else 's' }} can't be invited because
+      no Slack account is linked to them. Add them by hand after the launch.</p>
+    {% endif %}
+    <p class="mt-3 text-sm text-zinc-600">Channel names come from the crew names on the draft page. Name the crews first if you want.
+      Renaming a crew after launch does not rename its channel.</p>
+  </section>
+  <form method="post" action="{{ url_for('admin_crews.launch', draft_id=draft.id) }}" class="flex flex-wrap gap-2">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="{{ btn }}">{{ 'Invite anyone missing' if plan | selectattr('channel_id') | list | length == plan|length else 'Make channels and invite' }}</button>
+    <a class="{{ btn2 }}" href="{{ url_for('admin_crews.draft_page', draft_id=draft.id) }}">Cancel</a>
+  </form>
+  {% endif %}
+</div>
+{% endblock %}
