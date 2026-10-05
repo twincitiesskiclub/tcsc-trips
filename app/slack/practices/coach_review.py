@@ -16,9 +16,9 @@ from app.slack.practices._config import (
     PRACTICES_CORE_CHANNEL_ID,
     COLLAB_CHANNEL_ID,
     KJ_SLACK_ID,
-    ADMIN_SLACK_IDS,
     FALLBACK_COACH_IDS,
 )
+from app.slack.practices.leads import practices_director_slack_ids
 from app.slack.practices.announcements import (
     _delete_slack_message,
     _recover_ambiguous_link,
@@ -688,7 +688,7 @@ def escalate_practice_review(practice: Practice) -> dict:
 
     # Build mentions
     mentions = [f"<@{uid}>" for uid in coach_ids]
-    mentions.extend([f"<@{uid}>" for uid in ADMIN_SLACK_IDS])
+    mentions.extend([f"<@{uid}>" for uid in practices_director_slack_ids()])
     mention_text = " ".join(mentions)
 
     log_text = f":warning: {mention_text} This practice hasn't been reviewed yet. Please approve or edit."

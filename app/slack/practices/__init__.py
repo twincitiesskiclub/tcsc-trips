@@ -17,7 +17,6 @@ from app.slack.practices._config import (
     COACH_SUMMARY_FALLBACK_CHANNEL_ID,
     COLLAB_CHANNEL_ID,
     KJ_SLACK_ID,
-    ADMIN_SLACK_IDS,
     FALLBACK_COACH_IDS,
 )
 from app.slack.practices.announcements import (
@@ -90,7 +89,6 @@ __all__ = [
     "COACH_SUMMARY_FALLBACK_CHANNEL_ID",
     "COLLAB_CHANNEL_ID",
     "KJ_SLACK_ID",
-    "ADMIN_SLACK_IDS",
     "FALLBACK_COACH_IDS",
     # announcements
     "post_practice_announcement",
