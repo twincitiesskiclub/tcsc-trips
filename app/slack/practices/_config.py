@@ -107,13 +107,6 @@ COACH_SUMMARY_FALLBACK_CHANNEL_ID = "C053T1AR48Y"
 # KJ's Slack ID for 48h check tagging
 KJ_SLACK_ID = "U02K45N1JEV"
 
-# Admins to escalate to if practice not approved
-ADMIN_SLACK_IDS = [
-    "U02JP5QNQFS",  # @augie
-    "U02K5TKMQH3",  # @simon
-    "U02J6R6CZS7",  # @rob
-]
-
 # Fallback coaches if no coach assigned to practice
 FALLBACK_COACH_IDS = [
     "U02K45N1JEV",  # @kj

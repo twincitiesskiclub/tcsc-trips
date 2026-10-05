@@ -9,6 +9,7 @@ from app.slack.blocks import (
     build_lead_confirmation_blocks,
     build_substitution_request_blocks,
 )
+from app.models import Tag
 from app.practices.models import Practice
 
 from app.slack.practices._config import _get_escalation_channel, COORD_CHANNEL_ID
@@ -90,6 +91,21 @@ def send_workout_reminder(practice: Practice, coach_slack_id: str) -> dict:
         return {'success': False, 'error': error_msg}
 
 
+def practices_director_slack_ids() -> list[str]:
+    """Slack IDs of PRACTICES_DIRECTOR tag holders, for escalation mentions."""
+    tag = Tag.query.filter_by(name='PRACTICES_DIRECTOR').first()
+    slack_ids = [
+        user.slack_user.slack_uid
+        for user in (tag.users if tag else [])
+        if user.slack_user and user.slack_user.slack_uid
+    ]
+    if not slack_ids:
+        current_app.logger.warning(
+            "No PRACTICES_DIRECTOR tag holders with Slack accounts; skipping director mentions"
+        )
+    return slack_ids
+
+
 def send_lead_checkin_dm(practice: Practice) -> dict:
     """Send group DM to practices directors + lead for lead check-in.
 
@@ -105,24 +121,10 @@ def send_lead_checkin_dm(practice: Practice) -> dict:
         - channel_id: str (only if success=True)
         - error: str (only if success=False)
     """
-    from app.models import Tag
     from app.slack.client import open_conversation, get_slack_client
     from app.utils import format_datetime_central
 
-    # Get practices directors by tag
-    director_slack_ids = []
-    practices_director_tag = Tag.query.filter_by(name='PRACTICES_DIRECTOR').first()
-    if practices_director_tag:
-        for user in practices_director_tag.users:
-            if user.slack_user and user.slack_user.slack_uid:
-                director_slack_ids.append(user.slack_user.slack_uid)
-
-    # Fallback admin IDs if no directors are tagged
-    ADMIN_FALLBACK_IDS = ["U02JP5QNQFS", "U02K5TKMQH3", "U02J6R6CZS7"]  # augie, simon, rob
-
-    if not director_slack_ids:
-        current_app.logger.warning("No PRACTICES_DIRECTOR users found, using admin fallback")
-        director_slack_ids = ADMIN_FALLBACK_IDS
+    director_slack_ids = practices_director_slack_ids()
 
     # Get lead Slack IDs
     lead_slack_ids = []
@@ -154,7 +156,11 @@ def send_lead_checkin_dm(practice: Practice) -> dict:
     location = practice.location.name if practice.location else "TBD"
     practice_types = ", ".join([t.name for t in practice.practice_types]) if practice.practice_types else "Practice"
     lead_mention_text = " ".join(lead_mentions)
-    director_mention_text = ", ".join(f"<@{uid}>" for uid in director_slack_ids)
+    director_line = (
+        "\nIf you need to go over anything, "
+        f"{', '.join(f'<@{uid}>' for uid in director_slack_ids)} are here."
+        if director_slack_ids else ""
+    )
 
     # Determine if evening or morning practice for message
     from app.utils import now_central_naive
@@ -168,8 +174,8 @@ def send_lead_checkin_dm(practice: Practice) -> dict:
         f"---\n\n"
         f"Hey {lead_mention_text}! Just verifying you're good to lead {time_label.lower()}.\n\n"
         f":white_check_mark: React to the practice post or reply here to confirm!\n\n"
-        f"If you need a sub, post to <#C02J4DGCFL2|coord-practices-leads-assists>.\n"
-        f"If you need to go over anything, {director_mention_text} are here."
+        f"If you need a sub, post to <#C02J4DGCFL2|coord-practices-leads-assists>."
+        f"{director_line}"
     )
 
     client = get_slack_client()
