@@ -7,10 +7,11 @@ slack_users.slack_uid.
 from app.models import SlackUser, User
 from app.slack.client import get_slack_client
 
-DEFAULT_SPEEDY_CHANNEL = "C0ATRS011FA"  # #thots
+SPEEDY_CHANNEL = "C0ATRS011FA"  # #thots
+SPEEDY_CHANNEL_NAME = "#thots"
 
 
-def channel_member_user_ids(channel_id):
+def channel_member_user_ids(channel_id=SPEEDY_CHANNEL):
     """(user ids of club members in the channel, count of Slack members with no user)."""
     client = get_slack_client()
     uids, cursor = [], None

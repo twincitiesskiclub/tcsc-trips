@@ -1,34 +1,36 @@
-"""Crew drafts: build, edit, summarize, import and export. Callers commit."""
+"""Crew drafts: build, edit, summarize and export. Callers commit."""
 import csv
 import io
-from collections import Counter
 
 from app.crews import engine
 from app.crews.engine import LEVELS, TRAITS, Person, Rule, Settings
 from app.crews.models import CrewConfig, CrewDraft
 from app.crews.roster import load_members
-from app.crews.slack import DEFAULT_SPEEDY_CHANNEL
 from app.models import db
 
-DEFAULT_SETTINGS = {"crews": 12, "levels": {t: "normal" for t in TRAITS}, "board_rule": True,
-                    "speedy_channel": DEFAULT_SPEEDY_CHANNEL}
+DEFAULT_SETTINGS = {"crews": 12, "levels": {t: "normal" for t in TRAITS}, "board_rule": True}
 GENDERS = ["F", "M", "X", "?"]
 PERSON_FIELDS = ("gender", "age", "ski", "tenure", "thot", "board")
+DRAFTS_PER_BATCH = 5
+# The first draft of a season uses this seed, so with default settings it is
+# the same draw as the 2026-10-05 scratchpad run. Later drafts count up.
+FIRST_SEED = 2026
 
 
-def get_config(season):
+def get_config(season, create=False):
+    """The season's config, or an unsaved one with defaults (saved only when create=True)."""
     config = CrewConfig.query.filter_by(season_id=season.id).one_or_none()
     if config is None:
         config = CrewConfig(season_id=season.id, settings=dict(DEFAULT_SETTINGS), overrides={}, rules=[],
                             speedy_user_ids=[])
-        db.session.add(config)
-        db.session.flush()
+        if create:
+            db.session.add(config)
     return config
 
 
 def config_settings(config):
-    return {**DEFAULT_SETTINGS, **(config.settings or {}),
-            "levels": {**DEFAULT_SETTINGS["levels"], **(config.settings or {}).get("levels", {})}}
+    saved = config.settings or {}
+    return {**DEFAULT_SETTINGS, **saved, "levels": {**DEFAULT_SETTINGS["levels"], **saved.get("levels", {})}}
 
 
 def to_settings(settings, rules):
@@ -39,7 +41,7 @@ def to_settings(settings, rules):
 
 
 def parse_settings(form):
-    """Settings from the configure form; returns (settings, error)."""
+    """Settings from the settings form; returns (settings, error)."""
     try:
         crews = int(form.get("crews", ""))
     except ValueError:
@@ -49,9 +51,7 @@ def parse_settings(form):
     levels = {t: form.get(f"level_{t}", "normal") for t in TRAITS}
     if any(v not in LEVELS for v in levels.values()):
         return None, "Unknown weight."
-    channel = (form.get("speedy_channel") or "").strip() or DEFAULT_SPEEDY_CHANNEL
-    return {"crews": crews, "levels": levels, "board_rule": form.get("board_rule") == "on",
-            "speedy_channel": channel}, None
+    return {"crews": crews, "levels": levels, "board_rule": form.get("board_rule") == "on"}, None
 
 
 def parse_rule(form, member_ids, crews):
@@ -73,148 +73,8 @@ def parse_rule(form, member_ids, crews):
     return {"kind": kind, "a": a, "b": b}, None
 
 
-def people_snapshot(rows):
-    return [{"user_id": r.user_id, "name": r.person.name, "email": r.email,
-             **{f: getattr(r.person, f) for f in PERSON_FIELDS}} for r in rows]
-
-
-def draft_people(draft):
-    return [Person(key=m["user_id"], name=m["name"], **{f: m.get(f) for f in PERSON_FIELDS}) for m in draft.members]
-
-
-def _assignment(draft):
-    return {m["user_id"]: m["crew"] - 1 for m in draft.members}
-
-
-def rescore(draft):
-    draft.score = engine.score(draft_people(draft), _assignment(draft), to_settings(draft.settings, draft.rules))
-
-
-def make_drafts(season, config, count, start_seed, created_by):
-    settings = config_settings(config)
-    rows = load_members(season, config)
-    people = [r.person for r in rows]
-    snapshot = people_snapshot(rows)
-    drafts = []
-    for seed in range(start_seed, start_seed + count):
-        result = engine.generate(people, to_settings(settings, config.rules), seed)
-        members = [{**m, "crew": result.assignment[m["user_id"]] + 1, "band": result.bands[m["user_id"]]}
-                   for m in snapshot]
-        draft = CrewDraft(season_id=season.id, label=f"Seed {seed}", seed=seed, settings=settings,
-                          rules=list(config.rules), members=members, crew_names={}, score=result.score,
-                          created_by=created_by)
-        db.session.add(draft)
-        drafts.append(draft)
-    db.session.flush()
-    return drafts
-
-
-def summary(draft):
-    people = draft_people(draft)
-    assignment = _assignment(draft)
-    settings = to_settings(draft.settings, draft.rules)
-    names = {p.key: p.name for p in people}
-    rows = engine.crew_rows(people, assignment, settings.crews)
-    return {
-        "rows": rows,
-        "spread": engine.spread(people, assignment, settings),
-        "no_board": sum(1 for r in rows[:-1] if r["board"] == 0),
-        "broken": engine.broken_rules(assignment, settings.rules, names),
-        "ski_levels": [s for s in engine.SKI_ORDER if rows[-1]["ski"].get(s)] +
-                      sorted(s for s in rows[-1]["ski"] if s not in engine.SKI_ORDER),
-    }
-
-
-def crews_of(draft):
-    k = int(draft.settings["crews"])
-    out = [[] for _ in range(k)]
-    for m in sorted(draft.members, key=lambda m: (not m.get("board"), m["name"].lower())):
-        out[m["crew"] - 1].append(m)
-    return out
-
-
-def move(draft, user_id, crew):
-    k = int(draft.settings["crews"])
-    if not 1 <= crew <= k:
-        raise ValueError(f"Pick a crew from 1 to {k}.")
-    members = [dict(m) for m in draft.members]
-    for m in members:
-        if m["user_id"] == user_id:
-            m["crew"] = crew
-            break
-    else:
-        raise ValueError("That person is not in this draft.")
-    draft.members = members
-    rescore(draft)
-
-
-def swap(draft, a, b):
-    members = [dict(m) for m in draft.members]
-    by_id = {m["user_id"]: m for m in members}
-    if a not in by_id or b not in by_id or a == b:
-        raise ValueError("Pick two different people from this draft.")
-    by_id[a]["crew"], by_id[b]["crew"] = by_id[b]["crew"], by_id[a]["crew"]
-    draft.members = members
-    rescore(draft)
-
-
-def mark_final(draft):
-    CrewDraft.query.filter(CrewDraft.season_id == draft.season_id, CrewDraft.status == "final",
-                           CrewDraft.id != draft.id).update({"status": "draft"})
-    db.session.flush()
-    draft.status = "final"
-
-
-def _read_csv(file_storage):
-    text = file_storage.read().decode("utf-8-sig", errors="replace")
-    reader = csv.DictReader(io.StringIO(text))
-    fields = {(f or "").strip().lower(): f for f in reader.fieldnames or []}
-    if "email" not in fields:
-        raise ValueError("The CSV needs an Email column.")
-    return [{k: (row.get(orig) or "").strip() for k, orig in fields.items()} for row in reader]
-
-
-def _truthy(v):
-    return v.strip().lower() in ("1", "1.0", "y", "yes", "true", "x")
-
-
-def _gender(v):
-    v = v.strip().lower()
-    return {"f": "F", "female": "F", "woman": "F", "w": "F", "m": "M", "male": "M", "man": "M",
-            "x": "X", "nb": "X", "nonbinary": "X", "non-binary": "X"}.get(v)
-
-
-def import_overrides(config, rows, file_storage):
-    """Overrides from a CSV with Email plus any of gender, thot, board."""
-    data = _read_csv(file_storage)
-    by_email = {r.email: r for r in rows}
-    overrides = {k: dict(v) for k, v in (config.overrides or {}).items()}
-    updated, unknown = 0, []
-    for line in data:
-        row = by_email.get(line["email"].lower())
-        if row is None:
-            if line["email"]:
-                unknown.append(line["email"])
-            continue
-        values = {}
-        if line.get("gender") and _gender(line["gender"]):
-            values["gender"] = _gender(line["gender"])
-        for flag in ("thot", "board"):
-            if flag in line:  # a blank cell in a present column means no
-                values[flag] = _truthy(line[flag])
-        mine = overrides.setdefault(str(row.user_id), {})
-        for key, value in values.items():
-            if value == row.computed[key]:
-                mine.pop(key, None)
-            else:
-                mine[key] = value
-        updated += 1
-    config.overrides = {k: v for k, v in overrides.items() if v}
-    return updated, unknown
-
-
 def set_overrides(config, rows, form):
-    """Overrides from the members table form: keep only values that differ from computed."""
+    """Overrides from the members form: keep only values that differ from computed."""
     overrides = {}
     for r in rows:
         mine = {}
@@ -230,36 +90,74 @@ def set_overrides(config, rows, form):
     config.overrides = overrides
 
 
-def import_draft(season, config, rows, file_storage, created_by):
-    """A draft from a CSV with Email and Crew columns (e.g. the 10/5 scratchpad draw)."""
-    data = _read_csv(file_storage)
-    by_email = {r.email: r for r in rows}
-    crews = {}
-    for line in data:
-        row = by_email.get(line["email"].lower())
-        if row is None:
-            continue
-        try:
-            crews[row.user_id] = int(line.get("crew", ""))
-        except ValueError:
-            continue
-    if not crews:
-        raise ValueError("No rows matched a member with a crew number.")
-    k = max(crews.values())
-    missing = [r for r in rows if r.user_id not in crews]
-    sizes = Counter(crews.values())
-    for r in missing:  # members who joined after the CSV go to the smallest crew
-        crews[r.user_id] = min(range(1, k + 1), key=lambda c: (sizes[c], c))
-        sizes[crews[r.user_id]] += 1
-    settings = {**config_settings(config), "crews": k}
-    members = [{**m, "crew": crews[m["user_id"]], "band": -1} for m in people_snapshot(rows)]
-    draft = CrewDraft(season_id=season.id, label=f"Imported {file_storage.filename or 'CSV'}"[:120],
-                      settings=settings, rules=list(config.rules), members=members, crew_names={},
-                      created_by=created_by)
-    rescore(draft)
-    db.session.add(draft)
+def make_drafts(season, config):
+    settings = config_settings(config)
+    rows = load_members(season, config)
+    people = [r.person for r in rows]
+    last = db.session.query(db.func.max(CrewDraft.seed)).filter_by(season_id=season.id).scalar()
+    start = FIRST_SEED if last is None else last + 1
+    drafts = []
+    for seed in range(start, start + DRAFTS_PER_BATCH):
+        result = engine.generate(people, to_settings(settings, config.rules), seed)
+        members = [{"user_id": r.user_id, "name": r.person.name, "email": r.email,
+                    **{f: getattr(r.person, f) for f in PERSON_FIELDS},
+                    "crew": result.assignment[r.user_id] + 1} for r in rows]
+        draft = CrewDraft(season_id=season.id, label=f"Draft {seed - FIRST_SEED + 1}", seed=seed,
+                          settings=settings, rules=list(config.rules), members=members, crew_names={})
+        db.session.add(draft)
+        drafts.append(draft)
     db.session.flush()
-    return draft, missing
+    return drafts
+
+
+def summary(draft):
+    people = [Person(key=m["user_id"], name=m["name"], **{f: m.get(f) for f in PERSON_FIELDS})
+              for m in draft.members]
+    assignment = {m["user_id"]: m["crew"] - 1 for m in draft.members}
+    settings = to_settings(draft.settings, draft.rules)
+    rows = engine.crew_rows(people, assignment, settings.crews)
+    return {
+        "score": engine.score(people, assignment, settings),
+        "rows": rows,
+        "spread": engine.spread(people, assignment, settings),
+        "no_board": sum(1 for r in rows[:-1] if r["board"] == 0) if settings.board_rule else 0,
+        "broken": engine.broken_rules(assignment, settings.rules, {p.key: p.name for p in people}),
+        "ski_levels": [s for s in engine.SKI_ORDER if rows[-1]["ski"].get(s)] +
+                      sorted(s for s in rows[-1]["ski"] if s not in engine.SKI_ORDER),
+    }
+
+
+def crews_of(draft):
+    out = [[] for _ in range(int(draft.settings["crews"]))]
+    for m in sorted(draft.members, key=lambda m: (not m.get("board"), m["name"].lower())):
+        out[m["crew"] - 1].append(m)
+    return out
+
+
+def save_draft(draft, form):
+    """Crew picks, crew names and the draft name from the draft form."""
+    k = int(draft.settings["crews"])
+    members = [dict(m) for m in draft.members]
+    for m in members:
+        try:
+            crew = int(form.get(f"crew_{m['user_id']}", m["crew"]))
+        except ValueError:
+            raise ValueError(f"Pick a crew for {m['name']}.")
+        if not 1 <= crew <= k:
+            raise ValueError(f"Pick a crew from 1 to {k} for {m['name']}.")
+        m["crew"] = crew
+    draft.members = members
+    draft.crew_names = {str(i): name[:80] for i in range(1, k + 1)
+                        if (name := form.get(f"name_{i}", "").strip())}
+    if label := form.get("label", "").strip():
+        draft.label = label[:120]
+
+
+def mark_final(draft):
+    CrewDraft.query.filter(CrewDraft.season_id == draft.season_id, CrewDraft.status == "final",
+                           CrewDraft.id != draft.id).update({"status": "draft"})
+    db.session.flush()
+    draft.status = "final"
 
 
 def export_csv(draft):

@@ -13,7 +13,7 @@ class CrewConfig(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     season_id = db.Column(db.Integer, db.ForeignKey("seasons.id", ondelete="CASCADE"),
                           nullable=False, unique=True)
-    settings = db.Column(JSONB, nullable=False, default=dict)   # crews, levels, board_rule, speedy_channel
+    settings = db.Column(JSONB, nullable=False, default=dict)   # crews, levels, board_rule
     overrides = db.Column(JSONB, nullable=False, default=dict)  # "user_id" -> {gender, thot, board}
     rules = db.Column(JSONB, nullable=False, default=list)      # [{kind, a, b, crew}]
     speedy_user_ids = db.Column(JSONB, nullable=False, default=list)
@@ -31,14 +31,12 @@ class CrewDraft(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     season_id = db.Column(db.Integer, db.ForeignKey("seasons.id", ondelete="CASCADE"), nullable=False)
     label = db.Column(db.String(120), nullable=False)
-    seed = db.Column(db.Integer)
+    seed = db.Column(db.Integer, nullable=False)
     status = db.Column(db.String(10), nullable=False, default="draft")  # draft | final
     settings = db.Column(JSONB, nullable=False, default=dict)
     rules = db.Column(JSONB, nullable=False, default=list)
     members = db.Column(JSONB, nullable=False, default=list)
     crew_names = db.Column(JSONB, nullable=False, default=dict)  # "1" -> name
-    score = db.Column(db.Float)
-    created_by = db.Column(db.String(255))
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
 

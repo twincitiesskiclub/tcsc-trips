@@ -152,3 +152,9 @@ def test_more_crews_than_people_does_not_crash():
     people = roster(n=3, board=1, thot=0)
     result = generate(people, Settings(crews=5), seed=1)
     assert set(result.assignment) == {0, 1, 2}
+
+
+def test_board_weight_follows_the_board_rule():
+    assert Settings(board_rule=True).weight("board") == 1.0
+    assert Settings(board_rule=False).weight("board") == 0.0
+    assert "board" not in spread(roster(), {p.key: p.key % 4 for p in roster()}, Settings(crews=4))

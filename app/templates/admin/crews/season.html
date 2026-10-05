@@ -7,17 +7,13 @@
 {% else %}
 {% set card = "rounded-lg border border-solid border-zinc-200 bg-white p-4 sm:p-5" %}
 {% set btn = "inline-flex items-center justify-center rounded-lg bg-tcsc-navy px-4 py-2 text-sm font-semibold text-white hover:opacity-90" %}
-{% set btn2 = "inline-flex items-center justify-center rounded-lg border border-solid border-zinc-300 bg-white px-4 py-2 text-sm font-semibold text-tcsc-navy hover:bg-zinc-50" %}
+{% set btn2 = "inline-flex items-center justify-center rounded-lg border border-solid border-zinc-300 bg-white px-3 py-1.5 text-sm font-semibold text-tcsc-navy hover:bg-zinc-50" %}
 {% set input = "rounded-lg border border-solid border-zinc-300 px-3 py-2 text-sm" %}
 {% set sel = "rounded-lg border border-solid border-zinc-300 py-1.5 pl-3 pr-8 text-sm" %}
-{% set final = drafts | selectattr('0.status', 'equalto', 'final') | map(attribute='0') | first %}
-<div class="space-y-6" data-crews-page>
+{% set summary_cls = "cursor-pointer list-inside text-base font-semibold" %}
+<div class="space-y-5" data-crews-page>
   <div class="flex flex-wrap items-end justify-between gap-3">
-    <div class="min-w-0">
-      <h1 class="text-2xl font-semibold text-tcsc-navy">Crews</h1>
-      <p class="text-sm text-zinc-600">Split {{ season.name }} into crews. Choose what to balance, make a few drafts,
-        compare them, then open one to fix by hand and mark it final.</p>
-    </div>
+    <h1 class="text-2xl font-semibold text-tcsc-navy">Crews: {{ season.name }}</h1>
     <label class="text-sm text-zinc-600">Season
       <select class="{{ sel }} ml-1" data-season-picker>
         {% for s in seasons %}
@@ -27,26 +23,59 @@
     </label>
   </div>
 
-  {% if final %}
-  <div class="rounded-lg border border-solid border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
-    Final crews: <a class="font-semibold underline" href="{{ url_for('admin_crews.draft_page', draft_id=final.id) }}">{{ final.label }}</a>.
-    Making more drafts does not change it.
-  </div>
+  <section class="{{ card }} space-y-3">
+    <form method="post" action="{{ url_for('admin_crews.refresh_speedy', season_id=season.id) }}" class="flex flex-wrap items-center gap-x-3 gap-y-2 text-sm text-zinc-700">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <span>{{ rows|length }} members. Speedy group {{ config.speedy_user_ids|length }}
+        (from {{ speedy_channel }}, {% if config.speedy_refreshed_at %}read {{ config.speedy_refreshed_at.strftime('%b %-d') }}{% else %}not read yet{% endif %}).
+        Board members {{ board_count }}.</span>
+      <button class="{{ btn2 }}">Refresh from Slack</button>
+    </form>
+    <p class="text-sm text-zinc-700">Final crews:
+      {% if final %}<a class="font-semibold underline" href="{{ url_for('admin_crews.draft_page', draft_id=final.id) }}">{{ final.label }}</a>{% else %}none yet.{% endif %}</p>
+    <form method="post" action="{{ url_for('admin_crews.create_drafts', season_id=season.id) }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <button class="{{ btn }}">Make {{ batch }} drafts</button>
+    </form>
+  </section>
+
+  {% if drafts %}
+  <section class="{{ card }}" id="drafts">
+    <h2 class="mt-0 text-lg font-semibold">Drafts <span class="text-sm font-normal text-zinc-500">(best first, lower imbalance is more even)</span></h2>
+    <ul class="mt-2 list-none divide-y divide-zinc-100 pl-0">
+      {% for d, s in drafts %}
+      <li class="flex flex-wrap items-center gap-x-4 gap-y-1 py-2 text-sm {{ 'bg-green-50 -mx-2 px-2 rounded' if d.status == 'final' }}">
+        <a class="w-24 font-semibold text-tcsc-navy underline" href="{{ url_for('admin_crews.draft_page', draft_id=d.id) }}">{{ d.label }}</a>
+        <span class="w-28 tabular-nums text-zinc-600">imbalance {{ '%.1f'|format(s.score) }}</span>
+        <span class="order-last basis-full sm:order-none sm:basis-auto sm:flex-1">
+          {% if d.status == 'final' %}<span class="mr-2 rounded bg-green-600 px-1.5 py-0.5 text-xs font-semibold text-white">Final</span>{% elif loop.first %}<span class="mr-2 rounded bg-tcsc-navy px-1.5 py-0.5 text-xs font-semibold text-white">Best</span>{% endif %}
+          {% if s.no_board %}<span class="text-red-700">{{ s.no_board }} crew{{ '' if s.no_board == 1 else 's' }} with no board member</span>{% if s.broken %}, {% endif %}{% endif %}
+          {% if s.broken %}<span class="text-red-700">{{ s.broken|length }} rule{{ '' if s.broken|length == 1 else 's' }} not met</span>{% endif %}
+          {% if not s.no_board and not s.broken %}<span class="text-zinc-500">all rules met</span>{% endif %}
+        </span>
+        <form method="post" action="{{ url_for('admin_crews.delete_draft', draft_id=d.id) }}" class="ml-auto" data-confirm="Delete {{ d.label }}?">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="text-xs text-zinc-500 underline hover:text-red-700">Delete</button>
+        </form>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
   {% endif %}
 
-  {# 1. Settings #}
-  <section class="{{ card }}" id="settings">
-    <h2 class="text-lg font-semibold">1. How crews are built</h2>
-    <form method="post" action="{{ url_for('admin_crews.save_settings', season_id=season.id) }}" class="mt-3 space-y-4">
+  <details class="{{ card }}" id="settings">
+    <summary class="{{ summary_cls }}">Crew settings
+      <span class="block text-sm font-normal text-zinc-600 sm:inline">{{ settings.crews }} crews{% if settings.board_rule %}, every crew gets a board member{% endif %},
+        balancing {{ balancing|join(', ') if balancing else 'nothing' }}.</span></summary>
+    <form method="post" action="{{ url_for('admin_crews.save_settings', season_id=season.id) }}" class="mt-4 space-y-4">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="flex flex-wrap gap-4">
+      <div class="flex flex-wrap items-center gap-4">
         <label class="text-sm font-medium">Number of crews
-          <input class="{{ input }} mt-1 block w-28" type="number" name="crews" min="2" max="40" value="{{ settings.crews }}">
-          <span class="mt-1 block text-xs font-normal text-zinc-500">{{ rows|length }} members, about {{ (rows|length / settings.crews)|round|int if settings.crews else 0 }} per crew</span>
+          <input class="{{ input }} ml-1 w-20" type="number" name="crews" min="2" max="40" value="{{ settings.crews }}">
         </label>
-        <label class="flex items-start gap-2 self-center text-sm">
-          <input type="checkbox" name="board_rule" class="mt-0.5" {% if settings.board_rule %}checked{% endif %}>
-          <span>Every crew gets at least one board member</span>
+        <label class="flex items-center gap-2 text-sm">
+          <input type="checkbox" name="board_rule" {% if settings.board_rule %}checked{% endif %}>
+          Every crew gets at least one board member
         </label>
       </div>
       <div>
@@ -57,95 +86,21 @@
           <label class="flex items-center justify-between gap-2 rounded-lg border border-solid border-zinc-200 px-3 py-2 text-sm">
             <span>{{ trait_labels[t] }}</span>
             <select name="level_{{ t }}" class="{{ sel }}">
-              {% for level in levels %}
-              <option value="{{ level }}" {% if settings.levels[t] == level %}selected{% endif %}>{{ level|capitalize }}</option>
-              {% endfor %}
+              {% for level in levels %}<option value="{{ level }}" {% if settings.levels[t] == level %}selected{% endif %}>{{ level|capitalize }}</option>{% endfor %}
             </select>
           </label>
           {% endfor %}
         </div>
       </div>
-      <label class="block text-sm font-medium">Slack channel for the speedy group
-        <input class="{{ input }} mt-1 block w-44 font-mono" name="speedy_channel" value="{{ settings.speedy_channel }}">
-      </label>
       <button class="{{ btn }}">Save settings</button>
     </form>
-    <form method="post" action="{{ url_for('admin_crews.refresh_speedy', season_id=season.id) }}" class="mt-3 flex flex-wrap items-center gap-3 border-t border-solid border-zinc-100 pt-3">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <span class="text-sm text-zinc-600">Speedy group: {{ config.speedy_user_ids|length }} member{{ '' if config.speedy_user_ids|length == 1 else 's' }}{% if config.speedy_refreshed_at %}, read from Slack {{ config.speedy_refreshed_at.strftime('%b %-d') }}{% else %}, not read from Slack yet{% endif %}.</span>
-      <button class="{{ btn2 }}">Refresh from Slack</button>
-    </form>
-  </section>
+  </details>
 
-  {# 2. Drafts #}
-  <section class="{{ card }}" id="drafts">
-    <h2 class="text-lg font-semibold">2. Drafts</h2>
-    <p class="text-sm text-zinc-600">Each draft is a different random draw with the settings and rules above.
-      Lower imbalance is more even. The trait columns show the most any crew is off from an even share,
-      so 0.5 or less is as even as it gets.</p>
-    <div class="mt-3 flex flex-wrap items-end gap-3">
-      <form method="post" action="{{ url_for('admin_crews.create_drafts', season_id=season.id) }}" class="flex flex-wrap items-end gap-3">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label class="text-sm font-medium">How many
-          <input class="{{ input }} mt-1 block w-20" type="number" name="count" min="1" max="10" value="5">
-        </label>
-        <label class="text-sm font-medium">Starting seed
-          <input class="{{ input }} mt-1 block w-24" type="number" name="start_seed" value="{{ next_seed }}">
-        </label>
-        <button class="{{ btn }}">Make drafts</button>
-      </form>
-      <form method="post" enctype="multipart/form-data" action="{{ url_for('admin_crews.import_draft', season_id=season.id) }}" class="flex flex-wrap items-end gap-2">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <label class="text-sm font-medium">Or import crews from a CSV (Email, Crew)
-          <input class="mt-1 block text-sm" type="file" name="file" accept=".csv,text/csv">
-        </label>
-        <button class="{{ btn2 }}">Import</button>
-      </form>
-    </div>
-    {% if drafts %}
-    <div class="mt-4 overflow-x-auto">
-      <table class="min-w-full text-sm">
-        <thead class="text-left text-xs uppercase tracking-wide text-zinc-500">
-          <tr>
-            <th class="py-2 pr-3">Draft</th><th class="py-2 pr-3">Imbalance</th>
-            {% for t in traits %}<th class="py-2 pr-3">{{ trait_labels[t] }}</th>{% endfor %}
-            <th class="py-2 pr-3">No board</th><th class="py-2 pr-3">Rules broken</th><th class="py-2"></th>
-          </tr>
-        </thead>
-        <tbody class="divide-y divide-zinc-100">
-          {% for d, s in drafts %}
-          <tr class="{{ 'bg-green-50' if d.status == 'final' }}">
-            <td class="py-2 pr-3 whitespace-nowrap">
-              <a class="font-semibold text-tcsc-navy underline" href="{{ url_for('admin_crews.draft_page', draft_id=d.id) }}">{{ d.label }}</a>
-              {% if d.status == 'final' %}<span class="ml-1 rounded bg-green-600 px-1.5 py-0.5 text-xs font-semibold text-white">Final</span>{% endif %}
-            </td>
-            <td class="py-2 pr-3 tabular-nums">{{ '%.1f'|format(d.score or 0) }}</td>
-            {% for t in traits %}<td class="py-2 pr-3 tabular-nums">{{ s.spread.get(t, 'off') }}</td>{% endfor %}
-            <td class="py-2 pr-3 tabular-nums {{ 'text-red-700 font-semibold' if s.no_board }}">{{ s.no_board }}</td>
-            <td class="py-2 pr-3 tabular-nums {{ 'text-red-700 font-semibold' if s.broken }}">{{ s.broken|length }}</td>
-            <td class="py-2 whitespace-nowrap text-right">
-              <form method="post" action="{{ url_for('admin_crews.delete_draft', draft_id=d.id) }}" data-confirm="Delete {{ d.label }}?">
-                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-                <button class="text-xs text-zinc-500 underline hover:text-red-700">Delete</button>
-              </form>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p class="mt-3 text-sm text-zinc-500">No drafts yet. Make a few and compare.</p>
-    {% endif %}
-  </section>
-
-  {# 3. Rules #}
-  <section class="{{ card }}" id="rules">
-    <h2 class="text-lg font-semibold">3. Rules</h2>
-    <p class="text-sm text-zinc-600">Keep couples or family together or apart, or put someone in a set crew.
-      Rules apply to new drafts. A draft that cannot meet a rule says so in the comparison.</p>
+  <details class="{{ card }}" id="rules">
+    <summary class="{{ summary_cls }}">Rules ({{ config.rules|length }})
+      <span class="block text-sm font-normal text-zinc-600 sm:inline">Keep people together or apart, or put someone in a set crew.</span></summary>
     {% if config.rules %}
-    <ul class="mt-3 divide-y divide-zinc-100 text-sm">
+    <ul class="mt-3 list-none divide-y divide-zinc-100 pl-0 text-sm">
       {% for r in config.rules %}
       <li class="flex items-center justify-between gap-3 py-2">
         <span>{% if r.kind == 'pin' %}Put <strong>{{ names.get(r.a, 'someone no longer active') }}</strong> in crew {{ r.crew }}
@@ -180,39 +135,31 @@
       <label class="hidden text-sm font-medium" data-rule-crew>Crew
         <input class="{{ input }} mt-1 block w-20" type="number" name="crew" min="1" max="{{ settings.crews }}" value="1">
       </label>
-      <button class="{{ btn2 }}">Add rule</button>
+      <button class="{{ btn2 }} py-2">Add rule</button>
     </form>
-  </section>
+    <p class="mt-2 text-xs text-zinc-500">Rules apply to new drafts. A draft that cannot meet one says so.</p>
+  </details>
 
-  {# 4. Members #}
-  <section class="{{ card }}" id="members">
-    <h2 class="text-lg font-semibold">4. Members</h2>
-    <p class="text-sm text-zinc-600">Values come from registration: gender from pronouns, age from birthday, ski experience,
-      and seasons on the team. Board comes from the BOARD_MEMBER tag in
-      <a class="underline" href="{{ url_for('admin.roles') }}">Roles</a> ({{ board_count }} tagged).
+  <details class="{{ card }}" id="members">
+    <summary class="{{ summary_cls }}">Members
+      <span class="block text-sm font-normal text-zinc-600 sm:inline">{{ no_gender }} with no gender, {{ board_count }} board.</span></summary>
+    <p class="mt-3 text-sm text-zinc-600">Gender comes from pronouns, age from birthday, plus ski experience and seasons on the team.
+      Board comes from the BOARD_MEMBER tag in <a class="underline" href="{{ url_for('admin.roles') }}">Roles</a>, speedy from {{ speedy_channel }}.
       Change a value here to use it for crews only. Changed values are highlighted.</p>
-    <form method="post" enctype="multipart/form-data" action="{{ url_for('admin_crews.upload_overrides', season_id=season.id) }}" class="mt-3 flex flex-wrap items-end gap-2">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <label class="text-sm font-medium">Fill from a CSV (Email plus any of gender, thot, board)
-        <input class="mt-1 block text-sm" type="file" name="file" accept=".csv,text/csv">
-      </label>
-      <button class="{{ btn2 }}">Upload</button>
-    </form>
-    <form method="post" action="{{ url_for('admin_crews.save_members', season_id=season.id) }}" class="mt-4">
+    <form method="post" action="{{ url_for('admin_crews.save_members', season_id=season.id) }}" class="mt-3">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
           <thead class="text-left text-xs uppercase tracking-wide text-zinc-500">
             <tr><th class="py-2 pr-3">Name</th><th class="py-2 pr-3">Gender</th><th class="py-2 pr-3">Age</th>
-              <th class="py-2 pr-3">Ski</th><th class="py-2 pr-3">Seasons</th><th class="py-2 pr-3">Speedy</th><th class="py-2">Board</th></tr>
+              <th class="py-2 pr-3">Ski</th><th class="py-2 pr-3">Seasons on team</th><th class="py-2 pr-3">Speedy</th><th class="py-2">Board</th></tr>
           </thead>
           <tbody class="divide-y divide-zinc-100">
             {% for r in rows %}
             <tr>
               <td class="py-1.5 pr-3 whitespace-nowrap">{{ r.person.name }}</td>
               <td class="py-1.5 pr-3 {{ 'bg-amber-50' if 'gender' in r.overridden }}">
-                <select name="gender_{{ r.user_id }}" class="{{ sel }} py-1" aria-label="Gender for {{ r.person.name }}"
-                        title="From pronouns: {{ r.computed.gender }}">
+                <select name="gender_{{ r.user_id }}" class="{{ sel }} py-1" aria-label="Gender for {{ r.person.name }}">
                   {% for g in genders %}<option value="{{ g }}" {% if r.person.gender == g %}selected{% endif %}>{{ g }}</option>{% endfor %}
                 </select>
               </td>
@@ -230,17 +177,15 @@
           </tbody>
         </table>
       </div>
-      <div class="sticky bottom-0 mt-3 flex flex-wrap gap-3 bg-white py-2">
-        <button class="{{ btn }}">Save member values</button>
-      </div>
+      <button class="{{ btn }} mt-3">Save member values</button>
     </form>
     {% if config.overrides %}
-    <form method="post" action="{{ url_for('admin_crews.clear_overrides', season_id=season.id) }}" data-confirm="Clear every hand-set value?">
+    <form method="post" action="{{ url_for('admin_crews.clear_overrides', season_id=season.id) }}" class="mt-2" data-confirm="Clear every hand-set value?">
       <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
       <button class="text-xs text-zinc-500 underline hover:text-red-700">Clear {{ config.overrides|length }} hand-set member{{ '' if config.overrides|length == 1 else 's' }}</button>
     </form>
     {% endif %}
-  </section>
+  </details>
 </div>
 {% endif %}
 {% endblock %}

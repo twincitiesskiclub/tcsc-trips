@@ -24,14 +24,17 @@ from dataclasses import dataclass, field
 SKI_ORDER = ["1-3", "3-7", "7+"]
 TENURE_ORDER = ["new", "1-2", "3-5", "6+", "?"]
 GENDER_ORDER = ["F", "M", "X", "?"]
-TRAITS = ["thot", "tenure", "gender", "ski", "age", "board"]
-TRAIT_LABELS = {"thot": "Speedy group", "tenure": "Tenure", "gender": "Gender",
-                "ski": "Ski experience", "age": "Age", "board": "Board members"}
+# Traits an admin can weight, in sort order. Board has no weight of its own:
+# the board rule switches its score term on or off.
+TRAITS = ["thot", "tenure", "gender", "ski", "age"]
+TRAIT_LABELS = {"thot": "Speedy group", "tenure": "Seasons on team", "gender": "Gender",
+                "ski": "Ski experience", "age": "Age"}
 BASE_WEIGHTS = {"gender": 1.0, "ski": 1.0, "tenure": 1.0, "age": 1.0, "thot": 2.0, "board": 1.0}
 LEVELS = {"off": 0.0, "low": 0.5, "normal": 1.0, "high": 2.0}
 NO_BOARD_PENALTY = 100.0
 BROKEN_RULE_PENALTY = 1000.0
-# Score terms in a fixed order: float sums must not depend on dict order.
+# Score terms in a fixed order, separate from TRAITS on purpose: float sums
+# depend on order, and this order is what reproduces the 2026-10-05 draw.
 _SCORED = ["gender", "ski", "tenure", "age", "thot", "board"]
 
 
@@ -69,6 +72,8 @@ class Settings:
     rules: list = field(default_factory=list)
 
     def weight(self, trait):
+        if trait == "board":
+            return BASE_WEIGHTS["board"] if self.board_rule else 0.0
         return BASE_WEIGHTS[trait] * LEVELS.get(self.levels.get(trait, "normal"), 1.0)
 
 
@@ -147,7 +152,7 @@ class _State:
                     s += w * (counts[cat] - size * tot / self.n) ** 2
             ages = [p.age for p in g if p.age is not None]
             if ages and self.weights["age"]:
-                s += (self.weights["age"] / BASE_WEIGHTS["age"]) * ((statistics.mean(ages) - self.mean_age) / 2) ** 2
+                s += self.weights["age"] * ((statistics.mean(ages) - self.mean_age) / 2) ** 2
             if self.s.board_rule and not any(p.board for p in g):
                 s += NO_BOARD_PENALTY
         return s + BROKEN_RULE_PENALTY * len(broken_rules(self.crew, self.rules, self.names))
