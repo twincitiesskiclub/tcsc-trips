@@ -40,6 +40,25 @@ practices.
 - Automatic poll opening. A person presses the button.
 - Substitutions, capability profiles, coach scheduling (same as July).
 
+## Build principles
+
+This is a v2 of a system that never ran: prod has 0 polls, 0 participants and 0
+responses. Keep it simple.
+
+- **Replace, don't adapt.** No backward compatibility, no data backfill, no
+  feature flags. July code that the new flow doesn't need is deleted, along with
+  its tests.
+- **Reuse what works.** `generate_draft_block`, `poll_rows`, the reaction handler,
+  `reconcile_poll`, the nudge rules, `refresh_practice_posts`, the full edit modal
+  and the existing never-raise Slack pattern stay as they are unless this spec
+  names a change.
+- **No new states when an existing one fits.** Polls keep three statuses: `draft`,
+  `open`, `closed`. Concurrency uses a database row lock, not a status.
+- **Few new files.** `app/practices/blocks.py` (block job, `open_block_poll`,
+  block-post data), `app/slack/blocks/block_post.py` (Block Kit for the block post
+  and Assign modal), and handlers added where the existing Slack actions live.
+- **Each phase should remove about as much code as it adds.**
+
 ## Decisions
 
 | Question | Decision |
@@ -87,8 +106,6 @@ caught the next morning:
    with a null `block_post_ts`, retry the post.
 2. If `today >= S - 5`, the poll is still `draft` and `wednesday_reminder_sent_at`
    is null, post the Wednesday reply.
-3. Return any `opening` row older than 10 minutes to `draft` (the process died
-   between the claim and the Slack post).
 
 An admin action "Run block job now" on `/admin/practices/` triggers it by hand,
 following the existing weekly-summary trigger route. That makes deploy day safe:
@@ -101,8 +118,7 @@ a deploy after Mon Oct 19 09:00 still gets its block post the same day.
 - Added: `lead_block_job` (daily 09:00).
 - Changed: `run_lead_availability_nudge_job` (08:00) re-renders each open poll's
   block post after its reconcile. `run_close_expired_polls_job` (08:30) also closes
-  `draft`, `opening` and `manual` rows past `ends_on`, and re-renders the block post
-  on close.
+  `draft` rows past `ends_on`, and re-renders the block post on close.
 
 First regular cycle: block post Mon Oct 19 for Oct 26 to Nov 8. The current block
 (Oct 12 to 25) is handled by the cutover (see Rollout).
@@ -203,18 +219,19 @@ edit modal. Cancelled sessions are not listed.
 Open poll (block post button, Wednesday reply button, Sunday summary button, or
 the admin card) calls one service function, `open_block_poll(poll, opened_by)`:
 
-1. Atomically claim the poll: `UPDATE ... SET status='opening' WHERE id=? AND
-   status='draft'`, checking the row count before any Slack call. Zero rows means
-   someone else got there first: answer the clicker with an ephemeral "Chris
-   already opened this poll" and stop. Today's `open_poll()` checks status in
+1. Lock the poll row (`SELECT ... FOR UPDATE NOWAIT`) and hold the lock through
+   the Slack post and the commit. If the lock is taken, or the row is no longer
+   `draft`, answer the clicker with an ephemeral "Chris already opened this poll"
+   and stop. If the process dies mid-open, Postgres releases the lock with the
+   transaction, so nothing gets stuck. Today's `open_poll()` checks status in
    Python and has no such guard.
 2. Map letters to every non-cancelled practice in the block's date range, in date
    order, hidden or not. (Today's `build_poll()` maps drafts only, which under
    "visible when ready" would drop every session the team already filled in.)
 3. Validate emoji, post to #coord-practices-leads-assists (`COORD_CHANNEL_ID`),
    seed reactions, mark OPEN with `opened_by_slack_uid` (the clicker's Slack id,
-   rendered as `<@uid>`, so a clicker with no linked member still shows). On failure, return the claim to `draft` and
-   show the error to the clicker.
+   rendered as `<@uid>`, so a clicker with no linked member still shows). On failure, roll back (the poll stays `draft`)
+   and show the error to the clicker.
 4. Re-render the block post in its open state.
 
 No readiness gate. The 22-session cap stays (a two-week block is 6 today).
@@ -237,8 +254,6 @@ Opened by Chris F, Mon 10/19 · see the poll
 - Dot: green when assigned leads ≥ `leads_needed`; yellow when some are assigned
   or someone is available; red when nobody is assigned and nobody is available.
   Coaches are shown ("Coach: KJ") and not counted.
-- An assigned lead with no current reaction for that session shows "(no longer
-  available)" after their name and does not count toward green.
 - A session cancelled after opening stays on the post, struck through, with its
   letter, so the letters still line up with the leads poll.
 - The footer counts only people in the lead pool. Its reminder days are computed
@@ -255,13 +270,15 @@ Re-rendered by `refresh_block_post(poll)`:
 
 Not on individual reactions. Only the bot edits this message.
 
-### Closed and manual states
+### Closed state
 
-- **Closed:** rows and Assign buttons stay (late changes still happen), the
-  context line reads "Poll closed Mon 11/9", and the footer is dropped.
-- **Manual** (a block whose availability was collected outside the app, used once
-  for Oct 12 to 25): rows with Assign buttons, no Open poll button, no letters, no
-  footer.
+Rows and Assign buttons stay (late changes still happen), the context line reads
+"Poll closed Mon 11/9", and the footer is dropped.
+
+A `closed` poll with no `message_ts` is a block whose availability was collected
+outside the app (used once, for Oct 12 to 25). Its post renders the same way
+without letters or a poll link, and its context line reads "Availability
+collected outside the app". No extra status.
 
 ### Wednesday reply
 
@@ -287,7 +304,7 @@ Leads  [ Katrin S ×  ▾ ]
 
 - "Available" is everyone with a response row for this session, by name. "nobody
   yet" when the poll is open and empty; "poll not opened yet" before opening; no
-  line at all for a block with no poll (see Rollout).
+  line at all when the poll never posted (see Rollout).
 - One `multi_static_select` with two option groups: "Available" and "Everyone
   else" (the rest of `eligible_leads()`, alphabetical, plus anyone already
   assigned who is outside the pool). Prefilled with current leads. No maximum.
@@ -314,7 +331,8 @@ rules, auto-close. Changes:
 - **Letters only count up.** The poll stores `next_position`. Deleting a practice
   cascades its mapping away but leaves its pill and reactions on the message, so
   reusing its letter would hand a new session someone else's answers. A new
-  session always takes `next_position`.
+  session always takes `next_position`, which `open_block_poll` sets to the
+  number of sessions it mapped.
 - **Both save paths.** The availability-poll surface in `refresh.py` adds
   `create` to `AVAILABILITY_POLL_CHANGE_TYPES` and, before rendering, looks up
   OPEN polls by date range (today it finds polls only through the mapping table,
@@ -322,24 +340,23 @@ rules, auto-close. Changes:
   `next_position` when missing. The admin form and the Slack modal both reach it.
   It replaces `_uncovered_by_open_poll_warning()`, which only the admin path
   called. If no letter is left (22 cap), keep the warning.
-- **Moved out of range.** A session rescheduled outside its poll's dates drops
-  out of that poll's message and block post (mapping kept, so history stays) and
-  is picked up by whichever block covers its new date. `poll_rows()`, the
-  reaction handler and `reconcile_poll()` all skip mappings whose practice is
-  outside the poll's range, the same way they already treat cancelled sessions.
+- **Moved out of range.** Rare, and left alone. A session rescheduled into
+  another block keeps its letter and line in its original poll (the line shows
+  the new date, and reactions still mean "I can lead this practice"). Block posts
+  list practices by date range, so it moves to its new block's post. If the new
+  block's poll opens later, it gets a letter there too, and the picker reads the
+  newer poll.
 
 ## Poll statuses
 
-| Status | Meaning | Nudge job | Close job | Reactions | Block post | Assign "Available" line |
-|---|---|---|---|---|---|---|
-| `draft` | Block post up, poll not opened | skip | close past `ends_on` | ignored (no message) | before-opening state | "poll not opened yet" |
-| `opening` | Claim held during open | skip | close past `ends_on` | ignored | unchanged | "poll not opened yet" |
-| `open` | Poll posted | reconcile, nudge, re-render | close past `ends_on` | recorded | open state | names |
-| `closed` | Block over | skip | done | ignored | closed state | names |
-| `manual` | Availability collected outside the app | skip | close past `ends_on` | ignored | manual state | no line |
+| Status | Meaning | Nudge job | Close job | Block post | Assign "Available" line |
+|---|---|---|---|---|---|
+| `draft` | Block post up, poll not opened | skip | close past `ends_on` | before-opening state | "poll not opened yet" |
+| `open` | Poll posted | reconcile, nudge, re-render | close past `ends_on` | open state | names |
+| `closed` | Block over, or never posted | skip | done | closed state | names, or no line if never posted |
 
-`lead_candidates._poll_for_practice()` keeps reading `open` and `closed` only.
-The admin card labels gain `manual` ("Assign only") and `opening` ("Opening…").
+Reactions only ever match an `open` poll's message (unchanged).
+`lead_candidates._poll_for_practice()` keeps reading `open` and `closed`.
 
 ## Removed
 
@@ -368,18 +385,17 @@ The admin card labels gain `manual` ("Assign only") and `opening` ("Opening…")
 
 On `lead_availability_polls`:
 
-- `block_post_channel_id`, `block_post_ts` (nullable strings)
+- `block_post_ts` (nullable string; the channel is always `COLLAB_CHANNEL_ID`)
 - `opened_by_slack_uid` (nullable string)
 - `wednesday_reminder_sent_at` (nullable timestamp)
-- `next_position` (integer, default 0; backfilled from existing mappings)
-- status gains `opening` (transient claim) and `manual` (block with no poll)
+- `next_position` (integer, default 0; no backfill, the table is empty in prod)
 
 New AppConfig key `lead_availability.block_anchor` (ISO date, default
 `2026-10-26`).
 
-The migration also drops `readiness_digest` from the `practice_summary_posts`
-surface check constraint (after deleting those rows, which the cleanup script
-reads first; see Rollout), and bumps `HEAD_REVISION` in
+The `readiness_digest` value stays in the `practice_summary_posts` check
+constraint and its three rows stay put: nothing writes them any more, and the
+cleanup script reads them. The migration bumps `HEAD_REVISION` in
 `tests/practices/test_practice_migration_release.py`.
 
 ## Error handling
@@ -399,18 +415,18 @@ prefixes, rollback-first cleanup). New coverage:
 - `publish_if_ready` from each save path; one way; cancelled stays hidden;
   hand-created practices unaffected; late publish triggers the announcement
 - block job: idempotent on state, a missed Monday caught Tuesday, retry of a
-  failed block post, Wednesday reply after a missed Wednesday, stale `opening`
-  reset, anchor arithmetic across Nov 1 and Dec 31, existing drafts in range
-  still produce a block post
-- `open_block_poll`: concurrent claim, failure returns the claim, published and
-  hidden sessions both mapped, letters in date order
-- letters: append keeps positions; a deleted session's letter is never reused;
-  a session moved out of range stops rendering and stops collecting
+  failed block post, Wednesday reply after a missed Wednesday, anchor arithmetic
+  across Nov 1 and Dec 31, existing drafts in range still produce a block post
+- `open_block_poll`: a second open while locked or after opening is refused,
+  failure leaves the poll `draft`, published and hidden sessions both mapped,
+  letters in date order
+- letters: append keeps positions; a deleted session's letter is never reused
 - late publish: "passed" boundaries at 08:00 and 20:00, Thursday strength pair
   combined, standalone when its partner was already announced
-- status table: every row above, including close of `draft` and `manual`
-- block post render: dot rules, coaches shown not counted, withdrawn lead,
-  cancelled struck through, `leads_needed` 1 and 3, footer days from `opened_at`
+- status table: every row above, including close of `draft` and a never-posted
+  `closed` block's rendering
+- block post render: dot rules, coaches shown not counted, cancelled struck
+  through, `leads_needed` 1 and 3, footer days from `opened_at`
 - Assign: replaces only lead rows, outside-pool assignees preserved, option groups
 - Sunday summary: sweep, hidden copy, Open poll when DRAFT
 
@@ -430,8 +446,8 @@ Each phase is its own PR, merged and deployed in order.
 - **B. Block cycle.** Daily block job, poll statuses, `open_block_poll`, block
   post in all states, Wednesday reply, admin card and "Run block job now". Must be
   live before Mon Oct 19 09:00, or run by hand that day.
-- **C. Assign and letters.** Assign modal, `next_position` append, out-of-range
-  filtering, withdrawn-lead flag, the `manual` Oct 12-25 post. If C slips past
+- **C. Assign and letters.** Assign modal, `next_position` append, the Oct 12-25
+  assignment post. If C slips past
   Oct 12, skip cutover step 1 and Chris assigns Oct 12-25 in the admin picker,
   which still works.
 
@@ -447,16 +463,15 @@ row and a late-added letter, nudge DM, Sunday summary changes. Admin screens
 **At deploy (prod one-offs, `TCSC_MIGRATION_ONLY=1`, `SLACK_APP_TOKEN` unset):**
 
 1. **Oct 12 to 25 assignment post.** Chris already collected availability by hand
-   for this block. Create its poll row with status `manual` and post its block
-   post: session rows with Assign buttons, no Open poll button, no Available line,
-   no leads poll in #coord-practices-leads-assists.
+   for this block. Create its poll row as `closed` with no `message_ts` and post
+   its block post: session rows with Assign buttons, no Open poll button, no
+   Available line, no leads poll in #coord-practices-leads-assists.
 2. **Clean up #collab-coaches-practices.** Read the three `readiness_digest`
    summary-post records (Aug 1, Sep 1, Oct 1 anchors) for the parent messages,
    list each parent and its thread replies (`conversations.replies`) for Rob, and
    after his OK delete them with `chat.delete` (the bot can delete its own
    messages). Do not scan the channel: coach weekly summaries are bot posts there
-   too. Phase A's migration drops those records, so this step runs before it, or
-   the script saves the ids first.
+   too.
 3. Delete stale drafts 111-115 (Sep 1, 3, 3, 10, 10).
 4. **Heads-up to leads.** Before Oct 19, Chris (or Rob) posts one short note in
    #coord-practices-leads-assists: the poll now comes from the bot every other
