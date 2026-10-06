@@ -50,6 +50,7 @@ from .routes.main import main
 from .routes.payments import payments
 from .routes.registration import registration
 from .routes.season_api import bp as season_api_bp
+from .routes.event_api import bp as event_api_bp
 from .routes.slack_interactivity import slack_bp
 from .routes.socials import socials
 from .routes.trips import trips
@@ -100,6 +101,7 @@ def create_app(environment=None):
     app.register_blueprint(conditions_bp)
     app.register_blueprint(registration)
     app.register_blueprint(season_api_bp)
+    app.register_blueprint(event_api_bp)
     app.register_blueprint(slack_bp)
     app.register_blueprint(verify_api)
 

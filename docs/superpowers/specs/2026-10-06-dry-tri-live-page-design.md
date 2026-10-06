@@ -128,10 +128,14 @@ Body:
   `url_for(_external=True)` can produce `http://` behind Render. The site
   resolves the path against the API URL's origin.
 - No open/closed state, for the reason documented in `season_api.py`.
+  The stored `status` (`active` or `closed`) is included: it is data, and an
+  admin can close signups before `signup_end`.
 - `apply_marketing_cors`, `Cache-Control: public, max-age=300`.
 
 `/tri` and `/dryland-triathlon` in `routes/main.py` redirect to the selected
-event's page. With no event they redirect to `/`.
+event's page. With no event they redirect to `/`. A closed event's page
+returns 404, so for a closed event they redirect to
+https://twincitiesskiclub.org/dry-tri instead.
 
 ### Marketing page
 
@@ -146,7 +150,7 @@ New `site/src/lib/eventState.ts`: the single rule for the button.
 |---|---|---|
 | before `signup_start` | `upcoming` | "Registration opens Saturday, July 25" |
 | `signup_start` to `signup_end` | `open` | **Register** button, "Registration closes Thursday, October 22" |
-| after `signup_end`, before race day ends | `closed` | "Registration is closed. See you at the start." |
+| after `signup_end`, or `status` is `closed`, before race day ends | `closed` | "Registration is closed. See you at the start." |
 | after race day | `past` | No button and no closing line. |
 
 "Race day ends" is the end of `event_date`'s Central calendar day. Dates format
@@ -154,13 +158,18 @@ in America/Chicago.
 
 `dry-tri.astro` renders, top to bottom:
 
-1. Masthead. Facts strip: event date ("Sat, Oct 24"), "Carver Park Reserve",
-   "Roll · Ride · Run". With no event the date fact is omitted.
+1. Masthead. Static facts only: "Roll · Ride · Run", "Carver Park Reserve",
+   "First held October 2025". The browser refresh rewrites only the band, so a
+   race date outside it could disagree with the band after an admin edit.
 2. Photo triptych, unchanged.
-3. New band, seam label "2026 race" (the year comes from `event_date`): date and
-   time, location, the description with line breaks kept and `- ` lines as a
-   list, the entries as a ledger (name, description, price), the button area,
+3. New band, seam label "Race day": date and
+   time, location, the schedule part of the description (from the first `- `
+   list and the one-line heading above it; the whole description when there is
+   no list) with `- ` lines as a list, the entries as a ledger (name, description, price), the button area,
    and a "Full race details" link to `details_url` when present.
+   The description's opening paragraph is the tcsc.ski registration page's
+   only introduction, so it stays in the event. The marketing masthead already
+   covers it, so the band does not repeat it. Decided by Rob 2026-10-06.
 4. Course ledger, now three rows and no start column:
    Long course 18K roll · 17K ride · 11K run; Short course 9K roll · 9K ride ·
    6K run; Run only: 6K trail run. Footnote drops "The 2025 format."
