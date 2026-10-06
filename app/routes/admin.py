@@ -16,7 +16,7 @@ from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
-from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email, normalize_phone_e164
+from ..utils import central_naive_to_utc_naive, format_datetime_central, normalize_email, normalize_phone_e164
 from ..trips.models import TripSeries
 from ..trips.questions import (
     BUILTIN_QUESTIONS, BUILTIN_ANSWER_TYPES, DIETARY_OTHER,
@@ -25,7 +25,6 @@ from ..trips.questions import (
 )
 from .. import late_link
 from datetime import datetime, timedelta
-import pytz
 import csv
 import json
 from io import StringIO
@@ -80,8 +79,7 @@ def validate_season_form(form):
         def _parse_central_to_utc(value):
             if not value:
                 return None
-            naive = datetime.strptime(value, DATETIME_FORMAT)
-            return CENTRAL_TZ.localize(naive).astimezone(pytz.utc).replace(tzinfo=None)
+            return central_naive_to_utc_naive(datetime.strptime(value, DATETIME_FORMAT))
 
         returning_start = _parse_central_to_utc(form.get('returning_start'))
         returning_end = _parse_central_to_utc(form.get('returning_end'))

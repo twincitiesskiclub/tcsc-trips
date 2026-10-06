@@ -64,6 +64,17 @@ def utc_naive_to_central_naive(dt: datetime) -> datetime:
     return pytz.utc.localize(dt).astimezone(CENTRAL_TZ).replace(tzinfo=None)
 
 
+def central_naive_to_utc_naive(dt: datetime) -> datetime:
+    """Convert a naive Central datetime to naive UTC for storage.
+
+    Admin forms use datetime-local inputs, which admins fill in Central time.
+    The inverse of utc_naive_to_central_naive.
+    """
+    if dt is None:
+        return None
+    return CENTRAL_TZ.localize(dt).astimezone(pytz.utc).replace(tzinfo=None)
+
+
 def format_datetime_central(dt: datetime, fmt: str = '%b %d, %Y %I:%M %p %Z') -> str:
     """Format a datetime in Central timezone.
 

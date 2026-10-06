@@ -621,3 +621,14 @@ def test_discount_check_on_draft_is_404_for_anonymous_and_open_for_admin(
     )
     assert response.status_code == 200
     assert response.get_json()["valid"] is True
+
+
+def test_registration_page_shows_the_central_start_time(client, public_event):
+    event = public_event[0]
+    event.event_date = datetime(2026, 10, 24, 14, 0)
+    from app.models import db
+    db.session.commit()
+
+    html = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    assert "Saturday, October 24, 2026 at 9:00 AM CT" in html
