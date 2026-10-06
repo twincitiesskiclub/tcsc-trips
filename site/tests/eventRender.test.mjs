@@ -87,7 +87,7 @@ test('upcoming, closed and past copy', () => {
 
 test('shows date, time, location, entries and the details link', () => {
   const el = dom(renderEventBand(EVENT, at('2026-10-06T15:00:00Z'), API));
-  assert.ok(el.textContent.includes('Saturday, October 24 · 9:00 AM'));
+  assert.ok(el.textContent.includes('Saturday, October 24 · 9:00\u00a0AM'), 'time keeps AM on its line');
   assert.ok(el.textContent.includes('Carver Park Reserve, Parley Lake, Victoria'));
   assert.deepEqual([...el.querySelectorAll('[data-entry-price]')].map((p) => p.textContent), ['$55', '$105', '$30']);
   assert.equal(el.querySelector('a[data-event-details]').textContent, 'Full race details');
