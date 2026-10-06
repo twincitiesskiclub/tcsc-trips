@@ -36,6 +36,7 @@ from ..events.templates import (
     validate_question,
 )
 from ..models import db
+from ..utils import central_naive_to_utc_naive
 from .payments import refund_or_cancel_payment
 
 
@@ -91,6 +92,11 @@ def _parse_event_fields(form):
         raise ValueError(
             "Event date and signup dates must be valid date-times."
         ) from exc
+
+    # Admins type Central wall time; the database stores naive UTC.
+    event_date = central_naive_to_utc_naive(event_date)
+    signup_start = central_naive_to_utc_naive(signup_start)
+    signup_end = central_naive_to_utc_naive(signup_end)
 
     if signup_start >= signup_end:
         raise ValueError("Signup start must be before signup end.")
@@ -355,7 +361,7 @@ def _event_rows():
                 "id": event.id,
                 "name": event.name,
                 "slug": event.slug,
-                "event_date": event.event_date.isoformat(),
+                "event_date": event.event_date.isoformat() + "Z",
                 "audience": event.audience,
                 "status": event.status,
                 "confirmed_count": event.confirmed_count,
