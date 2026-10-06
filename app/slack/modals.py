@@ -181,6 +181,35 @@ def _build_activity_type_multi_select(
     return element
 
 
+def _build_location_select(locations, current_location_id, action_id="location_id"):
+    """Build a static_select of (id, name) locations, or None when there are none.
+
+    Slack static_select needs at least one option, so callers decide what to
+    show instead (full edit falls back to a text input, Assign omits the block).
+    """
+    options = [
+        {
+            "text": {"type": "plain_text", "text": _bounded_option_text(name)},
+            "value": str(loc_id),
+        }
+        for loc_id, name in (locations or [])
+    ]
+    if not options:
+        return None
+    element = {
+        "type": "static_select",
+        "action_id": action_id,
+        "placeholder": {"type": "plain_text", "text": "Select a location"},
+        "options": options,
+    }
+    initial = next(
+        (o for o in options if o["value"] == str(current_location_id)), None
+    )
+    if initial:
+        element["initial_option"] = initial
+    return element
+
+
 def build_practice_edit_modal(practice: PracticeInfo) -> dict:
     """Build modal for editing practice details.
 
@@ -491,39 +520,14 @@ def build_practice_edit_full_modal(
     # Practice types for context (read-only)
     practice_types = ", ".join([t.name for t in practice.practice_types]) if practice.practice_types else "General"
 
-    # Build location dropdown options
-    location_options = []
-    initial_location = None
-    if locations:
-        for loc_id, loc_name in locations:
-            option = {
-                "text": {
-                    "type": "plain_text",
-                    "text": _bounded_option_text(loc_name),
-                },
-                "value": str(loc_id)
-            }
-            location_options.append(option)
-            if practice.location and practice.location.id == loc_id:
-                initial_location = option
-
-    # Build location element
-    if location_options:
-        location_element = {
-            "type": "static_select",
-            "action_id": "location_id",
-            "placeholder": {"type": "plain_text", "text": "Select a location"},
-            "options": location_options
-        }
-        if initial_location:
-            location_element["initial_option"] = initial_location
-    else:
+    location_element = _build_location_select(
+        locations, practice.location.id if practice.location else None
+    ) or {
         # Fallback to text input if no locations provided
-        location_element = {
-            "type": "plain_text_input",
-            "action_id": "location_id",
-            "initial_value": location_name
-        }
+        "type": "plain_text_input",
+        "action_id": "location_id",
+        "initial_value": location_name
+    }
 
     # Build blocks dynamically
     blocks = [

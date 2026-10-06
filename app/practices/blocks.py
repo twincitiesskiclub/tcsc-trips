@@ -337,20 +337,78 @@ def assign_modal_data(practice_id: int) -> dict | None:
         "available": [(u.id, short_name(u)) for u in available_users],
         "others": [(u.id, short_name(u)) for u in others],
         "initial_ids": [u.id for u in current],
+        "location_id": practice.location_id,
+        "type_ids": [t.id for t in practice.practice_types],
+        "activity_ids": [a.id for a in practice.activities],
     }
 
 
-def save_assigned_leads(practice_id: int, user_ids: list[int]) -> None:
-    """Replace a session's lead rows (coaches untouched) and refresh its posts."""
+def validate_assignment(type_ids, activity_ids) -> tuple[str, str] | None:
+    """(block_id, message) when the chosen types/activities cannot be combined."""
+    from app.practices.plan_reaction_queries import load_selected_plan_reaction_sources
+    from app.practices.plan_reactions import (
+        PlanReactionValidationError,
+        resolve_plan_reaction_defaults,
+    )
+
+    try:
+        selected = load_selected_plan_reaction_sources(
+            db.session, activity_ids=activity_ids, type_ids=type_ids)
+        resolve_plan_reaction_defaults(selected.practice_types, selected.activities)
+    except PlanReactionValidationError as exc:
+        return ("activities" if exc.field == "activities" else "types"), str(exc)
+    return None
+
+
+def save_assignment(practice_id: int, *, lead_ids, location_id, type_ids,
+                    activity_ids) -> None:
+    """Save one Assign submission: leads (coaches untouched), location, type, activity.
+
+    A changed type or activity set resets plan reactions to the new defaults.
+    A None location means "not chosen" and keeps the current one.
+    """
     from app.practices.models import Practice, PracticeLead
+    from app.practices.plan_reaction_queries import load_selected_plan_reaction_sources
+    from app.practices.plan_reactions import resolve_plan_reaction_defaults
+    from app.practices.publishing import publish_if_ready
     from app.slack.practices import refresh_practice_posts
+    from app.slack.practices.announcements import build_announcement_change_notice
 
     practice = db.session.get(Practice, practice_id)
     if practice is None:
         return
+    previous_date = practice.date
+    previous_location_id = practice.location_id
+    previous_plan_reactions = [dict(item) for item in (practice.plan_reactions or [])]
+
     for lead in [l for l in practice.leads if l.role == "lead"]:
         practice.leads.remove(lead)
-    for user_id in dict.fromkeys(user_ids):
+    for user_id in dict.fromkeys(lead_ids):
         practice.leads.append(PracticeLead(user_id=user_id, role="lead"))
+    if location_id is not None:
+        practice.location_id = location_id
+
+    selected = load_selected_plan_reaction_sources(
+        db.session, activity_ids=activity_ids, type_ids=type_ids)
+    changed = (
+        {t.id for t in practice.practice_types} != {t.id for t in selected.practice_types}
+        or {a.id for a in practice.activities} != {a.id for a in selected.activities})
+    if changed:
+        practice.practice_types = list(selected.practice_types)
+        practice.activities = list(selected.activities)
+        practice.plan_reactions = resolve_plan_reaction_defaults(
+            selected.practice_types, selected.activities).snapshot
     db.session.commit()
-    refresh_practice_posts(practice, change_type="edit", notify=False)
+
+    try:
+        publish_if_ready(practice)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.exception("publish_if_ready failed for practice %s", practice_id)
+
+    refresh_practice_posts(
+        practice, change_type="edit", notify=False, previous_date=previous_date,
+        previous_plan_reactions=previous_plan_reactions,
+        announcement_notice=build_announcement_change_notice(
+            previous_date=previous_date, previous_location_id=previous_location_id,
+            practice=practice))
