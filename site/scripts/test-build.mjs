@@ -30,9 +30,30 @@ const body = JSON.stringify({
   by_type: { 'fall/winter': season },
 });
 
+// The Dry Tri fixture: signups open now, race three weeks out, so the
+// built page is always in the `open` state.
+const eventBody = JSON.stringify({
+  generated_at: iso(0),
+  event: {
+    slug: 'dry-tri-fixture',
+    name: 'Fixture Dry Tri',
+    location: 'Carver Park Reserve, Parley Lake, Victoria',
+    description: 'Fixture race.\r\n\r\n- 7:30 AM: Packet pickup opens',
+    event_date: iso(21),
+    signup_start: iso(-30),
+    signup_end: iso(19),
+    registration_path: '/events/dry-tri-fixture',
+    details_url: 'https://example.com/details',
+    entries: [
+      { name: 'Individual Triathlon', description: 'Complete all three legs yourself', price_cents: 5500 },
+      { name: 'Run-only 6K', description: 'Just the 6K trail run', price_cents: 3000 },
+    ],
+  },
+});
+
 const server = createServer((request, response) => {
   response.writeHead(200, { 'Content-Type': 'application/json' });
-  response.end(body);
+  response.end(request.url.startsWith('/api/events/') ? eventBody : body);
 });
 
 await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
@@ -50,6 +71,7 @@ const build = spawn('npx', ['astro', 'build', '--force'], {
     ...process.env,
     TCSC_EDGE_CONFIG: 'true',
     PUBLIC_SEASON_API_URL: `http://127.0.0.1:${port}/api/season`,
+    PUBLIC_EVENT_API_URL: `http://127.0.0.1:${port}/api/events/dry-tri`,
   },
 });
 

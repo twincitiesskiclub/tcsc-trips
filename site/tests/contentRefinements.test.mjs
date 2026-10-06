@@ -189,13 +189,15 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
 });
 
 test('publishes only confirmed Dry Tri registration details while retaining 2025 history', () => {
+  // Registration details come from tcsc.ski's event API now, never from
+  // hand-typed content, so the placeholder and register_url are both gone.
   assert.doesNotMatch(source.dryTri, /^register_url:/m);
-  assert.ok(source.dryTri.includes(DRY_TRI_2026));
+  assert.ok(!source.dryTri.includes(DRY_TRI_2026));
   assert.match(source.dryTri, new RegExp(`^results_url: ${DRY_TRI_RESULTS}$`, 'm'));
   assert.ok(source.dryTri.includes('The first Dry Tri was held on October 25, 2025.'));
 
   const dryTriText = toText(html.dryTri);
-  assert.ok(dryTriText.includes(DRY_TRI_2026));
+  assert.ok(!dryTriText.includes(DRY_TRI_2026));
   assert.ok(dryTriText.includes('The first Dry Tri was held on October 25, 2025.'));
   assert.ok(html.dryTri.includes(`href="${DRY_TRI_RESULTS}"`));
   assert.doesNotMatch(html.dryTri, /href="https:\/\/tcsc\.ski\/tri\/?"/i);

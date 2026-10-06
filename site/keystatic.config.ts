@@ -235,9 +235,8 @@ export default config({
           fields.object({
             name: fields.text({ label: 'Course name', validation: { isRequired: true } }),
             legs: fields.text({ label: 'Legs' }),
-            start: fields.text({ label: 'Start time' }),
           }),
-          { label: 'Courses (2025 format)', itemLabel: (p) => p.fields.name.value || 'Course' },
+          { label: 'Courses', itemLabel: (p) => p.fields.name.value || 'Course' },
         ),
         roll_photo: optionalContentImage('Roll photo', 'photos'),
         roll_photo_alt: fields.text({ label: 'Roll photo alt text' }),
@@ -245,7 +244,6 @@ export default config({
         ride_photo_alt: fields.text({ label: 'Ride photo alt text' }),
         run_photo: optionalContentImage('Run photo', 'photos'),
         run_photo_alt: fields.text({ label: 'Run photo alt text' }),
-        register_url: fields.url({ label: 'Registration URL' }),
         results_url: fields.url({ label: 'Latest results URL' }),
       },
     }),
