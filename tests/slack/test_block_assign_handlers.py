@@ -59,3 +59,20 @@ def test_valid_submit_acks_then_saves(monkeypatch, app):
     monkeypatch.setattr("app.slack.bolt_app.get_app_context", nullcontext)
     bolt_app._save_block_assign(_view(FULL), lambda **kw: order.append("ack"))
     assert order == ["ack", "save"]
+
+
+def test_validation_crash_acks_with_errors_and_does_not_save(monkeypatch, app):
+    saved, acks = [], []
+
+    def boom(t, a):
+        raise RuntimeError("db down")
+
+    monkeypatch.setattr("app.practices.blocks.validate_assignment", boom)
+    monkeypatch.setattr("app.practices.blocks.save_assignment",
+                        lambda pid, **kw: saved.append(kw))
+    monkeypatch.setattr("app.slack.bolt_app.get_app_context", nullcontext)
+    with app.app_context():
+        bolt_app._save_block_assign(_view(FULL), lambda **kw: acks.append(kw))
+    assert len(acks) == 1 and acks[0]["response_action"] == "errors"
+    assert "leads" in acks[0]["errors"]
+    assert saved == []

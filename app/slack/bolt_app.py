@@ -116,7 +116,16 @@ def _save_block_assign(view, ack=lambda **_: None) -> None:
     with get_app_context():
         from app.practices import blocks
 
-        error = blocks.validate_assignment(parsed["type_ids"], parsed["activity_ids"])
+        try:
+            error = blocks.validate_assignment(parsed["type_ids"], parsed["activity_ids"])
+        except Exception:
+            from app.models import db
+
+            db.session.rollback()
+            logger.exception("validate_assignment failed for practice %s", practice_id)
+            ack(response_action="errors",
+                errors={"leads": "Could not save right now. Please try again."})
+            return
         if error:
             ack(response_action="errors", errors={error[0]: error[1]})
             return
@@ -569,7 +578,8 @@ if _bot_token:
             from app.slack.blocks.block_post import build_assign_modal
 
             data = assign_modal_data(int(action["value"]))
-            ref_data = _load_modal_ref_data() if data is not None else ((), (), ())
+            locations, all_activities, all_types = (
+                _load_modal_ref_data() if data is not None else ((), (), ()))
         if data is None:
             channel = (body.get("channel") or {}).get("id")
             if channel:
@@ -577,7 +587,7 @@ if _bot_token:
                                           text=":warning: That practice no longer exists.")
             return
         client.views_open(trigger_id=body["trigger_id"], view=build_assign_modal(
-            data, locations=ref_data[0], all_types=ref_data[2], all_activities=ref_data[1]))
+            data, locations=locations, all_types=all_types, all_activities=all_activities))
 
     @bolt_app.view("block_assign_submit")
     def handle_block_assign_submit(ack, body, view, client, logger):

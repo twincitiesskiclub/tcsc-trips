@@ -357,6 +357,8 @@ def test_save_assignment_replaces_only_lead_rows_and_writes_details(
         assert len(refresh_calls) == 1
         assert refresh_calls[0]["change_type"] == "edit"
         assert refresh_calls[0]["notify"] is False
+        assert refresh_calls[0]["announcement_notice"] == (
+            "📍 Location updated, check Where below.")
         # location None keeps the existing one
         blocks.save_assignment(pid, lead_ids=[], location_id=None,
                                type_ids=[type_id], activity_ids=[act_id])
