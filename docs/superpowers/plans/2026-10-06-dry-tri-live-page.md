@@ -1285,7 +1285,7 @@ test('no event renders the fallback line linking tcsc.ski/tri', () => {
 test('no em or en dashes in any rendered copy', () => {
   for (const iso of ['2026-07-01T12:00:00Z', '2026-10-06T15:00:00Z', '2026-10-23T12:00:00Z', '2026-10-26T12:00:00Z']) {
     const html = renderEventBand(EVENT, at(iso), API) + renderEventBand(null, at(iso), API);
-    assert.ok(!/[–—]/.test(html), `dash in ${iso}`);
+    assert.ok(!/[\u2013\u2014]/.test(html), `dash in ${iso}`);
   }
 });
 ```
@@ -1810,7 +1810,7 @@ test('the old 2026 placeholder and 2025-only labels are gone', () => {
 });
 
 test('no em or en dashes in the page body', () => {
-  assert.ok(!/[–—]/.test(document.querySelector('main').textContent));
+  assert.ok(!/[\u2013\u2014]/.test(document.querySelector('main').textContent));
 });
 ```
 
