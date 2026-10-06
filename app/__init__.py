@@ -13,6 +13,7 @@ from .events.models import (
     EventRegistration,
 )
 from .trips import models as trips_models  # noqa: F401  (register tables with SQLAlchemy)
+from .interest import models as interest_models  # noqa: F401  (register tables with SQLAlchemy)
 from .security import csrf, init_security
 from .newsletter.models import (
     Newsletter,
@@ -22,9 +23,21 @@ from .newsletter.models import (
     NewsletterNewsItem,
     NewsletterPrompt,
 )
+from .analytics.models import (  # noqa: F401  (Alembic metadata registration)
+    PracticeAttendance,
+    PracticeSession,
+    SlackArchiveMessage,
+    SlackReactionEvent,
+    WeatherHour,
+    AnalyticsCorrection,
+)
+from .crews import models as crews_models  # noqa: F401  (Alembic metadata registration)
 from .routes.admin import admin
+from .routes.admin_analytics import admin_analytics_bp
+from .routes.admin_crews import admin_crews_bp
 from .routes.admin_availability import admin_availability_bp
 from .routes.admin_events import admin_events_bp
+from .routes.admin_interest import admin_interest_bp
 from .routes.admin_newsletter import admin_newsletter_bp
 from .routes.admin_practices import admin_practices_bp
 from .routes.admin_scheduled_tasks import admin_scheduled_tasks
@@ -32,10 +45,12 @@ from .routes.admin_skipper import admin_skipper_bp
 from .routes.auth import auth
 from .routes.conditions import bp as conditions_bp
 from .routes.events import events
+from .routes.interest import interest
 from .routes.main import main
 from .routes.payments import payments
 from .routes.registration import registration
 from .routes.season_api import bp as season_api_bp
+from .routes.event_api import bp as event_api_bp
 from .routes.slack_interactivity import slack_bp
 from .routes.socials import socials
 from .routes.trips import trips
@@ -70,10 +85,14 @@ def create_app(environment=None):
     app.register_blueprint(trips)
     app.register_blueprint(socials)
     app.register_blueprint(events)
+    app.register_blueprint(interest)
     app.register_blueprint(payments)
     app.register_blueprint(admin)
+    app.register_blueprint(admin_analytics_bp)
     app.register_blueprint(admin_availability_bp)
+    app.register_blueprint(admin_crews_bp)
     app.register_blueprint(admin_events_bp)
+    app.register_blueprint(admin_interest_bp)
     app.register_blueprint(admin_newsletter_bp)
     app.register_blueprint(admin_practices_bp)
     app.register_blueprint(admin_scheduled_tasks)
@@ -82,8 +101,12 @@ def create_app(environment=None):
     app.register_blueprint(conditions_bp)
     app.register_blueprint(registration)
     app.register_blueprint(season_api_bp)
+    app.register_blueprint(event_api_bp)
     app.register_blueprint(slack_bp)
     app.register_blueprint(verify_api)
+
+    from .analytics.cli import analytics_cli
+    app.cli.add_command(analytics_cli)
 
     # Slack Bolt verifies its own request signatures. Browser CSRF tokens are
     # neither available nor appropriate for Slack's server-to-server hooks.

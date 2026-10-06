@@ -1,10 +1,10 @@
 """Trip registration domain logic. Parallel to app/events/service.py.
 
-Key rule inherited from the spec: a registration row is only meaningful
-with a payment attached. The row is committed PENDING_PAYMENT before the
-Stripe intent exists (same deliberate non-atomicity as events, with the
-same two mitigations: capacity ignores stale pendings after 1h, and a 24h
-sweep cancels them).
+Unpaid attempts reuse the member's registration row and restart its capacity
+hold. Only PENDING and CONFIRMED registrations block another attempt. Rows
+are committed PENDING_PAYMENT before Stripe; the route reconciles any previous
+intent before creating a new manual-capture hold. Capacity ignores unpaid
+attempts after 1h, and a 24h sweep cancels abandoned rows.
 """
 from datetime import datetime, timedelta
 
@@ -17,10 +17,6 @@ PENDING_HOLD_WINDOW = timedelta(hours=1)
 STALE_PENDING_AGE = timedelta(hours=24)
 
 HITCH_SIZES = {"", "1.25", "2"}
-DIETARY_OPTIONS = [
-    "None", "Vegan", "Vegetarian", "Gluten-Free", "Dairy Free / Lactose Intolerant",
-    "Nut allergy", "Halal", "Kosher", "Pescatarian", "Other (specify below)",
-]
 
 
 class TripRegistrationError(Exception):
@@ -54,6 +50,8 @@ def validate_answers(questions, submitted):
         return {}, {"answers": "Answers must be provided as an object."}
     stored, errors = {}, {}
     for question in visible_questions(questions, submitted):
+        if "builtin" in question:
+            continue
         key = question["key"]
         label = question.get("label") or key
         answer = submitted.get(key)
@@ -120,43 +118,60 @@ def _parse_yes_no(value):
     return None
 
 
-def validate_profile(payload):
-    """Returns (clean_profile_dict, errors). All fields live in a fixed form
-    section (never custom questions) and map 1:1 to TripProfile columns."""
+def validate_profile(questions, payload):
+    """Validate only enabled built-ins, using their fixed profile mapping.
+
+    Omitted columns must stay omitted so upsert preserves earlier answers.
+    """
+    if payload is None:
+        payload = {}
     if not isinstance(payload, dict):
         return {}, {"profile": "Profile must be provided as an object."}
-    errors = {}
-    clean = {
-        "can_drive": _parse_yes_no(payload.get("can_drive")),
-        "has_tent": _parse_yes_no(payload.get("has_tent")),
-        "seat_capacity": _parse_optional_int(
-            payload.get("seat_capacity"), "profile.seat_capacity", errors),
-        "bike_capacity": _parse_optional_int(
-            payload.get("bike_capacity"), "profile.bike_capacity", errors),
-    }
-    if payload.get("can_drive") not in ("yes", "no"):
-        errors["profile.can_drive"] = "Tell us whether you can drive."
-    hitch = str(payload.get("hitch_size") or "")
-    if hitch not in HITCH_SIZES:
-        errors["profile.hitch_size"] = "Choose a valid hitch size."
-    clean["hitch_size"] = hitch
-    region = str(payload.get("region_code") or "").strip()
-    if not region:
-        errors["profile.region_code"] = "Your region code is required."
-    elif len(region) > 10:
-        errors["profile.region_code"] = "Region code is too long."
-    clean["region_code"] = region
-    dietary = payload.get("dietary_restrictions") or []
-    if not isinstance(dietary, list):
-        errors["profile.dietary_restrictions"] = "Dietary picks must be a list."
-        dietary = []
-    invalid = [d for d in dietary if d not in DIETARY_OPTIONS]
-    if invalid:
-        errors["profile.dietary_restrictions"] = "Choose valid dietary options."
-    clean["dietary_restrictions"] = [str(d) for d in dietary]
-    clean["dietary_other"] = str(payload.get("dietary_other") or "").strip()[:255]
-    if payload.get("has_tent") not in ("yes", "no", None, ""):
-        errors["profile.has_tent"] = "Answer yes or no for the tent question."
+    clean, errors = {}, {}
+    for question in questions or []:
+        builtin = question.get("builtin")
+        if not builtin or not question["enabled"]:
+            continue
+        required = question["required"]
+        if builtin in ("carpool", "tent"):
+            field = "can_drive" if builtin == "carpool" else "has_tent"
+            answer = payload.get(field)
+            if answer not in ("yes", "no") and (required or answer not in (None, "")):
+                errors[f"profile.{field}"] = f"Answer yes or no for {question['label']}"
+            clean[field] = _parse_yes_no(answer)
+        if builtin == "carpool":
+            # Driver details apply only to a yes answer, just like the reveal.
+            driving = clean["can_drive"] is True
+            followups = question["followups"]
+            for key, field in (("seats", "seat_capacity"), ("bikes", "bike_capacity")):
+                if followups[key]["enabled"]:
+                    clean[field] = _parse_optional_int(
+                        payload.get(field) if driving else None, f"profile.{field}", errors)
+            if followups["hitch"]["enabled"]:
+                hitch = str(payload.get("hitch_size") or "") if driving else ""
+                if hitch not in HITCH_SIZES:
+                    errors["profile.hitch_size"] = "Choose a valid hitch size."
+                clean["hitch_size"] = hitch
+        elif builtin == "region_code":
+            region = str(payload.get("region_code") or "").strip()
+            if required and not region:
+                errors["profile.region_code"] = "Your region code is required."
+            elif len(region) > 10:
+                errors["profile.region_code"] = "Region code is too long."
+            clean["region_code"] = region
+        elif builtin == "dietary":
+            dietary = payload.get("dietary_restrictions", [])
+            if dietary is None:
+                dietary = []
+            if not isinstance(dietary, list):
+                errors["profile.dietary_restrictions"] = "Dietary picks must be a list."
+                dietary = []
+            elif any(d not in question["options"] for d in dietary):
+                errors["profile.dietary_restrictions"] = "Choose valid dietary options."
+            elif required and not dietary:
+                errors["profile.dietary_restrictions"] = "Select at least one dietary option."
+            clean["dietary_restrictions"] = dietary
+            clean["dietary_other"] = str(payload.get("dietary_other") or "").strip()[:255]
     return clean, errors
 
 
@@ -170,10 +185,12 @@ def upsert_profile(user, clean_profile):
     return profile
 
 
-def _active_count(trip):
+def _active_count(trip, *, exclude_registration_id=None):
     recent_cutoff = datetime.utcnow() - PENDING_HOLD_WINDOW
     count = 0
     for registration in trip.registrations:
+        if registration.id == exclude_registration_id:
+            continue
         if registration.status in (TripRegistrationStatus.PENDING,
                                    TripRegistrationStatus.CONFIRMED):
             count += 1
@@ -183,12 +200,12 @@ def _active_count(trip):
     return count
 
 
-def capacity_available(trip):
+def capacity_available(trip, *, exclude_registration_id=None):
     capacity = (trip.max_participants_standard or 0) + (
         trip.max_participants_extra or 0)
     if capacity <= 0:
         return True
-    return _active_count(trip) < capacity
+    return _active_count(trip, exclude_registration_id=exclude_registration_id) < capacity
 
 
 def expire_stale_pending(trip):
@@ -206,6 +223,7 @@ def expire_stale_pending(trip):
 
 
 def create_registration(trip, payload):
+    """Return the unpaid registration and any intent the route must reconcile."""
     if not isinstance(payload, dict):
         raise TripRegistrationError(
             {"payload": "Registration data must be an object."})
@@ -225,9 +243,9 @@ def create_registration(trip, payload):
     existing = TripRegistration.query.filter(
         TripRegistration.trip_id == trip.id,
         TripRegistration.user_id == user.id,
-        TripRegistration.status != TripRegistrationStatus.CANCELLED,
     ).first()
-    if existing:
+    if existing and existing.status in (
+            TripRegistrationStatus.PENDING, TripRegistrationStatus.CONFIRMED):
         raise TripRegistrationError(
             {"email": "You're already signed up for this trip."})
 
@@ -239,7 +257,8 @@ def create_registration(trip, payload):
     else:
         errors["price_tier"] = "Choose a valid price option."
 
-    clean_profile, profile_errors = validate_profile(payload.get("profile"))
+    clean_profile, profile_errors = validate_profile(
+        trip.custom_questions, payload.get("profile"))
     errors.update(profile_errors)
     stored_answers, answer_errors = validate_answers(
         trip.custom_questions or [], payload.get("answers") or {})
@@ -247,17 +266,19 @@ def create_registration(trip, payload):
     if errors:
         raise TripRegistrationError(errors)
 
-    if not capacity_available(trip):
+    if not capacity_available(trip, exclude_registration_id=existing.id if existing else None):
         raise TripRegistrationError(
             {"trip": "This trip is full."})
 
     upsert_profile(user, clean_profile)
-    registration = TripRegistration(
-        trip_id=trip.id, user_id=user.id,
-        status=TripRegistrationStatus.PENDING_PAYMENT,
-        answers=stored_answers, price_tier=price_tier,
-        amount_cents=amount_cents,
-    )
+    registration = existing or TripRegistration(trip_id=trip.id, user_id=user.id)
+    previous_intent_id = registration.payment_intent_id
+    registration.status = TripRegistrationStatus.PENDING_PAYMENT
+    registration.answers = stored_answers
+    registration.price_tier = price_tier
+    registration.amount_cents = amount_cents
+    registration.created_at = now
+    registration.payment_intent_id = None
     db.session.add(registration)
     db.session.commit()
-    return registration
+    return registration, previous_intent_id

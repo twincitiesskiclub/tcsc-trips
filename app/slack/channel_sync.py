@@ -564,7 +564,7 @@ def sync_single_user(
             #
             # Compare only the managed portion of the user's current channels.
             # Slack may place SCG users in unmanaged public channels (e.g. the
-            # workspace default #welcome-to-tcsc), but those are not ours to
+            # workspace default #a-welcome-to-tcsc), but those are not ours to
             # remove, so they must not trigger a spurious repair.
             final_target = set(target_channel_ids)
             current_managed = current_channels & managed_channel_ids

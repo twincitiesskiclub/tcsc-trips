@@ -322,6 +322,7 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
         )
         from app.slack.blocks import build_coach_weekly_summary_blocks
         from app.slack.client import get_slack_client
+        from app.slack.practices.coach_review import _unopened_block_poll_id
         from app.slack.practices._config import (
             COACH_SUMMARY_FALLBACK_CHANNEL_ID,
             COLLAB_CHANNEL_ID,
@@ -358,6 +359,7 @@ def _refresh_coach_summary_for_week(value, *, exclude_practice_id=None):
             practice_infos,
             expected_days,
             week_start,
+            open_poll_id=_unopened_block_poll_id(week_start),
         )
 
         resolved_channel = summary_post_channel(record)
@@ -567,7 +569,11 @@ def _refresh_availability_poll(practice, change_type, **_context):
     out of the rebuilt message via poll_rows' status filter; a deleted one
     is excluded explicitly because the delete route refreshes before the
     row disappears.
+
+    It also appends the next letter for a practice created in, or moved
+    into, an open poll's date range (see append_session).
     """
+    practice_id = practice.id
     try:
         from app.practices.availability import poll_rows
         from app.practices.availability_models import (
@@ -581,21 +587,31 @@ def _refresh_availability_poll(practice, change_type, **_context):
         )
         from app.slack.client import get_slack_client
 
-        polls = (
+        from app.practices.availability import append_session
+        from app.practices.interfaces import PracticeStatus
+
+        mapped = (
             LeadAvailabilityPoll.query
-            .join(
-                LeadAvailabilityPollPractice,
-                LeadAvailabilityPollPractice.poll_id
-                == LeadAvailabilityPoll.id,
-            )
-            .filter(
-                LeadAvailabilityPoll.status == PollStatus.OPEN,
-                LeadAvailabilityPollPractice.practice_id == practice.id,
-            )
+            .join(LeadAvailabilityPollPractice,
+                  LeadAvailabilityPollPractice.poll_id == LeadAvailabilityPoll.id)
+            .filter(LeadAvailabilityPoll.status == PollStatus.OPEN,
+                    LeadAvailabilityPollPractice.practice_id == practice.id)
             .all()
         )
+        if not mapped and change_type in ("create", "edit") \
+                and practice.status != PracticeStatus.CANCELLED.value:
+            day = practice.date.date()
+            covering = LeadAvailabilityPoll.query.filter(
+                LeadAvailabilityPoll.status == PollStatus.OPEN,
+                LeadAvailabilityPoll.starts_on <= day,
+                LeadAvailabilityPoll.ends_on >= day,
+            ).all()
+            for poll in covering:
+                if append_session(poll, practice):
+                    mapped.append(poll)
+        polls = mapped
         if not polls:
-            # The normal case for any ordinary practice edit — nothing to
+            # The normal case for any ordinary practice edit; nothing to
             # do here. Deliberately NOT "absent": _log_refresh_results()
             # warns about "absent" as a genuinely missing linked post.
             return {"skipped": "no_poll"}
@@ -628,7 +644,7 @@ def _refresh_availability_poll(practice, change_type, **_context):
                     "Failed to refresh availability poll #%s for practice "
                     "#%s: %s",
                     poll.id,
-                    practice.id,
+                    practice_id,
                     exc,
                 )
                 errors.append(f"poll #{poll.id}: {exc}")
@@ -645,10 +661,29 @@ def _refresh_availability_poll(practice, change_type, **_context):
     except Exception as exc:
         logger.warning(
             "Failed to refresh availability polls for practice #%s: %s",
-            practice.id,
+            practice_id,
             exc,
         )
         return {"success": False, "error": str(exc)}
+
+
+def _refresh_block_post(practice, change_type, **_context):
+    """Re-render the team's block post for the block covering this practice."""
+    try:
+        from app.practices.blocks import poll_for_date, refresh_block_post
+
+        poll = poll_for_date(practice.date.date())
+        if poll is None or not poll.block_post_ts:
+            return {"skipped": "no_block_post"}
+        exclude = practice.id if change_type == "delete" else None
+        ok = refresh_block_post(poll, exclude_practice_id=exclude)
+        return {"success": True} if ok else {"success": False, "error": "refresh failed"}
+    except Exception as exc:
+        logger.warning("Block post refresh for practice #%s failed: %s", practice.id, exc)
+        return {"success": False, "error": str(exc)}
+
+
+BLOCK_POST_CHANGE_TYPES = ("edit", "cancel", "delete", "create")
 
 
 WEEKLY_CHANGE_TYPES = tuple(
@@ -657,7 +692,7 @@ WEEKLY_CHANGE_TYPES = tuple(
 
 # The poll lists date/location/type per session, so only changes that can
 # alter those lines (or remove a session) apply — not rsvp/workout churn.
-AVAILABILITY_POLL_CHANGE_TYPES = ("edit", "cancel", "delete")
+AVAILABILITY_POLL_CHANGE_TYPES = ("edit", "cancel", "delete", "create")
 
 
 PRACTICE_SURFACES = [
@@ -680,6 +715,12 @@ PRACTICE_SURFACES = [
         None,
         AVAILABILITY_POLL_CHANGE_TYPES,
         _refresh_availability_poll,
+    ),
+    PracticeSurface(
+        "block_post",
+        None,
+        BLOCK_POST_CHANGE_TYPES,
+        _refresh_block_post,
     ),
 ]
 

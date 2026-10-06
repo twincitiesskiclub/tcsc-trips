@@ -19,6 +19,11 @@ slack:
   # Whether to post workout details in announcement
   include_workout_in_announcement: true
 
+weekly_summary:
+  # Linked from the Sunday "Practices this week" post. Practices leads swap
+  # this each season. Leave it empty to drop the line.
+  training_plan_url: "https://docs.google.com/spreadsheets/d/1304u53zgA4LR39djRNA82xCNebcv5nFZ1DFQNyVb9tE/edit?gid=463036660#gid=463036660"
+
 rsvp:
   enabled: true
   # Close RSVPs this many hours before practice

@@ -183,3 +183,11 @@ def test_availability_timestamps_default_to_central_not_utc(db_session):
             )
     finally:
         _cleanup(poll_ids=[poll_id], practice_ids=[practice_id], user_ids=[user_id])
+
+
+def test_poll_has_block_post_columns(db_session):
+    from sqlalchemy import inspect
+
+    columns = {c["name"] for c in inspect(db.engine).get_columns("lead_availability_polls")}
+    assert {"block_post_ts", "opened_by_slack_uid",
+            "wednesday_reminder_sent_at", "next_position"} <= columns

@@ -4,6 +4,7 @@ from datetime import date, datetime, timedelta
 from itertools import groupby
 
 from app.practices.interfaces import PracticeStatus
+from app.slack.practices._config import get_training_plan_url
 from app.slack.blocks.fallback import (
     allocate_fallback_component_limits,
     plainify_fallback_fragment,
@@ -210,6 +211,18 @@ def build_weekly_summary_blocks(practices, *, week_start, weather_data=None):
         )
 
     if any(not _is_cancelled(practice) for practice in ordered):
+        plan_url = get_training_plan_url()
+        if plan_url:
+            blocks.append({
+                "type": "section",
+                "text": {
+                    "type": "mrkdwn",
+                    "text": (
+                        "📋 For more details on this week's practices, "
+                        f"check the <{plan_url}|Training Plan>."
+                    ),
+                },
+            })
         blocks.append({
             "type": "context",
             "elements": [{

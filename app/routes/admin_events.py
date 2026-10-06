@@ -36,6 +36,7 @@ from ..events.templates import (
     validate_question,
 )
 from ..models import db
+from ..utils import central_naive_to_utc_naive
 from .payments import refund_or_cancel_payment
 
 
@@ -54,6 +55,7 @@ _REGISTRATION_BASE_COLUMNS = [
 _REGISTRATION_TRAILING_COLUMNS = [
     ("amount_cents", "Amount"),
     ("discount_applied", "Discount applied"),
+    ("waiver_accepted_at", "Waiver accepted"),
     ("created_at", "Created at"),
 ]
 _CSV_FORMULA_PREFIXES = ("=", "+", "-", "@")
@@ -90,6 +92,11 @@ def _parse_event_fields(form):
         raise ValueError(
             "Event date and signup dates must be valid date-times."
         ) from exc
+
+    # Admins type Central wall time; the database stores naive UTC.
+    event_date = central_naive_to_utc_naive(event_date)
+    signup_start = central_naive_to_utc_naive(signup_start)
+    signup_end = central_naive_to_utc_naive(signup_end)
 
     if signup_start >= signup_end:
         raise ValueError("Signup start must be before signup end.")
@@ -354,7 +361,7 @@ def _event_rows():
                 "id": event.id,
                 "name": event.name,
                 "slug": event.slug,
-                "event_date": event.event_date.isoformat(),
+                "event_date": event.event_date.isoformat() + "Z",
                 "audience": event.audience,
                 "status": event.status,
                 "confirmed_count": event.confirmed_count,
@@ -443,6 +450,11 @@ def _registration_rows(event):
             "emergency_contact": emergency_contact,
             "amount_cents": registration.amount_cents,
             "discount_applied": registration.discount_applied,
+            "waiver_accepted_at": (
+                registration.waiver_accepted_at.isoformat()
+                if registration.waiver_accepted_at
+                else ""
+            ),
             "created_at": registration.created_at.isoformat(),
         }
         for position, participant in enumerate(

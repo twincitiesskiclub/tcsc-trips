@@ -16,14 +16,15 @@ from ..slack.admin_api import validate_admin_credentials
 from ..integrations.expertvoice import sync_expertvoice
 from ..scheduler import get_scheduler_status
 from ..errors import flash_error, flash_success
-from ..utils import CENTRAL_TZ, format_datetime_central, normalize_email, normalize_phone_e164
+from ..utils import central_naive_to_utc_naive, format_datetime_central, normalize_email, normalize_phone_e164
 from ..trips.models import TripSeries
 from ..trips.questions import (
+    BUILTIN_QUESTIONS, BUILTIN_ANSWER_TYPES, DIETARY_OTHER,
     apply_template, get_template, load_trip_templates, validate_questions,
+    default_builtin_questions, enabled_questions,
 )
 from .. import late_link
 from datetime import datetime, timedelta
-import pytz
 import csv
 import json
 from io import StringIO
@@ -78,8 +79,7 @@ def validate_season_form(form):
         def _parse_central_to_utc(value):
             if not value:
                 return None
-            naive = datetime.strptime(value, DATETIME_FORMAT)
-            return CENTRAL_TZ.localize(naive).astimezone(pytz.utc).replace(tzinfo=None)
+            return central_naive_to_utc_naive(datetime.strptime(value, DATETIME_FORMAT))
 
         returning_start = _parse_central_to_utc(form.get('returning_start'))
         returning_end = _parse_central_to_utc(form.get('returning_end'))
@@ -170,8 +170,13 @@ def _parse_trip_questions(raw_value):
 def _trip_editor_template_data(templates):
     from copy import deepcopy
     return {
-        key: {"custom_questions": deepcopy(template["custom_questions"])}
-        for key, template in templates.items()
+        "builtins": deepcopy(BUILTIN_QUESTIONS),
+        "builtinAnswerTypes": BUILTIN_ANSWER_TYPES,
+        "dietaryOther": DIETARY_OTHER,
+        "templates": {
+            key: {"custom_questions": deepcopy(template["custom_questions"])}
+            for key, template in templates.items()
+        },
     }
 
 
@@ -181,7 +186,7 @@ def _render_trip_form(trip=None, error=None, status_code=200):
     questions_json = (
         submitted_questions
         if submitted_questions is not None
-        else json.dumps(trip.custom_questions if trip else [])
+        else json.dumps(trip.custom_questions if trip else default_builtin_questions())
     )
     return (
         render_template(
@@ -305,6 +310,8 @@ def _trip_registration_columns(trip):
                                + _TRIP_REG_TRAILING_COLUMNS)
     }
     for question in trip.custom_questions or []:
+        if "builtin" in question:
+            continue
         key = question["key"]
         if key in seen:
             continue
@@ -456,6 +463,17 @@ def new_trip():
             return redirect(url_for('admin.new_trip'))
 
     return _render_trip_form()
+
+@admin.route('/admin/trips/questions-preview', methods=['POST'])
+@admin_required
+def questions_preview():
+    try:
+        questions = _parse_trip_questions(
+            request.form.get('custom_questions_json', ''))
+    except ValueError as exc:
+        return render_template('trips/questions_preview.html', error=str(exc)), 400
+    return render_template('trips/questions_preview.html',
+                           questions=enabled_questions(questions))
 
 @admin.route('/admin/trips/<int:trip_id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -778,7 +796,8 @@ def registration_review():
     # user who has actually been ACTIVE before — the "returning member who
     # registered as new" trap.
     new_regs = (UserSeason.query
-                .filter_by(season_id=season.id, registration_type='new')
+                .filter(UserSeason.season_id == season.id,
+                        func.lower(UserSeason.registration_type) == 'new')
                 .join(User).all())
     suspects = []
     for us in new_regs:

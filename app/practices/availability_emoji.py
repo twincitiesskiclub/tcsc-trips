@@ -52,8 +52,7 @@ def _practice_config() -> dict:
     of practices.yaml here: two caches meant that wiring reload_config on
     one side only would silently leave the other serving stale values.
     Imported lazily because app.slack.practices.__init__ imports modules
-    (availability_reactions) that import this module back -- same pattern
-    as _target_channel in app/practices/availability.py.
+    (availability_reactions) that import this module back.
     """
     from app.slack.practices._config import _load_practice_config
 

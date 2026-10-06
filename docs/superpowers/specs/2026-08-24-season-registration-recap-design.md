@@ -1,7 +1,7 @@
 # Daily season registration recap — design
 
 Date: 2026-08-24
-Status: approved in brainstorming (season-only scope, window-open + tail cadence)
+Status: approved; cadence revised 2026-09-08 to stop after registration closes
 
 ## Goal
 
@@ -21,11 +21,10 @@ interest, and any notable one-off details.
   interest from the Get Involved question, plus conditional "fun" lines.
   A `needs_review` count is included only when nonzero (those block the
   lottery; leadership should see them, but a daily zero is noise).
-- **Cadence: window-open plus tail.** Post every morning (~8:05am Central,
+- **Cadence: open registration windows only.** Post every morning (~8:05am Central,
   covering the prior Central day) while either the returning or new window is
-  open, and for 7 days after the last window closes so the final tally
-  settles. Silent the rest of the year. A zero-registration day during the
-  window still posts — the zero is the signal.
+  open. Stop after the last registration day, with no extra week of recaps.
+  A zero-registration day during an open window still posts.
 
 ## Data model facts this design relies on
 
@@ -78,7 +77,7 @@ covers (normally yesterday). Returns a dict:
   - household: two or more of `for_date`'s registrants share a `phone_e164`.
 
 `should_post(season, today)` — the cadence gate: True when either window is
-open at `today`, or the latest window end is within the past 7 days. Lives
+open on the Central date `today`. Closed windows do not trigger recaps. Lives
 here so the scheduler job stays a thin wrapper and the gate is unit-testable.
 
 ### 2. Slack layer — `app/slack/season_recap.py` (new)
@@ -125,8 +124,8 @@ an override channel for testing.
   in fixture teardown): yesterday split, season totals excluding dropped,
   window day math, trend, prior-season comparison at same day-offset,
   volunteer counts, each highlight's trigger and non-trigger, and
-  `should_post` inside/after/outside the window (including the 7-day tail
-  boundary).
+  `should_post` inside/after/outside the window. The cadence tests use
+  unpersisted seasons and cover the first day after closing and the following week.
 - `tests/slack/test_season_recap.py` — block builder renders every section
   shape and omits empty ones; `post_season_recap` returns
   `{"success": False}` rather than raising when the client blows up

@@ -1,6 +1,7 @@
 """Exact-copy contracts for the member-facing calendar-week summary."""
 
 from datetime import date, datetime, timedelta
+from unittest.mock import patch
 
 import pytest
 
@@ -15,6 +16,23 @@ from app.slack.blocks.summary import (
     build_weekly_summary_blocks,
     build_weekly_summary_fallback_text,
 )
+
+
+PLAN_URL = "https://docs.google.com/spreadsheets/d/TEST_plan/edit#gid=1"
+PLAN_TEXT = (
+    "📋 For more details on this week's practices, check the "
+    f"<{PLAN_URL}|Training Plan>."
+)
+
+
+@pytest.fixture(autouse=True)
+def training_plan_config():
+    """Pin practices.yaml so copy contracts don't track the real plan URL."""
+    with patch(
+        "app.slack.practices._config._load_practice_config",
+        return_value={"weekly_summary": {"training_plan_url": PLAN_URL}},
+    ) as load:
+        yield load
 
 
 def practice(
@@ -119,8 +137,9 @@ def test_one_semantic_section_per_date_has_exact_copy_and_chronological_rows():
         "*Thursday, July 16*\n"
         "6:05 PM · Strength · Balance Fitness\n"
         "7:20 PM · Strength · Balance Fitness",
+        PLAN_TEXT,
     ]
-    assert "|" not in "\n".join(section_texts(blocks))
+    assert "|" not in "\n".join(section_texts(blocks)[:-1])
 
 
 def test_cancelled_row_uses_stop_sign_and_suppresses_forecast():
@@ -179,6 +198,41 @@ def test_all_cancelled_week_omits_footer():
         [cancelled], week_start=date(2026, 7, 27)
     )
     assert not any(block.get("type") == "context" for block in blocks)
+    assert PLAN_TEXT not in section_texts(blocks)
+
+
+def test_training_plan_line_sits_between_the_days_and_the_footer():
+    blocks = build_weekly_summary_blocks(
+        [practice(1, datetime(2026, 7, 28, 18, 0))],
+        week_start=date(2026, 7, 27),
+    )
+    assert [block["type"] for block in blocks] == [
+        "header", "section", "section", "context",
+    ]
+    assert blocks[2] == {
+        "type": "section",
+        "text": {"type": "mrkdwn", "text": PLAN_TEXT},
+    }
+
+
+@pytest.mark.parametrize("configured", [
+    {},
+    {"weekly_summary": None},
+    {"weekly_summary": {"training_plan_url": None}},
+    {"weekly_summary": {"training_plan_url": "  "}},
+])
+def test_training_plan_line_is_dropped_when_no_url_is_configured(
+    training_plan_config, configured
+):
+    training_plan_config.return_value = configured
+    blocks = build_weekly_summary_blocks(
+        [practice(1, datetime(2026, 7, 28, 18, 0))],
+        week_start=date(2026, 7, 27),
+    )
+    assert [block["type"] for block in blocks] == [
+        "header", "section", "context",
+    ]
+    assert "Training Plan" not in str(blocks)
 
 
 def test_weekly_fallback_remains_plain_and_has_no_broadcast_token():
@@ -357,7 +411,8 @@ def test_oversized_first_and_middle_rows_preserve_later_block_essentials():
         week_start=date(2026, 7, 13),
         weather_data={2: {"temp_f": 80, "conditions": "C" * 5000}},
     )
-    [day_text] = section_texts(blocks)
+    day_text, plan_text = section_texts(blocks)
+    assert plan_text == PLAN_TEXT
 
     assert len(day_text) <= 3000
     assert "5:00 PM · 🚫 CANCELLED ·" in day_text
@@ -429,3 +484,19 @@ def test_high_count_weekly_fallback_preserves_every_practice_row():
             assert f"CANCELLED: REASON-{index:02d}" in fallback
         else:
             assert f"Forecast: {70 + index}°F, WEATHER-{index:02d}" in fallback
+
+
+
+def test_shipped_config_links_the_current_training_plan(training_plan_config):
+    """The real practices.yaml carries the plan the practices lead sent."""
+    from pathlib import Path
+
+    import yaml
+
+    from app.slack.practices._config import get_training_plan_url
+
+    shipped = Path(__file__).parents[2] / "config" / "practices.yaml"
+    training_plan_config.return_value = yaml.safe_load(shipped.read_text())
+    url = get_training_plan_url()
+    assert url.startswith("https://docs.google.com/spreadsheets/d/")
+    assert "|" not in url and ">" not in url

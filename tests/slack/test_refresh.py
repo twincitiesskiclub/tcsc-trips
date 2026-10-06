@@ -478,7 +478,7 @@ class TestSurfaceRegistry:
         names = {s.name for s in PRACTICE_SURFACES}
         assert names == {
             "announcement", "collab", "coach_summary", "weekly_summary",
-            "availability_poll",
+            "availability_poll", "block_post",
         }
 
     def test_surface_skips_when_ts_absent(self):
@@ -945,3 +945,22 @@ class TestTemporaryAnnouncementNotice:
             announcement_notice="📍 Location updated, check Where below.",
             previous_plan_reactions=previous,
         )
+
+
+def test_coach_summary_refresh_keeps_the_open_poll_button():
+    from types import SimpleNamespace
+
+    record = SimpleNamespace(message_ts="1.0", channel_id="C1", surface="coach_summary")
+    query = MagicMock()
+    query.filter.return_value.order_by.return_value.all.return_value = []
+    build = MagicMock(return_value=[])
+    with patch.object(refreshmod, "find_summary_post", return_value=record), \
+            patch("app.practices.service.coach_visible_practices", return_value=query), \
+            patch("app.slack.blocks.build_coach_weekly_summary_blocks", build), \
+            patch("app.slack.practices.coach_review._unopened_block_poll_id",
+                  return_value=7), \
+            patch("app.models.AppConfig.get", side_effect=lambda k, default=None: default), \
+            patch("app.slack.client.get_slack_client", return_value=MagicMock()):
+        result = refreshmod._refresh_coach_summary_for_week(datetime(2099, 1, 5))
+    assert result == {"success": True}
+    assert build.call_args.kwargs["open_poll_id"] == 7

@@ -16,6 +16,7 @@ Escape hatch: set ``TCSC_ALLOW_NONLOCAL_TEST_DB=1`` to bypass (e.g. a CI host
 that isn't literally ``localhost``).
 """
 import os
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -51,3 +52,33 @@ def _enforce_local_db():
         f"you truly intend otherwise."
     )
     yield
+
+
+@pytest.fixture(autouse=True)
+def _no_outbound_providers():
+    """Never let a test reach Twilio or Resend.
+
+    Every outbound provider call (verify start/check, SMS send, Resend email)
+    goes through ``requests.post`` in ``app/verify/providers.py``, and
+    ``.env`` carries live credentials. Five registration tests posted a form
+    without patching ``send_sms`` and each suite run sent five real texts to
+    555 numbers (180 undelivered messages on the Twilio bill by 9/3). Stub the
+    one choke point for the whole suite; a test that wants to assert on the
+    provider's own behavior patches ``app.verify.providers.requests.post``
+    itself, and that inner patch wins.
+
+    The stub answers like a happy Twilio: 200, ``{"status": "approved"}``, so
+    ``twilio_verify_check`` reads as a correct code and ``send_sms`` returns
+    True. Tests that need a failure patch the provider explicitly.
+
+    Uses ``mock.patch`` rather than the ``monkeypatch`` fixture on purpose:
+    depending on ``monkeypatch`` here would pull it earlier in every test's
+    fixture order, so it would tear down after DB fixtures. A test that
+    monkeypatches ``db.session.commit`` to raise then blows up in its own
+    DB teardown.
+    """
+    fake = MagicMock(name="providers.requests.post[stubbed]")
+    fake.return_value = MagicMock(
+        status_code=200, json=lambda: {"status": "approved"})
+    with patch("app.verify.providers.requests.post", fake):
+        yield fake

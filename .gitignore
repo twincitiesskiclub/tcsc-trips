@@ -22,6 +22,7 @@ env/
 
 # PHP files
 vendor
+!app/static/vendor/
 logs
 
 # Java files

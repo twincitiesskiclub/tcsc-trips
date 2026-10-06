@@ -16,9 +16,9 @@ from app.slack.practices._config import (
     PRACTICES_CORE_CHANNEL_ID,
     COLLAB_CHANNEL_ID,
     KJ_SLACK_ID,
-    ADMIN_SLACK_IDS,
     FALLBACK_COACH_IDS,
 )
+from app.slack.practices.leads import practices_director_slack_ids
 from app.slack.practices.announcements import (
     _delete_slack_message,
     _recover_ambiguous_link,
@@ -415,6 +415,34 @@ def log_practice_edit(practice: Practice, slack_user_id: str) -> dict:
         return {'success': False, 'error': error_msg}
 
 
+def _publish_ready_hidden(week_start, week_end) -> None:
+    """Catch anything a script or missed save path left hidden while complete."""
+    from app.practices import publishing
+    from app.practices.service import coach_visible_practices
+
+    for hidden in coach_visible_practices().filter(
+        Practice.is_draft.is_(True),
+        Practice.date >= week_start,
+        Practice.date < week_end,
+    ).all():
+        if getattr(hidden, "is_draft", False):
+            try:
+                publishing.publish_if_ready(hidden)
+            except Exception:  # noqa: BLE001 - never block the Sunday summary
+                db.session.rollback()
+                current_app.logger.exception(
+                    "publish_if_ready failed for practice %s", getattr(hidden, "id", None))
+
+
+def _unopened_block_poll_id(week_start):
+    """The poll id for this week's block if nobody has opened it yet."""
+    from app.practices.availability_models import PollStatus
+    from app.practices.blocks import poll_for_date
+
+    poll = poll_for_date(week_start.date())
+    return poll.id if poll is not None and poll.status == PollStatus.DRAFT else None
+
+
 def post_coach_weekly_summary(
     week_start: datetime,
     channel_override: Optional[str] = None
@@ -453,6 +481,7 @@ def post_coach_weekly_summary(
     # hiding them made every drafted slot render as an empty "Add Practice"
     # placeholder, inviting a second practice on top of the draft.
     week_end = week_start + timedelta(days=7)
+    _publish_ready_hidden(week_start, week_end)
     practices = coach_visible_practices().filter(
         Practice.date >= week_start,
         Practice.date < week_end
@@ -462,7 +491,9 @@ def post_coach_weekly_summary(
     practice_infos = [convert_practice_to_info(p) for p in practices]
 
     # Build blocks
-    blocks = build_coach_weekly_summary_blocks(practice_infos, expected_days, week_start)
+    blocks = build_coach_weekly_summary_blocks(
+        practice_infos, expected_days, week_start,
+        open_poll_id=_unopened_block_poll_id(week_start))
 
     # Determine channel - use override if provided
     if channel_override:
@@ -688,7 +719,7 @@ def escalate_practice_review(practice: Practice) -> dict:
 
     # Build mentions
     mentions = [f"<@{uid}>" for uid in coach_ids]
-    mentions.extend([f"<@{uid}>" for uid in ADMIN_SLACK_IDS])
+    mentions.extend([f"<@{uid}>" for uid in practices_director_slack_ids()])
     mention_text = " ".join(mentions)
 
     log_text = f":warning: {mention_text} This practice hasn't been reviewed yet. Please approve or edit."

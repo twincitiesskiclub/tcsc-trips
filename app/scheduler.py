@@ -21,9 +21,8 @@ Scheduled Jobs:
 - 8:00 AM Sunday: Coach weekly review summary (collab-coaches-practices)
 - 6:00 PM Sunday: Newsletter finalize → marks ready for review
 - 8:30 PM Sunday: Weekly practice summary (announcements-practices)
+- 9:00 AM: Lead block job → create, post and remind for two-week lead blocks
 - Hourly: Expire pending cancellation proposals (fail-open)
-- 8:00 AM on the 1st: Draft practices through the end of next month, post readiness digest
-- 9:00 AM daily: Nudge coaches/directors while drafted practices lack details
 - 8:05 AM: Season registration recap → #leadership-registration (window-gated)
 """
 import os
@@ -37,14 +36,6 @@ from flask import Flask
 
 from app.models import db
 from app.utils import now_central_naive, today_central
-from app.practices.drafting import (
-    drafted_practices_in_window,
-    end_of_next_month,
-    generate_draft_block,
-    is_ready,
-    undrafted_next_month,
-)
-from app.slack.practices.drafts import post_readiness_digest
 
 
 # Lock file for single-worker guard
@@ -393,129 +384,6 @@ def run_expire_proposals_job(app: Flask):
             app.logger.error(f"Expire proposals failed: {e}", exc_info=True)
 
 
-def _block_anchor(today):
-    """The draft block's identity date: the 1st of the month it was drafted in.
-
-    Blocks are drafted on the 1st (the bootstrap job's cadence). The bootstrap
-    job records the readiness digest under this anchor, and the daily nudge
-    computes it again to find the post to thread onto — so both jobs MUST use
-    this one helper. If the two computations diverge, every nudge silently
-    posts top-level instead of threading.
-    """
-    return today.replace(day=1)
-
-
-def run_practice_block_bootstrap_job(app: Flask):
-    """Monthly: draft through the end of next month, report what needs details.
-
-    The horizon is end_of_next_month(), not a week count: the job fires on
-    the 1st, and consecutive runs deliberately overlap by a whole month so no
-    month's tail is ever left undrafted. generate_draft_block() is
-    idempotent, so a re-run (redeploy, manual trigger, misfire grace, the
-    monthly overlap) creates nothing twice — and when nothing new was
-    created, no digest is posted, since posting anyway would spam the channel
-    with a duplicate every time the job re-fires.
-
-    Args:
-        app: Flask application instance for context.
-    """
-    with app.app_context():
-        from app.utils import today_central
-
-        app.logger.info("Starting practice block bootstrap job")
-
-        start = today_central()
-        horizon = end_of_next_month(start)
-        created = generate_draft_block(start, horizon)
-        if not created:
-            app.logger.info("Draft bootstrap: nothing to create, block already drafted")
-            return
-
-        # Summarise the WHOLE drafted window, not just this run's new rows.
-        # After the first run, `created` only ever contains the following
-        # month's rows — the current month was drafted by the previous run
-        # and idempotency skips it — so a digest computed over `created`
-        # would state a range that includes the current month while omitting
-        # its drafts from both the count and the incomplete list. A director
-        # reading that digest would conclude the month is fully specified
-        # while drafts may still be missing location or type. The window
-        # query is what the digest claims to describe, so it is what gets
-        # summarised, and the labels come from the drafts it actually covers.
-        drafts = drafted_practices_in_window(start, horizon) or created
-        first = min(p.date for p in drafts)
-        end = max(p.date for p in drafts)
-        result = post_readiness_digest(
-            drafts,
-            first.strftime("%b %-d"),
-            end.strftime("%b %-d"),
-            block_start=_block_anchor(start),
-        )
-        if result.get("success"):
-            app.logger.info(
-                f"Draft bootstrap: drafted {len(created)} new practices, "
-                f"digest posted over {len(drafts)} in window"
-            )
-        else:
-            app.logger.warning(
-                f"Drafted {len(created)} practices but the digest failed: {result.get('error')}"
-            )
-
-
-def run_practice_readiness_nudge_job(app: Flask):
-    """Daily: chase incomplete drafts in the original digest's thread.
-
-    A daily "all good" post trains people to ignore the channel, so this
-    stays silent whenever every drafted practice already has its details.
-    When drafts ARE incomplete, the digest goes out as a reply in the
-    thread of the block's original digest post (recorded by the bootstrap
-    job) rather than a fresh channel message — daily top-level re-posts
-    train people to ignore the channel just as fast. post_readiness_digest
-    falls back to a recorded top-level post when no digest is on record.
-
-    Args:
-        app: Flask application instance for context.
-    """
-    with app.app_context():
-        from app.utils import today_central
-
-        start = today_central()
-        # Same horizon as the bootstrap job: the nudge must chase every draft
-        # the bootstrap created, and a shorter window would silently stop
-        # chasing the tail of the drafted block.
-        drafts = drafted_practices_in_window(start, end_of_next_month(start))
-
-        # "No drafts" is ambiguous: it means everything is published and fine,
-        # OR that the monthly bootstrap never ran and a whole month has no
-        # practices at all. The second is silent by construction -- this job
-        # only chases drafts that exist -- so two missed runs could leave 31
-        # undrafted days with nothing anywhere saying so. Detect and alert
-        # rather than drafting here: drafting daily would resurrect any draft
-        # a coach deliberately deleted, the next morning.
-        missing = undrafted_next_month(start)
-        if missing:
-            app.logger.error(
-                "Practice drafting has a hole: all %d configured slots in "
-                "%s have no practice. The monthly bootstrap job (1st, 08:00 "
-                "Central) has probably not run -- check its logs, then "
-                "trigger it manually. Nothing else will notice this.",
-                len(missing), missing[0].strftime("%B %Y"),
-            )
-
-        if not drafts or all(is_ready(p) for p in drafts):
-            app.logger.info("Readiness nudge: nothing outstanding, staying quiet")
-            return
-
-        end = max(p.date for p in drafts)
-        result = post_readiness_digest(
-            drafts,
-            start.strftime("%b %-d"),
-            end.strftime("%b %-d"),
-            block_start=_block_anchor(start),
-        )
-        if not result.get("success"):
-            app.logger.warning(f"Readiness nudge digest failed: {result.get('error')}")
-
-
 def _is_strength_practice(practice) -> bool:
     """Check if a practice is a lift session.
 
@@ -611,7 +479,7 @@ def _get_upcoming_strength_practices(now, app) -> list:
     return strength_practices
 
 
-def run_practice_announcements_job(app: Flask, channel_override: str = None):
+def run_practice_announcements_job(app: Flask, channel_override: str = None, now_override=None):
     """Execute the daily practice announcement job within app context.
 
     Posts practice announcements with smart timing:
@@ -644,7 +512,9 @@ def run_practice_announcements_job(app: Flask, channel_override: str = None):
         # Convert to naive datetime for database comparisons (Practice.date is naive)
         central_tz = ZoneInfo('America/Chicago')
         now_central = datetime.now(central_tz)
-        now = now_central.replace(tzinfo=None)  # Naive datetime in Central time
+        # now_override lets publish_if_ready() replay a window that already
+        # ran, for a practice that became visible after its run.
+        now = now_override or now_central.replace(tzinfo=None)  # Naive Central
         app.logger.info(f"Current time (Central): {now_central.strftime('%Y-%m-%d %H:%M %Z')}")
         practices_to_announce = []
 
@@ -962,6 +832,7 @@ def run_lead_availability_nudge_job(app: Flask):
     """
     with app.app_context():
         from app.practices.availability import send_nudges, sync_participants
+        from app.practices.blocks import refresh_block_post
         from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
         from app.slack.practices.availability_reactions import reconcile_poll
 
@@ -991,6 +862,7 @@ def run_lead_availability_nudge_job(app: Flask):
                     f"Poll {poll.id} nudges: sent={result.get('sent', 0)}, "
                     f"skipped={result.get('skipped', 0)}"
                 )
+                refresh_block_post(poll)
             except Exception as e:
                 # Rollback FIRST. Every poll in this run shares one session
                 # (one app_context), so an exception that left a failed flush
@@ -1004,6 +876,19 @@ def run_lead_availability_nudge_job(app: Flask):
                 app.logger.error(
                     f"Lead availability nudge failed for poll {poll.id}: {e}", exc_info=True
                 )
+
+
+def run_lead_block_job(app: Flask):
+    """Daily 09:00: create, post and remind for two-week lead blocks."""
+    with app.app_context():
+        from app.practices.blocks import run_block_job
+
+        try:
+            results = run_block_job()
+            app.logger.info(f"Lead block job: {results}")
+        except Exception as e:
+            db.session.rollback()
+            app.logger.error(f"Lead block job failed: {e}", exc_info=True)
 
 
 def run_close_expired_polls_job(app: Flask):
@@ -1021,16 +906,18 @@ def run_close_expired_polls_job(app: Flask):
     """
     with app.app_context():
         from app.practices.availability import close_poll
+        from app.practices.blocks import refresh_block_post
         from app.practices.availability_models import LeadAvailabilityPoll, PollStatus
 
         today = today_central()
         expired = LeadAvailabilityPoll.query.filter(
-            LeadAvailabilityPoll.status == PollStatus.OPEN,
+            LeadAvailabilityPoll.status.in_([PollStatus.OPEN, PollStatus.DRAFT]),
             LeadAvailabilityPoll.ends_on < today,
         ).all()
         for poll in expired:
             try:
                 close_poll(poll)
+                refresh_block_post(poll)
             except Exception as e:
                 # See run_lead_availability_nudge_job: shared session, so a
                 # poisoned one would leave every later expired poll OPEN and
@@ -1045,7 +932,7 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
     """Daily registration recap to #leadership-registration.
 
     Self-gating via should_post(): posts while a registration window is
-    open plus a 7-day tail after the last one closes, silent otherwise.
+    open, silent otherwise.
     A zero-registration day during the window still posts -- the zero is
     the signal. Covers the prior Central day.
 
@@ -1053,7 +940,7 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
     Activate Season action runs at season start, while registration (and
     this recap) happens weeks earlier. select_season prefers the season
     taking registrations now, else the soonest ahead (which should_post
-    silences until it opens), else the most recently ended (the tail).
+    silences until it opens), else the most recently ended (also silenced).
 
     Args:
         app: Flask application instance for context.
@@ -1076,7 +963,7 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
             today = today_central()
             if not should_post(season, today):
                 app.logger.info(
-                    "Season recap: no open or recently closed window, staying quiet")
+                    "Season recap: no open registration window, staying quiet")
                 return
 
             stats = build_recap(season, today - timedelta(days=1))
@@ -1090,6 +977,14 @@ def run_season_recap_job(app: Flask, channel_override: str = None):
                     f"Season recap post failed: {result.get('error')}")
         except Exception as e:
             app.logger.error(f"Season recap job failed: {e}", exc_info=True)
+
+
+def run_analytics_nightly_job(app: Flask):
+    """Refresh practice analytics with the bot client inside an app context."""
+    from app.analytics.jobs import run_nightly
+
+    with app.app_context():
+        return run_nightly()
 
 
 def init_scheduler(app: Flask) -> bool:
@@ -1371,41 +1266,6 @@ def init_scheduler(app: Flask) -> bool:
     )
 
     # ========================================================================
-    # Practice Availability Drafting
-    # ========================================================================
-
-    # Monthly: draft practices through the end of next month on the 1st at 8:00 AM
-    scheduler.add_job(
-        func=run_practice_block_bootstrap_job,
-        args=[app],
-        trigger=CronTrigger(
-            day=1,
-            hour=8,
-            minute=0,
-            timezone='America/Chicago'
-        ),
-        id='practice_block_bootstrap',
-        name='Practice Block Bootstrap',
-        replace_existing=True,
-        misfire_grace_time=7200  # 2 hour grace; generation is idempotent
-    )
-
-    # Daily: nudge coaches/directors while drafted practices lack details
-    scheduler.add_job(
-        func=run_practice_readiness_nudge_job,
-        args=[app],
-        trigger=CronTrigger(
-            hour=9,
-            minute=0,
-            timezone='America/Chicago'
-        ),
-        id='practice_block_readiness_nudge',
-        name='Practice Readiness Nudge',
-        replace_existing=True,
-        misfire_grace_time=3600
-    )
-
-    # ========================================================================
     # Lead Availability Nudge
     # ========================================================================
 
@@ -1422,6 +1282,17 @@ def init_scheduler(app: Flask) -> bool:
         name='Lead Availability Nudge',
         replace_existing=True,
         misfire_grace_time=3600
+    )
+
+    # Daily: two-week lead blocks (block post, Wednesday reminder)
+    scheduler.add_job(
+        func=run_lead_block_job,
+        args=[app],
+        trigger=CronTrigger(hour=9, minute=0, timezone='America/Chicago'),
+        id='lead_block_job',
+        name='Lead Block Job',
+        replace_existing=True,
+        misfire_grace_time=3600,
     )
 
     # Daily: close availability polls whose block has ended
@@ -1444,7 +1315,7 @@ def init_scheduler(app: Flask) -> bool:
     # ========================================================================
 
     # Daily: registration recap to #leadership-registration while a window
-    # is open (plus a 7-day tail); the job self-gates via should_post().
+    # is open; the job self-gates via should_post().
     scheduler.add_job(
         func=run_season_recap_job,
         args=[app],
@@ -1455,6 +1326,17 @@ def init_scheduler(app: Flask) -> bool:
         ),
         id='season_registration_recap',
         name='Season Registration Recap',
+        replace_existing=True,
+        misfire_grace_time=3600
+    )
+
+    # Daily: archive sync, derived session rebuild, and historical weather.
+    scheduler.add_job(
+        func=run_analytics_nightly_job,
+        args=[app],
+        trigger=CronTrigger(hour=3, minute=30, timezone='America/Chicago'),
+        id='analytics_nightly',
+        name='Practice Analytics Nightly',
         replace_existing=True,
         misfire_grace_time=3600
     )
@@ -1544,6 +1426,7 @@ def trigger_skipper_job_now(app: Flask, job_type: str, channel_override: str = N
         Result dict from the job, or error dict if invalid job_type.
     """
     job_map = {
+        'analytics_nightly': run_analytics_nightly_job,
         'morning_check': run_skipper_morning_check_job,
         '48h_check': run_skipper_48h_check_job,
         '24h_check': run_skipper_24h_check_job,

@@ -1,0 +1,64 @@
+{% macro required_hint() -%}
+<span class="form-field__hint trip-visually-hidden">Required</span>
+{%- endmacro %}
+
+{% macro optional_hint() -%}
+<span class="form-field__hint">(optional)</span>
+{%- endmacro %}
+
+{% macro question_hint(question) -%}
+{% if question.required %}{{ required_hint() }}{% else %}{{ optional_hint() }}{% endif %}
+{%- endmacro %}
+
+{% macro region_map() -%}
+<a href="https://bit.ly/TCSCmap" target="_blank" rel="noopener">TCSC region map<span class="trip-visually-hidden"> (opens in a new tab)</span></a>
+{%- endmacro %}
+
+{% macro question_help(question, id) -%}
+{% if question.help_text %}<p id="{{ id }}" class="form-field__hint trip-help">{% if question.builtin == 'region_code' %}{{ question.help_text|e|replace('TCSC region map', region_map()) }}{% else %}{{ question.help_text }}{% endif %}</p>{% endif %}
+{%- endmacro %}
+
+{% macro section_heading(number, title, subtitle) -%}
+<h2 class="form-section__title"><span data-step-number hidden aria-hidden="true">{{ number }}</span>{{ title }}</h2>
+<p class="form-section__subtitle">{{ subtitle }}</p>
+{%- endmacro %}
+
+{% macro error_slot(id) -%}
+<p id="{{ id }}-error" data-error-for="{{ id }}" class="trip-error" hidden></p>
+{%- endmacro %}
+
+{% macro choice_mark() -%}
+<span data-choice-mark class="trip-choice-mark" aria-hidden="true">
+  <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="m3 8 3 3 7-7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+</span>
+{%- endmacro %}
+
+{% macro pill(name, value, label, describedby, required=false, checked=false) -%}
+<label class="pill">
+  <input type="radio" name="{{ name }}" value="{{ value }}" aria-describedby="{{ describedby }}"{% if required %} required{% endif %}{% if checked %} checked{% endif %}>
+  <span>{{ label }}</span>
+</label>
+{%- endmacro %}
+
+{% macro logo_header() -%}
+<header class="page-header">
+  <a href="https://tcsc.ski" aria-label="Twin Cities Ski Club home">
+    <img src="{{ url_for('static', filename='images/tcsc-logo.svg') }}" alt="Twin Cities Ski Club" class="page-header__logo">
+  </a>
+</header>
+{%- endmacro %}
+
+{% macro trip_meta(trip) -%}
+<div class="form-header__meta">
+  <span>{{ trip.destination }}</span>
+  <span>{{ trip.formatted_date_range }}</span>
+</div>
+{%- endmacro %}
+
+{% macro trip_heading(trip) -%}
+<div class="form-header">
+  <div><span class="badge badge--trip">TCSC trip</span></div>
+  <h1 class="form-header__title">{{ trip.name }}</h1>
+  {{ trip_meta(trip) }}
+</div>
+{%- endmacro %}

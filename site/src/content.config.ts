@@ -364,8 +364,10 @@ const extra_training = defineCollection({
 });
 
 // /dry-tri: the club's own public race (rollerski / mountain bike / trail
-// run at Carver Park Reserve, first held 2025-10-25). `courses` is the 2025
-// format; the roll/ride/run photo trio mounts as a triptych. POLICY: photos
+// run at Carver Park Reserve, first held 2025-10-25). `courses` holds the
+// distances; dates, schedule, entries and registration come from tcsc.ski's
+// event API (src/lib/eventData.ts). The roll/ride/run photo trio mounts as a
+// triptych. POLICY: photos
 // come from the consent-cleared pool; the three Dry Tri shots carry a
 // public-event caveat in migration/CONSENT.md.
 const dry_tri = defineCollection({
@@ -381,7 +383,6 @@ const dry_tri = defineCollection({
               .object({
                 name: z.string(),
                 legs: z.string().optional(),
-                start: z.string().optional(),
               })
               .strict(),
           )
@@ -392,7 +393,6 @@ const dry_tri = defineCollection({
         ride_photo_alt: z.string().optional(),
         run_photo: image().optional(),
         run_photo_alt: z.string().optional(),
-        register_url: z.url().optional(),
         results_url: z.url().optional(),
       })
       .strict(),

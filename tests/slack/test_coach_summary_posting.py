@@ -29,11 +29,12 @@ class FakeQuery:
         return self.rows
 
 
-def practice(practice_id, when):
+def practice(practice_id, when, is_draft=False):
     return SimpleNamespace(
         id=practice_id,
         date=when,
         slack_coach_summary_ts=None,
+        is_draft=is_draft,
     )
 
 
@@ -44,6 +45,7 @@ def run_coach_summary(
     post_response=None,
     commit_effects=None,
     cleanup_error=None,
+    open_poll_id=None,
 ):
     client = MagicMock()
     client.chat_postMessage.return_value = (
@@ -106,7 +108,9 @@ def run_coach_summary(
     ), patch(
         "app.slack.blocks.build_coach_weekly_summary_blocks",
         return_value=blocks,
-    ) as build_blocks:
+    ) as build_blocks, patch.object(
+        coach_review, "_unopened_block_poll_id", return_value=open_poll_id
+    ):
         result = coach_review.post_coach_weekly_summary(
             WEEK_START,
             channel_override=channel_override,
@@ -122,6 +126,36 @@ def run_coach_summary(
         channel_lookup=channel_lookup,
         logger=logger,
     )
+
+
+def test_summary_passes_the_unopened_poll_to_the_blocks():
+    run = run_coach_summary([], open_poll_id=12)
+    assert run.build_blocks.call_args.kwargs["open_poll_id"] == 12
+
+
+def test_summary_sweeps_hidden_practices_through_publish_if_ready():
+    hidden = practice(41, datetime(2026, 7, 14, 18, 15), is_draft=True)
+    swept = []
+    with patch("app.practices.publishing.publish_if_ready",
+               lambda p, **k: swept.append(p.id) or False):
+        run_coach_summary([hidden])
+    assert 41 in swept
+
+
+def test_one_failing_publish_does_not_block_the_sweep():
+    first = practice(41, datetime(2026, 7, 14, 18, 15), is_draft=True)
+    second = practice(42, datetime(2026, 7, 16, 18, 15), is_draft=True)
+    swept = []
+
+    def fake(p, **k):
+        swept.append(p.id)
+        if p.id == 41:
+            raise RuntimeError("boom")
+        return False
+
+    with patch("app.practices.publishing.publish_if_ready", fake):
+        run_coach_summary([first, second])
+    assert swept == [41, 42]
 
 
 def test_empty_production_week_registers_coach_refresh_identity():

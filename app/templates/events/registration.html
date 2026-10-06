@@ -138,6 +138,18 @@
               </section>
             {% endif %}
 
+            <section class="form-section" id="waiver" aria-labelledby="waiver-title">
+              <h2 class="form-section__title" id="waiver-title">Waiver</h2>
+              <p class="form-section__subtitle">Read the release below, then confirm you agree. Participants under 18 must complete this waiver with a parent or guardian.</p>
+              <div class="waiver-text" id="waiver-text" tabindex="0" aria-label="Waiver text">
+                {% include "events/_waiver.html" %}
+              </div>
+              <div class="checkbox-group" id="waiver-field">
+                <input type="checkbox" id="waiver-accepted" required>
+                <label for="waiver-accepted">I have read and agree to the Assumption of Risk, Release of Liability, SMS Communication, and Photography Release.</label>
+              </div>
+            </section>
+
             <section class="form-section" aria-labelledby="payment-title">
               <h2 class="form-section__title" id="payment-title">Payment</h2>
               <p class="form-section__subtitle">The server will verify your option and any discount before charging.</p>

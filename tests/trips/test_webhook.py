@@ -91,6 +91,22 @@ def test_canceled_cancels_registration(client, db_session,
     assert pending_registration.status == TripRegistrationStatus.CANCELLED
 
 
+@pytest.mark.parametrize("current_intent_id", [None, "pi_replacement"])
+def test_old_intent_cancellation_does_not_cancel_retry(
+        client, db_session, pending_registration, current_intent_id):
+    pending_registration.payment_intent_id = current_intent_id
+    db_session.session.commit()
+    payload = _webhook_payload("payment_intent.canceled", pending_registration.id,
+                               pending_registration.trip_id)
+
+    response = _post_development_webhook(client, payload)
+
+    assert response.status_code == 200
+    db_session.session.expire_all()
+    assert pending_registration.status == TripRegistrationStatus.PENDING_PAYMENT
+    assert pending_registration.payment_intent_id == current_intent_id
+
+
 def test_missing_registration_id_does_not_error(client, db_session,
                                                 pending_registration):
     payload = _webhook_payload("payment_intent.amount_capturable_updated",

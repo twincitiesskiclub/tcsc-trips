@@ -107,6 +107,7 @@ def _payload(option, participant_count=None):
         ],
         "answers": {"course": "Long", "club": "TCSC"},
         "discount_code": "",
+        "waiver_accepted": True,
     }
 
 
@@ -359,7 +360,11 @@ def test_admin_can_register_for_draft_event(
 
 
 @pytest.mark.parametrize("path", ["/tri", "/dryland-triathlon"])
-def test_dry_tri_legacy_urls_redirect_to_generic_event_page(client, path):
+def test_dry_tri_legacy_urls_redirect_to_generic_event_page(client, public_event, path):
+    public_event[0].template_key = "dry_tri"
+    from app.models import db
+    db.session.commit()
+
     response = client.get(path)
 
     assert response.status_code == 302
@@ -380,6 +385,44 @@ def test_get_event_page_drops_the_registration_contact_section(
     # Emergency contact and team name stay.
     assert 'id="emergency-contact-name"' in page
     assert 'id="team-name"' in page
+
+
+def test_get_event_page_renders_the_waiver_before_payment(
+    client,
+    public_event,
+):
+    event, _individual, _team, _free = public_event
+
+    page = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    assert "Assumption of Risk, Release of Liability" in page
+    assert "By checking the box below" in page
+    assert "Participants under 18 must complete this waiver" in page
+    assert 'id="waiver-accepted"' in page
+    assert "required" in page[page.index('id="waiver-accepted"'):][:200]
+    # The copied text named another club; every reference now points at us.
+    assert "COLNSF" not in page
+    assert "Competitor" not in page
+    waiver_heading = page.index('id="waiver-title"')
+    questions_heading = page.index('id="event-questions-title"')
+    payment_heading = page.index('id="payment-title"')
+    assert questions_heading < waiver_heading < payment_heading
+
+
+def test_post_without_waiver_acceptance_is_rejected(
+    client,
+    db_session,
+    public_event,
+):
+    event, individual, _team, _free = public_event
+    payload = _payload(individual)
+    payload["waiver_accepted"] = False
+
+    response = client.post(f"/events/{event.slug}/register", json=payload)
+
+    assert response.status_code == 400
+    assert "waiver_accepted" in response.get_json()["error"]
+    assert EventRegistration.query.filter_by(event_id=event.id).count() == 0
 
 
 def test_get_event_page_puts_team_name_with_participant_details(
@@ -582,3 +625,64 @@ def test_discount_check_on_draft_is_404_for_anonymous_and_open_for_admin(
     )
     assert response.status_code == 200
     assert response.get_json()["valid"] is True
+
+
+def test_registration_page_shows_the_central_start_time(client, public_event):
+    event = public_event[0]
+    event.event_date = datetime(2026, 10, 24, 14, 0)
+    from app.models import db
+    db.session.commit()
+
+    html = client.get(f"/events/{event.slug}").get_data(as_text=True)
+
+    assert "Saturday, October 24, 2026 at 9:00 AM CT" in html
+
+
+def test_event_api_serves_a_real_event_row(client, public_event):
+    event = public_event[0]
+    event.template_key = "dry_tri"
+    from app.models import db
+    db.session.commit()
+
+    body = client.get("/api/events/dry-tri").get_json()
+
+    assert body["event"]["slug"] == "dry-tri-2026"
+    assert [e["name"] for e in body["event"]["entries"]] == ["Individual", "Team of 3", "Volunteer"]
+
+
+def test_tri_redirects_to_the_selected_dry_tri(client, public_event):
+    event = public_event[0]
+    event.template_key = "dry_tri"
+    # Not the old hardcoded slug, so the test fails until /tri selects.
+    # admin-scope-test is in TEST_EVENT_SLUGS, so cleanup still removes it.
+    event.slug = "admin-scope-test"
+    from app.models import db
+    db.session.commit()
+
+    resp = client.get("/tri")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith(f"/events/{event.slug}")
+
+
+def test_tri_without_a_dry_tri_goes_home(client, db_session):
+    with patch("app.routes.main.Event") as event_model:
+        event_model.query.filter.return_value.all.return_value = []
+        resp = client.get("/tri")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")
+
+
+def test_tri_does_not_send_people_to_a_closed_event_page(client, public_event):
+    event = public_event[0]
+    event.template_key = "dry_tri"
+    event.status = EventStatus.CLOSED
+    from app.models import db
+    db.session.commit()
+
+    assert client.get(f"/events/{event.slug}").status_code == 404
+    resp = client.get("/tri")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "https://twincitiesskiclub.org/dry-tri"

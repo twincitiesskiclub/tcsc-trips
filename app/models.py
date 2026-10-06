@@ -45,6 +45,8 @@ class Trip(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     slug = db.Column(db.String(255), unique=True, nullable=False)  # e.g., 'training-trip'
     series_id = db.Column(db.Integer, db.ForeignKey('trip_series.id'), nullable=True)
+    # The complete ordered survey, including built-ins that write TripProfile
+    # columns and custom questions that write TripRegistration.answers.
     custom_questions = db.Column(JSON, nullable=False, default=list)
     name = db.Column(db.String(255), nullable=False)
     destination = db.Column(db.String(255), nullable=False)

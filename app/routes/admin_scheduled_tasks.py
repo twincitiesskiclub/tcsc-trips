@@ -38,6 +38,15 @@ KNOWN_CHANNELS = [
 # Job definitions with metadata
 TRIGGERABLE_JOBS = [
     {
+        'id': 'analytics_nightly',
+        'name': 'Practice Analytics Nightly',
+        'description': 'Syncs practice history, rebuilds analytics, and fills historical weather',
+        'default_channel': None,
+        'schedule': 'Daily 3:30am',
+        'supports_channel_override': False,
+        'category': 'practices',
+    },
+    {
         'id': 'morning_check',
         'name': 'Skipper Morning Check',
         'description': 'Evaluates today\'s practices for safety conditions',

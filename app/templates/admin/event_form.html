@@ -92,19 +92,19 @@
       <div>
         <label for="event_date" class="mb-2 block text-sm font-semibold text-zinc-700">Event date and time</label>
         <input id="event_date" name="event_date" type="datetime-local" required
-               value="{{ form_data.get('event_date') if form_data else event.event_date.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+               value="{{ form_data.get('event_date') if form_data else event.event_date|central_time('%Y-%m-%dT%H:%M') if event else '' }}"
                class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
       </div>
       <div>
         <label for="signup_start" class="mb-2 block text-sm font-semibold text-zinc-700">Signup start</label>
         <input id="signup_start" name="signup_start" type="datetime-local" required
-               value="{{ form_data.get('signup_start') if form_data else event.signup_start.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+               value="{{ form_data.get('signup_start') if form_data else event.signup_start|central_time('%Y-%m-%dT%H:%M') if event else '' }}"
                class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
       </div>
       <div>
         <label for="signup_end" class="mb-2 block text-sm font-semibold text-zinc-700">Signup end</label>
         <input id="signup_end" name="signup_end" type="datetime-local" required
-               value="{{ form_data.get('signup_end') if form_data else event.signup_end.strftime('%Y-%m-%dT%H:%M') if event else '' }}"
+               value="{{ form_data.get('signup_end') if form_data else event.signup_end|central_time('%Y-%m-%dT%H:%M') if event else '' }}"
                class="min-h-11 w-full rounded-lg border border-zinc-300 px-3 text-sm">
       </div>
       <div>

@@ -24,10 +24,8 @@ E36 = "e36bbec59bde"
 EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
-# Head as of the volunteer-interests migration (down_revision is
-# 8055e0305cc4, the phone_e164/verification-tables migration). Bump whenever
-# a new migration lands.
-HEAD_REVISION = "1137d059b6f4"
+# Bump whenever a new migration lands.
+HEAD_REVISION = "c7e1a9d3f5b2"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -75,6 +73,11 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
         "CREATE TABLE practice_activities (id INTEGER PRIMARY KEY)"
     )
     connection.exec_driver_sql(
+        # Created by abc123456789 before this baseline; analytics sessions
+        # reference its primary key when upgrading to head.
+        "CREATE TABLE practice_locations (id SERIAL PRIMARY KEY)"
+    )
+    connection.exec_driver_sql(
         "CREATE TABLE payments (id INTEGER PRIMARY KEY)"
     )
     connection.exec_driver_sql(
@@ -92,6 +95,11 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
         # it must exist in this synthetic baseline for the upgrade to head
         # to succeed.
         "CREATE TABLE user_seasons (user_id INTEGER PRIMARY KEY)"
+    )
+    connection.exec_driver_sql(
+        # Bare stub: real `seasons` predates e36bbec59bde; the crews
+        # migration (d4e8f2a6b1c9) FKs to it.
+        "CREATE TABLE seasons (id INTEGER PRIMARY KEY)"
     )
     connection.exec_driver_sql(
         # Bare stub: real `trips` predates e36bbec59bde; the trip series

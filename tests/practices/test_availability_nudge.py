@@ -30,12 +30,11 @@ from uuid import uuid4
 
 from slack_sdk.errors import SlackApiError
 
-from app.models import AppConfig, SlackUser, Tag, User, db
+from app.models import SlackUser, Tag, User, db
 from app.practices.availability import (
     eligible_leads,
     participants_to_nudge,
     send_nudges,
-    shadow_roster_leads,
     sync_participants,
 )
 from app.practices.availability_models import (
@@ -50,11 +49,11 @@ _STARTS_ON = date(2099, 7, 21)
 _ENDS_ON = date(2099, 8, 13)
 
 
-def _poll(db_session, is_shadow=False, opened_at=OPENED):
+def _poll(db_session, opened_at=OPENED):
     poll = LeadAvailabilityPoll(
         starts_on=_STARTS_ON, ends_on=_ENDS_ON,
         channel_id="TEST-CHANNEL-NUDGE", message_ts="1.1",
-        status=PollStatus.OPEN, opened_at=opened_at, is_shadow=is_shadow,
+        status=PollStatus.OPEN, opened_at=opened_at,
     )
     db_session.add(poll)
     db_session.flush()
@@ -478,68 +477,8 @@ def test_send_nudges_defaults_now_to_now_central_naive(db_session, app):
         _cleanup(poll_id, [user_id])
 
 
-# ---------------------------------------------------------------------------
-# Fix 1: shadow mode must restrict who gets nudged. `sync_participants` must
-# resolve the shadow roster (not the live tag pool) when poll.is_shadow, and
-# must fail closed -- an unset/empty roster nudges nobody, never falls back
-# to eligible_leads().
-# ---------------------------------------------------------------------------
-
-def test_shadow_poll_uses_the_shadow_roster_not_the_live_pool(db_session):
-    poll = _poll(db_session, is_shadow=True)
-    roster_user = _user(db_session, "Roster", with_slack=True)
-    live_user = _user(db_session, "Live")  # would come back from eligible_leads()
-    poll_id = poll.id
-    user_ids = [roster_user.id, live_user.id]
-    roster_slack_uid = roster_user.slack_user.slack_uid
-    db_session.commit()
-
-    try:
-        with patch("app.models.AppConfig.get", return_value=[roster_slack_uid]), \
-             patch("app.practices.availability.eligible_leads",
-                   return_value=[roster_user, live_user]):
-            added = sync_participants(poll)
-
-        assert added == 1
-        participant_user_ids = {
-            row.user_id for row in
-            LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).all()
-        }
-        assert participant_user_ids == {roster_user.id}, (
-            "a shadow poll must only ever add the shadow roster as "
-            "participants -- eligible_leads() (the live pool) must not be "
-            "consulted at all"
-        )
-    finally:
-        _cleanup(poll_id, user_ids)
-
-
-def test_shadow_poll_with_empty_roster_fails_closed(db_session):
-    """An unset or empty shadow_roster config must nudge nobody -- it must
-    NOT silently fall back to the live tag pool. A misconfiguration that DMs
-    everyone is the exact disaster shadow mode exists to prevent.
-    """
-    poll = _poll(db_session, is_shadow=True)
-    live_user = _user(db_session, "Live")
-    poll_id = poll.id
-    user_ids = [live_user.id]
-    db_session.commit()
-
-    try:
-        with patch("app.models.AppConfig.get", return_value=[]), \
-             patch("app.practices.availability.eligible_leads",
-                   return_value=[live_user]) as eligible_mock:
-            added = sync_participants(poll)
-
-        assert added == 0
-        assert LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).count() == 0
-        eligible_mock.assert_not_called()
-    finally:
-        _cleanup(poll_id, user_ids)
-
-
-def test_non_shadow_poll_uses_the_live_pool(db_session):
-    poll = _poll(db_session, is_shadow=False)
+def test_sync_participants_uses_the_live_pool(db_session):
+    poll = _poll(db_session)
     live_user = _user(db_session, "Live")
     poll_id = poll.id
     user_ids = [live_user.id]
@@ -547,77 +486,17 @@ def test_non_shadow_poll_uses_the_live_pool(db_session):
 
     try:
         with patch("app.practices.availability.eligible_leads",
-                   return_value=[live_user]) as eligible_mock, \
-             patch("app.practices.availability.shadow_roster_leads") as shadow_mock:
+                   return_value=[live_user]) as eligible_mock:
             added = sync_participants(poll)
 
         assert added == 1
         eligible_mock.assert_called_once()
-        shadow_mock.assert_not_called()
         assert {
             row.user_id for row in
             LeadAvailabilityParticipant.query.filter_by(poll_id=poll_id).all()
         } == {live_user.id}
     finally:
         _cleanup(poll_id, user_ids)
-
-
-def test_shadow_roster_null_config_row_resolves_to_an_empty_roster(db_session):
-    """A `lead_availability.shadow_roster` row storing JSON null must fail
-    closed to an empty roster, exactly like a missing row -- AppConfig.get
-    returns the row's value (None) whenever the row exists, and falling back
-    to the live tag pool here would DM the real 10-17 person lead pool during
-    the shadow month.
-
-    Writes a REAL null row rather than mocking AppConfig.get: mocking the
-    getter would merely stipulate that a null row yields None instead of
-    proving it. Save/restore, never unconditional delete -- real
-    configuration lives in this database.
-    """
-    key = "lead_availability.shadow_roster"
-    db.session.rollback()
-    existing = AppConfig.query.filter_by(key=key).first()
-    had_row = existing is not None
-    original = (
-        (existing.value, existing.description, existing.category)
-        if had_row else None
-    )
-    AppConfig.set(key=key, value=None, description="TEST null roster",
-                  category="practices")
-    db.session.commit()
-    try:
-        assert shadow_roster_leads() == [], (
-            "a JSON-null shadow_roster row must resolve to an empty roster, "
-            "never fall back to the live tag pool"
-        )
-    finally:
-        db.session.rollback()
-        if had_row:
-            value, description, category = original
-            AppConfig.set(key=key, value=value,
-                          description=description, category=category)
-        else:
-            AppConfig.query.filter_by(key=key).delete()
-        db.session.commit()
-
-
-def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
-    """Unit-level check on shadow_roster_leads() itself, independent of
-    sync_participants: unknown slack uids in the roster are skipped rather
-    than raising, and a known one resolves to its User via SlackUser.
-    """
-    user = _user(db_session, "Roster", with_slack=True)
-    user_id = user.id
-    slack_uid = user.slack_user.slack_uid
-    db_session.commit()
-
-    try:
-        with patch("app.models.AppConfig.get",
-                   return_value=[slack_uid, "TEST-UNKNOWN-UID"]):
-            result = shadow_roster_leads()
-        assert [u.id for u in result] == [user_id]
-    finally:
-        _cleanup(None, [user_id])
 
 
 # ---------------------------------------------------------------------------
@@ -629,11 +508,8 @@ def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
 # reconcile_poll (which the nudge job runs immediately before send_nudges)
 # resets such a row to PENDING once its reaction is withdrawn. So selecting
 # nudge targets by poll_id + PENDING alone let a non-pool member be DMed,
-# which defeats the two containment rules that matter most:
+# which defeats the containment rule that matters most:
 #
-#   - shadow mode: the shadow channel holds real coaches who are not on the
-#     roster, and the whole point of the shadow month is that no real lead is
-#     DMed. Shadow-ness is persisted on the poll, so the gate uses that.
 #   - the ALUMNI exclusion: a lapsed lead-tagged alumnus is deliberately out
 #     of the pool because "DMing them every block is how the bot gets muted
 #     by the people it depends on" (eligible_leads' own docstring).
@@ -643,33 +519,8 @@ def test_shadow_roster_leads_resolves_slack_uids_to_users(db_session):
 # -- while making sure the DM only goes to people who were actually asked.
 # ---------------------------------------------------------------------------
 
-def test_shadow_poll_does_not_nudge_a_participant_off_the_roster(db_session):
-    poll = _poll(db_session, is_shadow=True)
-    roster_user = _user(db_session, "Roster", with_slack=True)
-    intruder = _user(db_session, "Intruder", with_slack=True, in_pool=False)
-    poll_id = poll.id
-    user_ids = [roster_user.id, intruder.id]
-    roster_slack_uid = roster_user.slack_user.slack_uid
-    # Both PENDING: the intruder's row is what a reaction-then-unreact leaves
-    # behind, exactly as reconcile_poll would write it.
-    _participant(db_session, poll, roster_user, status=ParticipantStatus.PENDING)
-    _participant(db_session, poll, intruder, status=ParticipantStatus.PENDING)
-    db_session.commit()
-
-    try:
-        with patch("app.models.AppConfig.get", return_value=[roster_slack_uid]):
-            due = participants_to_nudge(poll, now=OPENED + timedelta(days=3))
-
-        assert [p.user_id for p in due] == [roster_user.id], (
-            "a shadow poll must only DM the shadow roster -- a participant row "
-            "created by a reaction from someone off the roster must not be nudged"
-        )
-    finally:
-        _cleanup(poll_id, user_ids)
-
-
 def test_live_poll_does_not_nudge_a_participant_outside_the_eligible_pool(db_session):
-    poll = _poll(db_session, is_shadow=False)
+    poll = _poll(db_session)
     lead = _user(db_session, "Lead", with_slack=True)
     outsider = _user(db_session, "Outsider", with_slack=True, in_pool=False)
     poll_id = poll.id
@@ -687,29 +538,6 @@ def test_live_poll_does_not_nudge_a_participant_outside_the_eligible_pool(db_ses
 
         assert [p.user_id for p in due] == [lead.id], (
             "only people the pool rules say may be asked can be DMed"
-        )
-    finally:
-        _cleanup(poll_id, user_ids)
-
-
-def test_shadow_poll_with_an_unresolvable_roster_nudges_nobody(db_session):
-    """Fail closed at nudge time too: an empty resolved roster must mean zero
-    DMs, never "no filter, so everyone".
-    """
-    poll = _poll(db_session, is_shadow=True)
-    someone = _user(db_session, "Someone", with_slack=True)
-    poll_id = poll.id
-    user_ids = [someone.id]
-    _participant(db_session, poll, someone, status=ParticipantStatus.PENDING)
-    db_session.commit()
-
-    try:
-        with patch("app.models.AppConfig.get", return_value=[]):
-            due = participants_to_nudge(poll, now=OPENED + timedelta(days=3))
-
-        assert due == [], (
-            "an unset/empty shadow roster must nudge nobody -- an empty pool "
-            "must not be treated as 'no filter'"
         )
     finally:
         _cleanup(poll_id, user_ids)

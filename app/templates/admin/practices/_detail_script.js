@@ -1,6 +1,6 @@
 // Selected ids injected server-side (ids match the option-list endpoints).
 const practiceId = {{ practice.id if practice else 'null' }};
-const selLocationId = {{ practice.location_id if practice else 'null' }};
+const selLocationId = {{ practice.location_id | tojson if practice else 'null' }};
 const selActivities = {{ (practice.activities | map(attribute='id') | list) | tojson if practice else '[]' }};
 const selTypes = {{ (practice.practice_types | map(attribute='id') | list) | tojson if practice else '[]' }};
 const selCoaches = {{ (practice.leads | selectattr('role','equalto','coach') | map(attribute='user_id') | select | list) | tojson if practice else '[]' }};
@@ -162,17 +162,6 @@ document.getElementById('practice-form').addEventListener('submit', async (e) =>
         });
         const result = await resp.json();
         if (resp.ok && result.success) {
-            if (result.availability_warning) {
-                // The practice saved, but it fell inside an OPEN availability
-                // poll it can't join — no letter, no availability collected.
-                // Stashed rather than toasted here because this page redirects
-                // in 800ms; the list page flashes it on arrival (see
-                // flashPendingAvailabilityWarning in admin_practices.js).
-                try {
-                    window.sessionStorage.setItem(
-                        'tcsc-availability-warning', result.availability_warning);
-                } catch (e) { /* storage blocked; the server already logged it */ }
-            }
             showToast(result.message || 'Practice saved', 'success');
             setTimeout(() => { window.location.href = '/admin/practices'; }, 800);
         } else {

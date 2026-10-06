@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Preview survey | Twin Cities Ski Club</title>
+  <link rel="icon" href="{{ url_for('static', filename='favicon.ico') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/normalize.css') }}">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/styles/main.css') }}">
+  <script src="{{ url_for('static', filename='trip_questions_preview.js') }}" type="module"></script>
+</head>
+<body class="page page--trip">
+<main class="page-content page-content--medium trip-content">
+  <div class="form-header"><h1 class="form-header__title">Trip survey</h1></div>
+  <div class="notice notice--info" role="status">Preview only. Nothing is saved or submitted.</div>
+  {% if error %}
+  <p class="notice notice--error" role="alert">{{ error }}</p>
+  {% else %}
+  <div id="trip-survey-preview">
+    {% set steps = namespace(n=0) %}
+{% include 'trips/_question_list.html' %}
+  </div>
+  <p id="survey-errors" class="notice notice--error" role="alert"></p>
+  {% endif %}
+</main>
+</body>
+</html>

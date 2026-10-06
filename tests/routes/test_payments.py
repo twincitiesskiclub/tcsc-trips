@@ -315,6 +315,9 @@ class TestCreateSeasonPaymentIntentWindowGate:
                 'season_id': season_returning_only,
                 'email': 'brand-new-user@example.com',
                 'name': 'Brand New',
+                # No session identity: take the "Can't receive texts?" hatch
+                # so the window gate, not the identity gate, decides.
+                'continue_unverified': True,
             },
         )
 

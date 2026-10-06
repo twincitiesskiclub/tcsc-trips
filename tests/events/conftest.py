@@ -1,9 +1,12 @@
 """Database fixtures for event model tests."""
 
+import os
+
 import pytest
 
 from app import create_app
 from app.models import db
+from tests._db_guard import LOCAL_TEST_DB
 
 
 TEST_EVENT_SLUGS = (
@@ -31,8 +34,10 @@ TEST_EVENT_SLUGS = (
 def app():
     app = create_app()
     app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "postgresql://tcsc:tcsc@localhost:5432/tcsc_trips"
+    # The root conftest pins DATABASE_URL to a localhost database before any
+    # app exists, so honoring it here lets a run target a scratch schema.
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL", LOCAL_TEST_DB
     )
     return app
 

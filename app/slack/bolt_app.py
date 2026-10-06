@@ -89,6 +89,50 @@ def bind_flask_app(flask_app) -> None:
     _flask_app = flask_app
 
 
+def _parse_block_assign(view) -> dict:
+    """Read an Assign modal submission into save_assignment keyword arguments."""
+    values = view["state"]["values"]
+
+    def picked(block, action):
+        return (values.get(block, {}).get(action) or {})
+
+    location = picked("location", "location_select").get("selected_option")
+    return {
+        "lead_ids": [int(o["value"]) for o in picked("leads", "leads_select").get("selected_options") or []],
+        "location_id": int(location["value"]) if location else None,
+        "type_ids": [int(o["value"]) for o in picked("types", "type_ids").get("selected_options") or []],
+        "activity_ids": [int(o["value"]) for o in picked("activities", "activity_ids").get("selected_options") or []],
+    }
+
+
+def _save_block_assign(view, ack=lambda **_: None) -> None:
+    """Validate and persist an Assign modal submission.
+
+    Invalid choices ack with modal errors and save nothing; otherwise ack
+    first, then save.
+    """
+    practice_id = int(view["private_metadata"])
+    parsed = _parse_block_assign(view)
+    with get_app_context():
+        from app.practices import blocks
+
+        try:
+            error = blocks.validate_assignment(parsed["type_ids"], parsed["activity_ids"])
+        except Exception:
+            from app.models import db
+
+            db.session.rollback()
+            logger.exception("validate_assignment failed for practice %s", practice_id)
+            ack(response_action="errors",
+                errors={"leads": "Could not save right now. Please try again."})
+            return
+        if error:
+            ack(response_action="errors", errors={error[0]: error[1]})
+            return
+        ack()
+        blocks.save_assignment(practice_id, **parsed)
+
+
 def _ack_practice_reaction_action(ack) -> None:
     """Primary Bolt action listener: send the transport acknowledgment only."""
     ack()
@@ -506,13 +550,59 @@ if _bot_token:
                     text=f":warning: Could not update post: {result.get('error')}"
                 )
 
+    @bolt_app.action("block_poll_open")
+    def handle_block_poll_open(ack, body, action, client, logger):
+        """Open poll on the block post, its Wednesday reply or the Sunday summary."""
+        ack()
+        user_id = body["user"]["id"]
+        with get_app_context():
+            from app.practices.blocks import open_block_poll
+
+            try:
+                result = open_block_poll(int(action["value"]), user_id)
+            except Exception:
+                logger.exception("open_block_poll failed for poll %s", action.get("value"))
+                result = {"success": False,
+                          "error": "Could not open the poll. Try again or use the admin page."}
+        if not result.get("success"):
+            channel = (body.get("channel") or {}).get("id")
+            if channel:
+                client.chat_postEphemeral(channel=channel, user=user_id,
+                                          text=f":warning: {result.get('error')}")
+
+    @bolt_app.action("block_assign")
+    def handle_block_assign(ack, body, action, client, logger):
+        ack()
+        with get_app_context():
+            from app.practices.blocks import assign_modal_data
+            from app.slack.blocks.block_post import build_assign_modal
+
+            data = assign_modal_data(int(action["value"]))
+            locations, all_activities, all_types = (
+                _load_modal_ref_data() if data is not None else ((), (), ()))
+        if data is None:
+            channel = (body.get("channel") or {}).get("id")
+            if channel:
+                client.chat_postEphemeral(channel=channel, user=body["user"]["id"],
+                                          text=":warning: That practice no longer exists.")
+            return
+        client.views_open(trigger_id=body["trigger_id"], view=build_assign_modal(
+            data, locations=locations, all_types=all_types, all_activities=all_activities))
+
+    @bolt_app.view("block_assign_submit")
+    def handle_block_assign_submit(ack, body, view, client, logger):
+        _save_block_assign(view, ack)
+
     @bolt_app.action("edit_practice_full")
     def handle_edit_practice_full(ack, body, action, client, logger):
         """Handle edit button click from collab channel - opens full edit modal."""
         ack()
 
         user_id = body["user"]["id"]
-        practice_id = int(action["value"])
+        # Fill in buttons send a value; the block post's "Edit a session"
+        # select sends the chosen option.
+        raw = action.get("value") or (action.get("selected_option") or {}).get("value")
+        practice_id = int(raw)
         trigger_id = body.get("trigger_id")
 
         if not trigger_id:
@@ -2799,6 +2889,14 @@ def _run_practice_edit_full_post_save(
                 }
             }
         else:
+            from app.models import db
+            from app.practices.publishing import publish_if_ready
+
+            try:
+                publish_if_ready(practice)
+            except Exception:
+                db.session.rollback()
+                logger.exception("publish_if_ready failed for practice %s", practice_id)
             announcement_notice = build_announcement_change_notice(
                 previous_date=previous_date,
                 previous_location_id=previous_location_id,
@@ -3339,13 +3437,25 @@ def _delegate_reaction_event(event, *, removed):
     from app.slack.practices.reactions import handle_attendance_reaction
 
     with get_app_context():
-        return handle_attendance_reaction(
-            channel=item.get("channel"),
-            message_ts=item.get("ts"),
-            reaction=event.get("reaction"),
-            slack_user_id=event.get("user"),
-            removed=removed,
-        )
+        try:
+            return handle_attendance_reaction(
+                channel=item.get("channel"),
+                message_ts=item.get("ts"),
+                reaction=event.get("reaction"),
+                slack_user_id=event.get("user"),
+                removed=removed,
+            )
+        finally:
+            # Analytics un-check log. Guarded twice: record_reaction_event never
+            # raises, and this except covers an import failure.
+            try:
+                from app.analytics.reaction_log import record_reaction_event
+                record_reaction_event(
+                    channel=item.get("channel"), message_ts=item.get("ts"),
+                    emoji=event.get("reaction"), slack_uid=event.get("user"),
+                    removed=removed, event_ts=event.get("event_ts"))
+            except Exception:
+                logger.warning("analytics reaction log skipped", exc_info=True)
 
 
 def _handle_reaction_removed(event):

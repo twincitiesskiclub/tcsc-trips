@@ -105,8 +105,8 @@
               <span class="card__title">{{ event.name }}</span>
               <div class="card__meta">
                 <span class="card__meta-item">📍 {{ event.location }}</span>
-                <span class="card__meta-item">📅 {{ event.event_date.strftime('%B %-d, %Y') }}</span>
-                <span class="card__meta-item">🕐 {{ event.event_date.strftime('%-I:%M %p') }}</span>
+                <span class="card__meta-item">📅 {{ event.event_date|central_time('%B %-d, %Y') }}</span>
+                <span class="card__meta-item">🕐 {{ event.event_date|central_time('%-I:%M %p') }}</span>
               </div>
               <p class="card__description">{{ event.description }}</p>
               <div class="card__footer">

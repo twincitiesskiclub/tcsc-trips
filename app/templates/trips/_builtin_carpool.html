@@ -1,0 +1,44 @@
+{% from 'trips/_form_ui.html' import question_hint, question_help, optional_hint, error_slot, pill, choice_mark %}
+  <fieldset id="profile-can-drive-group" class="form-field" aria-describedby="profile-can-drive-group-error{% if question.help_text %} carpool-help{% endif %}">
+    <legend class="form-field__label">{{ question.label }} {{ question_hint(question) }}</legend>
+    {{ question_help(question, 'carpool-help') }}
+    <div class="pill-group">
+      {{ pill('profile-can-drive', 'yes', 'Yes', 'profile-can-drive-group-error', required=question.required) }}
+      {{ pill('profile-can-drive', 'no', 'No', 'profile-can-drive-group-error', required=question.required) }}
+    </div>
+    {{ error_slot('profile-can-drive-group') }}
+  </fieldset>
+  <div id="driver-details" hidden>
+    {% if question.followups.seats.enabled or question.followups.bikes.enabled %}
+    <div class="form-row form-row--pair">
+      {% if question.followups.seats.enabled %}
+      <div class="form-field">
+        <label class="form-field__label" for="profile-seats">{{ question.followups.seats.label }} {{ optional_hint() }}</label>
+        {{ question_help(question.followups.seats, 'profile-seats-help') }}
+        <input id="profile-seats" type="number" min="0" max="99" inputmode="numeric" placeholder="Number of passengers" class="form-input" aria-describedby="profile-seats-error{% if question.followups.seats.help_text %} profile-seats-help{% endif %}">
+        {{ error_slot('profile-seats') }}
+      </div>
+      {% endif %}
+      {% if question.followups.bikes.enabled %}
+      <div class="form-field">
+        <label class="form-field__label" for="profile-bikes">{{ question.followups.bikes.label }} {{ optional_hint() }}</label>
+        {{ question_help(question.followups.bikes, 'profile-bikes-help') }}
+        <input id="profile-bikes" type="number" min="0" max="99" inputmode="numeric" placeholder="Number of bikes" class="form-input" aria-describedby="profile-bikes-error{% if question.followups.bikes.help_text %} profile-bikes-help{% endif %}">
+        {{ error_slot('profile-bikes') }}
+      </div>
+      {% endif %}
+    </div>
+    {% endif %}
+    {% if question.followups.hitch.enabled %}
+    <fieldset id="profile-hitch-group" class="form-field" aria-describedby="profile-hitch-group-error{% if question.followups.hitch.help_text %} profile-hitch-help{% endif %}">
+      <legend class="form-field__label">{{ question.followups.hitch.label }} {{ optional_hint() }}</legend>
+      {{ question_help(question.followups.hitch, 'profile-hitch-help') }}
+      <div class="pill-group">
+        {{ pill('profile-hitch', '', 'No', 'profile-hitch-group-error', checked=true) }}
+        {{ pill('profile-hitch', '1.25', '1.25″', 'profile-hitch-group-error') }}
+        {{ pill('profile-hitch', '2', '2″', 'profile-hitch-group-error') }}
+      </div>
+      {{ error_slot('profile-hitch-group') }}
+    </fieldset>
+    {% endif %}
+  </div>

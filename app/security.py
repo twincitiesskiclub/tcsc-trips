@@ -105,8 +105,16 @@ def init_security(app, environment):
 
     @app.after_request
     def add_security_headers(response):
-        if request.path.startswith("/admin"):
+        frame_options = "DENY"
+        # Only the survey preview can be framed, and only by this origin.
+        if request.endpoint == "admin.questions_preview":
+            csp = _PUBLIC_CSP.replace(
+                "frame-ancestors 'none'", "frame-ancestors 'self'")
+            frame_options = "SAMEORIGIN"
+        elif request.path.startswith("/admin"):
             csp = _ADMIN_CSP
+            if request.endpoint in {"admin.new_trip", "admin.edit_trip"}:
+                csp = csp.replace("frame-src 'none'", "frame-src 'self'")
         elif request.endpoint in _PAYMENT_PAGE_ENDPOINTS:
             csp = _PAYMENT_CSP
         else:
@@ -114,7 +122,7 @@ def init_security(app, environment):
 
         response.headers["Content-Security-Policy"] = csp
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["X-Frame-Options"] = frame_options
         response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
         if production:
             response.headers["Strict-Transport-Security"] = "max-age=31536000"

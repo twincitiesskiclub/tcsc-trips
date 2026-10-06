@@ -158,30 +158,30 @@ def test_window_day_math(app, season):
     assert stats["windows"]["new"] is None
 
 
-def test_should_post_gate(app, clean):
+@pytest.mark.parametrize("today, expected", [
+    (date(2098, 1, 5), False),   # before either window
+    (date(2098, 1, 6), True),    # returning window opens
+    (date(2098, 1, 20), True),   # returning window closes
+    (date(2098, 1, 22), True),   # only the new-member window is open
+    (date(2098, 1, 27), True),   # last registration day
+    (date(2098, 1, 28), False),  # first day after registration closes
+    (date(2098, 2, 3), False),   # no extra week of closed recaps
+    (date(2098, 2, 4), False),
+])
+def test_should_post_gate(today, expected):
     from app.seasons.recap import should_post
-    with app.app_context():
-        s = _make_season(
-            "Recap Gate 2098", 2098,
-            window_start=date(2098, 1, 6), window_end=date(2098, 1, 20),
-            new_window=(date(2098, 1, 13), date(2098, 1, 27)),
-        )
-        assert should_post(s, date(2098, 1, 5)) is False   # before any window
-        assert should_post(s, date(2098, 1, 6)) is True    # first day
-        assert should_post(s, date(2098, 1, 22)) is True   # new window open
-        assert should_post(s, date(2098, 2, 3)) is True    # 7 days after last end
-        assert should_post(s, date(2098, 2, 4)) is False   # 8 days after
+    season = Season(
+        returning_start=_utc_noon(date(2098, 1, 6)),
+        returning_end=_utc_noon(date(2098, 1, 20)),
+        new_start=_utc_noon(date(2098, 1, 13)),
+        new_end=_utc_noon(date(2098, 1, 27)),
+    )
+    assert should_post(season, today) is expected
 
 
-def test_should_post_false_without_windows(app, clean):
+def test_should_post_false_without_windows():
     from app.seasons.recap import should_post
-    with app.app_context():
-        s = Season(name="Recap Bare 2097", year=2097, season_type="winter",
-                   price_cents=15000,
-                   start_date=date(2097, 11, 1), end_date=date(2098, 3, 1))
-        db.session.add(s)
-        db.session.commit()
-        assert should_post(s, date(2097, 12, 1)) is False
+    assert should_post(Season(), date(2097, 12, 1)) is False
 
 
 def test_prior_season_comparison_at_same_day_offset(app, season):

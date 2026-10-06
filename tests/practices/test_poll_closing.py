@@ -31,7 +31,7 @@ def protect_foreign_polls(db_session):
     with no other scope, and these tests patch `today_central` to 2099 — so
     the job closes EVERY open poll in the database, not just the test's own.
     Against the real local dev database (see tests/practices/conftest.py) that
-    means a live shadow-mode poll gets silently CLOSED: the nudge job stops
+    means a live open poll gets silently CLOSED: the nudge job stops
     chasing it, the lead picker treats partial availability as final, and the
     only recovery is a manual UPDATE.
 

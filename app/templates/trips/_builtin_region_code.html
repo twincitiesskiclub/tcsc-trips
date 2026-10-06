@@ -1,0 +1,7 @@
+{% from 'trips/_form_ui.html' import question_hint, question_help, optional_hint, error_slot, pill, choice_mark %}
+  <div class="form-field">
+    <label class="form-field__label" for="profile-region">{{ question.label }} {{ question_hint(question) }}</label>
+    <input id="profile-region" type="text" maxlength="10" {% if question.required %}required{% endif %} placeholder="Region code" class="form-input" aria-describedby="profile-region-error{% if question.help_text %} region-help{% endif %}">
+    {{ question_help(question, 'region-help') }}
+    {{ error_slot('profile-region') }}
+  </div>

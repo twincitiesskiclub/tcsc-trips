@@ -1,8 +1,8 @@
 ---
 // /dry-tri: the club's own public race. Roll/Ride/Run triptych under the
-// masthead (the three legs as one strip, hairline gaps like the mosaic),
-// then the 2025 course format as a ledger, then the year-one recap and the
-// 2026 status from the markdoc body, then the two outbound links.
+// masthead, then the current race from tcsc.ski (baked at build, refreshed
+// in the browser by eventRefresh.ts), then the course distances, then the
+// recap from the markdoc body, then the results link.
 import { getEntry, render } from 'astro:content';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import ProseColumn from '@/components/ProseColumn.astro';
@@ -11,6 +11,8 @@ import SectionBand from '@/components/SectionBand.astro';
 import Ledger from '@/components/Ledger.astro';
 import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
+import { eventApiUrl, fetchEventData } from '@/lib/eventData';
+import { renderEventBand } from '@/lib/eventRender';
 
 const page = await getEntry('dry_tri', 'dry_tri');
 if (!page) throw new Error('dry_tri singleton missing (src/content/pages/dry_tri.mdoc)');
@@ -21,17 +23,23 @@ const legs = [
   { caption: 'Ride', src: d.ride_photo, alt: d.ride_photo_alt ?? '', attention: true as const, loading: 'eager' as const },
   { caption: 'Run', src: d.run_photo, alt: d.run_photo_alt ?? '', attention: true as const, loading: 'eager' as const },
 ].filter((leg): leg is typeof leg & { src: ImageMetadata } => Boolean(leg.src));
+
+const apiUrl = eventApiUrl();
+const { source, event } = await fetchEventData(apiUrl);
+// Static on purpose: the browser refresh only rewrites the band, so any
+// race-specific date out here could disagree with it after an admin edit.
+const facts = [
+  { value: 'Roll · Ride · Run', label: 'Format' },
+  { value: 'Carver Park Reserve', label: 'Venue' },
+  { value: 'October 2025', label: 'First held' },
+];
 ---
 <InnerPageLayout
   title="Dry Tri · Twin Cities Ski Club"
   description={d.intro && metaDescription(d.intro)}
   headline={d.headline ?? 'The Dry Tri'}
   subhead={d.intro}
-  facts={[
-    { value: 'Roll · Ride · Run', label: 'Format' },
-    { value: 'Carver Park Reserve', label: 'Venue' },
-    { value: 'October 2025', label: 'First held' },
-  ]}
+  facts={facts}
 >
   {legs.length === 3 && (
     <section class="gutter mx-auto max-w-site band-t-sm" aria-label="The three legs">
@@ -46,33 +54,41 @@ const legs = [
       />
     </section>
   )}
+  <SectionBand variant="paper" seam="Race day">
+    <div
+      data-event-band
+      data-event-api={apiUrl}
+      data-event-source={source}
+      data-event={JSON.stringify(event)}
+      set:html={renderEventBand(event, Date.now(), apiUrl)}
+    />
+  </SectionBand>
   {d.courses.length > 0 && (
     <SectionBand variant="paper" seam="The course" flush="bottom">
-      <Ledger cols="three" surface="paper">
+      <Ledger cols="two" surface="paper">
         {d.courses.map((c) => (
-          <LedgerRow label={c.name} note={c.legs} meta={c.start} />
+          <LedgerRow label={c.name} note={c.legs} />
         ))}
       </Ledger>
-      <p class="mt-4 text-sm text-slate">The 2025 format. Each leg starts and ends at the transition zone in the Parley Lake lot.</p>
+      <p class="mt-4 text-sm text-slate">Each leg starts and ends at the transition zone in the Parley Lake lot.</p>
     </SectionBand>
   )}
   <ProseColumn flush="top">
     <Fragment slot="prose">
       <Content />
     </Fragment>
-    <div class="mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm">
-      {d.register_url && (
-        <a
-          href={d.register_url}
-          class="link-inline"
-        >Registration and updates</a>
-      )}
-      {d.results_url && (
+    {d.results_url && (
+      <div class="mt-8 flex flex-wrap gap-x-8 gap-y-2 text-sm">
         <a
           href={d.results_url}
           class="link-inline"
-        >2025 results</a>
-      )}
-    </div>
+        >Latest results</a>
+      </div>
+    )}
   </ProseColumn>
 </InnerPageLayout>
+
+<script>
+  import { refreshEventBands } from '@/lib/eventRefresh';
+  void refreshEventBands(document, fetch.bind(window), Date.now);
+</script>

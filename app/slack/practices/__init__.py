@@ -17,7 +17,6 @@ from app.slack.practices._config import (
     COACH_SUMMARY_FALLBACK_CHANNEL_ID,
     COLLAB_CHANNEL_ID,
     KJ_SLACK_ID,
-    ADMIN_SLACK_IDS,
     FALLBACK_COACH_IDS,
 )
 from app.slack.practices.announcements import (
@@ -73,9 +72,6 @@ from app.slack.practices.refresh import (
 from app.slack.practices.delete_recovery import (
     recover_failed_practice_delete,
 )
-from app.slack.practices.drafts import (
-    post_readiness_digest,
-)
 
 __all__ = [
     # _config
@@ -90,7 +86,6 @@ __all__ = [
     "COACH_SUMMARY_FALLBACK_CHANNEL_ID",
     "COLLAB_CHANNEL_ID",
     "KJ_SLACK_ID",
-    "ADMIN_SLACK_IDS",
     "FALLBACK_COACH_IDS",
     # announcements
     "post_practice_announcement",
@@ -136,6 +131,4 @@ __all__ = [
     "refresh_practice_posts",
     # delete recovery
     "recover_failed_practice_delete",
-    # drafts
-    "post_readiness_digest",
 ]

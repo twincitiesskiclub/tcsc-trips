@@ -48,7 +48,6 @@ const html = {
 const MISSION =
   'Twin Cities Ski Club is a 501(c)(3) nonprofit dedicated to fostering a supportive community for young adults (ages 21-35) by promoting a healthy lifestyle through cross-country ski training sessions and educational programming.';
 const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
-const APP_ORIGIN = 'https://tcsc.ski';
 // The dates now come from the database, so only the ability line is a
 // fixed string worth pinning here.
 const ABILITY_LINE = 'You should be comfortable on skis. Racing is optional.';
@@ -112,12 +111,11 @@ function htmlFiles(directory) {
     .map((entry) => readFileSync(`${entry.parentPath}/${entry.name}`, 'utf8'));
 }
 
-test('wires season-neutral registration copy to the external registration route', () => {
-  assert.equal(yamlScalar(source.home, 'cta_coming_soon_label'), 'How to register');
-  assert.equal(
-    yamlScalar(source.home, 'cta_coming_soon_url'),
-    APP_ORIGIN,
-  );
+test('wires the confirmed fall registration copy to the home CTA target', () => {
+  assert.equal(yamlScalar(source.home, 'cta_coming_soon_label'), 'Registration');
+  assert.equal(yamlScalar(source.home, 'cta_coming_soon_url'), `${MARKETING_ORIGIN}/join`);
+  assert.equal(yamlScalar(source.home, 'cta_closed_url'), `${MARKETING_ORIGIN}/join`);
+  assert.equal(yamlScalar(source.home, 'cta_closed_label'), 'Registration');
   assert.equal(yamlScalar(source.home, 'mission_paragraph'), MISSION);
 
   assert.match(source.ctaStrip, /\bid\?: string;/);
@@ -155,21 +153,19 @@ test('wires season-neutral registration copy to the external registration route'
     'test build must use the fixture API — run via npm run test:refinement',
   );
 
+  // While registration is coming_soon, the hero, nav and mobile CTAs send
+  // people to the interest-list form on /join.
   const outsideStrip = html.home.replace(registration, '');
-  const registrationTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
-    .filter(([, attributes]) => /\bdata-registration\b/i.test(attributes))
+  const joinTargets = [...outsideStrip.matchAll(/<a\b([^>]*)>/gi)]
     .map(([, attributes]) => attributes.match(/\bhref=(['"])(.*?)\1/i))
     .filter(Boolean)
-    .map((href) => new URL(decodeHtml(href[2]), MARKETING_ORIGIN));
+    .map((href) => new URL(decodeHtml(href[2]), MARKETING_ORIGIN))
+    .filter((url) => url.origin === MARKETING_ORIGIN && url.pathname === '/join');
 
   assert.ok(
-    registrationTargets.length > 0,
-    'hero/nav/mobile registration CTAs must render in the coming_soon state',
+    joinTargets.length > 0,
+    'hero/nav/mobile CTAs must target /join while registration is coming_soon',
   );
-  for (const url of registrationTargets) {
-    assert.equal(url.origin, APP_ORIGIN);
-    assert.equal(url.hash, '');
-  }
   assert.equal(
     (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
       .length,
@@ -187,18 +183,19 @@ test('wires season-neutral registration copy to the external registration route'
     '#registration',
     'registration strip button must not link to its own section',
   );
-  assert.equal(new URL(decodeHtml(stripHref[2]), MARKETING_ORIGIN).origin, APP_ORIGIN);
   assert.ok(toText(html.home).includes(MISSION));
 });
 
 test('publishes only confirmed Dry Tri registration details while retaining 2025 history', () => {
+  // Registration details come from tcsc.ski's event API now, never from
+  // hand-typed content, so the placeholder and register_url are both gone.
   assert.doesNotMatch(source.dryTri, /^register_url:/m);
-  assert.ok(source.dryTri.includes(DRY_TRI_2026));
+  assert.ok(!source.dryTri.includes(DRY_TRI_2026));
   assert.match(source.dryTri, new RegExp(`^results_url: ${DRY_TRI_RESULTS}$`, 'm'));
   assert.ok(source.dryTri.includes('The first Dry Tri was held on October 25, 2025.'));
 
   const dryTriText = toText(html.dryTri);
-  assert.ok(dryTriText.includes(DRY_TRI_2026));
+  assert.ok(!dryTriText.includes(DRY_TRI_2026));
   assert.ok(dryTriText.includes('The first Dry Tri was held on October 25, 2025.'));
   assert.ok(html.dryTri.includes(`href="${DRY_TRI_RESULTS}"`));
   assert.doesNotMatch(html.dryTri, /href="https:\/\/tcsc\.ski\/tri\/?"/i);

@@ -49,6 +49,15 @@ class LeadAvailabilityPoll(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=now_central_naive)
     opened_at = db.Column(db.DateTime)
     closed_at = db.Column(db.DateTime)
+    # The team's block post in #practices-core (always that
+    # channel, so only the ts is stored).
+    block_post_ts = db.Column(db.String(50))
+    # Who pressed Open poll, as a Slack id so an unlinked clicker still renders.
+    opened_by_slack_uid = db.Column(db.String(50))
+    wednesday_reminder_sent_at = db.Column(db.DateTime)
+    # Letters only count up: a deleted session's letter keeps its reactions
+    # on the message, so it must never be handed to a new session.
+    next_position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
 
     practices = db.relationship(
         "LeadAvailabilityPollPractice", backref="poll",

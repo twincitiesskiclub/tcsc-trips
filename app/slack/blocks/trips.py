@@ -45,6 +45,7 @@ def _answer_fields(registration, trip):
     question_labels = {
         question["key"]: question["label"]
         for question in (trip.custom_questions or [])
+        if "builtin" not in question
     }
     fields = []
     for key, value in (registration.answers or {}).items():

@@ -1,11 +1,22 @@
+from datetime import datetime
+
 from flask import Blueprint, redirect, render_template, url_for
 from ..events.models import Audience, Event, EventStatus
+from ..events.selection import select_public_event
 from ..models import Trip, Season
 from ..utils import get_current_times
 
 main = Blueprint('main', __name__)
 
+MARKETING_DRY_TRI_URL = 'https://twincitiesskiclub.org/dry-tri'
+
 MARKETING_TRIPS_URL = 'https://twincitiesskiclub.org/trips'
+
+
+@main.route('/rsvp', strict_slashes=False)
+def kickoff_rsvp():
+    """Open the kickoff Slack post from a short, tappable SMS link."""
+    return render_template('rsvp.html'), 200, {'Cache-Control': 'no-store'}
 
 
 @main.route('/register', strict_slashes=False)
@@ -60,4 +71,12 @@ def get_home_page():
 @main.route('/tri')
 @main.route('/dryland-triathlon')
 def dryland_triathlon_page():
-    return redirect('/events/dry-tri-2026', code=302)
+    candidates = Event.query.filter(Event.template_key == 'dry_tri').all()
+    event = select_public_event(candidates, 'dry_tri', datetime.utcnow())
+    if event is None:
+        return redirect('/', code=302)
+    if event.status != EventStatus.ACTIVE:
+        # The event page 404s for a closed event; the marketing page says
+        # registration is closed and still has the race details.
+        return redirect(MARKETING_DRY_TRI_URL, code=302)
+    return redirect(url_for('events.get_event_page', slug=event.slug), code=302)

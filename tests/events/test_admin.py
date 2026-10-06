@@ -73,6 +73,7 @@ def _registration(event, status=RegistrationStatus.CONFIRMED):
         discount_applied=True,
         status=status,
         created_at=datetime(2026, 7, 24, 15, 30),
+        waiver_accepted_at=datetime(2026, 7, 24, 15, 29),
     )
     registration.participants.extend(
         [
@@ -131,7 +132,7 @@ def test_events_data_returns_confirmed_revenue(
         "id": event.id,
         "name": "Admin Event",
         "slug": "admin-grid-test",
-        "event_date": event.event_date.isoformat(),
+        "event_date": event.event_date.isoformat() + "Z",
         "audience": "both",
         "status": "active",
         "confirmed_count": 1,
@@ -309,6 +310,8 @@ def test_registration_csv_contains_flattened_headers_and_values(
     assert "price_option_name" in csv_text.splitlines()[0]
     assert "participant_1" in csv_text.splitlines()[0]
     assert "course" in csv_text.splitlines()[0]
+    assert "waiver_accepted_at" in csv_text.splitlines()[0]
+    assert "2026-07-24T15:29:00" in csv_text
     assert "Nordic Rockets" in csv_text
     assert "Rollerskier: Ada Skier" in csv_text
     assert "Long course" in csv_text
@@ -685,3 +688,68 @@ def test_registrations_roster_lists_a_repeated_question_key_once(
     keys = [column["key"] for column in body["columns"]]
     assert keys.count("competition_gender") == 1
     assert body["registrations"][0]["competition_gender"] == "Mixed"
+
+
+def _central_form(slug, event_date, signup_start, signup_end):
+    return {
+        "slug": slug,
+        "name": "Timezone Event",
+        "description": "",
+        "location": "Carver Park Reserve",
+        "event_date": event_date,
+        "signup_start": signup_start,
+        "signup_end": signup_end,
+        "capacity": "",
+        "status": EventStatus.DRAFT,
+        "audience": "both",
+        "details_url": "",
+        "discount_code": "",
+    }
+
+
+def test_create_stores_central_input_as_utc_in_cdt_and_cst(admin_client, db_session):
+    response = admin_client.post(
+        "/admin/events/new",
+        data=_central_form(
+            "admin-grid-test", "2026-10-24T09:00", "2026-01-10T08:00", "2026-10-22T23:59"
+        ),
+    )
+
+    assert response.status_code == 302
+    event = Event.query.filter_by(slug="admin-grid-test").one()
+    assert event.event_date == datetime(2026, 10, 24, 14, 0)
+    assert event.signup_start == datetime(2026, 1, 10, 14, 0)
+    assert event.signup_end == datetime(2026, 10, 23, 4, 59)
+
+
+def test_edit_form_prefills_central_wall_time(admin_client, db_session):
+    event = _event("admin-delete-test")
+    event.event_date = datetime(2026, 10, 24, 14, 0)
+    db_session.session.add(event)
+    db_session.session.commit()
+
+    html = admin_client.get(f"/admin/events/{event.id}/edit").get_data(as_text=True)
+
+    assert 'value="2026-10-24T09:00"' in html
+
+
+def test_saving_the_edit_form_unchanged_keeps_the_time(admin_client, db_session):
+    event = _event("admin-delete-test")
+    event.event_date = datetime(2026, 10, 24, 14, 0)
+    event.signup_start = datetime(2026, 7, 25, 5, 0)
+    event.signup_end = datetime(2026, 10, 23, 4, 59)
+    db_session.session.add(event)
+    db_session.session.commit()
+
+    form = _edit_form(event, "[]", "[]")
+    form.update(
+        event_date="2026-10-24T09:00",
+        signup_start="2026-07-25T00:00",
+        signup_end="2026-10-22T23:59",
+    )
+    response = admin_client.post(f"/admin/events/{event.id}/edit", data=form)
+
+    assert response.status_code == 302, response.get_data(as_text=True)[:500]
+    db_session.session.refresh(event)
+    assert event.event_date == datetime(2026, 10, 24, 14, 0)
+    assert event.signup_end == datetime(2026, 10, 23, 4, 59)

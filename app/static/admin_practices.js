@@ -23,7 +23,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   attachEventListeners();
   render();
   renderPolls();
-  flashPendingAvailabilityWarning();
 });
 
 async function loadPractices() {
@@ -173,15 +172,14 @@ function rowHtml(p, isToday) {
   const st = p.status || 'scheduled';
   const status = `<span class="pl-status is-${esc(st)}">${esc(STATUS_LABEL[st] || st)}</span>`;
   const flag = isToday ? '<span class="pl-today-flag">Today</span>' : '';
-  // A draft looks like any other practice in this list but no member can see
-  // it, so it is badged on the row itself — a director reading the week needs
-  // to know which of these are actually live without cross-checking anything.
-  const missing = (p.missing_details || []);
+  // A hidden practice looks like any other in this list but no member can see
+  // it, so it is badged on the row itself.
+  const missing = (p.missing_details || []).filter(m => m !== 'not cancelled');
   const draftBadge = p.is_draft
-    ? `<span class="pl-draft">Draft${missing.length ? ` · needs ${esc(missing.join(', '))}` : ''}</span>`
+    ? `<span class="pl-draft">Hidden${missing.length ? ` · needs ${esc(missing.join(', '))}` : ''}</span>`
     : '';
   return `<button type="button" class="pl-row${isToday ? ' today' : ''}${p.is_draft ? ' pl-row-draft' : ''}" data-id="${p.id}" `
-    + `aria-label="${esc(p.location_name || 'Practice')} ${esc(time)}, ${esc(STATUS_LABEL[st] || st)}${p.is_draft ? ', draft, not visible to members' : ''}">`
+    + `aria-label="${esc(p.location_name || 'Practice')} ${esc(time)}, ${esc(STATUS_LABEL[st] || st)}${p.is_draft ? ', hidden from members' : ''}">`
     + `<div class="pl-row-main"><div class="pl-row-top"><span class="pl-loc">${esc(p.location_name || 'No Location')}</span>`
     + `<span class="pl-time">${esc(time)}</span>${flag}</div>`
     + `<div class="pl-meta">${pills}${inds}</div>`
@@ -190,65 +188,16 @@ function rowHtml(p, isToday) {
     + `<div class="pl-row-aside">${status}${draftBadge}</div></button>`;
 }
 
-/* ---------- drafts → published ----------
-
-   Blocks are normally published from the availability poll that collected
-   leads for them (POST /admin/availability/polls/<id>/publish), which is the
-   batch a director actually thinks in. There is no week-level or list-level
-   publish here on purpose: the Sunday evening flow already puts the coming
-   week in front of members with nobody clicking anything.
-
-   What lives here is the single-practice escape hatch, in the drawer. A draft
-   whose block never got a poll has no other route to being published, and an
-   unpublishable practice is the exact failure this whole feature exists to
-   prevent. */
+/* ---------- hidden practices ----------
+   Bot-created sessions stay hidden from members until they have a location
+   and a type, then go live on their own (publish_if_ready). Nothing to click. */
 
 function draftPublishHtml(p) {
   if (!p.is_draft) return '';
-  const missing = (p.missing_details || []);
-  if (missing.length) {
-    return `<div class="pl-draft-note">Draft — members can't see this yet; `
-      + `needs ${esc(missing.join(', '))}.</div>`;
-  }
-  return `<div class="pl-draft-note">Draft — members can't see this yet. `
-    + `Normally published with its availability block.`
-    + `<button type="button" class="pl-act pl-act-ghost" id="pl-publish-one" `
-    + `style="margin-top:9px">Publish this practice</button></div>`;
-}
-
-async function publishOnePractice(id) {
-  const btn = document.getElementById('pl-publish-one');
-  if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
-
-  try {
-    const r = await fetch('/admin/practices/publish', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ practice_ids: [id] }),
-    });
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
-
-    if ((body.published || []).length) {
-      showToast('Practice published — members can see it now', 'success');
-    } else {
-      const skipped = (body.skipped || [])[0];
-      showToast(
-        skipped ? `Still needs ${skipped.missing.join(', ')}`
-                : 'Practice was already published',
-        skipped ? 'warning' : 'info');
-    }
-
-    await Promise.all([loadPractices(), loadAvailabilityPolls()]);
-    render();
-    renderPolls(); // its block's unpublished/publishable counts just changed
-    const fresh = findPractice(id);
-    if (fresh && currentDrawerId === id) populateDrawer(fresh);
-  } catch (e) {
-    console.error(e);
-    showToast(e.message || 'Failed to publish practice', 'error');
-    if (btn) { btn.disabled = false; btn.textContent = 'Publish this practice'; }
-  }
+  const missing = (p.missing_details || []).filter(m => m !== 'not cancelled');
+  if (!missing.length) return '<div class="pl-draft-note">Hidden from members.</div>';
+  const needs = missing.map(m => `a ${m}`).join(' and ');
+  return `<div class="pl-draft-note">Hidden from members until it has ${esc(needs)}.</div>`;
 }
 
 /* ---------- events ---------- */
@@ -268,11 +217,10 @@ function attachEventListeners() {
   document.getElementById('pl-scrim').addEventListener('click', closeDrawer);
   document.getElementById('pl-cancel-btn').addEventListener('click', () => { if (currentDrawerId) openCancelModal(currentDrawerId); });
   document.getElementById('pl-delete-btn').addEventListener('click', () => { if (currentDrawerId) deletePractice(currentDrawerId); });
-  document.getElementById('pl-poll-btn').addEventListener('click', openAvailabilityPoll);
-
+  document.getElementById('pl-block-job-btn').addEventListener('click', runBlockJob);
   document.getElementById('pl-polls').addEventListener('click', (e) => {
-    const btn = e.target.closest('.pl-poll-publish');
-    if (btn) publishPollBlock(parseInt(btn.dataset.pollId));
+    const btn = e.target.closest('.pl-poll-open');
+    if (btn) openBlockPoll(parseInt(btn.dataset.pollId));
   });
 
   document.addEventListener('keydown', (e) => {
@@ -334,11 +282,6 @@ function populateDrawer(p) {
   document.getElementById('pl-badges').innerHTML = badges;
 
   document.getElementById('pl-dwbody').innerHTML = draftPublishHtml(p) + drawerBody(p);
-
-  const publishOne = document.getElementById('pl-publish-one');
-  if (publishOne) {
-    publishOne.addEventListener('click', () => publishOnePractice(p.id));
-  }
 
   const edit = document.getElementById('pl-edit');
   edit.setAttribute('href', '/admin/practices/' + p.id);
@@ -468,87 +411,8 @@ async function deletePractice(id) {
   } catch (e) { showToast('Failed to delete practice', 'error'); }
 }
 
-/* ---------- lead availability poll trigger ---------- */
-// Friendly names for the only two channels a poll can ever target -- see
-// app/practices/availability.py's _target_channel(). Falls back to the raw
-// id below for anything unrecognized rather than guessing a name.
-const AVAILABILITY_CHANNEL_NAMES = {
-  'C02J4DGCFL2': '#coord-practices-leads-assists (the live, 64-member channel)',
-  'C0B3Y71PG92': '#collab-asset-mgmt-practices (shadow test channel)',
-};
-
-function describeAvailabilityChannel(channelId, isShadow) {
-  const known = AVAILABILITY_CHANNEL_NAMES[channelId];
-  if (known) return known;
-  return isShadow ? `${channelId} (shadow)` : `${channelId} (live)`;
-}
-
-async function openAvailabilityPoll() {
-  const startsOn = document.getElementById('pl-poll-start').value;
-  const endsOn = document.getElementById('pl-poll-end').value;
-  if (!startsOn || !endsOn) { showToast('Pick a start and end date for the poll', 'error'); return; }
-
-  const btn = document.getElementById('pl-poll-btn');
-  btn.disabled = true;
-  try {
-    // Step 1: build the DRAFT poll. build_poll() refuses (400) if any
-    // practice in range is missing location/type/time -- that error names
-    // exactly which practice needs what, so it's shown verbatim, not
-    // replaced with a generic message. This step only writes a DRAFT row;
-    // nothing is posted to Slack yet.
-    const createResult = await fetch('/admin/availability/polls/create', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ starts_on: startsOn, ends_on: endsOn }),
-    }).then(r => r.json());
-    if (!createResult.success) {
-      showToast(createResult.error || 'Failed to create poll', 'error');
-      return;
-    }
-
-    // Confirm before the one step that actually posts to Slack, naming the
-    // resolved target channel explicitly -- a one-click "Open Availability
-    // Poll" button with no confirmation is how a shadow-mode misconfig
-    // reaches all 64 real members instead of the 5-person test channel.
-    const channelLabel = describeAvailabilityChannel(createResult.channel_id, createResult.is_shadow);
-    const proceed = confirm(
-      `This will post the availability poll to ${channelLabel}. Continue?`
-    );
-    if (!proceed) {
-      showToast('Poll created as a draft; not posted to Slack', 'success');
-      return;
-    }
-
-    // Step 2: open it -- posts to Slack and seeds reactions. Refuses (400)
-    // if any custom letter emoji is missing from the workspace; that error
-    // names the missing emoji verbatim too.
-    const openResult = await fetch(`/admin/availability/polls/${createResult.poll_id}/open`, {
-      method: 'POST',
-    }).then(r => r.json());
-    if (!openResult.success) {
-      showToast(openResult.error || 'Failed to open poll', 'error');
-      return;
-    }
-
-    showToast(`Availability poll posted to ${channelLabel}`, 'success');
-  } catch (e) {
-    showToast('Failed to open availability poll', 'error');
-  } finally {
-    btn.disabled = false;
-    // A poll may have been created (even the "draft only, not posted" path),
-    // so the poll cards below the toolbar need to pick it up.
-    await loadAvailabilityPolls();
-    renderPolls();
-  }
-}
-
-/* ---------- block-level publish (per availability poll) ----------
-
-   THE publish control: one poll's worth of practices, sent live together from
-   the poll that collected their availability. Deliberately per block — never
-   per week, never automatic (see the note above draftPublishHtml). */
-
-const POLL_STATUS_LABEL = {draft: 'Draft', open: 'Open', closed: 'Closed'};
+/* ---------- lead availability blocks ---------- */
+const POLL_STATUS_LABEL = {draft: 'Not opened', open: 'Open', closed: 'Closed'};
 
 async function loadAvailabilityPolls() {
   try {
@@ -570,27 +434,58 @@ function pollRangeLabel(poll) {
 function pollCardHtml(poll) {
   const st = poll.status || 'draft';
   const n = (c, w) => `${c} ${w}${c === 1 ? '' : 's'}`;
-  // "N unpublished, 0 publishable" must read as "go fill in details", never
-  // as "nothing to do" — that distinction is why the endpoint returns both.
-  const held = poll.unpublished - poll.publishable;
   let act = '';
-  if (held > 0) {
-    act += `<span class="pl-poll-note warn">${n(held, 'draft')} need${held === 1 ? 's' : ''} details before publishing</span>`;
-  }
-  if (poll.publishable > 0) {
-    // esc() even though poll.id is a server-side int column: this file's
-    // discipline is that every interpolated value is escaped, and a single
-    // exception is what makes the next one look acceptable.
-    act += `<button type="button" class="pl-poll-publish" data-poll-id="${esc(poll.id)}">`
-      + `Publish ${n(poll.publishable, 'practice')}</button>`;
-  } else if (poll.unpublished === 0) {
-    act = '<span class="pl-poll-note">All published</span>';
+  if (st === 'draft') {
+    act = `<button type="button" class="pl-poll-open" data-poll-id="${esc(poll.id)}">Open poll</button>`;
+  } else if (st === 'closed' && !poll.posted) {
+    act = '<span class="pl-poll-note">Assign only</span>';
   }
   return `<div class="pl-poll">`
     + `<span class="pl-poll-range">${esc(pollRangeLabel(poll))}</span>`
     + `<span class="pl-poll-status is-${esc(st)}">${esc(POLL_STATUS_LABEL[st] || st)}</span>`
     + `<span class="pl-poll-sessions">${n(poll.sessions, 'session')}</span>`
     + `<span class="pl-poll-act">${act}</span></div>`;
+}
+
+async function openBlockPoll(pollId) {
+  const btn = document.querySelector(`.pl-poll-open[data-poll-id="${pollId}"]`);
+  if (btn) { btn.disabled = true; btn.textContent = 'Opening…'; }
+  try {
+    const r = await fetch(`/admin/availability/polls/${pollId}/open`, {method: 'POST'});
+    const body = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
+    showToast('Lead poll posted to #coord-practices-leads-assists', 'success');
+  } catch (e) {
+    showToast(e.message || 'Could not open the poll', 'error');
+  } finally {
+    await loadAvailabilityPolls();
+    renderPolls();
+  }
+}
+
+function blockJobMessage(results) {
+  const failed = results.find(r => r.error);
+  if (failed) return {text: 'Block job had errors: ' + failed.error, tone: 'error'};
+  const posted = results.filter(r => r.posted === 'True').length;
+  if (posted) return {text: 'Block job ran: ' + posted + ' block post(s) sent', tone: 'success'};
+  return {text: 'Block job ran: nothing to do', tone: 'success'};
+}
+
+async function runBlockJob() {
+  const btn = document.getElementById('pl-block-job-btn');
+  btn.disabled = true;
+  try {
+    const r = await fetch('/admin/availability/block-job/run', {method: 'POST'});
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const msg = blockJobMessage((await r.json()).results || []);
+    showToast(msg.text, msg.tone);
+  } catch (e) {
+    showToast('Block job failed', 'error');
+  } finally {
+    btn.disabled = false;
+    await loadAvailabilityPolls();
+    renderPolls();
+  }
 }
 
 function renderPolls() {
@@ -601,83 +496,6 @@ function renderPolls() {
     return;
   }
   root.innerHTML = pollsData.map(pollCardHtml).join('');
-}
-
-function practiceName(id) {
-  const p = findPractice(id);
-  if (!p) return `practice #${id}`;
-  const d = new Date(p.date)
-    .toLocaleDateString([], {weekday: 'short', month: 'numeric', day: 'numeric'});
-  return `${d} ${p.location_name || 'No Location'}`;
-}
-
-function publishResultMessage(result) {
-  const published = result.published || [];
-  const skipped = result.skipped || [];
-  const parts = [];
-  if (published.length) {
-    parts.push(`Published ${published.length} practice${published.length === 1 ? '' : 's'}`
-      + ' — members can see them now');
-  }
-  for (const s of skipped) {
-    parts.push(`held back ${practiceName(s.practice_id)} — still needs `
-      + (s.missing || []).join(', '));
-  }
-  if (!parts.length) {
-    return (result.already_published || []).length
-      ? 'Everything in this block was already published'
-      : 'Nothing to publish in this block';
-  }
-  return parts.join('; ');
-}
-
-async function publishPollBlock(pollId) {
-  const poll = (pollsData || []).find(p => p.id === pollId);
-  if (!poll) return;
-  const count = poll.publishable;
-  const proceed = confirm(
-    `Publish ${count} practice${count === 1 ? '' : 's'} from the `
-    + `${pollRangeLabel(poll)} block? Members will be able to see them, and `
-    + 'announcements will go out on the normal schedule.');
-  if (!proceed) return;
-
-  const btn = document.querySelector(`.pl-poll-publish[data-poll-id="${pollId}"]`);
-  if (btn) { btn.disabled = true; btn.textContent = 'Publishing…'; }
-  try {
-    const r = await fetch(`/admin/availability/polls/${pollId}/publish`, {method: 'POST'});
-    const body = await r.json().catch(() => ({}));
-    if (!r.ok) throw new Error(body.error || ('HTTP ' + r.status));
-    const tone = (body.skipped || []).length
-      ? 'warning' : ((body.published || []).length ? 'success' : 'info');
-    showToast(publishResultMessage(body), tone);
-  } catch (e) {
-    console.error(e);
-    showToast(e.message || 'Failed to publish this block', 'error');
-  } finally {
-    // Re-render both views from fresh data either way — the rows' draft
-    // badges and the poll counts must agree, and a re-render also restores
-    // the button after a failure.
-    await Promise.all([loadPractices(), loadAvailabilityPolls()]);
-    render();
-    renderPolls();
-  }
-}
-
-/* ---------- availability_warning handoff (from the create form) ----------
-
-   create_practice() warns when a new practice lands inside an OPEN poll's
-   range: the poll's emoji mapping is already fixed, so the practice gets no
-   letter and collects no availability. The create page stashes that warning
-   (see _detail_script.js) because it redirects here immediately — the toast
-   has to survive the navigation to be seen by the admin who caused it. */
-
-function flashPendingAvailabilityWarning() {
-  let warning = null;
-  try {
-    warning = window.sessionStorage.getItem('tcsc-availability-warning');
-    if (warning) window.sessionStorage.removeItem('tcsc-availability-warning');
-  } catch (e) { return; /* storage blocked; the server already logged it */ }
-  if (warning) showToast(warning, 'warning');
 }
 
 /* ---------- lead candidates picker (practice create/edit form) ---------- */

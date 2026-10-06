@@ -78,9 +78,15 @@ def build_volunteer_ask_blocks(
             "elements": [checkboxes],
         },
         {
-            "type": "actions",
+            # Slack's message API rejects this multi-select in actions blocks.
+            # Keep its IDs stable so Submit still receives the same state keys.
+            "type": "section",
             "block_id": "volunteer_committees_block",
-            "elements": [select],
+            "text": {
+                "type": "mrkdwn",
+                "text": "Joining a committee? Pick one or more:",
+            },
+            "accessory": select,
         },
     ]
 

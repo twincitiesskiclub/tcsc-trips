@@ -50,6 +50,14 @@ def get_default_duration_minutes():
         return 90
 
 
+def get_training_plan_url() -> Optional[str]:
+    """Training plan link for the weekly summary, or None to omit the line."""
+    value = (
+        _load_practice_config().get("weekly_summary") or {}
+    ).get("training_plan_url")
+    return str(value or "").strip() or None
+
+
 def reload_config():
     """Force reload of config from disk (useful for testing or config changes)."""
     global _config_cache, _practice_config_cache
@@ -98,13 +106,6 @@ COACH_SUMMARY_FALLBACK_CHANNEL_ID = "C053T1AR48Y"
 
 # KJ's Slack ID for 48h check tagging
 KJ_SLACK_ID = "U02K45N1JEV"
-
-# Admins to escalate to if practice not approved
-ADMIN_SLACK_IDS = [
-    "U02JP5QNQFS",  # @augie
-    "U02K5TKMQH3",  # @simon
-    "U02J6R6CZS7",  # @rob
-]
 
 # Fallback coaches if no coach assigned to practice
 FALLBACK_COACH_IDS = [

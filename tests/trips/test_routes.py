@@ -1,4 +1,6 @@
 from datetime import datetime, timedelta
+from copy import deepcopy
+import re
 from types import SimpleNamespace
 from unittest.mock import patch
 
@@ -6,7 +8,9 @@ import pytest
 
 from app.constants import UserStatus
 from app.models import db, Trip, User
-from app.trips.models import TripRegistration, TripRegistrationStatus, TripSeries
+from app.trips.questions import default_builtin_questions
+from app.trips.models import TripProfile, TripRegistration, TripRegistrationStatus, TripSeries
+from app.trips.questions import DIETARY_OTHER
 
 
 QUESTIONS = [
@@ -29,7 +33,7 @@ def public_trip(db_session):
         signup_start=datetime.utcnow() - timedelta(days=1),
         signup_end=datetime.utcnow() + timedelta(days=30),
         price_low=10000, price_high=15000, status="active",
-        custom_questions=QUESTIONS,
+        custom_questions=default_builtin_questions() + QUESTIONS,
     )
     user = User(first_name="Test", last_name="Member",
                 email="trip-member@example.com", status=UserStatus.ACTIVE)
@@ -38,9 +42,10 @@ def public_trip(db_session):
     return series, trip, user
 
 
-def _intent(intent_id="pi_trip_test", amount=10000):
+def _intent(intent_id="pi_trip_test", amount=10000, status="requires_payment_method", registration_id=None):
     return SimpleNamespace(id=intent_id, client_secret=f"cs_{intent_id}",
-                           amount=amount, status="requires_payment_method")
+                           amount=amount, status=status,
+                           metadata={"payment_type": "trip", "registration_id": str(registration_id)})
 
 
 def _payload():
@@ -103,6 +108,89 @@ def test_stripe_failure_leaves_registration_pending(
     assert registration.payment_intent_id is None
 
 
+def _pending_registration(public_trip):
+    _, trip, user = public_trip
+    registration = TripRegistration(
+        trip_id=trip.id, user_id=user.id, status=TripRegistrationStatus.PENDING_PAYMENT,
+        answers={}, price_tier="low", amount_cents=10000, payment_intent_id="pi_previous")
+    db.session.add(registration)
+    db.session.commit()
+    return registration
+
+
+@pytest.mark.parametrize("status", [
+    "requires_payment_method", "requires_confirmation", "requires_action", "canceled",
+])
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.cancel")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_register_reuses_pending_row_and_cancels_stale_intent(
+        retrieve_intent, cancel_intent, create_intent, client, public_trip, status):
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _intent("pi_previous", status=status, registration_id=registration.id)
+    create_intent.return_value = _intent("pi_replacement")
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 200
+    assert response.get_json()["clientSecret"] == "cs_pi_replacement"
+    assert response.get_json()["registrationId"] == registration.id
+    retrieve_intent.assert_called_once_with("pi_previous")
+    cancel_intent.assert_called_once_with("pi_previous")
+    assert create_intent.call_args.kwargs["metadata"]["registration_id"] == str(registration.id)
+    assert create_intent.call_args.kwargs["capture_method"] == "manual"
+    db.session.expire_all()
+    assert registration.payment_intent_id == "pi_replacement"
+    assert registration.status == TripRegistrationStatus.PENDING_PAYMENT
+
+
+@pytest.mark.parametrize("status", ["requires_capture", "succeeded", "processing"])
+@patch("app.routes.payments.trip_slack")
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.cancel")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_register_recovers_authorized_previous_intent(
+        retrieve_intent, cancel_intent, create_intent, trip_slack, client, public_trip, status):
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _intent("pi_previous", status=status, registration_id=registration.id)
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == {"email": "You're already signed up for this trip."}
+    retrieve_intent.assert_called_once_with("pi_previous")
+    cancel_intent.assert_not_called()
+    create_intent.assert_not_called()
+    db.session.expire_all()
+    assert registration.payment_intent_id == "pi_previous"
+    assert registration.status == TripRegistrationStatus.PENDING
+    trip_slack.send_registration_dm.assert_called_once_with(registration)
+
+
+@pytest.mark.parametrize("failure", ["retrieve", "cancel"])
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.cancel")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_previous_intent_errors_do_not_block_retry(
+        retrieve_intent, cancel_intent, create_intent, client, public_trip, caplog, failure):
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _intent("pi_previous", registration_id=registration.id)
+    failing_call = retrieve_intent if failure == "retrieve" else cancel_intent
+    failing_call.side_effect = RuntimeError("Stripe is unavailable")
+    create_intent.return_value = _intent("pi_replacement")
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 200
+    assert response.get_json()["clientSecret"] == "cs_pi_replacement"
+    assert any(record.levelname == "WARNING" and "pi_previous" in record.getMessage()
+               for record in caplog.records)
+    if failure == "retrieve":
+        cancel_intent.assert_not_called()
+    db.session.expire_all()
+    assert registration.payment_intent_id == "pi_replacement"
+
+
 def test_register_validation_error_returns_field_errors(
         client, public_trip):
     payload = _payload()
@@ -115,8 +203,10 @@ def test_register_validation_error_returns_field_errors(
 def test_register_page_renders_questions_and_gate(client, public_trip):
     response = client.get("/test-trip-routes/register")
     html = response.get_data(as_text=True)
-    assert "css/tailwind-output.css" in html
-    assert "1.</span> Member check" in html
+    assert "css/styles/main.css" in html
+    assert 'id="gate-section"' in html
+    assert "Member check" in html
+    assert "TEST Trip 2027 registration | Twin Cities Ski Club" in html
     assert "member-email" in html
     assert "Which task?" in html
     assert "trip-registration-data" in html
@@ -144,7 +234,7 @@ def test_trip_page_renders_closed_registration_notice(client, db_session):
         signup_start=now - timedelta(days=30),
         signup_end=now - timedelta(days=1),
         price_low=10000, price_high=15000, status="active",
-        custom_questions=QUESTIONS,
+        custom_questions=default_builtin_questions() + QUESTIONS,
     )
     db.session.add(trip)
     db.session.commit()
@@ -154,3 +244,113 @@ def test_trip_page_renders_closed_registration_notice(client, db_session):
     assert "Trip registration has closed." in html
     assert 'class="notice notice--info"' in html
     assert 'role="status"' in html
+
+
+PROFILE_FIELDS = {
+    "carpool": ("can_drive", "seat_capacity", "bike_capacity", "hitch_size"),
+    "region_code": ("region_code",),
+    "dietary": ("dietary_restrictions", "dietary_other"),
+    "tent": ("has_tent",),
+}
+
+
+@pytest.mark.parametrize("asked", [None, *PROFILE_FIELDS])
+@pytest.mark.parametrize("existing", [False, True])
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+def test_post_only_writes_enabled_profile_columns(
+        create_intent, client, public_trip, asked, existing):
+    _, trip, user = public_trip
+    previous = dict(can_drive=True, seat_capacity=7, bike_capacity=4, hitch_size="2",
+                    region_code="9", dietary_restrictions=["Vegan"],
+                    dietary_other="Previous needs", has_tent=True)
+    if existing:
+        db.session.add(TripProfile(user_id=user.id, **previous))
+    trip.custom_questions = [q | {"enabled": q["builtin"] == asked}
+                             for q in default_builtin_questions()] + QUESTIONS
+    db.session.commit()
+    payload = _payload()
+    # Disabled fields are ignored even when a stale or tampered client sends them.
+    for builtin, fields in PROFILE_FIELDS.items():
+        if builtin != asked:
+            payload["profile"].update({field: {"invalid": True} for field in fields})
+    create_intent.return_value = _intent()
+    response = client.post("/test-trip-routes/register", json=payload)
+    assert response.status_code == 200, response.get_json()
+    db.session.expire_all()
+    expected = dict(can_drive=False, seat_capacity=None, bike_capacity=None, hitch_size="",
+                    region_code="4", dietary_restrictions=[], dietary_other="", has_tent=None)
+    for builtin, fields in PROFILE_FIELDS.items():
+        for field in fields:
+            if builtin == asked:
+                value = expected[field]
+            elif existing:
+                value = previous[field]
+            else:
+                value = {"dietary_restrictions": [], "dietary_other": ""}.get(field)
+            assert getattr(user.trip_profile, field) == value, field
+    registration = db.session.get(TripRegistration, response.get_json()["registrationId"])
+    assert registration.answers == {"chore_preference": "Cooking"}
+
+
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+def test_optional_region_accepts_blank(create_intent, client, public_trip):
+    _, trip, user = public_trip
+    trip.custom_questions = [q | {"required": False} if q.get("builtin") == "region_code" else q
+                             for q in trip.custom_questions]
+    db.session.commit()
+    create_intent.return_value = _intent()
+    payload = _payload()
+    payload["profile"]["region_code"] = " "
+    response = client.post("/test-trip-routes/register", json=payload)
+    assert response.status_code == 200
+    assert user.trip_profile.region_code == ""
+
+
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+def test_required_dietary_and_trip_specific_options(create_intent, client, public_trip):
+    _, trip, user = public_trip
+    trip.custom_questions = [q | {"required": True, "options": ["Sesame allergy", DIETARY_OTHER]}
+                             if q.get("builtin") == "dietary" else q for q in trip.custom_questions]
+    db.session.commit()
+    payload = _payload()
+    for invalid in ([], ["Vegetarian"], "Sesame allergy"):
+        payload["profile"]["dietary_restrictions"] = invalid
+        response = client.post("/test-trip-routes/register", json=payload)
+        assert response.status_code == 400
+        assert "profile.dietary_restrictions" in response.get_json()["error"]
+        create_intent.assert_not_called()
+    payload["profile"].update(dietary_restrictions=["Sesame allergy", DIETARY_OTHER],
+                              dietary_other="Also avoid celery")
+    create_intent.return_value = _intent()
+    response = client.post("/test-trip-routes/register", json=payload)
+    assert response.status_code == 200
+    assert user.trip_profile.dietary_restrictions == ["Sesame allergy", DIETARY_OTHER]
+    assert user.trip_profile.dietary_other == "Also avoid celery"
+
+
+def test_register_renders_stored_order_with_disabled_builtins_omitted(client, public_trip):
+    _, trip, _ = public_trip
+    carpool, region, dietary, tent = default_builtin_questions()
+    trip.custom_questions = [deepcopy(QUESTIONS[0]), tent, region | {"required": False},
+                             carpool | {"enabled": False}, dietary]
+    db.session.commit()
+    html = client.get("/test-trip-routes/register").get_data(as_text=True)
+    assert re.findall(r'data-(?:builtin|question-key)="([^"]+)"', html) == [
+        "chore_preference", "tent", "region_code", "dietary"]
+    assert 'id="driver-details"' not in html
+    region_input = re.search(r'<input id="profile-region"[^>]*>', html)[0]
+    assert "required" not in region_input
+    assert 'maxlength="10"' in region_input
+    assert 'href="https://bit.ly/TCSCmap"' in html
+    assert re.findall(r'<section id="([^"]+)" data-step-section', html) == [
+        "gate-section", "trip-questions", "payment-section"]
+
+
+def test_no_enabled_questions_omits_survey_and_progress_step(client, public_trip):
+    _, trip, _ = public_trip
+    trip.custom_questions = [q | {"enabled": False} for q in default_builtin_questions()]
+    db.session.commit()
+    html = client.get("/test-trip-routes/register").get_data(as_text=True)
+    assert 'id="trip-questions"' not in html
+    assert 'href="#trip-questions"' not in html
+    assert html.count('data-step-link') == 2
