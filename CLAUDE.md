@@ -116,6 +116,20 @@ A build that cannot reach the API **falls back rather than failing**, so it
 stamps `data-season-source="fallback"` on `<body>`. If the live site shows
 wrong dates, check that attribute first.
 
+## Dry Tri page (marketing site)
+
+twincitiesskiclub.org/dry-tri reads the current Dry Tri from
+`GET /api/events/dry-tri`, the same pick `tcsc.ski/tri` redirects to
+(`app/events/selection.py`). The build bakes it and the browser re-renders the
+band from a fresh fetch, so admin edits to the event show without a deploy.
+Only the band refreshes: keep race-specific dates out of the masthead.
+
+The band shows only the schedule part of the event description. Its opening
+paragraph is the tcsc.ski registration page's only introduction, so leave it
+in the event. If the live page shows the wrong race info, check the band's
+`data-event-source`: `fallback` means the build could not reach the API
+(redeploy `tcsc-team-site`), `live` means the browser fetch replaced it.
+
 ## Skipper AI (practice safety evaluation)
 
 Thresholds live in `config/skipper.yaml`; read them there rather than hardcoding.

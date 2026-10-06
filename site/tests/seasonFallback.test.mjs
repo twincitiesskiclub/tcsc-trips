@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
@@ -12,7 +12,11 @@ test('a build against a dead API still succeeds and announces itself', () => {
 
   execFileSync('npm', ['run', 'build'], {
     cwd: root,
-    env: { ...process.env, PUBLIC_SEASON_API_URL: 'http://127.0.0.1:1/api/season' },
+    env: {
+      ...process.env,
+      PUBLIC_SEASON_API_URL: 'http://127.0.0.1:1/api/season',
+      PUBLIC_EVENT_API_URL: 'http://127.0.0.1:1/api/events/dry-tri',
+    },
     stdio: 'pipe',
   });
 
@@ -41,4 +45,16 @@ test.after(() => {
     cwd: new URL('..', import.meta.url).pathname,
     stdio: 'pipe',
   });
+});
+
+test('the Dry Tri band announces its own fallback when the event API is dead', () => {
+  // Runs after the build above, which pointed both APIs at a dead port.
+  // Without TCSC_EDGE_CONFIG the build uses directory format.
+  const file = ['../dist/dry-tri.html', '../dist/dry-tri/index.html']
+    .map((p) => new URL(p, import.meta.url))
+    .find((u) => existsSync(u));
+  const html = readFileSync(file, 'utf8');
+  const band = new JSDOM(html).window.document.querySelector('[data-event-band]');
+  assert.equal(band.getAttribute('data-event-source'), 'fallback');
+  assert.equal(band.querySelector('a').getAttribute('href'), 'https://tcsc.ski/tri');
 });

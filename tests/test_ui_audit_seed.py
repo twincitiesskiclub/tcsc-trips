@@ -412,3 +412,17 @@ def test_seed_all_runs_end_to_end(db_session):
 
     seed_all({"users": 20, "seasons": 2, "trips": 2, "tags": 8})
     assert User.query.count() == 20
+
+
+def test_seeded_event_times_are_utc(db_session):
+    """Event columns are naive UTC (migration c7e1a9d3f5b2). Seeding Central
+    wall time would show every audit event 5-6 hours early."""
+    from datetime import datetime, timedelta
+    from app.events.models import Event
+    from scripts.ui_audit.seed_fixtures import EVENT_SPECS, default_volumes, seed_all
+
+    seed_all(default_volumes())
+    spec = EVENT_SPECS[0]
+    event = Event.query.filter_by(slug=spec["slug"]).one()
+    expected = datetime.utcnow() + timedelta(days=spec["days_from_today"])
+    assert abs(event.event_date - expected) < timedelta(minutes=5)
