@@ -63,6 +63,30 @@ export function descriptionHtml(text: string): string {
   return out.join('');
 }
 
+/**
+ * The schedule part of a description: the first block holding a "- " list,
+ * plus a one-line heading block right above it (unless the list block opens
+ * with its own heading line), through the end.
+ *
+ * The description is shared with the tcsc.ski registration page, where its
+ * opening paragraph is that page's only introduction. On the marketing page
+ * the masthead already says what the race is, so the band starts at the
+ * schedule instead of repeating it. No list means nothing to anchor on, so
+ * the whole description is shown.
+ */
+export function scheduleSection(text: string): string {
+  const blocks = (text ?? '').replace(/\r\n?/g, '\n').split(/\n\s*\n/);
+  const isList = (block: string) => block.split('\n').some((line) => line.trim().startsWith('- '));
+  const first = blocks.findIndex(isList);
+  if (first === -1) return text ?? '';
+  // A list block that opens with its own heading line needs nothing above it.
+  const headed = !blocks[first].trim().startsWith('- ');
+  const above = blocks[first - 1];
+  const takeAbove = !headed && above !== undefined && !above.trim().includes('\n') && !isList(above);
+  const start = takeAbove ? first - 1 : first;
+  return blocks.slice(start).join('\n\n');
+}
+
 const BUTTON =
   'inline-flex items-center px-5 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep active:bg-navy/90';
 const LINK =
@@ -114,7 +138,7 @@ export function renderEventBand(event: EventRecord | null, now: number, apiUrl: 
     `<div>` +
     `<p class="text-2xl font-semibold text-navy">${escapeHtml(longDay(event.event_date))} · ${escapeHtml(clock(event.event_date))}</p>` +
     `<p class="mt-1 text-ink/80">${escapeHtml(event.location)}</p>` +
-    `<div class="mt-6 prose text-ink">${descriptionHtml(event.description)}</div>` +
+    `<div class="mt-6 prose text-ink">${descriptionHtml(scheduleSection(event.description))}</div>` +
     `</div>` +
     `<div>` +
     `<div class="divide-y divide-ink/10 border-y border-ink/10">${entries}</div>` +

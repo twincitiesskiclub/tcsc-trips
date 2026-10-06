@@ -163,9 +163,13 @@ in America/Chicago.
    race date outside it could disagree with the band after an admin edit.
 2. Photo triptych, unchanged.
 3. New band, seam label "Race day": date and
-   time, location, the description with line breaks kept and `- ` lines as a
-   list, the entries as a ledger (name, description, price), the button area,
+   time, location, the schedule part of the description (from the first `- `
+   list and the one-line heading above it; the whole description when there is
+   no list) with `- ` lines as a list, the entries as a ledger (name, description, price), the button area,
    and a "Full race details" link to `details_url` when present.
+   The description's opening paragraph is the tcsc.ski registration page's
+   only introduction, so it stays in the event. The marketing masthead already
+   covers it, so the band does not repeat it. Decided by Rob 2026-10-06.
 4. Course ledger, now three rows and no start column:
    Long course 18K roll · 17K ride · 11K run; Short course 9K roll · 9K ride ·
    6K run; Run only: 6K trail run. Footnote drops "The 2025 format."

@@ -100,3 +100,24 @@ test('no em or en dashes in any rendered copy', () => {
     assert.ok(!/[–—]/.test(html), `dash in ${iso}`);
   }
 });
+
+test('the band skips the description intro the page masthead already covers', () => {
+  const el = dom(renderEventBand(EVENT, at('2026-10-06T15:00:00Z'), API));
+  assert.ok(!el.textContent.includes("TCSC's fall race."));
+  assert.ok(el.textContent.includes('Schedule of events'));
+  assert.equal(el.querySelectorAll('li').length, 2);
+});
+
+test('a heading on the line right above the list is kept', () => {
+  const event = { ...EVENT, description: 'Intro.\n\nRace day\n- 7:30 AM: Pickup' };
+  const el = dom(renderEventBand(event, at('2026-10-06T15:00:00Z'), API));
+  assert.ok(!el.textContent.includes('Intro.'));
+  assert.ok(el.textContent.includes('Race day'));
+});
+
+test('a description with no schedule list is shown whole', () => {
+  const event = { ...EVENT, description: 'Details coming soon.\n\nWatch this space.' };
+  const el = dom(renderEventBand(event, at('2026-10-06T15:00:00Z'), API));
+  assert.ok(el.textContent.includes('Details coming soon.'));
+  assert.ok(el.textContent.includes('Watch this space.'));
+});
