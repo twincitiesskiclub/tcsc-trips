@@ -360,7 +360,11 @@ def test_admin_can_register_for_draft_event(
 
 
 @pytest.mark.parametrize("path", ["/tri", "/dryland-triathlon"])
-def test_dry_tri_legacy_urls_redirect_to_generic_event_page(client, path):
+def test_dry_tri_legacy_urls_redirect_to_generic_event_page(client, public_event, path):
+    public_event[0].template_key = "dry_tri"
+    from app.models import db
+    db.session.commit()
+
     response = client.get(path)
 
     assert response.status_code == 302
@@ -644,3 +648,27 @@ def test_event_api_serves_a_real_event_row(client, public_event):
 
     assert body["event"]["slug"] == "dry-tri-2026"
     assert [e["name"] for e in body["event"]["entries"]] == ["Individual", "Team of 3", "Volunteer"]
+
+
+def test_tri_redirects_to_the_selected_dry_tri(client, public_event):
+    event = public_event[0]
+    event.template_key = "dry_tri"
+    # Not the old hardcoded slug, so the test fails until /tri selects.
+    # admin-scope-test is in TEST_EVENT_SLUGS, so cleanup still removes it.
+    event.slug = "admin-scope-test"
+    from app.models import db
+    db.session.commit()
+
+    resp = client.get("/tri")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith(f"/events/{event.slug}")
+
+
+def test_tri_without_a_dry_tri_goes_home(client, db_session):
+    with patch("app.routes.main.Event") as event_model:
+        event_model.query.filter.return_value.all.return_value = []
+        resp = client.get("/tri")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"].endswith("/")

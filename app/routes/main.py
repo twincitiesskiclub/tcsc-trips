@@ -1,5 +1,8 @@
+from datetime import datetime
+
 from flask import Blueprint, redirect, render_template, url_for
 from ..events.models import Audience, Event, EventStatus
+from ..events.selection import select_public_event
 from ..models import Trip, Season
 from ..utils import get_current_times
 
@@ -66,4 +69,8 @@ def get_home_page():
 @main.route('/tri')
 @main.route('/dryland-triathlon')
 def dryland_triathlon_page():
-    return redirect('/events/dry-tri-2026', code=302)
+    candidates = Event.query.filter(Event.template_key == 'dry_tri').all()
+    event = select_public_event(candidates, 'dry_tri', datetime.utcnow())
+    if event is None:
+        return redirect('/', code=302)
+    return redirect(url_for('events.get_event_page', slug=event.slug), code=302)
