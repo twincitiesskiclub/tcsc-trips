@@ -43,3 +43,10 @@ test('spring-forward: the day before ends at CST midnight, the day itself at CDT
 test('unparseable timestamps read as closed, never open', () => {
   assert.equal(deriveEventState({ ...TIMES, signup_end: 'nope' }, at('2026-08-01T00:00:00Z')), 'closed');
 });
+
+test('a closed event reads closed inside the signup window, and past after race day', () => {
+  const closed = { ...TIMES, status: 'closed' };
+  assert.equal(deriveEventState(closed, at('2026-10-06T15:00:00Z')), 'closed');
+  assert.equal(deriveEventState(closed, at('2026-07-01T12:00:00Z')), 'closed');
+  assert.equal(deriveEventState(closed, at('2026-10-25T05:00:00Z')), 'past');
+});

@@ -9,6 +9,8 @@ export interface EventTimes {
   event_date: string;
   signup_start: string;
   signup_end: string;
+  /** Stored event status from the API. An admin can close signups early. */
+  status?: string;
 }
 
 const CENTRAL = 'America/Chicago';
@@ -45,6 +47,7 @@ export function deriveEventState(t: EventTimes, now: number): EventState {
   const race = Date.parse(t.event_date);
   if ([start, end, race].some(Number.isNaN)) return 'closed';
   if (now >= endOfCentralDay(race)) return 'past';
+  if (t.status === 'closed') return 'closed';
   if (now < start) return 'upcoming';
   // Inclusive, matching events.py: signup_start <= now <= signup_end.
   if (now <= end) return 'open';

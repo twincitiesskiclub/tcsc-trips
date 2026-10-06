@@ -16,6 +16,8 @@ def serialize_public_event(event, registration_path: str) -> dict:
     )
     return {
         "slug": event.slug,
+        # Stored data, not a computed state: an admin can close signups early.
+        "status": event.status,
         "name": event.name,
         "location": event.location,
         "description": event.description or "",

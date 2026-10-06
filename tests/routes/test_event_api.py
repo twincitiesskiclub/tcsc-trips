@@ -50,8 +50,9 @@ def test_returns_the_selected_event_with_the_public_shape(monkeypatch):
     event = body["event"]
     assert set(event) == {
         "slug", "name", "location", "description", "event_date", "signup_start",
-        "signup_end", "registration_path", "details_url", "entries",
+        "signup_end", "registration_path", "details_url", "entries", "status",
     }
+    assert event["status"] == "active"
     assert event["registration_path"] == "/events/dry-tri-2026"
     assert event["signup_end"] == "2026-10-23T04:59:00Z"
     assert event["description"].startswith("Schedule of events\r\n")
@@ -98,3 +99,8 @@ def test_disallowed_origin_gets_no_cors_header(monkeypatch):
         "/api/events/dry-tri", headers={"Origin": "https://evil.example"}
     )
     assert "Access-Control-Allow-Origin" not in resp.headers
+
+
+def test_a_closed_event_says_so(monkeypatch):
+    body = _client(monkeypatch, [_stub_event(status="closed")]).get("/api/events/dry-tri").get_json()
+    assert body["event"]["status"] == "closed"

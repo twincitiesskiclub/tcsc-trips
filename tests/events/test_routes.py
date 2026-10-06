@@ -672,3 +672,17 @@ def test_tri_without_a_dry_tri_goes_home(client, db_session):
 
     assert resp.status_code == 302
     assert resp.headers["Location"].endswith("/")
+
+
+def test_tri_does_not_send_people_to_a_closed_event_page(client, public_event):
+    event = public_event[0]
+    event.template_key = "dry_tri"
+    event.status = EventStatus.CLOSED
+    from app.models import db
+    db.session.commit()
+
+    assert client.get(f"/events/{event.slug}").status_code == 404
+    resp = client.get("/tri")
+
+    assert resp.status_code == 302
+    assert resp.headers["Location"] == "https://twincitiesskiclub.org/dry-tri"

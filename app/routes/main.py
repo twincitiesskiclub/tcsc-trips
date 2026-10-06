@@ -8,6 +8,8 @@ from ..utils import get_current_times
 
 main = Blueprint('main', __name__)
 
+MARKETING_DRY_TRI_URL = 'https://twincitiesskiclub.org/dry-tri'
+
 MARKETING_TRIPS_URL = 'https://twincitiesskiclub.org/trips'
 
 
@@ -73,4 +75,8 @@ def dryland_triathlon_page():
     event = select_public_event(candidates, 'dry_tri', datetime.utcnow())
     if event is None:
         return redirect('/', code=302)
+    if event.status != EventStatus.ACTIVE:
+        # The event page 404s for a closed event; the marketing page says
+        # registration is closed and still has the race details.
+        return redirect(MARKETING_DRY_TRI_URL, code=302)
     return redirect(url_for('events.get_event_page', slug=event.slug), code=302)
