@@ -56,8 +56,10 @@ should match.
   local time. Today it has no suffix and is read as local, which only looks
   right because the stored value is Central.
 - `index.html` event cards: use `central_time` instead of raw `strftime`.
-- `events/seeds.py`: express the Dry Tri seed in UTC (14:00, 05:00, 04:59 next
-  day) so a fresh dev DB matches prod.
+- `events/seeds.py` stays in Central. The seed migration `d4e7f9a1b2c3` calls
+  `build_dry_tri_2026()` and runs before the conversion migration, which then
+  converts the seeded row like any other. Changing the seed to UTC would shift
+  a fresh database twice.
 - Alembic data migration: for every `events` row, convert the three columns
   from Central to UTC with
   `(col AT TIME ZONE 'America/Chicago') AT TIME ZONE 'UTC'`, which handles DST
@@ -89,8 +91,9 @@ New blueprint `app/routes/event_api.py`, beside `season_api.py`.
 
 Selection, in `app/events/selection.py` (pure, testable without a DB):
 
-- Candidates: `template_key == 'dry_tri'`, `status == 'active'`,
-  `audience != 'internal'`.
+- Candidates: `template_key == 'dry_tri'`, `status != 'draft'` (a `closed`
+  event is still the race; it just stopped taking signups), `audience !=
+  'internal'`.
 - Pick the soonest event whose `event_date` is now or later. If none, the most
   recent past one. If no candidates, return `{"event": null}` with status 200.
 
@@ -107,7 +110,7 @@ Body:
     "event_date": "2026-10-24T14:00:00Z",
     "signup_start": "2026-07-25T05:00:00Z",
     "signup_end": "2026-10-23T04:59:00Z",
-    "registration_url": "https://tcsc.ski/events/dry-tri-2026",
+    "registration_path": "/events/dry-tri-2026",
     "details_url": "https://docs.google.com/document/d/...",
     "entries": [
       {"name": "Individual Triathlon", "description": "Complete all three legs yourself", "price_cents": 5500}
@@ -121,8 +124,9 @@ Body:
 - `entries` are the active price options in `sort_order`. Public price only.
   The payload never carries `member_price_cents`, `discount_code`,
   `capacity`, or registration counts.
-- `registration_url` is built from the request host's external URL
-  (`url_for(..., _external=True)`), not hardcoded.
+- `registration_path` is a path. The app has no ProxyFix, so
+  `url_for(_external=True)` can produce `http://` behind Render. The site
+  resolves the path against the API URL's origin.
 - No open/closed state, for the reason documented in `season_api.py`.
 - `apply_marketing_cors`, `Cache-Control: public, max-age=300`.
 
@@ -176,7 +180,8 @@ Fallback (no event at build time and no fresh fetch): the band reads
 "Dates, entries and registration: tcsc.ski/tri", linked. `/tri` always lands on
 the current event.
 
-Body gets `data-event-source="api|fallback"`, like `data-season-source`.
+The band element gets `data-event-source="api|fallback"` (on the band, not
+`<body>`, so BaseLayout needs no new prop).
 
 Keystatic and `content.config.ts`: `courses[].start` becomes unused; remove it
 from the schema and the `.mdoc`. `register_url` is removed; the API supplies it.
@@ -192,8 +197,9 @@ Friendly, short, plain. No em dashes.
 - Fallback: as above.
 
 The event's description and location come from the database and render as
-written. Prod currently has em dashes in both; they get edited in admin (Rob's
-call who does it) before PR 2 ships.
+written. Prod em dashes in both were replaced on 2026-10-06 (": " in the
+schedule lines, ", " in the location). The prod description uses `\r\n` line
+endings; the renderer must accept both.
 
 ### Tests
 
