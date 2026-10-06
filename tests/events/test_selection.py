@@ -43,3 +43,23 @@ def test_drafts_internal_and_other_series_are_ignored():
 def test_external_audience_counts():
     events = [_event("2026", datetime(2026, 10, 24, 14), audience="external")]
     assert select_public_event(events, "dry_tri", NOW).slug == "2026"
+
+
+def test_race_day_stays_current_until_central_midnight():
+    # 1 PM Central on race day, after the 9 AM start. Next year's race is
+    # already active, but today's race is still the one people want.
+    race_day_afternoon = datetime(2026, 10, 24, 18, 0)
+    events = [
+        _event("2026", datetime(2026, 10, 24, 14)),
+        _event("2027", datetime(2027, 10, 23, 14)),
+    ]
+    assert select_public_event(events, "dry_tri", race_day_afternoon).slug == "2026"
+
+
+def test_the_day_after_moves_on_to_next_year():
+    day_after = datetime(2026, 10, 25, 5, 0)  # midnight Central
+    events = [
+        _event("2026", datetime(2026, 10, 24, 14)),
+        _event("2027", datetime(2027, 10, 23, 14)),
+    ]
+    assert select_public_event(events, "dry_tri", day_after).slug == "2027"

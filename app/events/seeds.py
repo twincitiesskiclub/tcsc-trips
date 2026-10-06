@@ -27,7 +27,14 @@ _PARTICIPANT_GUIDE_URL = (
 
 
 def build_dry_tri_2026() -> dict:
-    """Return the complete business-data payload for the 2026 Dry Tri."""
+    """Return the complete business-data payload for the 2026 Dry Tri.
+
+    The datetimes are Central wall time ON PURPOSE, unlike every other event
+    datetime (naive UTC). Seed migration d4e7f9a1b2c3 inserts this payload and
+    runs before c7e1a9d3f5b2, which converts every row to UTC. Changing these
+    to UTC would shift a fresh database twice. Do not call this from anywhere
+    but that migration.
+    """
     template = get_template("dry_tri")
     if template is None:
         raise ValueError("Required event template 'dry_tri' was not found")

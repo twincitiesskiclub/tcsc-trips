@@ -44,3 +44,39 @@ def test_downgrade_expression_restores_the_original(db_session):
 
 def test_migration_follows_the_previous_head():
     assert _migration().down_revision == "9b2e6d4f1a37"
+
+
+def test_upgrade_converts_stored_rows_and_downgrade_restores_them(db_session):
+    from alembic.operations import Operations
+    from alembic.runtime.migration import MigrationContext
+
+    m = _migration()
+    conn = db_session.session.connection()
+    conn.execute(text(
+        "INSERT INTO events (slug, name, location, event_date, signup_start, signup_end,"
+        " status, audience, custom_questions, created_at, updated_at)"
+        " VALUES ('migration-home-draft', 'tz probe', 'x', '2026-10-24 09:00',"
+        " '2026-01-19 12:00', '2026-10-22 23:59', 'draft', 'both', '[]', now(), now())"
+    ))
+    select = text(
+        "SELECT event_date, signup_start, signup_end FROM events"
+        " WHERE slug = 'migration-home-draft'"
+    )
+    operations = Operations(MigrationContext.configure(conn))
+    try:
+        with Operations.context(operations.migration_context):
+            m.upgrade()
+            assert tuple(conn.execute(select).one()) == (
+                datetime(2026, 10, 24, 14, 0),
+                datetime(2026, 1, 19, 18, 0),
+                datetime(2026, 10, 23, 4, 59),
+            )
+            m.downgrade()
+            assert tuple(conn.execute(select).one()) == (
+                datetime(2026, 10, 24, 9, 0),
+                datetime(2026, 1, 19, 12, 0),
+                datetime(2026, 10, 22, 23, 59),
+            )
+    finally:
+        # The UPDATE touches every events row; never let it commit.
+        db_session.session.rollback()

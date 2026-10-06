@@ -943,7 +943,8 @@ def _make_availability_polls(practices, users, rng):
 def _make_events():
     events = []
     for spec in EVENT_SPECS:
-        event_date = now_central_naive() + timedelta(days=spec["days_from_today"])
+        # Event columns are naive UTC (migration c7e1a9d3f5b2).
+        event_date = datetime.utcnow() + timedelta(days=spec["days_from_today"])
         event = Event(
             slug=spec["slug"], name=spec["name"], description=spec["description"],
             location=spec["location"], event_date=event_date,

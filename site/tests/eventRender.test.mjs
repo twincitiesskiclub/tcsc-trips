@@ -121,3 +121,15 @@ test('a description with no schedule list is shown whole', () => {
   assert.ok(el.textContent.includes('Details coming soon.'));
   assert.ok(el.textContent.includes('Watch this space.'));
 });
+
+test('a midnight close reads as the end of the previous day', () => {
+  const event = { ...EVENT, signup_end: '2026-10-23T05:00:00Z' };
+  const el = dom(renderEventBand(event, at('2026-10-06T15:00:00Z'), API));
+  assert.ok(el.textContent.includes('Registration closes Thursday, October 22.'));
+});
+
+test('a close at any other time names the time', () => {
+  const event = { ...EVENT, signup_end: '2026-10-22T22:00:00Z' };
+  const el = dom(renderEventBand(event, at('2026-10-06T15:00:00Z'), API));
+  assert.ok(el.textContent.includes('Registration closes Thursday, October 22 at 5:00 PM.'));
+});
