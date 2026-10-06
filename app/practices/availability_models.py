@@ -49,7 +49,7 @@ class LeadAvailabilityPoll(db.Model):
     created_at = db.Column(db.DateTime, nullable=False, default=now_central_naive)
     opened_at = db.Column(db.DateTime)
     closed_at = db.Column(db.DateTime)
-    # The team's block post in #collab-coaches-practices (always that
+    # The team's block post in #practices-core (always that
     # channel, so only the ts is stored).
     block_post_ts = db.Column(db.String(50))
     # Who pressed Open poll, as a Slack id so an unlinked clicker still renders.

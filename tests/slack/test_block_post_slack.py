@@ -7,7 +7,7 @@ from app.models import db
 from app.practices import blocks
 from app.practices.availability_models import LeadAvailabilityPoll
 from app.practices.models import Practice
-from app.slack.practices._config import COLLAB_CHANNEL_ID
+from app.slack.practices._config import PRACTICES_CORE_CHANNEL_ID
 
 
 @pytest.fixture()
@@ -42,7 +42,7 @@ def client(monkeypatch):
 def test_post_block_post_records_the_ts(block, client):
     assert blocks.post_block_post(block) is True
     assert block.block_post_ts == "9.000"
-    assert client.chat_postMessage.call_args.kwargs["channel"] == COLLAB_CHANNEL_ID
+    assert client.chat_postMessage.call_args.kwargs["channel"] == PRACTICES_CORE_CHANNEL_ID
 
 
 def test_post_block_post_never_raises(block, client):
@@ -56,6 +56,7 @@ def test_refresh_updates_in_place(block, client):
     db.session.commit()
     assert blocks.refresh_block_post(block) is True
     assert client.chat_update.call_args.kwargs["ts"] == "9.000"
+    assert client.chat_update.call_args.kwargs["channel"] == PRACTICES_CORE_CHANNEL_ID
 
 
 def test_refresh_without_a_post_is_a_no_op(block, client):
@@ -69,6 +70,7 @@ def test_wednesday_reply_threads_and_marks_sent(block, client):
     assert blocks.post_wednesday_reply(block) is True
     kwargs = client.chat_postMessage.call_args.kwargs
     assert kwargs["thread_ts"] == "9.000"
+    assert kwargs["channel"] == PRACTICES_CORE_CHANNEL_ID
     assert "Nobody has opened the lead poll for *Jan 19 – Feb 1* yet." in str(kwargs["blocks"])
     assert "for Jan 19 – Feb 1 yet" in kwargs["text"]
     assert block.wednesday_reminder_sent_at is not None
