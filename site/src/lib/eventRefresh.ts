@@ -6,6 +6,9 @@
 // offline, then (2) fetches the API and re-renders from fresh data, so an
 // admin edit on tcsc.ski shows up without a deploy. Any failure leaves what
 // is already on the page.
+//
+// After a successful fetch the band's data-event-source becomes "live", the
+// third value beside the build's "api" and "fallback".
 import { renderEventBand } from './eventRender.ts';
 import type { EventRecord } from './eventData.ts';
 

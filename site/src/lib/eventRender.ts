@@ -27,6 +27,18 @@ const longDay = (iso: string) => central(iso, { weekday: 'long', month: 'long', 
 /** "9:00 AM", joined by a no-break space so AM never wraps onto its own line. */
 const clock = (iso: string) => central(iso, { hour: 'numeric', minute: '2-digit' }).replace(/[\u202f ]/g, '\u00a0');
 
+/**
+ * "Thursday, October 22" for an end-of-day close, else the day and time.
+ * A close at exactly midnight Central means "through the day before", so it
+ * names that day rather than the one that has not started yet.
+ */
+function closingText(iso: string): string {
+  const time = clock(iso).replace(/\u00a0/g, ' ');
+  if (time === '12:00 AM') return longDay(new Date(Date.parse(iso) - 60_000).toISOString());
+  if (time === '11:59 PM') return longDay(iso);
+  return `${longDay(iso)} at ${clock(iso)}`;
+}
+
 export function formatPrice(cents: number): string {
   const dollars = cents / 100;
   return Number.isInteger(dollars) ? `$${dollars}` : `$${dollars.toFixed(2)}`;
@@ -100,7 +112,7 @@ function ctaHtml(event: EventRecord, state: EventState, apiUrl: string): string 
     case 'open':
       return (
         `<a class="${BUTTON}" href="${escapeHtml(registrationUrl(event, apiUrl))}">Register</a>` +
-        `<p class="mt-3 text-sm text-slate">Registration closes ${escapeHtml(longDay(event.signup_end))}.</p>`
+        `<p class="mt-3 text-sm text-slate">Registration closes ${escapeHtml(closingText(event.signup_end))}.</p>`
       );
     case 'closed':
       return '<p class="font-semibold text-navy">Registration is closed. See you at the start.</p>';
