@@ -10,7 +10,7 @@ import SectionBand from '@/components/SectionBand.astro';
 import { MOSAIC } from '@/components/imageWidths';
 import { metaDescription } from '@/lib/metaDescription';
 import { eventApiUrl, fetchEventData } from '@/lib/eventData';
-import { raceDayShort, raceYear, renderEventBand } from '@/lib/eventRender';
+import { renderEventBand } from '@/lib/eventRender';
 
 const page = await getEntry('dry_tri', 'dry_tri');
 if (!page) throw new Error('dry_tri singleton missing (src/content/pages/dry_tri.mdoc)');
@@ -24,10 +24,12 @@ const legs = [
 
 const apiUrl = eventApiUrl();
 const { source, event } = await fetchEventData(apiUrl);
+// Static on purpose: the browser refresh only rewrites the band, so any
+// race-specific date out here could disagree with it after an admin edit.
 const facts = [
-  ...(event ? [{ value: raceDayShort(event.event_date), label: 'Race day' }] : []),
-  { value: 'Carver Park Reserve', label: 'Venue' },
   { value: 'Roll · Ride · Run', label: 'Format' },
+  { value: 'Carver Park Reserve', label: 'Venue' },
+  { value: 'October 2025', label: 'First held' },
 ];
 ---
 <InnerPageLayout
@@ -62,7 +64,7 @@ const facts = [
       </div>
     </section>
   )}
-  <SectionBand variant="paper" seam={event ? `${raceYear(event.event_date)} race` : 'This year'}>
+  <SectionBand variant="paper" seam="Race day">
     <div
       data-event-band
       data-event-api={apiUrl}

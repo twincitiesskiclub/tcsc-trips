@@ -3,7 +3,7 @@ import test from 'node:test';
 import { JSDOM } from 'jsdom';
 
 import {
-  descriptionHtml, escapeHtml, formatPrice, raceDayShort, raceYear, renderEventBand,
+  descriptionHtml, escapeHtml, formatPrice, renderEventBand,
 } from '../src/lib/eventRender.ts';
 
 const API = 'https://tcsc.ski/api/events/dry-tri';
@@ -30,12 +30,6 @@ test('prices drop .00 and keep real cents', () => {
   assert.equal(formatPrice(5500), '$55');
   assert.equal(formatPrice(5550), '$55.50');
   assert.equal(formatPrice(0), '$0');
-});
-
-test('race day and year format in Central', () => {
-  assert.equal(raceDayShort(EVENT.event_date), 'Sat, Oct 24');
-  // 11 PM Central on Dec 31 is already Jan 1 in UTC; the year stays Central.
-  assert.equal(raceYear('2027-01-01T05:00:00Z'), '2026');
 });
 
 test('description handles CRLF and mixed blocks', () => {

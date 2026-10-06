@@ -26,10 +26,6 @@ function central(iso: string, options: Intl.DateTimeFormatOptions): string {
 const longDay = (iso: string) => central(iso, { weekday: 'long', month: 'long', day: 'numeric' });
 /** "9:00 AM", joined by a no-break space so AM never wraps onto its own line. */
 const clock = (iso: string) => central(iso, { hour: 'numeric', minute: '2-digit' }).replace(/[\u202f ]/g, '\u00a0');
-/** "Sat, Oct 24" */
-export const raceDayShort = (iso: string) => central(iso, { weekday: 'short', month: 'short', day: 'numeric' });
-/** "2026" */
-export const raceYear = (iso: string) => central(iso, { year: 'numeric' });
 
 export function formatPrice(cents: number): string {
   const dollars = cents / 100;
