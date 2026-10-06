@@ -632,3 +632,15 @@ def test_registration_page_shows_the_central_start_time(client, public_event):
     html = client.get(f"/events/{event.slug}").get_data(as_text=True)
 
     assert "Saturday, October 24, 2026 at 9:00 AM CT" in html
+
+
+def test_event_api_serves_a_real_event_row(client, public_event):
+    event = public_event[0]
+    event.template_key = "dry_tri"
+    from app.models import db
+    db.session.commit()
+
+    body = client.get("/api/events/dry-tri").get_json()
+
+    assert body["event"]["slug"] == "dry-tri-2026"
+    assert [e["name"] for e in body["event"]["entries"]] == ["Individual", "Team of 3", "Volunteer"]
