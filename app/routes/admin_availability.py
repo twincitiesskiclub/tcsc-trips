@@ -1,6 +1,6 @@
 """Admin fallback for two-week lead blocks.
 
-The main path is the block post in #collab-coaches-practices. This page lists
+The main path is the block post in #practices-core. This page lists
 recent blocks, offers Open poll on an unopened one, and can run the block job
 by hand (useful on deploy day).
 """

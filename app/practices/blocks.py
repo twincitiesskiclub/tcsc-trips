@@ -2,7 +2,7 @@
 
 Every other Monday, a week before a block starts, the block job creates the
 block's sessions and its poll row (DRAFT) and posts the block post in
-#collab-coaches-practices. Someone on the practices team presses Open poll,
+#practices-core. Someone on the practices team presses Open poll,
 which posts the leads poll. The block post then shows coverage and an Assign
 button per session.
 
@@ -39,7 +39,7 @@ from app.practices.availability_models import (
 from app.practices.drafting import generate_draft_block
 from app.practices.interfaces import PracticeStatus
 from app.slack.client import get_slack_client
-from app.slack.practices._config import COLLAB_CHANNEL_ID
+from app.slack.practices._config import PRACTICES_CORE_CHANNEL_ID
 from app.utils import now_central_naive, today_central
 
 BLOCK_DAYS = 14
@@ -189,7 +189,7 @@ def post_block_post(poll) -> bool:
     try:
         rendered, text = _render(poll)
         response = get_slack_client().chat_postMessage(
-            channel=COLLAB_CHANNEL_ID, blocks=rendered, text=text)
+            channel=PRACTICES_CORE_CHANNEL_ID, blocks=rendered, text=text)
         ts = response["ts"]
     except Exception as exc:  # noqa: BLE001 - never raise; the job retries tomorrow
         current_app.logger.warning("Block post for poll %s failed: %s", poll.id, exc)
@@ -205,7 +205,7 @@ def refresh_block_post(poll, *, exclude_practice_id=None) -> bool:
     try:
         rendered, text = _render(poll, exclude_practice_id=exclude_practice_id)
         get_slack_client().chat_update(
-            channel=COLLAB_CHANNEL_ID, ts=poll.block_post_ts, blocks=rendered, text=text)
+            channel=PRACTICES_CORE_CHANNEL_ID, ts=poll.block_post_ts, blocks=rendered, text=text)
     except Exception as exc:  # noqa: BLE001 - never raise; next edit or morning repairs it
         current_app.logger.warning("Block post refresh for poll %s failed: %s", poll.id, exc)
         return False
@@ -225,7 +225,7 @@ def post_wednesday_reply(poll) -> bool:
         "accessory": {"type": "button", "style": "primary", "action_id": "block_poll_open",
                       "value": str(poll.id), "text": {"type": "plain_text", "text": "Open poll"}},
     }]
-    kwargs = {"channel": COLLAB_CHANNEL_ID, "blocks": rendered,
+    kwargs = {"channel": PRACTICES_CORE_CHANNEL_ID, "blocks": rendered,
               "text": f"Nobody has opened the lead poll for {label} yet."}
     if poll.block_post_ts:
         kwargs["thread_ts"] = poll.block_post_ts

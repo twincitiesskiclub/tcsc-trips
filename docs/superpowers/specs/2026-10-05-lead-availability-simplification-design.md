@@ -67,7 +67,7 @@ responses. Keep it simple.
 | Block length and timing | Two weeks, Monday to Sunday, handled one week ahead. Same scope for the team and for leads. |
 | Draft and publish | No publish step. A bot-created session becomes member-visible automatically once it has a location and a type. |
 | Who opens the poll | A person, from a button in Slack (main path) or on the admin page (fallback). |
-| Results and assignment | One live block post in #collab-coaches-practices with an Assign button per session. |
+| Results and assignment | One live block post in #practices-core with an Assign button per session. |
 | Assign modal | Available people as one line of text, plus one dropdown to choose leads. |
 | Coaches | Shown on the session row, not counted toward leads needed. |
 | Rollout | Cut over at deploy. Shadow mode is deleted. |
@@ -193,7 +193,8 @@ No separate Saturday job.
 
 ## Block post
 
-One message per block in #collab-coaches-practices (`COLLAB_CHANNEL_ID`). Its
+One message per block in #practices-core (`PRACTICES_CORE_CHANNEL_ID`; moved from
+#collab-coaches-practices on 2026-10-06). Its
 channel and ts live on the block's poll row. Channel membership is the only
 permission gate, the same as the existing Fill in and Edit buttons.
 
@@ -385,7 +386,7 @@ Reactions only ever match an `open` poll's message (unchanged).
 
 On `lead_availability_polls`:
 
-- `block_post_ts` (nullable string; the channel is always `COLLAB_CHANNEL_ID`)
+- `block_post_ts` (nullable string; the channel is always `PRACTICES_CORE_CHANNEL_ID`)
 - `opened_by_slack_uid` (nullable string)
 - `wednesday_reminder_sent_at` (nullable timestamp)
 - `next_position` (integer, default 0; no backfill, the table is empty in prod)
