@@ -25,7 +25,11 @@ from app.practices.interfaces import (  # noqa: E402
     PracticeStatus,
 )
 from app.slack.blocks.availability import build_nudge_blocks, build_poll_blocks  # noqa: E402
-from app.slack.blocks.block_post import build_assign_modal, build_block_post  # noqa: E402
+from app.slack.blocks.block_post import (  # noqa: E402
+    build_assign_modal,
+    build_block_post,
+    build_lead_schedule,
+)
 from app.slack.blocks.coach_review import build_coach_weekly_summary_blocks  # noqa: E402
 
 ROB = "U02JS0R7ZG8"
@@ -49,13 +53,16 @@ LATE = ("letter_g", datetime(2026, 11, 7, 9, 0), "Theodore Wirth · Skate", [], 
 
 def rows(with_letters=True, items=ROWS):
     return [{"practice_id": i + 1, "emoji": e if with_letters else None, "when": w, "where": wh,
-             "cancelled": False, "leads": l, "coaches": c, "leads_needed": 2, "available": a}
+             "cancelled": False, "leads": l, "coaches": c, "leads_needed": 2, "available": a,
+             # A real mention for Rob shows how one renders; the rest are unlinked names.
+             "lead_mentions": [f"<@{ROB}>"] + l[1:] if l else []}
             for i, (e, w, wh, l, c, a) in enumerate(items)]
 
 
-def poll(status, message_ts=None, opened_by=None, closed_at=None):
+def poll(status, message_ts=None, opened_by=None, closed_at=None, schedule_ts=None):
     return SimpleNamespace(id=0, starts_on=S, ends_on=E, status=status, message_ts=message_ts,
-                           opened_by_slack_uid=opened_by, opened_at=None, closed_at=closed_at)
+                           opened_by_slack_uid=opened_by, opened_at=None, closed_at=closed_at,
+                           schedule_ts=schedule_ts)
 
 
 def label(text):
@@ -104,6 +111,11 @@ def surfaces():
         footer="31 of 60 leads have answered. Reminders go to the rest Thu, Sat and Mon.")
     yield "block post, closed", build_block_post(
         poll("closed", "1.0", closed_at=datetime(2026, 11, 9, 8, 30)), rows(), permalink=None, footer=None)
+    yield "block post, schedule posted", build_block_post(
+        poll("closed", "1.0", closed_at=datetime(2026, 11, 9, 8, 30), schedule_ts="2.0"), rows(),
+        permalink=None, footer=None)
+    yield "lead schedule in #coord-practices-leads-assists", build_lead_schedule(
+        poll("closed"), rows())
     yield "Oct 12-25 assignment post (no poll)", build_block_post(
         poll("closed"), rows(with_letters=False), permalink=None, footer=None)
     modal = build_assign_modal({

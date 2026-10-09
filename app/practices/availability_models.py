@@ -55,6 +55,9 @@ class LeadAvailabilityPoll(db.Model):
     # Who pressed Open poll, as a Slack id so an unlinked clicker still renders.
     opened_by_slack_uid = db.Column(db.String(50))
     wednesday_reminder_sent_at = db.Column(db.DateTime)
+    # The lead schedule post in #coord-practices-leads-assists (always that
+    # channel). Set once; refresh_block_post keeps it current.
+    schedule_ts = db.Column(db.String(50))
     # Letters only count up: a deleted session's letter keeps its reactions
     # on the message, so it must never be handed to a new session.
     next_position = db.Column(db.Integer, nullable=False, default=0, server_default="0")
