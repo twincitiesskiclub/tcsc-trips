@@ -226,3 +226,28 @@ def test_schedule_post_uses_new_text_and_no_unfurls(assigned, client):
     assert posted["text"].startswith("Lead schedule for Jan 19 – Feb 1 is up · ")
     assert posted["unfurl_links"] is False and posted["unfurl_media"] is False
     assert ":ski: Lead schedule · Jan 19 – Feb 1" in str(posted["blocks"])
+
+
+def test_unlinked_lead_names_are_escaped(block):
+    from app.models import User
+    from app.practices.models import PracticeLead
+
+    db.session.rollback()
+    user = User(first_name="TEST S&am", last_name="<x>", email="test-esc@example.invalid")
+    db.session.add(user)
+    db.session.commit()
+    uid = user.id
+    try:
+        practice = Practice.query.filter_by(logistics_notes="TEST b5").one()
+        practice.leads.append(PracticeLead(user_id=uid, role="lead"))
+        db.session.commit()
+        assert blocks.block_post_rows(block)[0]["lead_mentions"] == ["TEST S&amp;am &lt;"]
+    finally:
+        db.session.rollback()
+        for lead in PracticeLead.query.filter_by(user_id=uid).all():
+            db.session.delete(lead)
+        db.session.commit()
+        u = db.session.get(User, uid)
+        if u is not None:
+            db.session.delete(u)
+        db.session.commit()

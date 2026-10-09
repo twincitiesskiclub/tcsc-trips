@@ -366,10 +366,10 @@ def post_wednesday_reply(poll) -> bool:
 
 
 def _mention(user) -> str:
-    from app.slack.blocks.block_post import short_name
+    from app.slack.blocks.block_post import escape, short_name
 
     slack = user.slack_user
-    return f"<@{slack.slack_uid}>" if slack and slack.slack_uid else short_name(user)
+    return f"<@{slack.slack_uid}>" if slack and slack.slack_uid else escape(short_name(user))
 
 
 def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
