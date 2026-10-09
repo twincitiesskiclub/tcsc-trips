@@ -15,6 +15,7 @@ Supports two modes:
 
 import copy
 import os
+import re
 import logging
 import threading
 from collections.abc import Mapping
@@ -131,6 +132,28 @@ def _save_block_assign(view, ack=lambda **_: None) -> None:
             return
         ack()
         blocks.save_assignment(practice_id, **parsed)
+
+
+LEAD_SIGNUP_ACTION = re.compile(r"^lead_signup_\d+$")
+
+
+def _lead_signup(body, action, client) -> None:
+    """Lead button on the leads' schedule post: sign the clicker up, or say why not."""
+    user_id = body["user"]["id"]
+    with get_app_context():
+        from app.practices import blocks
+
+        try:
+            result = blocks.sign_up_as_lead(int(action["value"]), user_id)
+        except Exception:
+            from app.models import db
+
+            db.session.rollback()
+            logger.exception("sign_up_as_lead failed for practice %s", action.get("value"))
+            result = {"success": False, "error": "Could not sign you up. Try again."}
+    channel = (body.get("channel") or {}).get("id")
+    if not result.get("success") and channel:
+        client.chat_postEphemeral(channel=channel, user=user_id, text=result["error"])
 
 
 def _ack_practice_reaction_action(ack) -> None:
@@ -586,6 +609,11 @@ if _bot_token:
         if not result.get("success") and channel:
             client.chat_postEphemeral(channel=channel, user=body["user"]["id"],
                                       text=f":warning: {result.get('error')}")
+
+    @bolt_app.action(LEAD_SIGNUP_ACTION)
+    def handle_lead_signup(ack, body, action, client, logger):
+        ack()
+        _lead_signup(body, action, client)
 
     @bolt_app.action("block_assign")
     def handle_block_assign(ack, body, action, client, logger):
