@@ -199,11 +199,11 @@ def _render(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
 
 
 def _render_schedule(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
-    from app.slack.blocks.block_post import block_range_label, build_lead_schedule
+    from app.slack.blocks.block_post import build_lead_schedule, lead_schedule_text
 
     rows = block_post_rows(poll, exclude_practice_id=exclude_practice_id)
-    return (build_lead_schedule(poll, rows),
-            f"Lead schedule {block_range_label(poll.starts_on, poll.ends_on)}")
+    now = now_central_naive()
+    return build_lead_schedule(poll, rows, now=now), lead_schedule_text(poll, rows, now=now)
 
 
 def post_lead_schedule(poll_id: int) -> dict:
@@ -220,7 +220,8 @@ def post_lead_schedule(poll_id: int) -> dict:
     try:
         rendered, text = _render_schedule(poll)
         ts = get_slack_client().chat_postMessage(
-            channel=COORD_CHANNEL_ID, blocks=rendered, text=text)["ts"]
+            channel=COORD_CHANNEL_ID, blocks=rendered, text=text,
+            unfurl_links=False, unfurl_media=False)["ts"]
     except Exception as exc:  # noqa: BLE001 - never raise; the button stays for a retry
         db.session.rollback()
         current_app.logger.warning("Lead schedule for poll %s failed: %s", poll_id, exc)
@@ -324,6 +325,12 @@ def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
             "coaches": [short_name(u) for u in coaches],
             "leads_needed": practice.leads_needed or 2,
             "available": available.get(practice.id, 0),
+            "activity": practice.activities[0].name if practice.activities else None,
+            "location": ({"name": practice.location.name, "spot": practice.location.spot,
+                          "url": practice.location.google_maps_url}
+                         if practice.location else None),
+            "kinds": ([t.name for t in practice.practice_types]
+                      or [a.name for a in practice.activities]),
         })
     return rows
 
