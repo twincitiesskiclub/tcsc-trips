@@ -232,6 +232,79 @@ def post_lead_schedule(poll_id: int) -> dict:
     return {"success": True, "ts": ts}
 
 
+NOT_IN_POOL = "Leading is open to the lead pool. Want in? Ask in this thread."
+
+
+def _signup_refusal(practice, user_id: int) -> str | None:
+    """Why this user can't take this session right now, or None if they can."""
+    if practice is None:
+        return "That practice is gone."
+    if practice.status == PracticeStatus.CANCELLED.value:
+        return "That practice was cancelled."
+    if practice.date <= now_central_naive():
+        return "That practice already started."
+    if any(l.user_id == user_id for l in practice.leads):
+        return "You're already on it."
+    if sum(1 for l in practice.leads if l.role == "lead") >= (practice.leads_needed or 2):
+        return "Just filled, thanks!"
+    return None
+
+
+def _post_signup_reply(practice, slack_uid: str, partners) -> None:
+    from app.slack.blocks.block_post import join_names
+
+    poll = poll_for_date(practice.date.date())
+    if poll is None or not poll.schedule_ts:
+        return
+    when = practice.date
+    text = (f":raised_hands: <@{slack_uid}> is leading {when.strftime('%a %-m/%-d')} · "
+            f"{when.strftime('%-I:%M%p').replace('PM', 'p').replace('AM', 'a')}")
+    if partners:
+        text += f" with {join_names(_mention(u) for u in partners)}"
+    try:
+        get_slack_client().chat_postMessage(
+            channel=COORD_CHANNEL_ID, thread_ts=poll.schedule_ts, text=text)
+    except Exception as exc:  # noqa: BLE001 - never raise; the sign-up stands
+        current_app.logger.warning("Sign-up reply for practice %s failed: %s", practice.id, exc)
+
+
+def sign_up_as_lead(practice_id: int, slack_uid: str) -> dict:
+    """The Lead button: add the clicker as a lead if the session still needs one.
+
+    The practice row is locked NOWAIT (with populate_existing, see _lock_poll)
+    so two clicks on the last spot can't both win.
+    """
+    from app.models import SlackUser
+    from app.practices.models import Practice, PracticeLead
+    from app.slack.practices import refresh_practice_posts
+
+    slack = SlackUser.query.filter_by(slack_uid=slack_uid).first()
+    user = slack.user if slack else None
+    if user is None or user.id not in {u.id for u in eligible_leads()}:
+        return {"success": False, "error": NOT_IN_POOL}
+    try:
+        practice = (Practice.query.filter_by(id=practice_id).populate_existing()
+                    .with_for_update(nowait=True).one_or_none())
+    except OperationalError:
+        db.session.rollback()
+        return {"success": False, "error": "Someone just signed up. Try again in a second."}
+    refusal = _signup_refusal(practice, user.id)
+    if refusal:
+        db.session.rollback()
+        return {"success": False, "error": refusal}
+
+    partners = [l.user for l in practice.leads if l.role == "lead" and l.user]
+    practice.leads.append(PracticeLead(user_id=user.id, role="lead"))
+    db.session.commit()
+    try:
+        refresh_practice_posts(practice, change_type="edit", notify=False)
+    except Exception:  # noqa: BLE001 - the sign-up is saved; the next refresh repairs posts
+        db.session.rollback()
+        current_app.logger.exception("Refresh after sign-up failed for practice %s", practice_id)
+    _post_signup_reply(practice, slack_uid, partners)
+    return {"success": True}
+
+
 def post_block_post(poll) -> bool:
     try:
         rendered, text = _render(poll)
