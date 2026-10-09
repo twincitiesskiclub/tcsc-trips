@@ -4,7 +4,9 @@ Every other Monday, a week before a block starts, the block job creates the
 block's sessions and its poll row (DRAFT) and posts the block post in
 #practices-core. Someone on the practices team presses Open poll,
 which posts the leads poll. The block post then shows coverage and an Assign
-button per session.
+button per session. When the team is done assigning, Post schedule to leads
+posts the leads' copy in #coord-practices-leads-assists, and every block
+post refresh updates it from then on.
 
 The job acts on state, not on the day it runs, so a missed Monday is caught
 the next morning. It never creates a block that starts before the anchor:
@@ -39,7 +41,7 @@ from app.practices.availability_models import (
 from app.practices.drafting import generate_draft_block
 from app.practices.interfaces import PracticeStatus
 from app.slack.client import get_slack_client
-from app.slack.practices._config import PRACTICES_CORE_CHANNEL_ID
+from app.slack.practices._config import COORD_CHANNEL_ID, PRACTICES_CORE_CHANNEL_ID
 from app.utils import now_central_naive, today_central
 
 BLOCK_DAYS = 14
@@ -130,16 +132,16 @@ def run_block_job(today: date | None = None) -> list[dict]:
     return results
 
 
-def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:
-    """Post the leads poll for a block. Exactly one caller wins.
+def _lock_poll(poll_id: int):
+    """Lock the poll row until the next commit or rollback, or None if it's taken.
 
-    The row lock is held through the Slack post and released by open_poll's
-    commit (or our rollback). A second click while the first is in flight
-    fails NOWAIT; a click after it sees status open. A crash mid-open rolls
-    the transaction back, so nothing gets stuck.
+    A second click while the first is in flight fails NOWAIT. A crash rolls
+    the transaction back, so nothing gets stuck. populate_existing() matters:
+    without it a caller that already loaded the poll reads stale columns
+    under the lock and acts twice (reproduced in review).
     """
     try:
-        poll = (
+        return (
             LeadAvailabilityPoll.query
             .filter_by(id=poll_id)
             .populate_existing()
@@ -148,6 +150,17 @@ def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:
         )
     except OperationalError:
         db.session.rollback()
+        return None
+
+
+def open_block_poll(poll_id: int, opened_by_slack_uid: str | None) -> dict:
+    """Post the leads poll for a block. Exactly one caller wins.
+
+    The row lock is held through the Slack post and released by open_poll's
+    commit (or our rollback); a click after that sees status open.
+    """
+    poll = _lock_poll(poll_id)
+    if poll is None:
         return {"success": False, "error": "Someone is opening this poll right now."}
 
     if poll.status != PollStatus.DRAFT:
@@ -185,6 +198,39 @@ def _render(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
     return rendered, f"Lead poll {block_range_label(poll.starts_on, poll.ends_on)}"
 
 
+def _render_schedule(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
+    from app.slack.blocks.block_post import block_range_label, build_lead_schedule
+
+    rows = block_post_rows(poll, exclude_practice_id=exclude_practice_id)
+    return (build_lead_schedule(poll, rows),
+            f"Lead schedule {block_range_label(poll.starts_on, poll.ends_on)}")
+
+
+def post_lead_schedule(poll_id: int) -> dict:
+    """Post the block's lead schedule to the leads channel. Exactly one caller wins.
+
+    After this, refresh_block_post keeps the schedule current.
+    """
+    poll = _lock_poll(poll_id)
+    if poll is None:
+        return {"success": False, "error": "Someone is posting this schedule right now."}
+    if poll.schedule_ts:
+        db.session.rollback()
+        return {"success": False, "error": "The schedule is already posted."}
+    try:
+        rendered, text = _render_schedule(poll)
+        ts = get_slack_client().chat_postMessage(
+            channel=COORD_CHANNEL_ID, blocks=rendered, text=text)["ts"]
+    except Exception as exc:  # noqa: BLE001 - never raise; the button stays for a retry
+        db.session.rollback()
+        current_app.logger.warning("Lead schedule for poll %s failed: %s", poll_id, exc)
+        return {"success": False, "error": "Could not post the schedule. Try again."}
+    poll.schedule_ts = ts
+    db.session.commit()
+    refresh_block_post(poll)
+    return {"success": True, "ts": ts}
+
+
 def post_block_post(poll) -> bool:
     try:
         rendered, text = _render(poll)
@@ -200,16 +246,22 @@ def post_block_post(poll) -> bool:
 
 
 def refresh_block_post(poll, *, exclude_practice_id=None) -> bool:
+    """Re-render the block post and, once it's posted, the leads' schedule."""
     if not poll.block_post_ts:
         return False
-    try:
-        rendered, text = _render(poll, exclude_practice_id=exclude_practice_id)
-        get_slack_client().chat_update(
-            channel=PRACTICES_CORE_CHANNEL_ID, ts=poll.block_post_ts, blocks=rendered, text=text)
-    except Exception as exc:  # noqa: BLE001 - never raise; next edit or morning repairs it
-        current_app.logger.warning("Block post refresh for poll %s failed: %s", poll.id, exc)
-        return False
-    return True
+    ok = True
+    for channel, ts, render in ((PRACTICES_CORE_CHANNEL_ID, poll.block_post_ts, _render),
+                                (COORD_CHANNEL_ID, poll.schedule_ts, _render_schedule)):
+        if not ts:
+            continue
+        try:
+            rendered, text = render(poll, exclude_practice_id=exclude_practice_id)
+            get_slack_client().chat_update(channel=channel, ts=ts, blocks=rendered, text=text)
+        except Exception as exc:  # noqa: BLE001 - never raise; next edit or morning repairs it
+            current_app.logger.warning(
+                "Refresh of %s in %s for poll %s failed: %s", ts, channel, poll.id, exc)
+            ok = False
+    return ok
 
 
 def post_wednesday_reply(poll) -> bool:
@@ -239,6 +291,13 @@ def post_wednesday_reply(poll) -> bool:
     return True
 
 
+def _mention(user) -> str:
+    from app.slack.blocks.block_post import short_name
+
+    slack = user.slack_user
+    return f"<@{slack.slack_uid}>" if slack and slack.slack_uid else short_name(user)
+
+
 def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
     from app.slack.blocks.block_post import short_name, where_label
 
@@ -261,6 +320,7 @@ def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
             "where": where_label(practice),
             "cancelled": practice.status == PracticeStatus.CANCELLED.value,
             "leads": [short_name(u) for u in leads],
+            "lead_mentions": [_mention(u) for u in leads],
             "coaches": [short_name(u) for u in coaches],
             "leads_needed": practice.leads_needed or 2,
             "available": available.get(practice.id, 0),

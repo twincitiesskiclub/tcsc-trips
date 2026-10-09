@@ -570,6 +570,23 @@ if _bot_token:
                 client.chat_postEphemeral(channel=channel, user=user_id,
                                           text=f":warning: {result.get('error')}")
 
+    @bolt_app.action("block_schedule_post")
+    def handle_block_schedule_post(ack, body, action, client, logger):
+        """Post schedule to leads, on the block post once the poll is open."""
+        ack()
+        with get_app_context():
+            from app.practices.blocks import post_lead_schedule
+
+            try:
+                result = post_lead_schedule(int(action["value"]))
+            except Exception:
+                logger.exception("post_lead_schedule failed for poll %s", action.get("value"))
+                result = {"success": False, "error": "Could not post the schedule. Try again."}
+        channel = (body.get("channel") or {}).get("id")
+        if not result.get("success") and channel:
+            client.chat_postEphemeral(channel=channel, user=body["user"]["id"],
+                                      text=f":warning: {result.get('error')}")
+
     @bolt_app.action("block_assign")
     def handle_block_assign(ack, body, action, client, logger):
         ack()

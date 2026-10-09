@@ -36,13 +36,15 @@ def _dot(row) -> str:
     return ":red_circle:"
 
 
-def _leads_line(row) -> str:
+def _leads_line(row, leads=None) -> str:
+    """`leads` overrides the display names, e.g. with Slack mentions."""
+    leads = row["leads"] if leads is None else leads
     parts = []
     if row["coaches"]:
         parts.append(f"Coach: {', '.join(row['coaches'])}")
-    if row["leads"]:
-        line = f"Leads: {', '.join(row['leads'])}"
-        short = row["leads_needed"] - len(row["leads"])
+    if leads:
+        line = f"Leads: {', '.join(leads)}"
+        short = row["leads_needed"] - len(leads)
         if short > 0:
             line += f" · needs {short} more"
         parts.append(line)
@@ -110,13 +112,49 @@ def _status_line(poll, permalink) -> str:
     return f"{opener} · <{permalink}|see the poll>" if permalink else opener
 
 
+def _schedule_button(poll) -> dict:
+    return {"type": "actions", "elements": [{
+        "type": "button", "action_id": "block_schedule_post", "value": str(poll.id),
+        "text": {"type": "plain_text", "text": "Post schedule to leads"},
+        "confirm": {
+            "title": {"type": "plain_text", "text": "Post the schedule?"},
+            "text": {"type": "plain_text", "text":
+                     "Posts every session and its leads to #coord-practices-leads-assists "
+                     "and @mentions each lead. It updates itself after that."},
+            "confirm": {"type": "plain_text", "text": "Post"},
+            "deny": {"type": "plain_text", "text": "Cancel"},
+        },
+    }]}
+
+
 def build_block_post(poll, rows, *, permalink, footer) -> list[dict]:
     if poll.status == "draft":
         return _before_opening(poll, rows)
-    blocks = [_header(poll), _context(_status_line(poll, permalink))]
+    status = _status_line(poll, permalink)
+    if poll.schedule_ts:
+        status += f" · Schedule posted to <#{COORD_CHANNEL_ID}>"
+    blocks = [_header(poll), _context(status)]
     blocks.extend(_row_section(r) for r in rows[:40])
     if footer and poll.status == "open":
         blocks.append(_context(footer))
+    if not poll.schedule_ts:
+        blocks.append(_schedule_button(poll))
+    return blocks
+
+
+def build_lead_schedule(poll, rows) -> list[dict]:
+    """The leads' copy of the block post in #coord-practices-leads-assists.
+
+    Same rows, with Slack mentions instead of names and no buttons or dots.
+    """
+    blocks = [{"type": "header", "text": {"type": "plain_text",
+               "text": f"Lead schedule · {block_range_label(poll.starts_on, poll.ends_on)}"}}]
+    for row in rows[:40]:
+        session = session_text(row["when"], row["where"])
+        text = (f"~{session}~  Cancelled" if row["cancelled"]
+                else f"{session}\n{_leads_line(row, row['lead_mentions'])}")
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
+    blocks.append(_context("Can't make yours? Reply in this thread so the team can find a sub."))
     return blocks
 
 

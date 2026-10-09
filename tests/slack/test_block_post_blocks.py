@@ -2,21 +2,26 @@ import json
 from datetime import date, datetime
 from types import SimpleNamespace
 
-from app.slack.blocks.block_post import block_range_label, build_block_post
+from app.slack.blocks.block_post import (
+    block_range_label,
+    build_block_post,
+    build_lead_schedule,
+)
 
 
 def _poll(status="draft", message_ts=None, opened_by=None, closed_at=None, pid=7,
-          opened_at=None):
+          opened_at=None, schedule_ts=None):
     return SimpleNamespace(id=pid, starts_on=date(2099, 1, 19), ends_on=date(2099, 2, 1),
                            status=status, message_ts=message_ts,
                            opened_by_slack_uid=opened_by, opened_at=opened_at,
-                           closed_at=closed_at)
+                           closed_at=closed_at, schedule_ts=schedule_ts)
 
 
 def _row(pid, *, emoji="letter_a", where="TEST Wirth · Bounding", leads=(), coaches=(),
-         needed=2, available=0, cancelled=False, day=20):
+         needed=2, available=0, cancelled=False, day=20, mentions=None):
     return {"practice_id": pid, "emoji": emoji, "when": datetime(2099, 1, day, 18, 15),
             "where": where, "cancelled": cancelled, "leads": list(leads),
+            "lead_mentions": list(leads if mentions is None else mentions),
             "coaches": list(coaches), "leads_needed": needed, "available": available}
 
 
@@ -193,3 +198,39 @@ def test_assign_modal_omits_location_without_locations_and_keeps_available_above
     kinds = [b["type"] for b in view["blocks"]]
     assert kinds.index("section") < view["blocks"].index(blocks["leads"])
     assert "initial_option\"" not in json.dumps(view)
+
+
+def test_schedule_button_on_open_and_closed_polls_until_posted():
+    for poll in (_poll("open", "2.0"), _poll("closed", None)):
+        text = _text(build_block_post(poll, [_row(1)], permalink=None, footer=None))
+        assert '"action_id": "block_schedule_post"' in text
+        assert '"confirm"' in text
+    draft = _text(build_block_post(_poll(), [_row(1)], permalink=None, footer=None))
+    assert "block_schedule_post" not in draft
+
+
+def test_posted_schedule_replaces_the_button_with_a_channel_link():
+    text = _text(build_block_post(_poll("open", "2.0", schedule_ts="5.0"), [_row(1)],
+                                  permalink=None, footer=None))
+    assert "block_schedule_post" not in text
+    assert "Schedule posted to <#C02J4DGCFL2>" in text
+
+
+def test_lead_schedule_mentions_leads_and_flags_gaps():
+    rows = [
+        _row(1, leads=["Katrin O", "Gunnar M"], mentions=["<@U1>", "<@U2>"]),
+        _row(2, where="location TBD", day=22),
+        _row(3, leads=["Joe H"], mentions=["<@U3>"], coaches=["KJ"], day=27),
+        _row(4, cancelled=True, day=29),
+    ]
+    blocks = build_lead_schedule(_poll("closed"), rows)
+    text = _text(blocks)
+    assert "Lead schedule · Jan 19 – Feb 1" in text
+    assert "*Tue 1/20* · 6:15p · TEST Wirth · Bounding\\nLeads: <@U1>, <@U2>" in text
+    assert "location TBD\\nNo leads yet" in text
+    assert "Coach: KJ · Leads: <@U3> · needs 1 more" in text
+    assert "~*Thu 1/29* · 6:15p · TEST Wirth · Bounding~  Cancelled" in text
+    assert "Reply in this thread" in text
+    assert "Katrin O" not in text
+    assert "block_assign" not in text and "large_green_circle" not in text
+    assert "—" not in text
