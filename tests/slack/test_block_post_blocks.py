@@ -6,6 +6,7 @@ from app.slack.blocks.block_post import (
     block_range_label,
     build_block_post,
     build_lead_schedule,
+    lead_schedule_text,
 )
 
 
@@ -18,11 +19,18 @@ def _poll(status="draft", message_ts=None, opened_by=None, closed_at=None, pid=7
 
 
 def _row(pid, *, emoji="letter_a", where="TEST Wirth · Bounding", leads=(), coaches=(),
-         needed=2, available=0, cancelled=False, day=20, mentions=None):
-    return {"practice_id": pid, "emoji": emoji, "when": datetime(2099, 1, day, 18, 15),
+         needed=2, available=0, cancelled=False, day=20, mentions=None,
+         activity="Pole Run", location="default", kinds=("Intervals",), hour=18):
+    if location == "default":
+        location = {"name": "TEST Wirth", "spot": "Xerxes Field", "url": "https://maps.example/w"}
+    return {"practice_id": pid, "emoji": emoji, "when": datetime(2099, 1, day, hour, 15),
             "where": where, "cancelled": cancelled, "leads": list(leads),
             "lead_mentions": list(leads if mentions is None else mentions),
-            "coaches": list(coaches), "leads_needed": needed, "available": available}
+            "coaches": list(coaches), "leads_needed": needed, "available": available,
+            "activity": activity, "location": location, "kinds": list(kinds)}
+
+
+NOW = datetime(2099, 1, 1, 9, 0)  # before every test session
 
 
 def _text(blocks):
@@ -216,21 +224,147 @@ def test_posted_schedule_replaces_the_button_with_a_channel_link():
     assert "Schedule posted to <#C02J4DGCFL2>" in text
 
 
-def test_lead_schedule_mentions_leads_and_flags_gaps():
+def test_lead_schedule_groups_weeks_in_one_quote_each():
     rows = [
         _row(1, leads=["Katrin O", "Gunnar M"], mentions=["<@U1>", "<@U2>"]),
-        _row(2, where="location TBD", day=22),
-        _row(3, leads=["Joe H"], mentions=["<@U3>"], coaches=["KJ"], day=27),
-        _row(4, cancelled=True, day=29),
+        _row(2, leads=["Jo E", "Al B"], mentions=["<@U3>", "<@U4>"], day=22),
+        _row(3, leads=["Mo P", "Di Q"], mentions=["<@U5>", "<@U6>"], day=27),
     ]
-    blocks = build_lead_schedule(_poll("closed"), rows)
-    text = _text(blocks)
-    assert "Lead schedule · Jan 19 – Feb 1" in text
-    assert "*Tue 1/20* · 6:15p · TEST Wirth · Bounding\\nLeads: <@U1>, <@U2>" in text
-    assert "location TBD\\nNo leads yet" in text
-    assert "Coach: KJ · Leads: <@U3> · needs 1 more" in text
-    assert "~*Thu 1/29* · 6:15p · TEST Wirth · Bounding~  Cancelled" in text
-    assert "Reply in this thread" in text
-    assert "Katrin O" not in text
-    assert "block_assign" not in text and "large_green_circle" not in text
-    assert "—" not in text
+    blocks = build_lead_schedule(_poll("closed"), rows, now=NOW)
+    assert blocks[0]["text"]["text"] == ":ski: Lead schedule · Jan 19 – Feb 1"
+    sections = [b for b in blocks if b["type"] == "section"]
+    assert len(sections) == 2
+    week1 = sections[0]["text"]["text"]
+    assert week1.startswith("*Week of Jan 19*\n> :runner:  *Tue 1/20* · 6:15p · "
+                            "<https://maps.example/w|TEST Wirth, Xerxes Field> · Intervals\n"
+                            "> <@U1> and <@U2>\n>\n> :runner:  *Thu 1/22*")
+    assert sections[1]["text"]["text"].startswith("*Week of Jan 26*\n")
+    assert not any(b["type"] in ("actions", "divider") for b in blocks)
+    assert blocks[-1] == {"type": "context", "elements": [{"type": "mrkdwn", "text":
+        "Can't make yours? Ask in this thread for a sub."}]}
+    assert "—" not in _text(blocks)
+
+
+def test_lead_schedule_needs_lines_coaches_and_place_fallbacks():
+    rows = [
+        _row(1, location=None, kinds=()),
+        _row(2, leads=["Joe H"], mentions=["<@U3>"], coaches=["KJ"], day=22),
+        _row(3, needed=1, day=27),
+        _row(4, location={"name": "TEST Balance", "spot": None, "url": None},
+             activity="Strength", kinds=("Circuit",), day=29),
+    ]
+    text = _text(build_lead_schedule(_poll("closed"), rows, now=NOW))
+    assert "*Tue 1/20* · 6:15p · location TBD\\n> :raising_hand: *Needs 2 leads*" in text
+    assert "> <@U3> · :raising_hand: *Needs 1 more* · coach KJ" in text
+    assert ":raising_hand: *Needs 1 lead*" in text
+    assert ":muscle:  *Thu 1/29* · 6:15p · TEST Balance · Circuit" in text
+
+
+def test_lead_schedule_escapes_names_and_keeps_links_intact():
+    rows = [_row(1, location={"name": "TEST A&B <Park>", "spot": "Lot|2", "url": "https://m/x"},
+                 kinds=("Run & Gun",))]
+    text = build_lead_schedule(_poll("closed"), rows, now=NOW)[1]["text"]["text"]
+    assert "<https://m/x|TEST A&amp;B &lt;Park&gt;, Lot 2>" in text
+    assert "· Run &amp; Gun" in text
+
+
+def test_cancelled_row_is_plain_strikethrough_without_button():
+    rows = [_row(1, cancelled=True)]
+    blocks = build_lead_schedule(_poll("closed"), rows, now=NOW)
+    assert "> ~Tue 1/20 · 6:15p · TEST Wirth~ _Cancelled_" in blocks[1]["text"]["text"]
+    assert not any(b["type"] == "actions" for b in blocks)
+
+
+def test_activity_emoji_keywords_and_fallback():
+    from app.slack.blocks.block_post import activity_emoji
+    assert activity_emoji("Strength") == ":muscle:"
+    assert activity_emoji("Mountain Bike") == ":bicyclist:"
+    assert activity_emoji("Skate/Classic Rollerski") == ":ski:"
+    assert activity_emoji("Pole Hike, Pole Run") == ":runner:"
+    assert activity_emoji("Hike") == ":runner:"
+    assert activity_emoji("Orienteering") == ":ski:"
+    assert activity_emoji(None) == ":ski:"
+
+
+def test_lead_buttons_only_for_takeable_sessions_with_unique_ids():
+    rows = [
+        _row(1),                                              # open
+        _row(2, leads=["Sarah H"], mentions=["<@U9>"], hour=19),  # partial, same day
+        _row(3, leads=["A B", "C D"], mentions=["<@U1>", "<@U2>"], day=22),  # full
+        _row(4, cancelled=True, day=22, hour=19),             # cancelled
+    ]
+    blocks = build_lead_schedule(_poll("closed"), rows, now=NOW)
+    actions = [b for b in blocks if b["type"] == "actions"]
+    assert len(actions) == 1
+    buttons = actions[0]["elements"]
+    assert [b["action_id"] for b in buttons] == ["lead_signup_1", "lead_signup_2"]
+    assert [b["value"] for b in buttons] == ["1", "2"]
+    assert buttons[0]["text"]["text"] == "Lead Tue 1/20 · 6:15p"
+    confirm = buttons[0]["confirm"]
+    assert confirm["title"]["text"] == "Lead this practice?"
+    assert confirm["confirm"]["text"] == "I'll lead it"
+    assert confirm["deny"]["text"] == "Cancel"
+    assert confirm["text"]["text"] == (
+        "Tue 1/20 at 6:15p, Intervals at TEST Wirth. "
+        "You're added right away. If plans change, ask in the thread.")
+    assert "You'll lead with Sarah H." in buttons[1]["confirm"]["text"]["text"]
+    assert all(len(b["confirm"]["text"]["text"]) <= 300 for b in buttons)
+
+
+def test_past_sessions_get_no_button_and_do_not_count_as_open():
+    from app.slack.blocks.block_post import lead_schedule_text
+    rows = [_row(1), _row(2, day=27)]
+    later = datetime(2099, 1, 21, 9, 0)  # after 1/20, before 1/27
+    blocks = build_lead_schedule(_poll("closed"), rows, now=later)
+    buttons = [e for b in blocks if b["type"] == "actions" for e in b["elements"]]
+    assert [b["action_id"] for b in buttons] == ["lead_signup_2"]
+    assert lead_schedule_text(_poll("closed"), rows, now=later).endswith(
+        "· 1 practice still needs leads")
+
+
+def test_star_line_wording():
+    def footer(rows):
+        return build_lead_schedule(_poll("closed"), rows, now=NOW)[-1]["elements"][0]["text"]
+
+    full = lambda pid, a, b, **kw: _row(pid, leads=["x", "y"], mentions=[a, b], **kw)  # noqa: E731
+    assert footer([full(1, "<@A>", "<@B>")]).startswith("Can't make yours?")
+    assert footer([full(1, "<@A>", "<@B>"), full(2, "<@A>", "<@C>", day=22)]).startswith(
+        ":star: <@A> is leading twice.\n")
+    assert footer([full(1, "<@A>", "<@B>"), full(2, "<@A>", "<@B>", day=22)]).startswith(
+        ":star: <@A> and <@B> are leading twice.\n")
+    three = [full(1, "<@A>", "<@B>"), full(2, "<@A>", "<@B>", day=22),
+             full(3, "<@A>", "<@C>", day=27)]
+    assert footer(three).startswith(
+        ":star: <@B> is leading twice.\n:star: <@A> is leading 3 times.\n")
+
+
+def test_cancelled_sessions_do_not_count_toward_stars():
+    rows = [_row(1, leads=["x"], mentions=["<@A>"]),
+            _row(2, leads=["x"], mentions=["<@A>"], cancelled=True, day=22)]
+    footer = build_lead_schedule(_poll("closed"), rows, now=NOW)[-1]["elements"][0]["text"]
+    assert ":star:" not in footer
+
+
+def test_lead_schedule_text_plurals():
+    from app.slack.blocks.block_post import lead_schedule_text
+    full = _row(9, leads=["a", "b"], mentions=["<@A>", "<@B>"])
+    poll = _poll("closed")
+    assert lead_schedule_text(poll, [full], now=NOW) == (
+        "Lead schedule for Jan 19 – Feb 1 is up · every practice has leads")
+    assert lead_schedule_text(poll, [_row(1), full], now=NOW).endswith(
+        "· 1 practice still needs leads")
+    assert lead_schedule_text(poll, [_row(1), _row(2, day=22)], now=NOW).endswith(
+        "· 2 practices still need leads")
+
+
+def test_join_names():
+    from app.slack.blocks.block_post import join_names
+    assert join_names([]) == ""
+    assert join_names(["a"]) == "a"
+    assert join_names(["a", "b"]) == "a and b"
+    assert join_names(["a", "b", "c"]) == "a, b and c"
+
+
+def test_post_schedule_confirm_mentions_lead_buttons():
+    text = _text(build_block_post(_poll("open", "2.0"), [_row(1)], permalink=None, footer=None))
+    assert "Open sessions get a Lead button anyone in the lead pool can take." in text
