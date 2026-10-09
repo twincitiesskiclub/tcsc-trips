@@ -181,3 +181,73 @@ def test_rows_mention_linked_leads_and_name_the_rest(block):
             if row is not None:
                 db.session.delete(row)
             db.session.commit()
+
+
+def test_rows_carry_activity_location_and_kinds(block):
+    from app.practices.models import PracticeActivity, PracticeLocation, PracticeType
+
+    db.session.rollback()
+    loc = PracticeLocation(name="TEST Sched Loc", spot="TEST Spot", google_maps_url="https://m/l")
+    act = PracticeActivity(name="TEST Sched Strength")
+    typ = PracticeType(name="TEST Sched Circuit")
+    db.session.add_all([loc, act, typ])
+    db.session.commit()
+    ids = (loc.id, act.id, typ.id)
+    try:
+        practice = Practice.query.filter_by(logistics_notes="TEST b5").one()
+        practice.location_id = ids[0]
+        practice.activities = [act]
+        practice.practice_types = [typ]
+        db.session.commit()
+        row = blocks.block_post_rows(block)[0]
+        assert row["activity"] == "TEST Sched Strength"
+        assert row["location"] == {"name": "TEST Sched Loc", "spot": "TEST Spot",
+                                   "url": "https://m/l"}
+        assert row["kinds"] == ["TEST Sched Circuit"]
+    finally:
+        db.session.rollback()
+        practice = Practice.query.filter_by(logistics_notes="TEST b5").one()
+        practice.location_id = None
+        practice.activities = []
+        practice.practice_types = []
+        db.session.commit()
+        for model, i in ((PracticeLocation, ids[0]), (PracticeActivity, ids[1]),
+                         (PracticeType, ids[2])):
+            row = db.session.get(model, i)
+            if row is not None:
+                db.session.delete(row)
+        db.session.commit()
+
+
+def test_schedule_post_uses_new_text_and_no_unfurls(assigned, client):
+    client.chat_postMessage.return_value = {"ts": "5.000"}
+    blocks.post_lead_schedule(assigned.id)
+    posted = client.chat_postMessage.call_args.kwargs
+    assert posted["text"].startswith("Lead schedule for Jan 19 – Feb 1 is up · ")
+    assert posted["unfurl_links"] is False and posted["unfurl_media"] is False
+    assert ":ski: Lead schedule · Jan 19 – Feb 1" in str(posted["blocks"])
+
+
+def test_unlinked_lead_names_are_escaped(block):
+    from app.models import User
+    from app.practices.models import PracticeLead
+
+    db.session.rollback()
+    user = User(first_name="TEST S&am", last_name="<x>", email="test-esc@example.invalid")
+    db.session.add(user)
+    db.session.commit()
+    uid = user.id
+    try:
+        practice = Practice.query.filter_by(logistics_notes="TEST b5").one()
+        practice.leads.append(PracticeLead(user_id=uid, role="lead"))
+        db.session.commit()
+        assert blocks.block_post_rows(block)[0]["lead_mentions"] == ["TEST S&amp;am &lt;"]
+    finally:
+        db.session.rollback()
+        for lead in PracticeLead.query.filter_by(user_id=uid).all():
+            db.session.delete(lead)
+        db.session.commit()
+        u = db.session.get(User, uid)
+        if u is not None:
+            db.session.delete(u)
+        db.session.commit()

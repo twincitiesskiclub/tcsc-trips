@@ -199,11 +199,11 @@ def _render(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
 
 
 def _render_schedule(poll, *, exclude_practice_id=None) -> tuple[list[dict], str]:
-    from app.slack.blocks.block_post import block_range_label, build_lead_schedule
+    from app.slack.blocks.block_post import build_lead_schedule, lead_schedule_text
 
     rows = block_post_rows(poll, exclude_practice_id=exclude_practice_id)
-    return (build_lead_schedule(poll, rows),
-            f"Lead schedule {block_range_label(poll.starts_on, poll.ends_on)}")
+    now = now_central_naive()
+    return build_lead_schedule(poll, rows, now=now), lead_schedule_text(poll, rows, now=now)
 
 
 def post_lead_schedule(poll_id: int) -> dict:
@@ -220,7 +220,8 @@ def post_lead_schedule(poll_id: int) -> dict:
     try:
         rendered, text = _render_schedule(poll)
         ts = get_slack_client().chat_postMessage(
-            channel=COORD_CHANNEL_ID, blocks=rendered, text=text)["ts"]
+            channel=COORD_CHANNEL_ID, blocks=rendered, text=text,
+            unfurl_links=False, unfurl_media=False)["ts"]
     except Exception as exc:  # noqa: BLE001 - never raise; the button stays for a retry
         db.session.rollback()
         current_app.logger.warning("Lead schedule for poll %s failed: %s", poll_id, exc)
@@ -229,6 +230,79 @@ def post_lead_schedule(poll_id: int) -> dict:
     db.session.commit()
     refresh_block_post(poll)
     return {"success": True, "ts": ts}
+
+
+NOT_IN_POOL = "Leading is open to the lead pool. Want in? Ask in this thread."
+
+
+def _signup_refusal(practice, user_id: int) -> str | None:
+    """Why this user can't take this session right now, or None if they can."""
+    if practice is None:
+        return "That practice is gone."
+    if practice.status == PracticeStatus.CANCELLED.value:
+        return "That practice was cancelled."
+    if practice.date <= now_central_naive():
+        return "That practice already started."
+    if any(l.user_id == user_id for l in practice.leads):
+        return "You're already on it."
+    if sum(1 for l in practice.leads if l.role == "lead") >= (practice.leads_needed or 2):
+        return "Just filled, thanks!"
+    return None
+
+
+def _post_signup_reply(practice, slack_uid: str, partners) -> None:
+    from app.slack.blocks.block_post import join_names
+
+    poll = poll_for_date(practice.date.date())
+    if poll is None or not poll.schedule_ts:
+        return
+    when = practice.date
+    text = (f":raised_hands: <@{slack_uid}> is leading {when.strftime('%a %-m/%-d')} · "
+            f"{when.strftime('%-I:%M%p').replace('PM', 'p').replace('AM', 'a')}")
+    if partners:
+        text += f" with {join_names(_mention(u) for u in partners)}"
+    try:
+        get_slack_client().chat_postMessage(
+            channel=COORD_CHANNEL_ID, thread_ts=poll.schedule_ts, text=text)
+    except Exception as exc:  # noqa: BLE001 - never raise; the sign-up stands
+        current_app.logger.warning("Sign-up reply for practice %s failed: %s", practice.id, exc)
+
+
+def sign_up_as_lead(practice_id: int, slack_uid: str) -> dict:
+    """The Lead button: add the clicker as a lead if the session still needs one.
+
+    The practice row is locked NOWAIT (with populate_existing, see _lock_poll)
+    so two clicks on the last spot can't both win.
+    """
+    from app.models import SlackUser
+    from app.practices.models import Practice, PracticeLead
+    from app.slack.practices import refresh_practice_posts
+
+    slack = SlackUser.query.filter_by(slack_uid=slack_uid).first()
+    user = slack.user if slack else None
+    if user is None or user.id not in {u.id for u in eligible_leads()}:
+        return {"success": False, "error": NOT_IN_POOL}
+    try:
+        practice = (Practice.query.filter_by(id=practice_id).populate_existing()
+                    .with_for_update(nowait=True).one_or_none())
+    except OperationalError:
+        db.session.rollback()
+        return {"success": False, "error": "Someone just signed up. Try again in a second."}
+    refusal = _signup_refusal(practice, user.id)
+    if refusal:
+        db.session.rollback()
+        return {"success": False, "error": refusal}
+
+    partners = [l.user for l in practice.leads if l.role == "lead" and l.user]
+    practice.leads.append(PracticeLead(user_id=user.id, role="lead"))
+    db.session.commit()
+    try:
+        refresh_practice_posts(practice, change_type="edit", notify=False)
+    except Exception:  # noqa: BLE001 - the sign-up is saved; the next refresh repairs posts
+        db.session.rollback()
+        current_app.logger.exception("Refresh after sign-up failed for practice %s", practice_id)
+    _post_signup_reply(practice, slack_uid, partners)
+    return {"success": True}
 
 
 def post_block_post(poll) -> bool:
@@ -292,10 +366,10 @@ def post_wednesday_reply(poll) -> bool:
 
 
 def _mention(user) -> str:
-    from app.slack.blocks.block_post import short_name
+    from app.slack.blocks.block_post import escape, short_name
 
     slack = user.slack_user
-    return f"<@{slack.slack_uid}>" if slack and slack.slack_uid else short_name(user)
+    return f"<@{slack.slack_uid}>" if slack and slack.slack_uid else escape(short_name(user))
 
 
 def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
@@ -324,6 +398,12 @@ def block_post_rows(poll, *, exclude_practice_id=None) -> list[dict]:
             "coaches": [short_name(u) for u in coaches],
             "leads_needed": practice.leads_needed or 2,
             "available": available.get(practice.id, 0),
+            "activity": practice.activities[0].name if practice.activities else None,
+            "location": ({"name": practice.location.name, "spot": practice.location.spot,
+                          "url": practice.location.google_maps_url}
+                         if practice.location else None),
+            "kinds": ([t.name for t in practice.practice_types]
+                      or [a.name for a in practice.activities]),
         })
     return rows
 
@@ -421,8 +501,12 @@ def validate_assignment(type_ids, activity_ids) -> tuple[str, str] | None:
 
 
 def save_assignment(practice_id: int, *, lead_ids, location_id, type_ids,
-                    activity_ids) -> None:
+                    activity_ids, initial_lead_ids=None) -> None:
     """Save one Assign submission: leads (coaches untouched), location, type, activity.
+
+    With initial_lead_ids (who the modal opened with), only the director's own
+    changes apply, so a lead who signed up while the modal was open stays.
+    None replaces every lead with lead_ids.
 
     A changed type or activity set resets plan reactions to the new defaults.
     A None location means "not chosen" and keeps the current one.
@@ -441,10 +525,20 @@ def save_assignment(practice_id: int, *, lead_ids, location_id, type_ids,
     previous_location_id = practice.location_id
     previous_plan_reactions = [dict(item) for item in (practice.plan_reactions or [])]
 
-    for lead in [l for l in practice.leads if l.role == "lead"]:
-        practice.leads.remove(lead)
-    for user_id in dict.fromkeys(lead_ids):
-        practice.leads.append(PracticeLead(user_id=user_id, role="lead"))
+    current = [l for l in practice.leads if l.role == "lead"]
+    if initial_lead_ids is None:
+        remove, add = {l.user_id for l in current}, list(dict.fromkeys(lead_ids))
+    else:
+        initial = set(initial_lead_ids)
+        remove = initial - set(lead_ids)
+        add = [u for u in dict.fromkeys(lead_ids) if u not in initial]
+    for lead in current:
+        if lead.user_id in remove:
+            practice.leads.remove(lead)
+    have = {l.user_id for l in practice.leads if l.role == "lead"}
+    for user_id in add:
+        if user_id not in have:
+            practice.leads.append(PracticeLead(user_id=user_id, role="lead"))
     if location_id is not None:
         practice.location_id = location_id
 

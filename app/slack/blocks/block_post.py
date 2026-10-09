@@ -1,5 +1,9 @@
 """Block Kit for the team's block post. Pure functions over plain data."""
 
+import json
+from collections import Counter
+from datetime import timedelta
+
 from app.slack.practices._config import COORD_CHANNEL_ID
 
 
@@ -120,7 +124,8 @@ def _schedule_button(poll) -> dict:
             "title": {"type": "plain_text", "text": "Post the schedule?"},
             "text": {"type": "plain_text", "text":
                      "Posts every session and its leads to #coord-practices-leads-assists "
-                     "and @mentions each lead. It updates itself after that."},
+                     "and @mentions each lead. Open sessions get a Lead button anyone in "
+                     "the lead pool can take. It updates itself after that."},
             "confirm": {"type": "plain_text", "text": "Post"},
             "deny": {"type": "plain_text", "text": "Cancel"},
         },
@@ -142,20 +147,153 @@ def build_block_post(poll, rows, *, permalink, footer) -> list[dict]:
     return blocks
 
 
-def build_lead_schedule(poll, rows) -> list[dict]:
-    """The leads' copy of the block post in #coord-practices-leads-assists.
+# The leads' schedule post in #coord-practices-leads-assists.
 
-    Same rows, with Slack mentions instead of names and no buttons or dots.
-    """
-    blocks = [{"type": "header", "text": {"type": "plain_text",
-               "text": f"Lead schedule · {block_range_label(poll.starts_on, poll.ends_on)}"}}]
-    for row in rows[:40]:
-        session = session_text(row["when"], row["where"])
-        text = (f"~{session}~  Cancelled" if row["cancelled"]
-                else f"{session}\n{_leads_line(row, row['lead_mentions'])}")
-        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text": text}})
-    blocks.append(_context("Can't make yours? Reply in this thread so the team can find a sub."))
+ACTIVITY_EMOJI = (  # first keyword found in the practice's first activity wins
+    ("strength", ":muscle:"),
+    ("bike", ":bicyclist:"),
+    ("ski", ":ski:"),
+    ("run", ":runner:"),
+    ("hike", ":runner:"),
+)
+SUB_LINE = "Can't make yours? Ask in this thread for a sub."
+
+
+def escape(text) -> str:
+    """Slack mrkdwn escaping for interpolated names."""
+    return str(text).replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
+def join_names(names) -> str:
+    names = list(names)
+    if len(names) <= 2:
+        return " and ".join(names)
+    return ", ".join(names[:-1]) + " and " + names[-1]
+
+
+def activity_emoji(activity) -> str:
+    name = (activity or "").lower()
+    return next((emoji for word, emoji in ACTIVITY_EMOJI if word in name), ":ski:")
+
+
+def _short(row) -> int:
+    return max(row["leads_needed"] - len(row["leads"]), 0)
+
+
+def takeable(row, now) -> bool:
+    """Shows a Lead button: short of leads, not cancelled, not started."""
+    return not row["cancelled"] and _short(row) > 0 and row["when"] > now
+
+
+def _day(when) -> str:
+    return when.strftime("%a %-m/%-d")
+
+
+def _week_label(when) -> str:
+    monday = when.date() - timedelta(days=when.weekday())
+    return f"Week of {monday.strftime('%b %-d')}"
+
+
+def _place_name(row) -> str:
+    return row["location"]["name"] if row["location"] else "location TBD"
+
+
+def _place(row) -> str:
+    loc = row["location"]
+    if not loc:
+        return "location TBD"
+    label = escape(", ".join(p for p in (loc["name"], loc["spot"]) if p)).replace("|", " ")
+    return f"<{loc['url']}|{label}>" if loc["url"] else label
+
+
+def _session_line(row) -> str:
+    kinds = f" · {escape(', '.join(row['kinds']))}" if row["kinds"] else ""
+    return (f"{activity_emoji(row['activity'])}  *{_day(row['when'])}* · "
+            f"{_time(row['when'])} · {_place(row)}{kinds}")
+
+
+def _schedule_leads_line(row) -> str:
+    short = _short(row)
+    if not row["lead_mentions"]:
+        line = f":raising_hand: *Needs {short} lead{'' if short == 1 else 's'}*"
+    elif short:
+        line = f"{join_names(row['lead_mentions'])} · :raising_hand: *Needs {short} more*"
+    else:
+        line = join_names(row["lead_mentions"])
+    if row["coaches"]:
+        line += f" · coach {join_names(escape(c) for c in row['coaches'])}"
+    return line
+
+
+def _schedule_row(row) -> str:
+    if row["cancelled"]:
+        return (f"> ~{_day(row['when'])} · {_time(row['when'])} · "
+                f"{escape(_place_name(row))}~ _Cancelled_")
+    return f"> {_session_line(row)}\n> {_schedule_leads_line(row)}"
+
+
+def _lead_button(row) -> dict:
+    day, time = _day(row["when"]), _time(row["when"])
+    text = f"{day} at {time}, {', '.join(row['kinds']) or 'Practice'} at {_place_name(row)}."
+    if row["leads"]:
+        text += f" You'll lead with {join_names(row['leads'])}."
+    text += " You're added right away. If plans change, ask in the thread."
+    return {
+        "type": "button", "action_id": f"lead_signup_{row['practice_id']}",
+        "value": str(row["practice_id"]),
+        "text": {"type": "plain_text", "text": f"Lead {day} · {time}"},
+        "confirm": {
+            "title": {"type": "plain_text", "text": "Lead this practice?"},
+            "text": {"type": "plain_text", "text": text[:300]},
+            "confirm": {"type": "plain_text", "text": "I'll lead it"},
+            "deny": {"type": "plain_text", "text": "Cancel"},
+        },
+    }
+
+
+def _star_lines(rows) -> list[str]:
+    counts = Counter(m for r in rows if not r["cancelled"] for m in r["lead_mentions"])
+    by_count: dict[int, list[str]] = {}
+    for mention, n in counts.items():
+        if n >= 2:
+            by_count.setdefault(n, []).append(mention)
+    lines = []
+    for n in sorted(by_count):
+        people = by_count[n]
+        times = "twice" if n == 2 else f"{n} times"
+        lines.append(f":star: {join_names(people)} {'is' if len(people) == 1 else 'are'} "
+                     f"leading {times}.")
+    return lines
+
+
+def build_lead_schedule(poll, rows, *, now) -> list[dict]:
+    """One bold week label and one quote of sessions per week, Lead buttons
+    under a week with a takeable session, stars and the sub line at the end."""
+    blocks = [{"type": "header", "text": {"type": "plain_text", "emoji": True,
+               "text": f":ski: Lead schedule · {block_range_label(poll.starts_on, poll.ends_on)}"}}]
+    weeks: dict[str, list[dict]] = {}
+    for row in rows:
+        weeks.setdefault(_week_label(row["when"]), []).append(row)
+    for label, week in weeks.items():
+        blocks.append({"type": "section", "text": {"type": "mrkdwn", "text":
+                       f"*{label}*\n" + "\n>\n".join(_schedule_row(r) for r in week)}})
+        buttons = [_lead_button(r) for r in week if takeable(r, now)]
+        if buttons:
+            blocks.append({"type": "actions", "elements": buttons[:25]})
+    blocks.append(_context("\n".join(_star_lines(rows) + [SUB_LINE])))
     return blocks
+
+
+def lead_schedule_text(poll, rows, *, now) -> str:
+    """Fallback text: what mention notifications and screen readers get."""
+    open_count = sum(1 for r in rows if takeable(r, now))
+    if not open_count:
+        need = "every practice has leads"
+    elif open_count == 1:
+        need = "1 practice still needs leads"
+    else:
+        need = f"{open_count} practices still need leads"
+    return f"Lead schedule for {block_range_label(poll.starts_on, poll.ends_on)} is up · {need}"
 
 
 MAX_SELECT_OPTIONS = 100
@@ -211,7 +349,8 @@ def build_assign_modal(data: dict, *, locations=(), all_types=(), all_activities
     return {
         "type": "modal",
         "callback_id": "block_assign_submit",
-        "private_metadata": str(data["practice_id"]),
+        "private_metadata": json.dumps({"practice_id": data["practice_id"],
+                                        "initial_lead_ids": data["initial_ids"]}),
         "title": {"type": "plain_text", "text": "Assign leads"},
         "submit": {"type": "plain_text", "text": "Save"},
         "close": {"type": "plain_text", "text": "Cancel"},

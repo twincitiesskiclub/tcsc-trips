@@ -55,7 +55,11 @@ def rows(with_letters=True, items=ROWS):
     return [{"practice_id": i + 1, "emoji": e if with_letters else None, "when": w, "where": wh,
              "cancelled": False, "leads": l, "coaches": c, "leads_needed": 2, "available": a,
              # A real mention for Rob shows how one renders; the rest are unlinked names.
-             "lead_mentions": [f"<@{ROB}>"] + l[1:] if l else []}
+             "lead_mentions": [f"<@{ROB}>"] + l[1:] if l else [],
+             "activity": "Strength" if "Balance" in wh else "Pole Run",
+             "location": None if "TBD" in wh else {"name": wh.split(" · ")[0], "spot": None,
+                                                   "url": "https://www.google.com/maps"},
+             "kinds": [wh.split(" · ")[1]] if " · " in wh else []}
             for i, (e, w, wh, l, c, a) in enumerate(items)]
 
 
@@ -114,8 +118,11 @@ def surfaces():
     yield "block post, schedule posted", build_block_post(
         poll("closed", "1.0", closed_at=datetime(2026, 11, 9, 8, 30), schedule_ts="2.0"), rows(),
         permalink=None, footer=None)
-    yield "lead schedule in #coord-practices-leads-assists", build_lead_schedule(
-        poll("closed"), rows())
+    yield "lead schedule in #coord-practices-leads-assists (open sessions)", build_lead_schedule(
+        poll("closed"), rows(), now=datetime(2026, 10, 20, 9, 0))
+    full = [(e, w, wh, ["Katrin S", "Ellie T"], c, a) for e, w, wh, _, c, a in ROWS]
+    yield "lead schedule in #coord-practices-leads-assists (all covered)", build_lead_schedule(
+        poll("closed"), rows(items=full), now=datetime(2026, 10, 20, 9, 0))
     yield "Oct 12-25 assignment post (no poll)", build_block_post(
         poll("closed"), rows(with_letters=False), permalink=None, footer=None)
     modal = build_assign_modal({
@@ -139,11 +146,13 @@ def surfaces():
     yield "admin page changes", [{"type": "section", "text": {"type": "mrkdwn", "text": ADMIN_NOTE}}]
 
 
-def post():
+def post(only=""):
     dm = client.conversations_open(users=ROB)["channel"]["id"]
     posted = []
     try:
         for title, blocks in surfaces():
+            if only not in title:
+                continue
             resp = client.chat_postMessage(channel=dm, blocks=[label(title)] + blocks[:49],
                                            text=f"Demo: {title}")
             posted.append(resp["ts"])
@@ -163,4 +172,7 @@ def clean():
 
 
 if __name__ == "__main__":
-    clean() if "--clean" in sys.argv else post()
+    if "--clean" in sys.argv:
+        clean()
+    else:
+        post(next((a for a in sys.argv[1:] if not a.startswith("--")), ""))

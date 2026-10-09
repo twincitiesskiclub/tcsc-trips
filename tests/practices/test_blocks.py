@@ -484,3 +484,47 @@ def test_wednesday_reply_does_not_need_the_block_post(db_session, slack_posts, m
         assert len(slack_posts["wed"]) == 1
     finally:
         _cleanup([pid], start)
+
+
+def test_save_assignment_keeps_a_lead_added_while_the_modal_was_open(
+        db_session, refresh_calls):
+    from app.models import User
+    from app.practices.models import PracticeLead
+
+    db.session.rollback()
+    users = [User(first_name=f"TEST C5 {i}", last_name="Diff",
+                  email=f"test-c5-{i}@example.invalid") for i in range(3)]
+    db.session.add_all(users)
+    db.session.commit()
+    a, b, c = [u.id for u in users]
+    pid = _practice(20)
+    try:
+        practice = db.session.get(Practice, pid)
+        practice.leads.append(PracticeLead(user_id=a, role="lead"))
+        db.session.commit()
+        # The modal opens with [a]; then b taps Lead before the director saves.
+        db.session.get(Practice, pid).leads.append(PracticeLead(user_id=b, role="lead"))
+        db.session.commit()
+        blocks.save_assignment(pid, lead_ids=[a, c], location_id=None, type_ids=[],
+                               activity_ids=[], initial_lead_ids=[a])
+        db.session.expire_all()
+        leads = sorted(l.user_id for l in db.session.get(Practice, pid).leads)
+        assert leads == sorted([a, b, c])
+        # Unchecking removes only who the director unchecked.
+        blocks.save_assignment(pid, lead_ids=[b, c], location_id=None, type_ids=[],
+                               activity_ids=[], initial_lead_ids=[a, b, c])
+        db.session.expire_all()
+        assert sorted(l.user_id for l in db.session.get(Practice, pid).leads) == sorted([b, c])
+        # Checking someone who is already on it adds no duplicate.
+        blocks.save_assignment(pid, lead_ids=[b, c], location_id=None, type_ids=[],
+                               activity_ids=[], initial_lead_ids=[c])
+        db.session.expire_all()
+        assert sorted(l.user_id for l in db.session.get(Practice, pid).leads) == sorted([b, c])
+    finally:
+        _cleanup([pid])
+        db.session.rollback()
+        for uid in (a, b, c):
+            u = db.session.get(User, uid)
+            if u is not None:
+                db.session.delete(u)
+        db.session.commit()
