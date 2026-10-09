@@ -14,6 +14,7 @@ Supports two modes:
 """
 
 import copy
+import json
 import os
 import re
 import logging
@@ -106,13 +107,26 @@ def _parse_block_assign(view) -> dict:
     }
 
 
+def _assign_metadata(view) -> tuple[int, list[int] | None]:
+    """The practice id and the leads the modal opened with.
+
+    A modal opened before this change carries a bare id: None keeps the old
+    replace-all save for it.
+    """
+    raw = view["private_metadata"]
+    if raw.lstrip().startswith("{"):
+        meta = json.loads(raw)
+        return int(meta["practice_id"]), [int(i) for i in meta.get("initial_lead_ids") or []]
+    return int(raw), None
+
+
 def _save_block_assign(view, ack=lambda **_: None) -> None:
     """Validate and persist an Assign modal submission.
 
     Invalid choices ack with modal errors and save nothing; otherwise ack
     first, then save.
     """
-    practice_id = int(view["private_metadata"])
+    practice_id, initial_lead_ids = _assign_metadata(view)
     parsed = _parse_block_assign(view)
     with get_app_context():
         from app.practices import blocks
@@ -131,7 +145,7 @@ def _save_block_assign(view, ack=lambda **_: None) -> None:
             ack(response_action="errors", errors={error[0]: error[1]})
             return
         ack()
-        blocks.save_assignment(practice_id, **parsed)
+        blocks.save_assignment(practice_id, initial_lead_ids=initial_lead_ids, **parsed)
 
 
 LEAD_SIGNUP_ACTION = re.compile(r"^lead_signup_\d+$")

@@ -1,5 +1,6 @@
 """Block Kit for the team's block post. Pure functions over plain data."""
 
+import json
 from collections import Counter
 from datetime import timedelta
 
@@ -348,7 +349,8 @@ def build_assign_modal(data: dict, *, locations=(), all_types=(), all_activities
     return {
         "type": "modal",
         "callback_id": "block_assign_submit",
-        "private_metadata": str(data["practice_id"]),
+        "private_metadata": json.dumps({"practice_id": data["practice_id"],
+                                        "initial_lead_ids": data["initial_ids"]}),
         "title": {"type": "plain_text", "text": "Assign leads"},
         "submit": {"type": "plain_text", "text": "Save"},
         "close": {"type": "plain_text", "text": "Cancel"},

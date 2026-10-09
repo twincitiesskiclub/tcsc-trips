@@ -501,8 +501,12 @@ def validate_assignment(type_ids, activity_ids) -> tuple[str, str] | None:
 
 
 def save_assignment(practice_id: int, *, lead_ids, location_id, type_ids,
-                    activity_ids) -> None:
+                    activity_ids, initial_lead_ids=None) -> None:
     """Save one Assign submission: leads (coaches untouched), location, type, activity.
+
+    With initial_lead_ids (who the modal opened with), only the director's own
+    changes apply, so a lead who signed up while the modal was open stays.
+    None replaces every lead with lead_ids.
 
     A changed type or activity set resets plan reactions to the new defaults.
     A None location means "not chosen" and keeps the current one.
@@ -521,10 +525,20 @@ def save_assignment(practice_id: int, *, lead_ids, location_id, type_ids,
     previous_location_id = practice.location_id
     previous_plan_reactions = [dict(item) for item in (practice.plan_reactions or [])]
 
-    for lead in [l for l in practice.leads if l.role == "lead"]:
-        practice.leads.remove(lead)
-    for user_id in dict.fromkeys(lead_ids):
-        practice.leads.append(PracticeLead(user_id=user_id, role="lead"))
+    current = [l for l in practice.leads if l.role == "lead"]
+    if initial_lead_ids is None:
+        remove, add = {l.user_id for l in current}, list(dict.fromkeys(lead_ids))
+    else:
+        initial = set(initial_lead_ids)
+        remove = initial - set(lead_ids)
+        add = [u for u in dict.fromkeys(lead_ids) if u not in initial]
+    for lead in current:
+        if lead.user_id in remove:
+            practice.leads.remove(lead)
+    have = {l.user_id for l in practice.leads if l.role == "lead"}
+    for user_id in add:
+        if user_id not in have:
+            practice.leads.append(PracticeLead(user_id=user_id, role="lead"))
     if location_id is not None:
         practice.location_id = location_id
 

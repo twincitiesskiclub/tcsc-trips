@@ -138,7 +138,7 @@ def test_assign_modal_shows_available_line_and_grouped_dropdown():
     view = build_assign_modal(_data())
     text = json.dumps(view)
     assert view["callback_id"] == "block_assign_submit"
-    assert view["private_metadata"] == "5"
+    assert json.loads(view["private_metadata"]) == {"practice_id": 5, "initial_lead_ids": [1]}
     assert "Available: Katrin S, Micah R" in text
     select = view["blocks"][-1]["element"]
     assert [g["label"]["text"] for g in select["option_groups"]] == ["Available", "Everyone else"]
