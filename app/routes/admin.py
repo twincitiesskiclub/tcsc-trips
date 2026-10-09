@@ -285,9 +285,11 @@ def get_payments_data():
 
     return jsonify({'payments': payments_data, 'can_view_amounts': can_view_amounts})
 
+# The roster never shows which price a member picked. Only finance sees the
+# amount, since it gives the choice away just as plainly.
 _TRIP_REG_BASE_COLUMNS = [
     ("id", "ID"), ("member", "Member"), ("email", "Email"),
-    ("status", "Status"), ("price_tier", "Tier"),
+    ("status", "Status"),
 ]
 _TRIP_REG_PROFILE_COLUMNS = [
     ("can_drive", "Can drive"), ("seat_capacity", "Seats"),
@@ -295,8 +297,9 @@ _TRIP_REG_PROFILE_COLUMNS = [
     ("region_code", "Region"), ("dietary", "Dietary"),
     ("has_tent", "Tent"),
 ]
+_TRIP_REG_AMOUNT_COLUMN = ("amount_cents", "Amount")
 _TRIP_REG_TRAILING_COLUMNS = [
-    ("amount_cents", "Amount"), ("payment_status", "Payment"),
+    ("payment_status", "Payment"),
     ("payment_id", "PaymentId"), ("created_at", "Created at"),
 ]
 
@@ -307,6 +310,7 @@ def _trip_registration_columns(trip):
     used_labels = {
         label for _, label in (_TRIP_REG_BASE_COLUMNS
                                + _TRIP_REG_PROFILE_COLUMNS
+                               + [_TRIP_REG_AMOUNT_COLUMN]
                                + _TRIP_REG_TRAILING_COLUMNS)
     }
     for question in trip.custom_questions or []:
@@ -321,8 +325,9 @@ def _trip_registration_columns(trip):
             label = f"{label} ({key})"
         used_labels.add(label)
         question_columns.append((key, label))
+    amount_columns = [_TRIP_REG_AMOUNT_COLUMN] if is_finance_authorized() else []
     return (_TRIP_REG_BASE_COLUMNS + _TRIP_REG_PROFILE_COLUMNS
-            + question_columns + _TRIP_REG_TRAILING_COLUMNS)
+            + question_columns + amount_columns + _TRIP_REG_TRAILING_COLUMNS)
 
 
 def _display_trip_answer(value):
@@ -348,7 +353,6 @@ def _trip_registration_rows(trip):
             "member": registration.user.full_name,
             "email": registration.user.email,
             "status": registration.status,
-            "price_tier": registration.price_tier,
             "amount_cents": registration.amount_cents,
             "payment_status": payment.status if payment else "",
             "payment_id": payment.id if payment else None,

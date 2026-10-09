@@ -506,3 +506,40 @@ def test_builtin_help_and_options_escape_admin_text(admin_client):
     assert "<script>alert(1)</script>" not in html
     assert "&lt;script&gt;alert(1)&lt;/script&gt;" in html
     assert 'href="https://bit.ly/TCSCmap"' in html
+
+
+def _roster_as(client, trip, email):
+    with client.session_transaction() as session:
+        session["user"] = {"email": email}
+    return client.get(f"/admin/trips/{trip.id}/registrations/data").get_json()
+
+
+def test_roster_never_shows_the_price_tier(client, db_session):
+    _, trip = _series_with_edition(db_session)
+    _registered_member(db_session, trip)
+    body = _roster_as(client, trip, "admin@twincitiesskiclub.org")
+    assert "price_tier" not in [c["key"] for c in body["columns"]]
+    assert "price_tier" not in body["registrations"][0]
+
+
+def test_roster_amount_is_finance_only(client, db_session):
+    _, trip = _series_with_edition(db_session)
+    _registered_member(db_session, trip)
+    trip_admin = _roster_as(client, trip, "adventures@twincitiesskiclub.org")
+    assert "amount_cents" not in [c["key"] for c in trip_admin["columns"]]
+    assert "amount_cents" not in trip_admin["registrations"][0]
+    assert trip_admin["registrations"][0]["payment_status"] == "requires_capture"
+
+    finance = _roster_as(client, trip, "finance@twincitiesskiclub.org")
+    assert finance["registrations"][0]["amount_cents"] == 10000
+
+
+def test_roster_csv_hides_tier_and_amount_from_trip_admins(client, db_session):
+    _, trip = _series_with_edition(db_session)
+    _registered_member(db_session, trip)
+    with client.session_transaction() as session:
+        session["user"] = {"email": "adventures@twincitiesskiclub.org"}
+    response = client.get(f"/admin/trips/{trip.id}/registrations/export.csv")
+    header = next(csv.reader(StringIO(response.get_data(as_text=True))))
+    assert "Tier" not in header
+    assert "Amount" not in header
