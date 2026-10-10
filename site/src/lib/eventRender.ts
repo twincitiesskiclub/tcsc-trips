@@ -99,10 +99,11 @@ export function scheduleSection(text: string): string {
   return blocks.slice(start).join('\n\n');
 }
 
+// Same classes as <Button variant="on-paper"> and the site's .link-inline:
+// the band is an HTML string, so it cannot render the Astro components.
 const BUTTON =
-  'inline-flex items-center px-5 py-3 rounded-md bg-navy text-mint font-semibold text-sm transition-colors duration-150 hover:bg-navy-deep active:bg-navy/90';
-const LINK =
-  'font-semibold text-navy underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors';
+  'btn inline-flex min-h-11 items-center justify-center self-start rounded-md px-5 py-3 transition-colors bg-navy text-mint hover:bg-navy-deep';
+const LINK = 'link-inline';
 
 function ctaHtml(event: EventRecord, state: EventState, apiUrl: string): string {
   switch (state) {

@@ -1,0 +1,34 @@
+---
+import type { CollectionEntry } from 'astro:content';
+import LedgerRow from '@/components/LedgerRow.astro';
+import { longDate, shortDate } from '@/lib/formatDate';
+
+interface Props {
+  entry: CollectionEntry<'wax_entries'>;
+  density: 'feed' | 'index';
+}
+
+const { entry, density }: Props = Astro.props;
+const { data } = entry;
+const date = density === 'index' ? longDate(data.date) : shortDate(data.date);
+const label = `${date}${data.author_name ? ` · ${data.author_name}` : ''}`;
+const conditions = [
+  data.conditions_snapshot?.temp_f != null
+    ? `${data.conditions_snapshot.temp_f}°F`
+    : undefined,
+  data.conditions_snapshot?.location,
+].filter(Boolean).join(' · ') || undefined;
+---
+
+<LedgerRow
+  label={label}
+  labelRole="caption"
+  title={data.slug}
+  meta={conditions}
+  href={'/wax-room/' + entry.id}
+  class:list={['wax-entry-row', density === 'feed' ? 'wax-entry-row-feed' : 'wax-entry-row-index']}
+>
+  {data.lede && (
+    <span slot="note" class="wax-entry-lede">{data.lede}</span>
+  )}
+</LedgerRow>

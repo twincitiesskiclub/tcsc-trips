@@ -7,8 +7,8 @@ const sponsor = (id, tier, order) => ({ id, data: { tier, order } });
 
 test('defines the three public tiers in recognition order', () => {
   assert.deepEqual(SPONSOR_TIERS, [
-    { tier: 'trailblazer', label: 'Trailblazer Partners' },
-    { tier: 'community_partner', label: 'Community Partners' },
+    { tier: 'trailblazer', label: 'Trailblazer partners' },
+    { tier: 'community_partner', label: 'Community partners' },
     { tier: 'supporter', label: 'Supporters' },
   ]);
   assert.equal(SPONSOR_TIERS.some(({ tier }) => tier === 'friend'), false);
@@ -36,7 +36,7 @@ test('omits empty tiers and sorts sponsors by order then id', () => {
     [
       {
         tier: 'trailblazer',
-        label: 'Trailblazer Partners',
+        label: 'Trailblazer partners',
         ids: ['first', 'alpha', 'bravo'],
       },
       { tier: 'supporter', label: 'Supporters', ids: ['zeta'] },

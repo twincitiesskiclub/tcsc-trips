@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import test from 'node:test';
+import './brandPrimitives.test.mjs';
 
 // Astro emits dist/<slug>/index.html with build.format 'directory' and
 // dist/<slug>.html with 'file'. Production sets TCSC_EDGE_CONFIG=true, which
@@ -49,7 +50,7 @@ const MISSION =
 const MARKETING_ORIGIN = 'https://twincitiesskiclub.org';
 // The dates now come from the database, so only the ability line is a
 // fixed string worth pinning here.
-const ABILITY_LINE = 'Intermediate ability and up, no racing required.';
+const ABILITY_LINE = 'You should be comfortable on skis. Racing is optional.';
 const DRY_TRI_2026 =
   'Planning for 2026 is underway. The date and registration details will be posted here when confirmed.';
 const DRY_TRI_RESULTS = 'https://my.raceresult.com/361087/results';
@@ -126,7 +127,7 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   assert.match(source.ctaStrip, /data-registration-subhead/);
   assert.match(
     source.ctaStrip,
-    /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper">/,
+    /<section id=\{id\} class="bg-navy border-t-\[3px\] border-coral text-paper" data-cta-strip>/,
   );
   assert.match(source.homePage, /<CTAStrip\s+id="registration"/);
   assert.match(source.homePage, /stripSubhead\('open', cta\.windows\)/);
@@ -136,9 +137,6 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
   const registration = sectionById(html.home, 'registration');
   const registrationText = toText(registration);
   assert.ok(registrationText.includes(ABILITY_LINE));
-  // The CTAs that scroll TO registration live above the strip (hero, nav,
-  // mobile menu). The strip's own button is excluded on purpose: the strip IS
-  // #registration, so aiming it at that anchor is a dead click.
   // Registration state is derived from the database at build time, so the
   // CTA's label and target legitimately differ between builds. Assert the
   // invariants that hold in EVERY state rather than pinning one state's copy,
@@ -172,10 +170,10 @@ test('wires the confirmed fall registration copy to the home CTA target', () => 
     (html.home.match(new RegExp(`\\bid=['"]${escapeRegExp('registration')}['"]`, 'gi')) ?? [])
       .length,
     1,
-    'registration CTA hash must resolve to exactly one target in the built home page',
+    'registration section id must occur exactly once in the built home page',
   );
 
-  // The strip is where that anchor lands, so its own button must go elsewhere.
+  // The strip still carries its own external registration route.
   const stripCta = registration.match(/<a\b([^>]*)>/i);
   assert.ok(stripCta, 'registration strip must still offer a link');
   const stripHref = stripCta[1].match(/\bhref=(['"])(.*?)\1/i);
@@ -211,20 +209,20 @@ test('identifies informal workouts as member activities in source and rendered c
   );
   assert.ok(
     source.community.includes(
-      'detail: Track mornings, long rollerskis, open-water swims. No signup; all members welcome.',
+      'detail: Track mornings, long rollerskis, open-water swims. No signup, all members welcome.',
     ),
   );
 
   assert.ok(toText(html.extraTraining).includes('Every member is welcome, and there is no signup.'));
   assert.ok(
     toText(html.community).includes(
-      'Track mornings, long rollerskis, open-water swims. No signup; all members welcome.',
+      'Track mornings, long rollerskis, open-water swims. No signup, all members welcome.',
     ),
   );
 });
 
 test('dates the Tour de Finn participation claim in source and rendered copy', () => {
-  assert.ok(source.racing.includes('notes: Two TCSC teams participated in 2026.'));
+  assert.ok(source.racing.includes('notes: A season-long local series. Two TCSC teams participated in 2026.'));
   assert.ok(toText(html.racing).includes('Two TCSC teams participated in 2026.'));
 });
 
