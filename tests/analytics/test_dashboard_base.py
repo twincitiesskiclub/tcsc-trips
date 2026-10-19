@@ -276,3 +276,12 @@ def test_location_filters_and_past_options_ordering(db_session):
     assert seasons == ['2099 Fall/Winter', '2099 Spring/Summer']
     assert values['days'].index('Monday') < values['days'].index('Sunday')
 
+
+
+def test_params_are_copied_raw_only_when_declared():
+    dashboard = Dashboard(slug="x", title="X", question="?", filters=[], build=lambda f: [],
+                          params=("draft",))
+    with patch.object(base, "get_filter_domains", return_value=DOMAINS):
+        filters = parse_filters(MultiDict({"draft": "13", "crews": "6"}), dashboard)
+    assert filters.params == {"draft": "13"}
+    assert _parse(draft="13").params == {}

@@ -94,6 +94,29 @@ def reference_lines(lines: list[dict], *, date_domain=None) -> list[dict]:
     return layers
 
 
+def heatmap(rows, *, x, y, value, threshold, x_title, y_title, tooltip,
+            x_sort=None, y_sort=None) -> dict:
+    """A grid of counts; cells at or above the threshold are filled, the rest muted."""
+    x_encoding = {"field": x, "type": "ordinal", "title": x_title, "sort": x_sort}
+    y_encoding = {"field": y, "type": "ordinal", "title": y_title, "sort": y_sort}
+    reached = f"datum.{value} >= {threshold}"
+    return {
+        "data": {"values": deepcopy(rows)}, "width": "container",
+        "height": {"step": 28},
+        "encoding": {"x": x_encoding, "y": y_encoding},
+        "layer": [
+            {"mark": {"type": "rect", "stroke": PALETTE["surface"], "strokeWidth": 2},
+             "encoding": {"color": {"condition": {"test": reached, "value": PALETTE["early"]},
+                                    "value": PALETTE["grid"]},
+                          "tooltip": _tooltip(tooltip, value)}},
+            {"mark": {"type": "text"},
+             "encoding": {"text": {"field": value, "type": "quantitative"},
+                          "color": {"condition": {"test": reached, "value": PALETTE["surface"]},
+                                    "value": PALETTE["ink"]}}},
+        ],
+    }
+
+
 def layered(base: dict, *extra_layers) -> dict:
     child = deepcopy(base)
     body = {key: child.pop(key) for key in ("data", "height") if key in child}

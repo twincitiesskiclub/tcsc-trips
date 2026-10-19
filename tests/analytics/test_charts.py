@@ -64,3 +64,13 @@ def test_series_palette_and_reference_line_presentation():
     assert rule["mark"]["strokeWidth"] == 1
     assert label["mark"]["align"] == "left"
     assert label["mark"]["color"] in (charts.PALETTE["ink"], charts.PALETTE["muted"])
+
+
+def test_heatmap_validates_and_renders():
+    rows = [{"crew": "1", "date": f"Jan {i}", "people": i} for i in range(1, 6)]
+    body = charts.heatmap(rows, x="date", y="crew", value="people", threshold=4,
+                          x_title="Practice", y_title="Crew", tooltip=["crew", "date", "people"])
+    _check(charts.spec("Crew turnout", body))
+    layers = body["layer"]
+    assert layers[0]["mark"]["type"] == "rect" and layers[1]["mark"]["type"] == "text"
+    assert "datum.people >= 4" in json.dumps(body)

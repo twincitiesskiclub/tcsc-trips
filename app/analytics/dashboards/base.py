@@ -57,6 +57,21 @@ class Note:
 
 
 @dataclass
+class Select:
+    name: str
+    label: str
+    options: list[tuple[str, str]]
+    selected: str
+
+
+@dataclass
+class Picker:
+    """A GET form of selects for dashboards that read their own params."""
+    kind: ClassVar[str] = "picker"
+    selects: list[Select]
+
+
+@dataclass
 class Dashboard:
     slug: str
     title: str
@@ -64,6 +79,7 @@ class Dashboard:
     filters: list[str]
     build: Callable
     kinds: tuple = ()
+    params: tuple = ()  # extra GET params the dashboard validates itself
 
 
 @dataclass
@@ -77,6 +93,7 @@ class Filters:
     location_ids: list[int] = field(default_factory=list)
     formats: list[str] = field(default_factory=list)
     kinds: list[str] = field(default_factory=list)
+    params: dict = field(default_factory=dict)
 
 
 DAYS = ("Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday")
@@ -142,6 +159,7 @@ def parse_filters(args: MultiDict, dashboard: Dashboard, domains=None) -> Filter
         result.date_to = _iso(args.get("date_to", ""))
     if dashboard.kinds:
         result.kinds = list(dashboard.kinds)
+    result.params = {name: args[name] for name in dashboard.params if name in args}
     return result
 
 
