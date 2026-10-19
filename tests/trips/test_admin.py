@@ -543,3 +543,40 @@ def test_roster_csv_hides_tier_and_amount_from_trip_admins(client, db_session):
     header = next(csv.reader(StringIO(response.get_data(as_text=True))))
     assert "Tier" not in header
     assert "Amount" not in header
+
+
+def _edit_form(trip, signup_start, signup_end):
+    return {
+        "name": trip.name, "destination": trip.destination,
+        "max_participants_standard": "20", "max_participants_extra": "5",
+        "start_date": "2099-01-10", "end_date": "2099-01-12",
+        "signup_start": signup_start, "signup_end": signup_end,
+        "price_low": "100", "price_high": "150",
+        "description": "", "status": "active",
+        "custom_questions_json": json.dumps(trip.custom_questions),
+    }
+
+
+def test_edit_stores_central_signup_times_as_utc(admin_client, db_session):
+    _, trip = _series_with_edition(db_session)
+    # Oct 23 is CDT (UTC-5); Dec 1 is CST (UTC-6).
+    form = _edit_form(trip, "2026-10-19T00:00", "2026-12-01T09:00")
+    assert admin_client.post(f"/admin/trips/{trip.id}/edit", data=form).status_code in (200, 302)
+    db_session.session.expire_all()
+    assert (trip.signup_start, trip.signup_end) == (datetime(2026, 10, 19, 5, 0), datetime(2026, 12, 1, 15, 0))
+
+
+def test_edit_form_shows_signup_times_in_central(admin_client, db_session):
+    _, trip = _series_with_edition(db_session)
+    trip.signup_start, trip.signup_end = datetime(2026, 10, 19, 5, 0), datetime(2026, 10, 23, 12, 0)
+    db.session.commit()
+    html = admin_client.get(f"/admin/trips/{trip.id}/edit").get_data(as_text=True)
+    assert 'value="2026-10-19T00:00"' in html and 'value="2026-10-23T07:00"' in html
+
+
+def test_trips_data_signup_dates_are_central(admin_client, db_session):
+    _, trip = _series_with_edition(db_session)
+    trip.signup_end = datetime(2026, 10, 24, 4, 59)   # 11:59 PM Oct 23 in Central
+    db.session.commit()
+    rows = admin_client.get("/admin/trips/data").get_json()["trips"]
+    assert next(r for r in rows if r["id"] == trip.id)["signup_end"] == "2026-10-23"

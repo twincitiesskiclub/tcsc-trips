@@ -25,7 +25,7 @@ EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
 # Bump whenever a new migration lands.
-HEAD_REVISION = "e3a7c1f9b4d2"
+HEAD_REVISION = "f4b8d2a6c1e9"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),
@@ -104,15 +104,18 @@ def _create_e36_baseline(connection, *, conflicting: bool) -> None:
     connection.exec_driver_sql(
         # Bare stub: real `trips` predates e36bbec59bde; the trip series
         # migration (a7c1e5f2b9d3) FKs to it and reads slug/name/destination/
-        # slack_channel_name in its backfill, so it must exist in this
-        # synthetic baseline.
+        # slack_channel_name in its backfill, and the signup-times migration
+        # (f4b8d2a6c1e9) updates signup_start/signup_end, so it must exist in
+        # this synthetic baseline.
         """
         CREATE TABLE trips (
             id INTEGER PRIMARY KEY,
             slug VARCHAR(255),
             name VARCHAR(255),
             destination VARCHAR(255),
-            slack_channel_name VARCHAR(255)
+            slack_channel_name VARCHAR(255),
+            signup_start TIMESTAMP,
+            signup_end TIMESTAMP
         )
         """
     )
