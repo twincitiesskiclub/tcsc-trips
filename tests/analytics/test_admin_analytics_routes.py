@@ -4,7 +4,7 @@ import pytest
 
 from app.analytics.dashboards import base
 from app.analytics import dashboards
-from app.analytics.dashboards.base import Chart, Dashboard, Note, Tile, Tiles
+from app.analytics.dashboards.base import Chart, Dashboard, Note, Picker, Select, Tile, Tiles
 
 
 def _build(filters):
@@ -148,3 +148,14 @@ def test_filter_domains_are_loaded_once_per_dashboard_request(admin_client):
         response = admin_client.get("/admin/analytics/stub")
     assert response.status_code == 200
     domains.assert_called_once_with(STUB.kinds)
+
+
+def test_picker_block_renders_get_form_with_selected(admin_client):
+    picker = Picker([Select("draft", "Draft", [("12", "Draft 12"), ("13", "Draft 13")], "13"),
+                     Select("crews", "Crews", [("6", "6"), ("12", "12")], "12")])
+    with patch.object(STUB, "filters", []), patch.object(STUB, "build", lambda f: [picker]):
+        html = admin_client.get("/admin/analytics/stub").get_data(as_text=True)
+    assert '<form method="get" action="/admin/analytics/stub"' in html
+    assert '<select name="draft"' in html and '<option value="13" selected>Draft 13</option>' in html
+    assert '<option value="12">Draft 12</option>' in html
+    assert '<option value="12" selected>12</option>' in html and ">Apply<" in html
