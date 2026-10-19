@@ -82,8 +82,12 @@ def tiles(items):
     return {t.label: t.value for t in first(items, Tiles).tiles}
 
 
+def named(items, title):
+    return next(b for b in items if isinstance(b, Table) and b.title == title)
+
+
 def table(items):
-    return {r["label"]: r for r in first(items, Table).rows}
+    return {r["label"]: r for r in named(items, "Turnout by crew").rows}
 
 
 def test_default_draft_is_final_else_latest(db_session):
@@ -184,7 +188,7 @@ def test_zero_practices_renders_zero_shares(db_session):
     out = blocks(crews=2)
     t = tiles(out)
     assert (t["Practices"], t["Average per crew"], t["Crew-practices with 4+"]) == (0, "0.0", "0%")
-    assert all(r["average"] == 0 for r in first(out, Table).rows)
+    assert all(r["average"] == 0 for r in named(out, "Turnout by crew").rows)
 
 
 def test_member_without_user_id_is_skipped(db_session):
@@ -245,7 +249,7 @@ def test_large_draft_skips_pairing_and_stays_fast(db_session):
 def test_over_limit_column_label(db_session):
     w = World(db_session)
     w.draft([1])
-    assert ("over_limit", "Over limit") in first(blocks(), Table).columns
+    assert ("over_limit", "Over limit") in named(blocks(), "Turnout by crew").columns
 
 
 def test_picker_shows_central_update_date(db_session):
@@ -257,5 +261,22 @@ def test_picker_shows_central_update_date(db_session):
 def test_table_has_ski_column(db_session):
     w = World(db_session)
     w.draft([2])
-    out = first(blocks(), Table)
+    out = named(blocks(), "Crew balance")
     assert ("ski", "Ski experience") in out.columns and out.rows[0]["ski"] == "3-7 2"
+
+
+def test_turnout_table_comes_first_with_counts(db_session):
+    w = World(db_session)
+    draft = w.draft([4, 4])
+    w.came(w.practice(date(2020, 1, 7)), crew(draft, 1))
+    w.came(w.practice(date(2020, 1, 8)), crew(draft, 1)[:1])
+    out = blocks()
+    kinds = [type(b).__name__ for b in out]
+    assert kinds.index("Tiles") + 1 == out.index(named(out, "Turnout by crew"))
+    assert [key for key, _ in named(out, "Turnout by crew").columns] == [
+        "label", "non_checkers", "over_limit", "average", "practices_4plus", "zero_practices"]
+    rows = table(out)
+    assert (rows["1"]["practices_4plus"], rows["1"]["zero_practices"], rows["1"]["average"]) == (1, 0, 2.5)
+    assert (rows["2"]["practices_4plus"], rows["2"]["zero_practices"]) == (0, 2)
+    balance = [key for key, _ in named(out, "Crew balance").columns]
+    assert balance == ["label", "size", "board", "speedy", "gender", "ski", "age", "tenure"]
