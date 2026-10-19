@@ -1,5 +1,6 @@
 """Crews backtest dashboard. Synthetic people only; every test rolls back."""
 import json
+import time as time_
 from datetime import date, datetime, time
 
 from app.analytics.dashboards import crews as cd
@@ -227,3 +228,34 @@ def test_crews_route_renders(admin_client, db_session):
     w.came(w.practice(date(2020, 1, 7)), crew(draft, 1))
     html = admin_client.get("/admin/analytics/crews?crews=1").get_data(as_text=True)
     assert "Crew by practice" in html and '<select name="crews"' in html
+
+
+def test_large_draft_skips_pairing_and_stays_fast(db_session):
+    w = World(db_session)
+    draft = w.draft([1] * 16)
+    w.came(w.practice(date(2020, 1, 7)), crew(draft, 1))
+    start = time_.perf_counter()
+    out = blocks(crews=8)
+    assert time_.perf_counter() - start < 3.0
+    assert [v for v, _ in first(out, Picker).selects[1].options] == ["16"]
+    assert tiles(out)["Crews"] == 16
+    assert any("pairing is off" in n.text for n in out if isinstance(n, Note))
+
+
+def test_over_limit_column_label(db_session):
+    w = World(db_session)
+    w.draft([1])
+    assert ("over_limit", "Over limit") in first(blocks(), Table).columns
+
+
+def test_picker_shows_central_update_date(db_session):
+    w = World(db_session)
+    w.draft([1], updated=datetime(2099, 10, 2, 3, 0))   # UTC: 10 pm Oct 1 in Central
+    assert first(blocks(), Picker).selects[0].options[0][1] == "Draft 1 (updated Oct 1)"
+
+
+def test_table_has_ski_column(db_session):
+    w = World(db_session)
+    w.draft([2])
+    out = first(blocks(), Table)
+    assert ("ski", "Ski experience") in out.columns and out.rows[0]["ski"] == "3-7 2"

@@ -9,6 +9,7 @@ from app.analytics.crew_pairing import MIN_GROUP, best_pairing, share_by_count
 from app.analytics.dashboards.base import (
     Chart, Dashboard, Note, Picker, Select, Table, Tile, Tiles, _past_sessions, load_attendance,
 )
+from app import utils
 from app.analytics import charts
 from app.analytics.models import PracticeSession
 from app.crews import engine
@@ -18,6 +19,7 @@ from app.models import Season
 
 NON_CHECKER_LIMIT = 5  # Mitchell: fine as long as no crew has more than 5 non-checkers
 ROLES = ("rsvp", "lead", "coach")
+MAX_PAIRING_CREWS = 13  # the search grows about 4x per crew; 13 crews take ~2 s
 
 
 def _drafts():
@@ -42,9 +44,13 @@ def pick_draft(drafts, raw):
     return final[0] if final else max(drafts, key=lambda d: (d.updated_at, d.id))
 
 
+def lowest_count(n):
+    return ceil(n / 2) if n <= MAX_PAIRING_CREWS else n
+
+
 def pick_count(raw, n):
     k = _int(raw)
-    return k if k is not None and ceil(n / 2) <= k <= n else n
+    return k if k is not None and lowest_count(n) <= k <= n else n
 
 
 def _sessions(label):
@@ -81,6 +87,11 @@ def _apart(rules, crew_of, names):
 
 def _counts(counter):
     return " · ".join(f"{key} {n}" for key, n in counter.items() if n)
+
+
+def _day(utc_naive):
+    local = utils.utc_naive_to_central_naive(utc_naive)
+    return f"{local:%b} {local.day}"
 
 
 def _percent(share):
@@ -136,18 +147,22 @@ def build(filters):
             "share_4plus": _percent(sum(x >= MIN_GROUP for x in counts) / len(counts) if counts else 0),
             "zero_practices": sum(x == 0 for x in counts),
             "board": balance["board"], "speedy": balance["thot"], "gender": _counts(balance["gender"]),
+            "ski": _counts({s: balance["ski"][s] for s in
+                            engine.SKI_ORDER + sorted(set(balance["ski"]) - set(engine.SKI_ORDER))}),
             "age": (f"{balance['age_min']} to {balance['age_max']}" if balance["age_min"] is not None else ""),
             "tenure": _counts(balance["tenure"]),
         })
 
     sizes = sorted(r["size"] for r in rows)
     slots = k * len(sessions)
-    count_rows = [{"crews": r["crews"], "share": round(r["share"] * 100)} for r in share_by_count(turnout, apart)]
+    counts_by_k = (share_by_count(turnout, apart) if n <= MAX_PAIRING_CREWS
+                   else [{"crews": n, "share": pick.share}])
+    count_rows = [{"crews": r["crews"], "share": round(r["share"] * 100)} for r in counts_by_k]
     blocks = [
         Picker([
-            Select("draft", "Draft", [(str(d.id), f"{d.label} (updated {d.updated_at:%b} {d.updated_at.day})")
+            Select("draft", "Draft", [(str(d.id), f"{d.label} (updated {_day(d.updated_at)})")
                                       for d in drafts], str(draft.id)),
-            Select("crews", "Crews", [(str(c), str(c)) for c in range(ceil(n / 2), n + 1)], str(k)),
+            Select("crews", "Crews", [(str(c), str(c)) for c in range(lowest_count(n), n + 1)], str(k)),
         ]),
         Tiles([
             Tile("Crews", k, f"from {n} in {draft.label}" if k < n else draft.label),
@@ -177,15 +192,18 @@ def build(filters):
                              x_sort=columns, y_sort=labels),
               rows=grid, columns=[("crew", "Crew"), ("practice", "Practice"), ("people", "People")]),
         Table("Crews", rows, [
-            ("label", "Crew"), ("size", "Size"), ("non_checkers", "Non-checkers"), ("over_limit", "Over 5"),
+            ("label", "Crew"), ("size", "Size"), ("non_checkers", "Non-checkers"), ("over_limit", "Over limit"),
             ("average", "Average"), ("share_4plus", "4 or more"), ("zero_practices", "Nobody there"),
-            ("board", "Board"), ("speedy", "Speedy"), ("gender", "Gender"), ("age", "Age"),
+            ("board", "Board"), ("speedy", "Speedy"), ("gender", "Gender"), ("ski", "Ski experience"),
+            ("age", "Age"),
             ("tenure", "Seasons on team"),
         ]),
     ]
     span = f", {columns[0]} to {columns[-1]}" if sessions else ""
     notes = [f"RSVPs, not headcounts. {draft.label}, {season.name}, {len(sessions)} practices{span}. "
              "Pairings are the best fit for these practices. Fall turnout may not predict winter."]
+    if n > MAX_PAIRING_CREWS:
+        notes.append(f"With {n} crews, pairing is off: it is only worked out for {MAX_PAIRING_CREWS} crews or fewer.")
     if pick.broken:
         notes.append(f"This pairing puts {pick.broken} keep-apart pair(s) in one crew; no pairing avoids it.")
     notes.extend(f"Already in the draft: {line}." for line in already_broken)
