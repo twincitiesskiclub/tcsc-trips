@@ -144,7 +144,7 @@ def build(filters):
             "label": label, "size": balance["size"], "non_checkers": non_checkers,
             "over_limit": "Yes" if non_checkers > NON_CHECKER_LIMIT * len(group) else "",
             "average": round(sum(counts) / len(counts), 1) if counts else 0,
-            "share_4plus": _percent(sum(x >= MIN_GROUP for x in counts) / len(counts) if counts else 0),
+            "practices_4plus": sum(x >= MIN_GROUP for x in counts),
             "zero_practices": sum(x == 0 for x in counts),
             "board": balance["board"], "speedy": balance["thot"], "gender": _counts(balance["gender"]),
             "ski": _counts({s: balance["ski"][s] for s in
@@ -174,6 +174,11 @@ def build(filters):
             Tile("Crews over 5 non-checkers", sum(r["over_limit"] == "Yes" for r in rows),
                  "5 per original crew when paired"),
         ]),
+        Table("Turnout by crew", rows, [
+            ("label", "Crew"), ("non_checkers", "Non-checkers"), ("over_limit", "Over limit"),
+            ("average", "Avg at practice"), ("practices_4plus", f"Practices with {MIN_GROUP}+"),
+            ("zero_practices", "Practices with 0"),
+        ]),
         Chart("Crew count",
               f"Share of crew-practices with {MIN_GROUP} or more people at each crew count. "
               "Each count uses the pairing that fits these practices best.",
@@ -191,12 +196,9 @@ def build(filters):
                              x_title="Practice", y_title="Crew", tooltip=["crew", "practice", "people"],
                              x_sort=columns, y_sort=labels),
               rows=grid, columns=[("crew", "Crew"), ("practice", "Practice"), ("people", "People")]),
-        Table("Crews", rows, [
-            ("label", "Crew"), ("size", "Size"), ("non_checkers", "Non-checkers"), ("over_limit", "Over limit"),
-            ("average", "Average"), ("share_4plus", "4 or more"), ("zero_practices", "Nobody there"),
-            ("board", "Board"), ("speedy", "Speedy"), ("gender", "Gender"), ("ski", "Ski experience"),
-            ("age", "Age"),
-            ("tenure", "Seasons on team"),
+        Table("Crew balance", rows, [
+            ("label", "Crew"), ("size", "Size"), ("board", "Board"), ("speedy", "Speedy"),
+            ("gender", "Gender"), ("ski", "Ski experience"), ("age", "Age"), ("tenure", "Seasons on team"),
         ]),
     ]
     span = f", {columns[0]} to {columns[-1]}" if sessions else ""
