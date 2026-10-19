@@ -181,7 +181,7 @@ def test_session_dates_and_soft_items_include_all_kinds(db_session):
 
 
 def test_coverage_registry_and_no_filters():
-    assert [dashboard.slug for dashboard in DASHBOARDS] == ["practices", "people", "coverage"]
+    assert [dashboard.slug for dashboard in DASHBOARDS] == ["practices", "people", "crews", "coverage"]
     assert DASHBOARDS[-1] is cv.DASHBOARD
     assert cv.DASHBOARD.filters == []
 
