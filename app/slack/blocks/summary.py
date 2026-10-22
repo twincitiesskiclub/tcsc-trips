@@ -5,15 +5,9 @@ from itertools import groupby
 
 from app.practices.interfaces import PracticeStatus
 from app.slack.practices._config import get_training_plan_url
-from app.slack.blocks.fallback import (
-    allocate_fallback_component_limits,
-    plainify_fallback_fragment,
-)
 from app.slack.blocks.text import (
-    FALLBACK_TEXT_MAX,
     guard_fallback_text,
     guard_slack_blocks,
-    truncate_slack_text,
 )
 
 
@@ -237,96 +231,33 @@ def build_weekly_summary_blocks(practices, *, week_start, weather_data=None):
     return guard_slack_blocks(blocks, surface="weekly_summary")
 
 
-def _weekly_fallback_row(practice, weather_data, *, max_chars=None):
-    when = practice.date.strftime("%A, %B %-d at %-I:%M %p")
-    kind = plainify_fallback_fragment(_practice_kind(practice))
-    location = plainify_fallback_fragment(_location_name(practice))
-    values = [kind, location]
-    fields = ["practice_kind", "location_name"]
-    if _is_cancelled(practice):
-        reason = plainify_fallback_fragment(_cancellation_reason(practice))
-        values.append(reason)
-        fields.append("cancellation_reason")
-        fixed_length = len(f"{when} —  at  — CANCELLED: .")
-    else:
-        forecast = _forecast_line(practice, weather_data)
-        if forecast:
-            forecast_value = plainify_fallback_fragment(
-                forecast.removeprefix("Forecast: ")
-            )
-            values.append(forecast_value)
-            fields.append("forecast")
-            fixed_length = len(f"{when} —  at  — Forecast: .")
-        else:
-            fixed_length = len(f"{when} —  at .")
-
-    if max_chars is not None:
-        limits = allocate_fallback_component_limits(
-            values,
-            budget=max_chars - fixed_length,
-        )
-        values = [
-            (
-                truncate_slack_text(
-                    value,
-                    limit,
-                    field=field,
-                    surface="weekly_summary_fallback",
-                    practice_id=practice.id,
-                )
-                if limit > 0 else ""
-            )
-            for value, field, limit in zip(values, fields, limits)
-        ]
-
-    kind, location, *tail = values
-    prefix = f"{when} — {kind} at {location}"
-    if _is_cancelled(practice):
-        return f"{prefix} — CANCELLED: {tail[0]}."
-    if tail:
-        return f"{prefix} — Forecast: {tail[0]}."
-    return prefix + "."
-
-
 def build_weekly_summary_fallback_text(
     practices,
     *,
     week_start,
     weather_data=None,
 ):
-    """Build the complete screen-reader and notification fallback."""
-    start = _week_date(week_start)
-    ordered = sorted(practices, key=lambda item: (item.date, item.id))
-    heading = f"Practices this week · {_format_week_range(start)}."
-    if not ordered:
+    """Build the push-notification text: how many days, which ones.
+
+    The times, places and workouts stay in the post, so members open it.
+    """
+    _week_date(week_start)
+    days = sorted({
+        practice.date.date() for practice in practices
+        if not _is_cancelled(practice)
+    })
+    if not days:
         return guard_fallback_text(
-            f"{heading} No practices scheduled this week.",
+            "No practices scheduled this week.",
             surface="weekly_summary",
         )
-
-    full_rows = [
-        _weekly_fallback_row(practice, weather_data)
-        for practice in ordered
-    ]
-    row_budget = (
-        FALLBACK_TEXT_MAX
-        - len(heading)
-        - len(full_rows)
+    names = [f"{day:%A}" for day in days]
+    listed = names[0] if len(names) == 1 else (
+        f"{', '.join(names[:-1])} and {names[-1]}"
     )
-    row_limits = allocate_fallback_component_limits(
-        full_rows,
-        budget=row_budget,
-    )
-    rows = [
-        _weekly_fallback_row(
-            practice,
-            weather_data,
-            max_chars=limit,
-        )
-        for practice, limit in zip(ordered, row_limits)
-    ]
-
+    noun = "practice" if len(days) == 1 else "practices"
     return guard_fallback_text(
-        " ".join([heading] + rows),
+        f"{len(days)} {noun} this week, {listed}. "
+        "See the week's plan in Slack.",
         surface="weekly_summary",
     )

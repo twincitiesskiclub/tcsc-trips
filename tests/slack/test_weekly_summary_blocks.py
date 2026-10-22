@@ -1,6 +1,6 @@
 """Exact-copy contracts for the member-facing calendar-week summary."""
 
-from datetime import date, datetime, timedelta
+from datetime import date, datetime
 from unittest.mock import patch
 
 import pytest
@@ -235,104 +235,6 @@ def test_training_plan_line_is_dropped_when_no_url_is_configured(
     assert "Training Plan" not in str(blocks)
 
 
-def test_weekly_fallback_remains_plain_and_has_no_broadcast_token():
-    practices = [
-        practice(1, datetime(2026, 7, 27, 18, 0)),
-        practice(
-            2,
-            datetime(2026, 8, 2, 9, 0),
-            status=PracticeStatus.CANCELLED,
-            reason="Heat warning",
-        ),
-    ]
-    fallback = build_weekly_summary_fallback_text(
-        practices, week_start=date(2026, 7, 27)
-    )
-    for forbidden in ("📅", "🚫", "📝", "<!channel>"):
-        assert forbidden not in fallback
-    assert "Practices this week · July 27–August 2." in fallback
-    assert "CANCELLED: Heat warning" in fallback
-
-
-def test_weekly_fallback_plainifies_authored_slack_control_tokens():
-    authored = "support <!channel> :wave:"
-    active = practice(
-        1,
-        datetime(2026, 7, 27, 18, 0),
-        activity=authored,
-        location=authored,
-    )
-    cancelled = practice(
-        2,
-        datetime(2026, 8, 2, 9, 0),
-        status=PracticeStatus.CANCELLED,
-        reason=authored,
-    )
-
-    fallback = build_weekly_summary_fallback_text(
-        [active, cancelled],
-        week_start=date(2026, 7, 27),
-        weather_data={1: {"temp_f": 78, "conditions": authored}},
-    )
-
-    assert "<!channel>" not in fallback
-    assert ":wave:" not in fallback
-    assert active.activities[0].name == authored
-    assert cancelled.cancellation_reason == authored
-
-
-def test_weekly_fallback_plainification_is_total_for_long_colon_tokens():
-    token = ":" + ("a" * 81) + ":"
-    cancelled = practice(
-        1,
-        datetime(2026, 7, 27, 18, 0),
-        status=PracticeStatus.CANCELLED,
-        reason=f"Reason {token}",
-    )
-
-    fallback = build_weekly_summary_fallback_text(
-        [cancelled],
-        week_start=date(2026, 7, 27),
-    )
-
-    assert token not in fallback
-    assert "a" * 81 in fallback
-    assert cancelled.cancellation_reason == f"Reason {token}"
-
-
-def test_fallback_has_full_range_and_every_active_or_cancelled_row():
-    active = practice(
-        1,
-        datetime(2026, 7, 14, 18, 15),
-        practice_type="Intervals",
-    )
-    cancelled = practice(
-        2,
-        datetime(2026, 7, 16, 18, 5),
-        activity="Strength",
-        location="Balance Fitness",
-        status=PracticeStatus.CANCELLED,
-        reason="Heat warning",
-    )
-
-    fallback = build_weekly_summary_fallback_text(
-        [cancelled, active],
-        week_start=date(2026, 7, 13),
-        weather_data={
-            1: {"temp_f": 78.2, "conditions": "partly cloudy"},
-            2: {"temp_f": 101, "conditions": "dangerously hot"},
-        },
-    )
-
-    assert fallback == (
-        "Practices this week · July 13–19. "
-        "Tuesday, July 14 at 6:15 PM — Run intervals at Theodore Wirth — "
-        "Forecast: 78°F, partly cloudy. "
-        "Thursday, July 16 at 6:05 PM — Strength at Balance Fitness — "
-        "CANCELLED: Heat warning."
-    )
-
-
 def test_empty_week_has_heading_and_clear_copy_without_footer():
     blocks = build_weekly_summary_blocks([], week_start=date(2026, 7, 13))
     fallback = build_weekly_summary_fallback_text(
@@ -342,9 +244,7 @@ def test_empty_week_has_heading_and_clear_copy_without_footer():
     assert header_text(blocks) == "📅 Practices this week · July 13–19"
     assert section_texts(blocks) == ["No practices scheduled this week."]
     assert not [block for block in blocks if block["type"] == "context"]
-    assert fallback == (
-        "Practices this week · July 13–19. No practices scheduled this week."
-    )
+    assert fallback == "No practices scheduled this week."
 
 
 @pytest.mark.parametrize(
@@ -420,71 +320,6 @@ def test_oversized_first_and_middle_rows_preserve_later_block_essentials():
     assert "6:00 PM ·" in day_text
     assert "Forecast: 80°F" in day_text
     assert "7:00 PM · Late Run · Final Trailhead" in day_text
-
-
-def test_oversized_first_and_middle_rows_preserve_later_fallback_essentials():
-    sessions = oversized_same_day_sessions()
-
-    fallback = build_weekly_summary_fallback_text(
-        sessions,
-        week_start=date(2026, 7, 13),
-        weather_data={2: {"temp_f": 80, "conditions": "C" * 5000}},
-    )
-
-    assert len(fallback) <= 4000
-    assert "Tuesday, July 14 at 5:00 PM" in fallback
-    assert "Cancelled Strength at First Park — CANCELLED:" in fallback
-    assert "Tuesday, July 14 at 6:00 PM" in fallback
-    assert "Forecast: 80°F" in fallback
-    assert (
-        "Tuesday, July 14 at 7:00 PM — Late Run at Final Trailhead"
-        in fallback
-    )
-
-
-def test_high_count_weekly_fallback_preserves_every_practice_row():
-    week_start = date(2026, 7, 13)
-    sessions = []
-    weather_data = {}
-    for index in range(21):
-        when = datetime.combine(
-            week_start + timedelta(days=index // 3),
-            datetime.min.time(),
-        ).replace(hour=6 + (index % 3), minute=index)
-        cancelled = index % 2 == 0
-        sessions.append(practice(
-            index + 1,
-            when,
-            activity=f"ROW-{index:02d}-" + ("a" * 70),
-            location=f"SITE-{index:02d}-" + ("l" * 90),
-            status=(
-                PracticeStatus.CANCELLED
-                if cancelled else PracticeStatus.SCHEDULED
-            ),
-            reason=(f"REASON-{index:02d}-" + ("r" * 150) if cancelled else None),
-        ))
-        if not cancelled:
-            weather_data[index + 1] = {
-                "temp_f": 70 + index,
-                "conditions": f"WEATHER-{index:02d}-" + ("w" * 120),
-            }
-
-    fallback = build_weekly_summary_fallback_text(
-        sessions,
-        week_start=week_start,
-        weather_data=weather_data,
-    )
-
-    assert len(fallback) <= 4_000
-    for index, session in enumerate(sessions):
-        assert session.date.strftime("%A, %B %-d at %-I:%M %p") in fallback
-        assert f"ROW-{index:02d}" in fallback
-        assert f"SITE-{index:02d}" in fallback
-        if session.status == PracticeStatus.CANCELLED:
-            assert f"CANCELLED: REASON-{index:02d}" in fallback
-        else:
-            assert f"Forecast: {70 + index}°F, WEATHER-{index:02d}" in fallback
-
 
 
 def test_shipped_config_links_the_current_training_plan(training_plan_config):
