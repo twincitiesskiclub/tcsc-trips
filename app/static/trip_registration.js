@@ -119,11 +119,19 @@ import {initTripSurvey} from './trip_survey.js';
   initTripSurvey(form, showError);
 
   const buttonText = document.getElementById('button-text');
+  const scholarshipCode = document.getElementById('scholarship-code');
   function updateHoldAmount() {
+    // The server decides what a scholarship code takes off, so a typed code
+    // hides the full price instead of guessing the discounted one.
+    if (scholarshipCode && scholarshipCode.value.trim()) {
+      buttonText.textContent = 'Place hold';
+      return;
+    }
     const tier = form.querySelector('input[name="price-tier"]:checked');
     const cents = tier && tier.value === 'high' ? tripData.priceHigh : tripData.priceLow;
     buttonText.textContent = 'Place hold for $' + (cents / 100).toFixed(2);
   }
+  if (scholarshipCode) scholarshipCode.addEventListener('input', updateHoldAmount);
   form.addEventListener('change', function (event) {
     // The survey's change handler has already hidden inapplicable fields.
     form.querySelectorAll('.field-error').forEach(function (field) {
@@ -202,6 +210,7 @@ import {initTripSurvey} from './trip_survey.js';
     return {
       email: emailInput.value,
       price_tier: tier ? tier.value : 'low',
+      scholarship_code: scholarshipCode ? scholarshipCode.value.trim() : '',
       profile: profile,
       answers: answers,
     };
@@ -287,6 +296,7 @@ import {initTripSurvey} from './trip_survey.js';
     'profile.has_tent': 'profile-tent-group',
     'email': 'member-email',
     'price_tier': 'price-tiers',
+    'scholarship_code': 'scholarship-code',
   };
 
   function findErrorField(key) {

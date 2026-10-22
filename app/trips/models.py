@@ -73,6 +73,9 @@ class TripRegistration(db.Model):
     price_tier = db.Column(db.String(10), nullable=False)  # 'low' | 'high'
     amount_cents = db.Column(db.Integer, nullable=False)
     payment_intent_id = db.Column(db.String(255))
+    scholarship_id = db.Column(
+        db.Integer, db.ForeignKey("trip_scholarships.id"), nullable=True
+    )
     created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
     updated_at = db.Column(
         db.DateTime, nullable=False,
@@ -88,6 +91,47 @@ class TripRegistration(db.Model):
 
     def __repr__(self):
         return f"<TripRegistration {self.id} trip={self.trip_id} user={self.user_id}>"
+
+
+class TripScholarship(db.Model):
+    """A one-time trip discount for one member, delivered by Slack DM.
+
+    Whether it is available, held or used is derived from the registrations
+    that point at it (app/trips/scholarships.py), so a released lottery hold
+    frees the code without any payment code knowing about scholarships.
+    """
+
+    __tablename__ = "trip_scholarships"
+    __table_args__ = (
+        db.UniqueConstraint(
+            "user_id", "season_id", name="uq_trip_scholarship_member_season"),
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(
+        db.Integer, db.ForeignKey("users.id"), nullable=False
+    )
+    season_id = db.Column(
+        db.Integer, db.ForeignKey("seasons.id"), nullable=False
+    )
+    amount_cents = db.Column(db.Integer, nullable=False, default=10000)
+    code = db.Column(db.String(16), unique=True, nullable=False)
+    sent_at = db.Column(db.DateTime)
+    claimed_at = db.Column(db.DateTime)  # the member clicked "Get my code"
+    slack_channel_id = db.Column(db.String(32))
+    slack_message_ts = db.Column(db.String(32))
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    user = db.relationship(
+        "User", backref=db.backref("trip_scholarships", lazy=True)
+    )
+    season = db.relationship("Season")
+    registrations = db.relationship(
+        "TripRegistration", backref="scholarship", lazy=True
+    )
+
+    def __repr__(self):
+        return f"<TripScholarship {self.id} user={self.user_id}>"
 
 
 class TripProfile(db.Model):

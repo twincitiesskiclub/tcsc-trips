@@ -1,0 +1,98 @@
+{% extends 'admin/admin_base.html' %}
+
+{% block title %}Trip Scholarships{% endblock %}
+
+{% block extra_css %}
+<style>
+#scholarships,#scholarships *{box-sizing:border-box}
+#scholarships{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1c2c44;font-size:15px;line-height:1.5;max-width:960px}
+#scholarships h1{font-size:20px;font-weight:700;margin:0 0 4px}
+#scholarships h2{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.07em;color:#64748b;margin:24px 0 10px}
+#scholarships .ts-lede{color:#64748b;margin:0 0 16px}
+#scholarships .ts-back{font-size:14px;color:#475569;text-decoration:none}
+#scholarships .ts-card{background:#fff;border:1px solid #e9edf3;border-radius:11px;padding:14px 16px}
+#scholarships .ts-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+#scholarships input[type=search],#scholarships input[type=number]{height:36px;border:1.5px solid #e5e7eb;border-radius:10px;padding:0 12px;font-size:14px;font-family:inherit;color:#1c2c44}
+#scholarships input[type=search]{flex:1;min-width:180px}
+#scholarships input[type=number]{width:96px}
+#scholarships .ts-members{max-height:320px;overflow-y:auto;border:1px solid #eceff3;border-radius:10px;margin:10px 0;padding:4px 0}
+#scholarships .ts-member{display:flex;gap:10px;align-items:baseline;padding:6px 12px;cursor:pointer}
+#scholarships .ts-member:hover{background:#f8fafc}
+#scholarships .ts-member small{color:#64748b}
+#scholarships .ts-member.is-disabled{color:#94a3b8;cursor:default}
+#scholarships button{height:36px;border:0;border-radius:10px;padding:0 14px;font-size:14px;font-weight:600;font-family:inherit;cursor:pointer;background:#1c2c44;color:#fff}
+#scholarships button:disabled{background:#cbd5e1;cursor:default}
+#scholarships button.ts-secondary{background:#fff;color:#1c2c44;border:1.5px solid #e5e7eb;height:30px;padding:0 10px;font-size:13px}
+#scholarships .ts-error{color:#b91c1c;margin:8px 0 0}
+#scholarships table{width:100%;border-collapse:collapse;font-size:14px}
+#scholarships th{text-align:left;font-size:12px;color:#64748b;font-weight:600;padding:6px 8px;border-bottom:1px solid #eceff3}
+#scholarships td{padding:8px;border-bottom:1px solid #f1f5f9;vertical-align:top}
+#scholarships code{font-size:13px}
+#scholarships .ts-muted{color:#94a3b8}
+@media(max-width:640px){
+  #scholarships table,#scholarships thead,#scholarships tbody,#scholarships tr,#scholarships td{display:block}
+  #scholarships thead{display:none}
+  #scholarships tr{border-bottom:1px solid #eceff3;padding:8px 0}
+  #scholarships td{border:0;padding:2px 0}
+  #scholarships td[data-label]::before{content:attr(data-label) ": ";color:#64748b;font-size:12px}
+}
+</style>
+{% endblock %}
+
+{% block content %}
+<div id="scholarships">
+  <a class="ts-back" href="{{ url_for('admin.get_admin_trips') }}">&larr; Trips</a>
+  <h1>Trip scholarships</h1>
+  {% if not season %}
+  <p class="ts-error">There is no current season. Mark a season current before sending scholarships.</p>
+  {% else %}
+  <p class="ts-lede">{{ season.name }}. Each member gets a DM from the TCSC app with a button that reveals their code. The code takes the amount off one trip and only works for them.</p>
+
+  <h2>Send</h2>
+  <div class="ts-card">
+    <div class="ts-row">
+      <input id="ts-filter" type="search" placeholder="Filter members by name or email" aria-label="Filter members">
+      <label for="ts-amount">Amount $</label>
+      <input id="ts-amount" type="number" min="1" max="1000" step="1" value="100">
+    </div>
+    <div class="ts-members" id="ts-members">
+      {% for member in members %}
+      <label class="ts-member{% if member.has_one %} is-disabled{% endif %}" data-search="{{ (member.name ~ ' ' ~ member.email)|lower }}">
+        <input type="checkbox" value="{{ member.id }}"{% if member.has_one %} disabled{% endif %}>
+        <span>{{ member.name }}</span> <small>{{ member.email }}{% if member.has_one %} &middot; already has one{% endif %}</small>
+      </label>
+      {% endfor %}
+    </div>
+    <div class="ts-row">
+      <button id="ts-send" type="button" disabled>Send to 0 members</button>
+    </div>
+    <p id="ts-error" class="ts-error" role="alert" hidden></p>
+  </div>
+
+  <h2>Sent this season ({{ rows|length }})</h2>
+  {% if rows %}
+  <table>
+    <thead><tr><th>Member</th><th>Code</th><th>Sent</th><th>Clicked</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {% for row in rows %}
+      <tr>
+        <td>{{ row.name }}<br><small class="ts-muted">{{ row.email }}</small></td>
+        <td data-label="Code"><code>{{ row.code }}</code> <small class="ts-muted">{{ row.amount_cents|format_price }}</small></td>
+        <td data-label="Sent">{{ row.sent_at or 'Not sent' }}</td>
+        <td data-label="Clicked">{{ row.claimed_at or 'Not yet' }}</td>
+        <td data-label="Status">{% if row.state == 'used' %}Used on {{ row.trip_name }}{% elif row.state == 'held' %}Held on {{ row.trip_name }}{% else %}Available{% endif %}</td>
+        <td><button type="button" class="ts-secondary" data-resend="{{ row.id }}">{{ 'Resend DM' if row.sent_at else 'Send DM' }}</button></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="ts-muted">None yet.</p>
+  {% endif %}
+  {% endif %}
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{{ url_for('static', filename='admin_trip_scholarships.js') }}?v={{ range(1000000) | random }}"></script>
+{% endblock %}

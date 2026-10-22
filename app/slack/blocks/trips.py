@@ -94,3 +94,70 @@ def confirmation_dm_fallback(registration, trip):
     return guard_fallback_text(
         f"You're confirmed for {trip.name} - card charged.",
         surface="trip_confirmation_dm")
+
+
+# --- trip scholarships ------------------------------------------------------
+
+MITCHELL_SLACK_UID = "U045LF8PCSW"
+SCHOLARSHIP_CLOSE_FMT = "%a %b %-d, %-I:%M %p"
+
+
+def _dollars(cents):
+    return f"${cents // 100}" if cents % 100 == 0 else _money(cents)
+
+
+def build_scholarship_offer_blocks(scholarship):
+    amount = _dollars(scholarship.amount_cents)
+    blocks = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            f"Hi {scholarship.user.first_name}, you're getting a TCSC trip "
+            f"scholarship: {amount} off one trip this season, thanks to our "
+            "sponsors Twin Cities Orthopedics and Kwik Trip. Tap the button "
+            f"to get your code. Questions? Ask <@{MITCHELL_SLACK_UID}>.")}},
+        {"type": "actions", "elements": [
+            {"type": "button", "action_id": "trip_scholarship_reveal",
+             "value": str(scholarship.id), "style": "primary",
+             "text": {"type": "plain_text", "text": "Get my code"}},
+        ]},
+    ]
+    return guard_slack_blocks(blocks, surface="trip_scholarship")
+
+
+def scholarship_offer_fallback(scholarship):
+    return guard_fallback_text(
+        f"You're getting a {_dollars(scholarship.amount_cents)} TCSC trip "
+        "scholarship. Open this message to get your code.",
+        surface="trip_scholarship")
+
+
+def build_scholarship_revealed_blocks(scholarship, applied_registration,
+                                      open_trips, base_url):
+    amount = _dollars(scholarship.amount_cents)
+    if applied_registration is not None:
+        how = (f"Already applied to {applied_registration.trip.name}: we'll "
+               f"take {amount} off when your spot is confirmed.")
+    else:
+        how = ("Enter it in the Scholarship code box when you register for a "
+               f"trip at tcsc.ski. It takes {amount} off either price and only "
+               "works for you. If you aren't picked in a trip lottery, the "
+               "code comes back for another trip.")
+    blocks = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": (
+            f"Your code: *{scholarship.code}*\n{how}")}},
+    ]
+    if open_trips:
+        lines = [
+            f"<{base_url}/{trip.series.slug}/register|{trip.name}> "
+            "(registration closes "
+            f"{format_datetime_central(trip.signup_end, SCHOLARSHIP_CLOSE_FMT)})"
+            for trip in open_trips
+        ]
+        blocks.append({"type": "context", "elements": [
+            {"type": "mrkdwn", "text": "Open now: " + ", ".join(lines)}]})
+    return guard_slack_blocks(blocks, surface="trip_scholarship")
+
+
+def scholarship_revealed_fallback(scholarship):
+    return guard_fallback_text(
+        f"Your TCSC trip scholarship code: {scholarship.code}",
+        surface="trip_scholarship")

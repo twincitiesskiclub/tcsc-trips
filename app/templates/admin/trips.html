@@ -14,6 +14,7 @@
 #trips-list .tl-head a{display:inline-flex;align-items:center;height:36px;background:#1c2c44;color:#fff;border-radius:10px;padding:0 14px;font-size:14px;font-weight:600;text-decoration:none;white-space:nowrap}
 #trips-list .tl-head a:hover{background:#243650}
 #trips-list .tl-head a:focus-visible{outline:2px solid #1c2c44;outline-offset:2px}
+#trips-list .tl-head-actions{display:flex;gap:8px;flex-wrap:wrap}
 
 /* toolbar */
 #trips-list .tl-toolbar{position:sticky;top:0;z-index:10;background:#fff;padding:8px 0 12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:4px}
@@ -102,6 +103,7 @@
 @media (max-width:480px){
   #trips-list .tl-head{flex-direction:column;align-items:flex-start}
   #trips-list .tl-head a{width:100%;justify-content:center}
+  #trips-list .tl-head-actions{width:100%;flex-direction:column}
 }
 @media (prefers-reduced-motion:reduce){
   #trips-list .tl-card{transition:none}
@@ -113,7 +115,10 @@
 <div id="trips-list">
   <div class="tl-head">
     <h1>Trips</h1>
-    <a href="{{ url_for('admin.new_trip') }}">+ Create New Trip</a>
+    <div class="tl-head-actions">
+      <a href="{{ url_for('admin.trip_scholarships_page') }}">Scholarships</a>
+      <a href="{{ url_for('admin.new_trip') }}">+ Create New Trip</a>
+    </div>
   </div>
 
   <div class="tl-toolbar" role="group" aria-label="Filter trips">

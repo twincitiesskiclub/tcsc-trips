@@ -109,7 +109,13 @@ def register_for_trip(slug):
                 "Could not retrieve previous trip intent %s", previous_intent_id, exc_info=True)
         else:
             if previous_intent.status in ('requires_capture', 'succeeded', 'processing'):
+                # The earlier hold stands, so the row must describe it, not
+                # this attempt's price and scholarship code.
+                metadata = previous_intent.metadata or {}
                 registration.payment_intent_id = previous_intent_id
+                registration.amount_cents = previous_intent.amount
+                registration.scholarship_id = (
+                    int(metadata.get('scholarship_id') or 0) or None)
                 _transition_trip_registration(previous_intent, TripRegistrationStatus.PENDING)
                 return json_error({'email': "You're already signed up for this trip."})
             try:
@@ -118,6 +124,17 @@ def register_for_trip(slug):
                 current_app.logger.warning(
                     "Could not cancel previous trip intent %s", previous_intent_id, exc_info=True)
 
+    metadata = {
+        'payment_type': PaymentType.TRIP,
+        'trip_id': str(trip.id),
+        'trip_slug': series.slug,
+        'registration_id': str(registration.id),
+        'price_tier': registration.price_tier,
+        'email': registration.user.email,
+        'name': registration.user.full_name,
+    }
+    if registration.scholarship_id:
+        metadata['scholarship_id'] = str(registration.scholarship_id)
     try:
         intent = stripe.PaymentIntent.create(
             amount=registration.amount_cents,
@@ -126,15 +143,7 @@ def register_for_trip(slug):
             receipt_email=registration.user.email,
             statement_descriptor=build_statement_descriptor('TRIP', trip.name),
             description=f"TCSC Trip - {trip.name}",
-            metadata={
-                'payment_type': PaymentType.TRIP,
-                'trip_id': str(trip.id),
-                'trip_slug': series.slug,
-                'registration_id': str(registration.id),
-                'price_tier': registration.price_tier,
-                'email': registration.user.email,
-                'name': registration.user.full_name,
-            },
+            metadata=metadata,
             **stripe_idempotency_options(),
         )
     except Exception as exc:
