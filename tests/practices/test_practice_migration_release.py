@@ -25,7 +25,7 @@ EVENTS_REVISION = "1b29976741b6"
 LEAD_AVAILABILITY_REVISION = "3d34ea39db0f"
 READINESS_DIGEST_REVISION = "b4d1f8e6c2a7"
 # Bump whenever a new migration lands.
-HEAD_REVISION = "f4b8d2a6c1e9"
+HEAD_REVISION = "a7c3e9d2b4f1"
 EXPECTED_C4_COLUMNS = {
     ("practice_activities", "default_plan_reactions"),
     ("practice_types", "default_plan_reactions"),

@@ -1,8 +1,15 @@
+import os
+
 import pytest
 
 from app import create_app
-from app.models import db, Payment, SlackUser, Trip, User
-from app.trips.models import TripProfile, TripRegistration, TripSeries
+from datetime import date
+
+from app.models import db, Payment, Season, SlackUser, Trip, User
+from app.trips.models import (
+    TripProfile, TripRegistration, TripScholarship, TripSeries,
+)
+from tests._db_guard import LOCAL_TEST_DB
 
 TEST_TRIP_SLUGS = (
     "test-trip-models",
@@ -25,14 +32,17 @@ TEST_USER_EMAILS = (
     "trip-inactive@example.com",
     "trip-second@example.com",
 )
+TEST_SEASON_NAME = "TEST Scholarship Season"
 
 
 @pytest.fixture
 def app():
     app = create_app()
     app.config["TESTING"] = True
-    app.config["SQLALCHEMY_DATABASE_URI"] = (
-        "postgresql://tcsc:tcsc@localhost:5432/tcsc_trips"
+    # The root conftest pins DATABASE_URL to a localhost database before any
+    # app exists, so honoring it here lets a run target a scratch schema.
+    app.config["SQLALCHEMY_DATABASE_URI"] = os.environ.get(
+        "DATABASE_URL", LOCAL_TEST_DB
     )
     return app
 
@@ -82,6 +92,12 @@ def _delete_test_trips():
             User.email.in_(TEST_USER_EMAILS))
     ]
     if user_ids:
+        TripRegistration.query.filter(
+            TripRegistration.user_id.in_(user_ids)
+        ).delete(synchronize_session=False)
+        TripScholarship.query.filter(
+            TripScholarship.user_id.in_(user_ids)
+        ).delete(synchronize_session=False)
         TripProfile.query.filter(
             TripProfile.user_id.in_(user_ids)
         ).delete(synchronize_session=False)
@@ -89,8 +105,10 @@ def _delete_test_trips():
             synchronize_session=False
         )
     SlackUser.query.filter(
-        SlackUser.slack_uid == "U_TEST_TRIP"
+        SlackUser.slack_uid.in_(("U_TEST_TRIP", "U_TEST_TRIP_2"))
     ).delete(synchronize_session=False)
+    Season.query.filter(Season.name == TEST_SEASON_NAME).delete(
+        synchronize_session=False)
     db.session.commit()
     db.session.expire_all()
 
@@ -101,3 +119,18 @@ def cleanup_trip_records(db_session):
     yield
     db_session.session.rollback()
     _delete_test_trips()
+
+
+@pytest.fixture
+def current_season(db_session):
+    """The current season, created for the run when the DB has none."""
+    season = Season.get_current()
+    if season is None:
+        season = Season(
+            name=TEST_SEASON_NAME, season_type="fall/winter", year=2099,
+            start_date=date(2099, 1, 1), end_date=date(2099, 3, 1),
+            is_current=True,
+        )
+        db.session.add(season)
+        db.session.flush()
+    return season
