@@ -231,3 +231,60 @@ def test_open_trips_window(db_session):
     names = [t.name for t in scholarships.open_trips(now)
              if t.slug.startswith("test-trip-models")]
     assert names == [open_trip.name]
+
+
+# --- one-off: link registrations made before the DM went out -------------------
+
+def _plain_registration(trip, user, status=TripRegistrationStatus.PENDING):
+    registration = TripRegistration(
+        trip_id=trip.id, user_id=user.id, status=status, price_tier="low",
+        amount_cents=trip.price_low)
+    db.session.add(registration)
+    db.session.commit()
+    return registration
+
+
+def test_link_sets_scholarship_and_keeps_amount(db_session, current_season):
+    user = _member()
+    scholarship = _scholarship(user, current_season)
+    registration = _plain_registration(_trip(), user)
+    lines = scholarships.link_registrations([registration.id], dry_run=False)
+    assert "linked" in lines[0]
+    db.session.refresh(registration)
+    assert registration.scholarship_id == scholarship.id
+    assert registration.amount_cents == 11000
+    assert scholarships.scholarship_state(scholarship) == "held"
+
+
+def test_link_dry_run_changes_nothing(db_session, current_season):
+    user = _member()
+    _scholarship(user, current_season)
+    registration = _plain_registration(_trip(), user)
+    lines = scholarships.link_registrations([registration.id])
+    assert "would link" in lines[0]
+    db.session.refresh(registration)
+    assert registration.scholarship_id is None
+
+
+def test_link_refuses_member_without_scholarship(db_session, current_season):
+    registration = _plain_registration(_trip(), _member())
+    lines = scholarships.link_registrations([registration.id], dry_run=False)
+    assert "refused" in lines[0]
+    db.session.refresh(registration)
+    assert registration.scholarship_id is None
+
+
+def test_link_refuses_code_held_elsewhere(db_session, current_season):
+    user = _member()
+    scholarship = _scholarship(user, current_season)
+    _registration(_trip(slug="test-trip-models-2028", name="Houghton 50KUM"),
+                  user, scholarship, TripRegistrationStatus.PENDING)
+    registration = _plain_registration(_trip(), user)
+    lines = scholarships.link_registrations([registration.id], dry_run=False)
+    assert "refused" in lines[0] and "Houghton 50KUM" in lines[0]
+    db.session.refresh(registration)
+    assert registration.scholarship_id is None
+
+
+def test_link_refuses_missing_registration(db_session, current_season):
+    assert "refused" in scholarships.link_registrations([999999999])[0]

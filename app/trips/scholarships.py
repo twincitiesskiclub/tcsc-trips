@@ -221,3 +221,41 @@ def scholarship_rows(season):
         })
     rows.sort(key=lambda row: row["name"].lower())
     return rows
+
+
+def link_registrations(registration_ids, dry_run=True):
+    """Attach existing registrations to their members' scholarships.
+
+    For members who registered before their DM arrived. The amount is left
+    alone so the row keeps matching its Stripe hold; the $ comes back as a
+    refund after capture.
+    """
+    from app.models import Season
+    from app.trips.models import TripRegistration
+
+    season = Season.get_current()
+    lines = []
+    for registration_id in registration_ids:
+        registration = db.session.get(TripRegistration, registration_id)
+        if registration is None:
+            lines.append(f"{registration_id}: refused, no such registration")
+            continue
+        label = (f"{registration_id} {registration.user.full_name} "
+                 f"({registration.trip.name})")
+        scholarship = season and TripScholarship.query.filter_by(
+            user_id=registration.user_id, season_id=season.id).first()
+        if not scholarship:
+            lines.append(f"{label}: refused, member has no scholarship")
+            continue
+        holder = active_registration(scholarship)
+        if holder is not None and holder.id != registration.id:
+            lines.append(
+                f"{label}: refused, code already in use on {holder.trip.name}")
+            continue
+        if dry_run:
+            lines.append(f"{label}: would link {scholarship.code}")
+            continue
+        registration.scholarship_id = scholarship.id
+        db.session.commit()
+        lines.append(f"{label}: linked {scholarship.code}")
+    return lines
