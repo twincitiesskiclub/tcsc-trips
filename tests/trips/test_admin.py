@@ -580,3 +580,147 @@ def test_trips_data_signup_dates_are_central(admin_client, db_session):
     db.session.commit()
     rows = admin_client.get("/admin/trips/data").get_json()["trips"]
     assert next(r for r in rows if r["id"] == trip.id)["signup_end"] == "2026-10-23"
+
+
+# --- trip scholarships ----------------------------------------------------------
+
+from app.models import SlackUser
+from app.trips.models import TripScholarship
+
+
+def _scholarship_member(email="trip-member@example.com", slack_uid="U_TEST_TRIP",
+                        status=UserStatus.ACTIVE, first_name="Mira"):
+    user = User(first_name=first_name, last_name="Tomten", email=email,
+                status=status)
+    if slack_uid:
+        slack_user = SlackUser(slack_uid=slack_uid, email=email)
+        db.session.add(slack_user)
+        db.session.flush()
+        user.slack_user_id = slack_user.id
+    db.session.add(user)
+    db.session.commit()
+    return user
+
+
+def _slack_client(ts="1.2"):
+    client = MagicMock()
+    client.chat_postMessage.return_value = {"channel": "D1", "ts": ts}
+    return client
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_send_creates_and_dms(get_client, admin_client, db_session,
+                                          current_season):
+    get_client.return_value = client = _slack_client()
+    user = _scholarship_member()
+    response = admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    assert response.status_code == 200
+    assert response.get_json()["results"] == [
+        {"user_id": user.id, "name": "Mira Tomten", "status": "sent"}]
+    scholarship = TripScholarship.query.filter_by(user_id=user.id).one()
+    assert scholarship.amount_cents == 10000
+    assert scholarship.season_id == current_season.id
+    assert client.chat_postMessage.call_count == 1
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_send_skips_existing_recipients(
+        get_client, admin_client, db_session, current_season):
+    get_client.return_value = client = _slack_client()
+    user = _scholarship_member()
+    payload = {"user_ids": [user.id], "amount_dollars": 100}
+    admin_client.post("/admin/trips/scholarships/send", json=payload)
+    second = admin_client.post("/admin/trips/scholarships/send", json=payload)
+    assert second.get_json()["results"][0]["status"] == "already_has_one"
+    assert TripScholarship.query.filter_by(user_id=user.id).count() == 1
+    assert client.chat_postMessage.call_count == 1
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_send_reports_no_slack(get_client, admin_client, db_session,
+                                           current_season):
+    user = _scholarship_member(slack_uid=None)
+    response = admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    assert response.get_json()["results"][0]["status"] == "no_slack"
+    scholarship = TripScholarship.query.filter_by(user_id=user.id).one()
+    assert scholarship.sent_at is None
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_send_reports_slack_failure(
+        get_client, admin_client, db_session, current_season):
+    get_client.return_value.chat_postMessage.side_effect = RuntimeError("down")
+    user = _scholarship_member()
+    response = admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    assert response.get_json()["results"][0]["status"] == "send_failed"
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_send_rejects_inactive_member(
+        get_client, admin_client, db_session, current_season):
+    user = _scholarship_member(email="trip-inactive@example.com",
+                               status=UserStatus.ALUMNI)
+    response = admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    assert response.get_json()["results"][0]["status"] == "not_active"
+    assert TripScholarship.query.filter_by(user_id=user.id).count() == 0
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_send_rejects_bad_amount(get_client, admin_client,
+                                             db_session, current_season):
+    user = _scholarship_member()
+    response = admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 0})
+    assert response.status_code == 400
+    assert TripScholarship.query.filter_by(user_id=user.id).count() == 0
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_page_lists_scholarships(get_client, admin_client,
+                                             db_session, current_season):
+    get_client.return_value = _slack_client()
+    user = _scholarship_member()
+    admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    code = TripScholarship.query.filter_by(user_id=user.id).one().code
+    response = admin_client.get("/admin/trips/scholarships")
+    assert response.status_code == 200
+    assert b"Mira Tomten" in response.data
+    assert code.encode() in response.data
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_resend_posts_new_dm(get_client, admin_client, db_session,
+                                         current_season):
+    get_client.return_value = _slack_client(ts="1.2")
+    user = _scholarship_member()
+    admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    scholarship = TripScholarship.query.filter_by(user_id=user.id).one()
+    get_client.return_value = _slack_client(ts="9.9")
+    response = admin_client.post(
+        f"/admin/trips/scholarships/{scholarship.id}/resend")
+    assert response.get_json() == {"success": True}
+    db.session.refresh(scholarship)
+    assert scholarship.slack_message_ts == "9.9"
+
+
+def test_scholarship_routes_require_admin(client, db_session):
+    assert client.get("/admin/trips/scholarships").status_code == 302
+    assert client.post("/admin/trips/scholarships/send",
+                       json={}).status_code == 302
+
+
+@patch("app.trips.scholarships.get_slack_client")
+def test_scholarship_page_offers_send_for_unsent_rows(
+        get_client, admin_client, db_session, current_season):
+    user = _scholarship_member(slack_uid=None)
+    admin_client.post("/admin/trips/scholarships/send", json={
+        "user_ids": [user.id], "amount_dollars": 100})
+    body = admin_client.get("/admin/trips/scholarships").get_data(as_text=True)
+    assert ">Send DM</button>" in body
+    assert "Resend DM" not in body

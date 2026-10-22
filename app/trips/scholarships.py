@@ -145,3 +145,79 @@ def handle_reveal_click(body, action, client):
         current_app.logger.warning(
             "trip scholarship: reveal failed: %s", exc)
         return False
+
+
+def issue_scholarships(user_ids, amount_cents):
+    """Create and DM one scholarship per member; one result dict per id."""
+    from sqlalchemy.exc import IntegrityError
+
+    from app.constants import UserStatus
+    from app.models import Season, User
+
+    season = Season.get_current()
+    if season is None:
+        raise ValueError("No current season.")
+    results = []
+    for user_id in user_ids:
+        user = db.session.get(User, user_id)
+        if user is None or user.status != UserStatus.ACTIVE:
+            results.append({"user_id": user_id,
+                            "name": user.full_name if user else "",
+                            "status": "not_active"})
+            continue
+        result = {"user_id": user.id, "name": user.full_name}
+        if TripScholarship.query.filter_by(
+                user_id=user.id, season_id=season.id).first():
+            results.append(dict(result, status="already_has_one"))
+            continue
+        scholarship = None
+        for _ in range(5):  # a code collision is the only expected failure
+            try:
+                with db.session.begin_nested():
+                    scholarship = TripScholarship(
+                        user_id=user.id, season_id=season.id,
+                        amount_cents=amount_cents, code=generate_code())
+                    db.session.add(scholarship)
+                break
+            except IntegrityError:
+                scholarship = None
+        if scholarship is None:
+            results.append(dict(result, status="send_failed"))
+            continue
+        db.session.commit()
+        if _slack_uid(user) is None:
+            status = "no_slack"
+        elif send_scholarship_dm(scholarship):
+            status = "sent"
+        else:
+            status = "send_failed"
+        results.append(dict(result, status=status))
+    return results
+
+
+def scholarship_rows(season):
+    from app.models import User
+    from app.utils import format_datetime_central
+
+    def when(dt):
+        return format_datetime_central(dt, "%b %-d, %-I:%M %p") if dt else ""
+
+    rows = []
+    scholarships = TripScholarship.query.join(User).filter(
+        TripScholarship.season_id == season.id).all()
+    now = datetime.utcnow()
+    for scholarship in scholarships:
+        registration = active_registration(scholarship, now)
+        rows.append({
+            "id": scholarship.id,
+            "name": scholarship.user.full_name,
+            "email": scholarship.user.email,
+            "code": scholarship.code,
+            "amount_cents": scholarship.amount_cents,
+            "sent_at": when(scholarship.sent_at),
+            "claimed_at": when(scholarship.claimed_at),
+            "state": scholarship_state(scholarship, now),
+            "trip_name": registration.trip.name if registration else "",
+        })
+    rows.sort(key=lambda row: row["name"].lower())
+    return rows

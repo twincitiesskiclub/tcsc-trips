@@ -3,7 +3,7 @@ from sqlalchemy import func
 from ..auth import admin_required
 from ..models import db, Payment, Trip, Season, User, UserSeason, SlackUser, Tag, UserTag
 from ..constants import (DATE_FORMAT, DATETIME_FORMAT, MIN_PRICE_CENTS,
-                         CENTS_PER_DOLLAR, UserSeasonStatus,
+                         CENTS_PER_DOLLAR, UserSeasonStatus, UserStatus,
                          VOLUNTEER_INTERESTS, VOLUNTEER_COMMITTEES)
 from ..slack.sync import sync_slack_users, get_sync_status, get_unmatched_slack_users, get_unmatched_db_users, get_all_users_with_slack_status, link_user_to_slack, unlink_user_from_slack, import_slack_user, sync_profiles_to_slack
 from ..slack.client import send_direct_message, open_conversation, send_message_to_channel
@@ -435,6 +435,54 @@ def _sanitize_trip_csv(value):
 def get_admin_trips():
     trips = Trip.query.order_by(Trip.start_date).all()
     return render_template('admin/trips.html', trips=trips)
+
+@admin.route('/admin/trips/scholarships')
+@admin_required
+def trip_scholarships_page():
+    from app.trips.scholarships import scholarship_rows
+    season = Season.get_current()
+    rows = scholarship_rows(season) if season else []
+    has_one = {row['email'] for row in rows}
+    members = User.query.filter(User.status == UserStatus.ACTIVE).order_by(
+        User.last_name, User.first_name).all()
+    return render_template(
+        'admin/trip_scholarships.html', season=season, rows=rows,
+        members=[{'id': m.id, 'name': m.full_name, 'email': m.email,
+                  'has_one': m.email in has_one} for m in members])
+
+
+@admin.route('/admin/trips/scholarships/send', methods=['POST'])
+@admin_required
+def send_trip_scholarships():
+    from app.trips.scholarships import issue_scholarships
+    data = request.get_json(silent=True) or {}
+    try:
+        user_ids = [int(uid) for uid in data.get('user_ids') or []]
+        amount_dollars = int(data.get('amount_dollars'))
+    except (TypeError, ValueError):
+        return {'success': False, 'error': 'Pick members and a whole-dollar amount.'}, 400
+    if not user_ids or not 1 <= amount_dollars <= 1000:
+        return {'success': False, 'error': 'Pick members and an amount from $1 to $1000.'}, 400
+    try:
+        results = issue_scholarships(user_ids, amount_dollars * 100)
+    except ValueError as exc:
+        return {'success': False, 'error': str(exc)}, 400
+    return {'success': True, 'results': results}
+
+
+@admin.route('/admin/trips/scholarships/<int:scholarship_id>/resend', methods=['POST'])
+@admin_required
+def resend_trip_scholarship(scholarship_id):
+    from app.trips.models import TripScholarship
+    from app.trips.scholarships import send_scholarship_dm
+    scholarship = db.session.get(TripScholarship, scholarship_id)
+    if scholarship is None:
+        return {'success': False, 'error': 'Scholarship not found'}, 404
+    if not send_scholarship_dm(scholarship):
+        return {'success': False,
+                'error': 'Could not send the DM. Is the member linked to Slack?'}, 502
+    return {'success': True}
+
 
 @admin.route('/admin/trips/new', methods=['GET', 'POST'])
 @admin_required
