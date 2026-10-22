@@ -1,5 +1,4 @@
 import type { Config } from 'tailwindcss';
-import forms from '@tailwindcss/forms';
 import typography from '@tailwindcss/typography';
 
 // Raw oklch values, shared between the color tokens (which append
@@ -17,11 +16,20 @@ const palette = {
   'paper-card': 'oklch(0.97 0.004 90)',
   ink: 'oklch(0.18 0.04 260)',
   slate: 'oklch(0.50 0.02 260)',
+  // Data colors: these encode the recommended glide-wax band and are used
+  // only by the live-conditions wax chip.
+  'wax-green': 'oklch(0.62 0.13 150)',
+  'wax-blue': 'oklch(0.62 0.12 245)',
+  'wax-purple': 'oklch(0.62 0.12 300)',
+  'wax-red': 'oklch(0.62 0.15 25)',
 };
 
 /** Palette color with a fixed alpha (for prose rules/borders). */
 const alpha = (color: keyof typeof palette, a: number) =>
   palette[color].replace(')', ` / ${a})`);
+
+const fontSans = "'ArchivoVariable', system-ui, sans-serif";
+const fontDisplay = "'PolySansBulkyWide', 'ArchivoVariable', system-ui, sans-serif";
 
 export default {
   content: ['./src/**/*.{astro,html,ts,tsx,md,mdx}'],
@@ -41,6 +49,9 @@ export default {
       typography: {
         DEFAULT: {
           css: {
+            fontSize: '1.125rem',
+            fontWeight: '400',
+            lineHeight: '1.7',
             '--tw-prose-body': palette.ink,
             '--tw-prose-headings': palette.navy,
             '--tw-prose-lead': palette.slate,
@@ -50,27 +61,59 @@ export default {
             '--tw-prose-bullets': palette['mint-deep'],
             '--tw-prose-hr': alpha('ink', 0.1),
             '--tw-prose-quotes': palette.ink,
-            '--tw-prose-quote-borders': palette.mint,
+            '--tw-prose-quote-borders': alpha('ink', 0.15),
             '--tw-prose-captions': palette.slate,
-            '--tw-prose-code': palette.ink,
-            '--tw-prose-pre-code': palette.paper,
-            '--tw-prose-pre-bg': palette['navy-deep'],
             '--tw-prose-th-borders': alpha('ink', 0.15),
             '--tw-prose-td-borders': alpha('ink', 0.1),
+            h2: {
+              color: palette.navy,
+              fontFamily: fontDisplay,
+              fontSize: 'clamp(1.75rem, 1.5rem + 1vw, 2.25rem)',
+              fontWeight: '700',
+              letterSpacing: '-0.02em',
+              lineHeight: '1.1',
+              textWrap: 'balance',
+            },
+            h3: {
+              color: palette.navy,
+              fontFamily: fontSans,
+              fontSize: 'clamp(1.375rem, 1.25rem + 0.5vw, 1.625rem)',
+              fontWeight: '600',
+              lineHeight: '1.2',
+            },
+            h4: {
+              color: palette.navy,
+              fontFamily: fontSans,
+              fontSize: '1.125rem',
+              fontWeight: '600',
+              lineHeight: '1.3',
+            },
           },
         },
       },
-      // One family, two voices: weight separates the display cut from body
-      // (headings add font-semibold; global.css pins .font-display to normal
-      // width after the expanded cut was retired 2026-06-10).
+      // One family, two voices: the licensed display face is a single 700
+      // cut, while Archivo carries the variable body weights.
       fontFamily: {
         sans: ['ArchivoVariable', 'system-ui', 'sans-serif'],
         // Licensed PolySans BulkyWide subset for display moments. Archivo
         // handles punctuation and any glyphs outside the optimized subset.
         display: ['PolySansBulkyWide', 'ArchivoVariable', 'system-ui', 'sans-serif'],
       },
-      maxWidth: { prose: '62ch', 'prose-narrow': '56ch' },
+      maxWidth: {
+        site: '80rem',
+        statement: '44ch',
+        'logo-mobile': '13.5rem',
+        prose: '62ch',
+        'prose-narrow': '56ch',
+      },
+      spacing: {
+        'logo-sm': '12.5rem',
+        'logo-md': '15rem',
+        'logo-lg': '17.5rem',
+      },
+      minHeight: { 'band-photo-min': '14.375rem' },
+      maxHeight: { 'band-photo-max': '26.25rem' },
     },
   },
-  plugins: [forms, typography],
+  plugins: [typography],
 } satisfies Config;

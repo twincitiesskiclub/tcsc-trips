@@ -1,0 +1,32 @@
+---
+/**
+ * Ledger owns the site's ruled row grammar. Rows inherit their fixed column
+ * preset and surface colors from this wrapper, so call sites only provide
+ * content through LedgerRow.
+ */
+interface Props {
+  cols?: 'two' | 'three' | 'stacked';
+  /** Seamed bands use the default between-row rules. Unseamed ledgers add
+      the single structural rule at their top. */
+  rule?: 'between' | 'top';
+  surface?: 'paper' | 'navy';
+  class?: string;
+}
+
+const {
+  cols = 'two',
+  rule = 'between',
+  surface = 'paper',
+  class: className,
+} = Astro.props;
+---
+
+<div
+  class:list={['ledger', className]}
+  data-ledger
+  data-ledger-cols={cols}
+  data-ledger-rule={rule}
+  data-ledger-surface={surface}
+>
+  <slot />
+</div>

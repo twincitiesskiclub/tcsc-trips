@@ -128,7 +128,7 @@ test('the mobile menu closes itself and releases the scroll lock before a same-p
         <button data-mobile-close aria-label="Close menu">Close</button>
         <nav>
           <a href="/about">About</a>
-          <a href="https://twincitiesskiclub.org/#registration">Fall registration dates</a>
+          <a href="https://twincitiesskiclub.org/#details">Details</a>
         </nav>
       </div>
     </body></html>`,
@@ -150,7 +150,7 @@ test('the mobile menu closes itself and releases the scroll lock before a same-p
   const { document } = dom.window;
   const toggle = document.querySelector('[data-mobile-toggle]');
   const panel = document.querySelector('[data-mobile-panel]');
-  const anchorLink = document.querySelector('a[href="https://twincitiesskiclub.org/#registration"]');
+  const anchorLink = document.querySelector('a[href="https://twincitiesskiclub.org/#details"]');
 
   assert.notEqual(document.body.style.position, 'fixed', 'body should not start scroll-locked');
 

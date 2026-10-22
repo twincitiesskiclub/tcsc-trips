@@ -11,16 +11,28 @@ import { getEntry, render } from 'astro:content';
 import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
 import PhotoMosaic from '@/components/PhotoMosaic.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
 import SectionBand from '@/components/SectionBand.astro';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
 import { CARD } from '@/components/imageWidths';
+// CONSENT.md:80
 import canoeSocial from '@/assets/images/photos/canoe-social.jpg';
+// CONSENT.md:81
 import backyardSocial from '@/assets/images/photos/backyard-social.jpg';
+// CONSENT.md:82
 import runClubSelfie from '@/assets/images/photos/run-club-selfie.jpg';
+// CONSENT.md:83
 import winterFive from '@/assets/images/photos/winter-five.jpg';
+// CONSENT.md:84
 import lakesidePicnic from '@/assets/images/photos/lakeside-picnic.jpg';
+// CONSENT.md:85
 import secondHarvest from '@/assets/images/photos/second-harvest.jpg';
+// CONSENT.md:86
 import barnBanquet from '@/assets/images/photos/barn-banquet.jpg';
+// CONSENT.md:104
 import etfFallRide from '@/assets/images/photos/etf-fall-ride.jpg';
 
 const community = await getEntry('community', 'community');
@@ -59,29 +71,25 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
   subhead={community.data.intro}
   facts={[
     { value: '2020', label: 'Founded' },
-    { value: 'Photos by club members', label: 'Credits' },
+    { value: 'Member-run', label: 'Board and committees' },
   ]}
   photo={canoeSocial}
   photoAlt="Members in canoes rafted together on a city lake at golden hour"
-  photoPosition="center 52%"
+  photoPosition="center 46%"
 >
-  <div class="safe-inline-6 mx-auto max-w-3xl px-6 py-12">
-    <div class="prose prose-lg max-w-prose text-ink">
+  <ProseColumn>
+    <Fragment slot="prose">
       <Content />
-    </div>
-    <div class="mt-10 grid grid-cols-2 gap-px bg-ink/15">
-      {memberCluster.map((p) => (
-        <Image
-          src={p.src}
-          alt={p.alt}
-          widths={CARD}
-          sizes="(min-width: 768px) 360px, 50vw"
-          class="w-full h-48 md:h-64 object-cover"
-          loading="lazy"
-        />
-      ))}
-    </div>
-  </div>
+    </Fragment>
+    <PhotoStrip
+      photos={memberCluster}
+      cols={2}
+      mobileCols={2}
+      aspect="4/3"
+      layout="lead-three"
+      class="mt-10"
+    />
+  </ProseColumn>
   {takeaways.length > 0 && (
     <SectionBand
       variant="paper"
@@ -91,7 +99,7 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
       <div class="space-y-14">
         {takeaways.map((g) => (
           <div class="grid gap-4 md:gap-10 md:grid-cols-12">
-            <h3 class="md:col-span-3 font-display font-semibold text-2xl text-navy pt-4">
+            <h3 class="type-h3 md:col-span-3 text-navy pt-4">
               {g.group}
             </h3>
             <div class="md:col-span-9">
@@ -106,28 +114,23 @@ const groupPhotos: Record<string, { src: ImageMetadata; alt: string; position?: 
                   loading="lazy"
                 />
               )}
-              <div class="divide-y divide-ink/10 border-t border-ink/10">
+              <Ledger cols="two" surface="paper">
                 {g.items.map((item) => (
-                  <div class="py-5 grid gap-x-6 gap-y-1 sm:grid-cols-[minmax(14rem,18rem)_1fr]">
-                    <div class="font-semibold text-navy">
-                      {item.href ? (
-                        <a
-                          href={item.href}
-                          class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-                        >{item.line}</a>
-                      ) : (
-                        item.line
-                      )}
-                    </div>
-                    {item.detail && <p class="text-ink/80">{item.detail}</p>}
-                  </div>
+                  <LedgerRow
+                    label={item.line}
+                    note={item.detail}
+                    href={item.href}
+                  />
                 ))}
-              </div>
+              </Ledger>
             </div>
           </div>
         ))}
       </div>
     </SectionBand>
   )}
-  <PhotoMosaic />
+  <PhotoMosaic
+    number="Photo wall"
+    heading="Photos by club members"
+  />
 </InnerPageLayout>

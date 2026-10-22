@@ -1,0 +1,44 @@
+---
+interface Props {
+  variant: 'on-navy' | 'on-paper';
+  href?: string;
+  size?: 'sm' | 'md';
+  disabled?: boolean;
+  class?: string;
+}
+
+const {
+  variant,
+  href,
+  size = 'md',
+  disabled = false,
+  class: className,
+  ...attributes
+}: Props = Astro.props;
+
+const classes = [
+  'btn inline-flex min-h-11 items-center justify-center self-start rounded-md px-5 py-3 transition-colors',
+  variant === 'on-navy'
+    ? 'bg-mint text-navy hover:bg-mint/90 active:bg-mint/80'
+    : 'bg-navy text-mint hover:bg-navy-deep',
+  className,
+];
+---
+
+{href && !disabled ? (
+  <a
+    href={href}
+    class:list={classes}
+    data-button-size={size}
+    data-button-variant={variant}
+    {...attributes}
+  ><slot /></a>
+) : (
+  <span
+    class:list={[classes, 'cursor-default opacity-70']}
+    data-button-size={size}
+    data-button-variant={variant}
+    aria-disabled="true"
+    {...attributes}
+  ><slot /></span>
+)}

@@ -4,15 +4,23 @@
 // member-shot race photo strip. Strip photos are direct imports, not
 // photos-collection entries (entries would also join the community mosaic).
 import { getEntry, render } from 'astro:content';
-import { Image } from 'astro:assets';
 import InnerPageLayout from '@/layouts/InnerPageLayout.astro';
+import ProseColumn from '@/components/ProseColumn.astro';
+import PhotoStrip from '@/components/PhotoStrip.astro';
+import Ledger from '@/components/Ledger.astro';
+import LedgerRow from '@/components/LedgerRow.astro';
 import { metaDescription } from '@/lib/metaDescription';
-import { CARD } from '@/components/imageWidths';
+// CONSENT.md:87
 import raceCrewFrosty from '@/assets/images/photos/race-crew-frosty.jpg';
+// CONSENT.md:88
 import skiDeSheTrio from '@/assets/images/photos/ski-de-she-trio.jpg';
+// CONSENT.md:89
 import korteMedals from '@/assets/images/photos/korte-medals.jpg';
+// CONSENT.md:90
 import birkieStart from '@/assets/images/photos/birkie-start.jpg';
+// CONSENT.md:91
 import finlandiaPodium from '@/assets/images/photos/finlandia-podium.jpg';
+// CONSENT.md:92
 import skijorRace from '@/assets/images/photos/skijor-race.jpg';
 
 const racing = await getEntry('racing', 'racing');
@@ -21,10 +29,10 @@ const { Content } = await render(racing);
 const races = racing.data.races;
 
 const raceStrip = [
-  { src: skiDeSheTrio, alt: 'Three members in TCSC jerseys and race bibs in front of the Ski de She sponsor wall' },
-  { src: korteMedals, alt: 'Two finishers with Kortelopet medals and bibs grinning in bright winter sun' },
-  { src: birkieStart, alt: 'Two members in matching TCSC kits with arms raised at the Birkie start area' },
-  { src: finlandiaPodium, alt: 'Three skiers holding trophy axes in front of the Minnesota Finlandia Ski Marathon banner' },
+  { src: skiDeSheTrio, alt: 'Three members in TCSC jerseys and race bibs in front of the Ski de She sponsor wall', position: 'center 30%' },
+  { src: korteMedals, alt: 'Two finishers with Kortelopet medals and bibs grinning in bright winter sun', position: 'center 30%' },
+  { src: birkieStart, alt: 'Two members in matching TCSC kits with arms raised at the Birkie start area', position: 'center 30%' },
+  { src: finlandiaPodium, alt: 'Three skiers holding trophy axes in front of the Minnesota Finlandia Ski Marathon banner', position: 'center 30%' },
   { src: skijorRace, alt: 'A member skijoring with their dog mid-race, bib 9527, in a TCSC suit on a snowy course', position: '82% center' },
 ];
 ---
@@ -35,54 +43,36 @@ const raceStrip = [
   subhead={racing.data.intro}
   facts={[
     { value: '80+', label: 'Skiers at the 2026 Birkie' },
-    { value: 'Always voluntary', label: 'Racing' },
   ]}
   photo={raceCrewFrosty}
   photoAlt="Six members in race bibs, arms around each other, in frosty woods before a start"
   photoPosition="center 30%"
 >
-  <div class="safe-inline-6 mx-auto max-w-3xl px-6 py-12">
-    <div class="prose prose-lg max-w-prose text-ink">
+  <ProseColumn>
+    <Fragment slot="prose">
       <Content />
-    </div>
-  </div>
-  {races.length > 0 && (
-    <section class="safe-inline-6 mx-auto max-w-3xl px-6 pb-12">
-      <h2 class="font-display font-semibold text-3xl text-navy">Races</h2>
-      <div class="mt-6 divide-y divide-ink/10">
+    </Fragment>
+    {races.length > 0 && (
+      <section class="mt-12">
+      <h2 class="type-h2-longform text-navy">Races</h2>
+      <Ledger cols="three" rule="top" surface="paper" class="mt-6">
         {races.map((r) => (
-          <div class="py-4 grid gap-x-6 gap-y-1 sm:grid-cols-[10rem_1fr_1fr]">
-            {/* date/name/location always render (possibly empty) so the
-                three grid columns never shift when a field is omitted. */}
-            <div class="text-mint-deep text-sm tracking-wider uppercase pt-0.5">{r.date}</div>
-            <div class="font-semibold text-navy">
-              {r.href ? (
-                <a
-                  href={r.href}
-                  class="underline underline-offset-4 decoration-ink/30 hover:decoration-mint-deep hover:text-mint-deep transition-colors"
-                >{r.name}</a>
-              ) : (
-                r.name
-              )}
-            </div>
-            <div class="text-slate">{r.location}</div>
-            {r.notes && <div class="sm:col-span-full text-sm text-ink/80">{r.notes}</div>}
-          </div>
-        ))}
-      </div>
-      <div class="mt-10 grid grid-cols-2 md:grid-cols-5 gap-px bg-ink/15">
-        {raceStrip.map((p) => (
-          <Image
-            src={p.src}
-            alt={p.alt}
-            widths={CARD}
-            sizes="(min-width: 768px) 144px, 50vw"
-            class="w-full aspect-[3/4] object-cover"
-            style={p.position ? `object-position: ${p.position}` : undefined}
-            loading="lazy"
+          <LedgerRow
+            label={r.date}
+            labelRole="caption"
+            title={r.name}
+            meta={r.location}
+            note={r.notes}
+            href={r.href}
           />
         ))}
-      </div>
+      </Ledger>
+      </section>
+    )}
+  </ProseColumn>
+  {races.length > 0 && (
+    <section class="gutter mx-auto max-w-site band-b-sm" aria-label="Race photos">
+      <PhotoStrip photos={raceStrip} cols={5} aspect="3/4" mobileLead />
     </section>
   )}
 </InnerPageLayout>
