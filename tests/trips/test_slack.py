@@ -154,3 +154,105 @@ def test_unfurl_payload_for_trip_link(linked_registration):
     assert "https://tcsc.ski/not-a-trip" not in unfurls
     card = unfurls["https://tcsc.ski/test-trip-slack/register"]
     assert card["blocks"]
+
+
+# --- scholarship DM -----------------------------------------------------------
+
+from types import SimpleNamespace
+
+from app.slack.blocks.trips import (
+    build_scholarship_offer_blocks,
+    build_scholarship_revealed_blocks,
+    scholarship_offer_fallback,
+    scholarship_revealed_fallback,
+)
+
+
+def _fake_scholarship(code="TCSC-7KQ2M9"):
+    return SimpleNamespace(id=7, code=code, amount_cents=10000,
+                           user=SimpleNamespace(first_name="Mira"))
+
+
+def _hayward():
+    return SimpleNamespace(
+        name="Hayward Training Trip", signup_end=datetime(2026, 10, 23, 12, 0),
+        series=SimpleNamespace(slug="training-trip"))
+
+
+def _all_text(blocks):
+    import json
+    return json.dumps(blocks, ensure_ascii=False)
+
+
+def test_scholarship_offer_copy_and_button():
+    blocks = build_scholarship_offer_blocks(_fake_scholarship())
+    text = _all_text(blocks)
+    assert ("Hi Mira, you're getting a TCSC trip scholarship: $100 off one "
+            "trip this season, thanks to our sponsors Twin Cities Orthopedics "
+            "and Kwik Trip. Tap the button to get your code. Questions? Ask "
+            "<@U045LF8PCSW>.") in text
+    buttons = [e for b in blocks if b["type"] == "actions" for e in b["elements"]]
+    assert len(buttons) == 1
+    assert buttons[0]["action_id"] == "trip_scholarship_reveal"
+    assert buttons[0]["value"] == "7"
+    assert buttons[0]["text"]["text"] == "Get my code"
+    assert "TCSC-7KQ2M9" not in text
+    assert "TCSC-7KQ2M9" not in scholarship_offer_fallback(_fake_scholarship())
+
+
+def test_scholarship_revealed_copy_without_open_trips():
+    blocks = build_scholarship_revealed_blocks(
+        _fake_scholarship(), None, [], "https://tcsc.ski")
+    text = _all_text(blocks)
+    assert "Your code: *TCSC-7KQ2M9*" in text
+    assert ("Enter it in the Scholarship code box when you register for a "
+            "trip at tcsc.ski. It takes $100 off either price and only works "
+            "for you. If you aren't picked in a trip lottery, the code comes "
+            "back for another trip.") in text
+    assert "Open now" not in text
+    assert all(b["type"] != "actions" for b in blocks)
+    assert "TCSC-7KQ2M9" in scholarship_revealed_fallback(_fake_scholarship())
+
+
+def test_scholarship_revealed_lists_open_trips():
+    blocks = build_scholarship_revealed_blocks(
+        _fake_scholarship(), None, [_hayward()], "https://tcsc.ski")
+    assert ("Open now: <https://tcsc.ski/training-trip/register|Hayward "
+            "Training Trip> (registration closes Fri Oct 23, 7:00 AM)"
+            ) in _all_text(blocks)
+
+
+def test_scholarship_revealed_when_already_applied():
+    applied = SimpleNamespace(trip=_hayward())
+    blocks = build_scholarship_revealed_blocks(
+        _fake_scholarship(), applied, [_hayward()], "https://tcsc.ski")
+    text = _all_text(blocks)
+    assert ("Already applied to Hayward Training Trip: we'll take $100 off "
+            "when your spot is confirmed.") in text
+    assert "Enter it in the Scholarship code box" not in text
+    assert "Your code: *TCSC-7KQ2M9*" in text
+
+
+def test_scholarship_copy_has_no_dashes():
+    for blocks in (
+        build_scholarship_offer_blocks(_fake_scholarship()),
+        build_scholarship_revealed_blocks(
+            _fake_scholarship(), None, [_hayward()], "https://tcsc.ski"),
+    ):
+        text = _all_text(blocks)
+        assert "—" not in text and "–" not in text
+
+
+def test_bolt_reveal_acks_then_delegates(monkeypatch):
+    from contextlib import nullcontext
+    from app.slack import bolt_app
+    order = []
+    monkeypatch.setattr("app.slack.bolt_app.get_app_context", nullcontext)
+    import importlib
+    monkeypatch.setattr(
+        importlib.import_module("app.trips.scholarships"), "handle_reveal_click",
+        lambda body, action, client: order.append(("click", action["value"])))
+    bolt_app._reveal_trip_scholarship(
+        lambda: order.append("ack"), {"user": {"id": "U1"}}, {"value": "7"},
+        object())
+    assert order == ["ack", ("click", "7")]

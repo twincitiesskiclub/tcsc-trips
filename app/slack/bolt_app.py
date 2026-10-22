@@ -170,6 +170,14 @@ def _lead_signup(body, action, client) -> None:
         client.chat_postEphemeral(channel=channel, user=user_id, text=result["error"])
 
 
+def _reveal_trip_scholarship(ack, body, action, client) -> None:
+    """"Get my code" on a trip scholarship DM."""
+    ack()
+    with get_app_context():
+        from app.trips.scholarships import handle_reveal_click
+        handle_reveal_click(body, action, client)
+
+
 def _ack_practice_reaction_action(ack) -> None:
     """Primary Bolt action listener: send the transport acknowledgment only."""
     ack()
@@ -448,6 +456,10 @@ if _bot_token:
 
         client.chat_update(channel=channel_id, ts=message_ts,
                            blocks=blocks, text=text)
+
+    @bolt_app.action("trip_scholarship_reveal")
+    def handle_trip_scholarship_reveal(ack, body, action, client, logger):
+        _reveal_trip_scholarship(ack, body, action, client)
 
     @bolt_app.action("home_rsvp")
     def handle_home_rsvp_action(ack, body, action, client, logger):
