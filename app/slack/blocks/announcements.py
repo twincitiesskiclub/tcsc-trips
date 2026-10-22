@@ -12,8 +12,6 @@ from app.practices.interfaces import (
     WeatherConditions,
 )
 from app.practices.plan_reactions import (
-    format_reaction_name_for_fallback,
-    format_supplemental_reaction_fallback,
     format_supplemental_reaction_sentence,
 )
 from app.slack.blocks.fallback import (
@@ -29,40 +27,23 @@ from app.slack.blocks.text import (
     guard_slack_blocks,
     truncate_slack_text,
 )
-from app.utils import utc_naive_to_central_naive
+from app.utils import today_central, utc_naive_to_central_naive
 
 
 _SPACER = "\n\u200b"
 _WORKOUT_PLACEHOLDER = "Workout details coming soon."
-_FALLBACK_STATUS_MAX = 80
 _FALLBACK_LOCATION_MAX = 250
-_FALLBACK_WORKOUT_MAX = 1000
-_FALLBACK_NOTES_MAX = 600
-_FALLBACK_SOCIAL_MAX = 250
-_FALLBACK_NOTICE_MAX = 250
-_FALLBACK_ALERTS_MAX = 550
 _DETAILS_FALLBACK_PARKING_MAX = 1000
 _DETAILS_FALLBACK_GEAR_MAX = 800
 _DETAILS_FALLBACK_CONDITIONS_MAX = 1700
 _COMBINED_CANCELLATION_REASON_MAX = 600
-_COMBINED_FALLBACK_NOTICE_MAX = 150
-_COMBINED_FALLBACK_LOCATION_MAX = 160
-_COMBINED_FALLBACK_REASON_MAX = 150
-_COMBINED_FALLBACK_SHARED_WORKOUT_MAX = 700
-_COMBINED_FALLBACK_SESSION_WORKOUT_MAX = 220
-_COMBINED_FALLBACK_SHARED_NOTES_MAX = 500
-_COMBINED_FALLBACK_SESSION_NOTES_MAX = 140
-_COMBINED_FALLBACK_SHARED_SOCIAL_MAX = 200
-_COMBINED_FALLBACK_SESSION_SOCIAL_MAX = 100
 _ACTIVE_ALERTS_VISIBLE_MAX = 20
 _RUNNING_LATE_LINE = "Running late? Reply in the thread. <!channel>"
-_FALLBACK_RUNNING_LATE = "Running late? Reply in the thread."
 _STANDALONE_ATTENDANCE = (
     "Bop :white_check_mark: so we'll know you'll be there."
 )
-_STANDALONE_FALLBACK_ATTENDANCE = (
-    "RSVP with the white check mark reaction so we'll know you'll be there."
-)
+_FALLBACK_RSVP = "RSVP ✅ in Slack."
+_COMBINED_FALLBACK_RSVP = "RSVP ✅ for your session in Slack."
 
 
 def _activity_label(activities) -> str:
@@ -116,35 +97,52 @@ def _rsvp_context_block(
     }
 
 
-def _fallback_with_reserved_tail(
-    parts,
-    tail,
-    *,
-    surface,
-    practice_id=None,
-):
-    body = " ".join(
-        plainify_fallback_fragment(str(part).strip()) for part in parts
-        if part and str(part).strip()
+def _fallback_day(value, today, *, first=True):
+    days_ahead = (value.date() - today).days
+    if days_ahead not in (0, 1):
+        return f"{value:%A}"
+    word = "Today" if days_ahead == 0 else "Tomorrow"
+    return word if first else word.lower()
+
+
+def _fallback_time(value):
+    return value.strftime("%-I:%M %p")
+
+
+def _fallback_location(practice):
+    name = str(practice.location.name or "").strip() if practice.location else ""
+    return truncate_slack_text(
+        name,
+        _FALLBACK_LOCATION_MAX,
+        field="location_name",
+        surface="practice_fallback",
+        practice_id=practice.id,
     )
-    tail = plainify_fallback_fragment(str(tail).strip())
-    separator_length = 1 if body and tail else 0
-    body_budget = max(0, FALLBACK_TEXT_MAX - len(tail) - separator_length)
-    if body and len(body) > body_budget:
-        body = (
-            truncate_slack_text(
-                body,
-                body_budget,
-                field="fallback_body",
-                surface=surface,
-                practice_id=practice_id,
-            )
-            if body_budget > 0
-            else ""
-        )
-    value = " ".join(part for part in (body, tail) if part)
+
+
+def _fallback_kind(practice):
+    """'Pole Run intervals'; several of either join with '+'."""
+    activities = [
+        str(item.name).strip() for item in (practice.activities or [])
+        if getattr(item, "name", None)
+    ]
+    seen = {name.casefold() for name in activities}
+    types = [
+        str(item.name).strip().lower() for item in (practice.practice_types or [])
+        if getattr(item, "name", None) and str(item.name).casefold() not in seen
+    ]
+    if activities:
+        return " ".join(filter(None, [" + ".join(activities), " + ".join(types)]))
+    kind = " + ".join(types)
+    return kind[:1].upper() + kind[1:]
+
+
+def _notification_text(sentences, *, rsvp, surface, practice_id):
+    """Join sentences; a cancelled post (no RSVP) leads with 'Cancelled.'"""
+    parts = [_sentence("", part) for part in sentences if part]
+    parts = parts + [rsvp] if rsvp else ["Cancelled."] + parts
     return guard_fallback_text(
-        value,
+        plainify_fallback_fragment(" ".join(parts)),
         surface=surface,
         practice_id=practice_id,
     )
@@ -260,12 +258,6 @@ def _workout_text(practice):
     return str(getattr(practice, "workout_description", None) or "").strip() or (
         _WORKOUT_PLACEHOLDER
     )
-
-
-def _practice_status_label(practice):
-    status = getattr(practice, "status", None)
-    value = getattr(status, "value", status)
-    return str(value or "unknown").replace("_", " ").title()
 
 
 def _sentence(prefix, value):
@@ -588,98 +580,19 @@ def build_practice_fallback_text(
     conditions: AnnouncementConditions,
     *,
     announcement_notice=None,
+    today=None,
 ):
-    """Build complete notification fallback text for the hero message."""
-    status = truncate_slack_text(
-        _practice_status_label(practice),
-        _FALLBACK_STATUS_MAX,
-        field="practice_status",
-        surface="practice_fallback",
-        practice_id=practice.id,
-    )
-    location = truncate_slack_text(
-        practice.location.name if practice.location else "TBD",
-        _FALLBACK_LOCATION_MAX,
-        field="location_name",
-        surface="practice_fallback",
-        practice_id=practice.id,
-    )
-    workout = truncate_slack_text(
-        _workout_text(practice),
-        _FALLBACK_WORKOUT_MAX,
-        field="workout_description",
-        surface="practice_fallback",
-        practice_id=practice.id,
-    )
-    parts = [
-        f"Status: {status}.",
-        (
-            f"{practice.date.strftime('%A, %B %-d')} at "
-            f"{practice.date.strftime('%-I:%M %p')} at {location}."
-        ),
-        f"Workout: {workout}",
-    ]
-    notes = str(getattr(practice, "logistics_notes", None) or "").strip()
-    if notes:
-        parts.append(
-            "Notes: "
-            + truncate_slack_text(
-                notes,
-                _FALLBACK_NOTES_MAX,
-                field="logistics_notes",
-                surface="practice_fallback",
-                practice_id=practice.id,
-            )
-        )
-    if getattr(practice, "has_social", False):
-        social = getattr(practice, "social_location", None)
-        social_name = str(getattr(social, "name", None) or "").strip()
-        if social_name:
-            bounded_name = truncate_slack_text(
-                social_name,
-                _FALLBACK_SOCIAL_MAX,
-                field="social_location_name",
-                surface="practice_fallback",
-                practice_id=practice.id,
-            )
-            parts.append(f"Social after at {bounded_name}.")
-        else:
-            parts.append("Social after practice.")
-    urgent_categories = _urgent_exception_categories(
-        practice, conditions, announcement_notice=announcement_notice
-    )
-    urgent_budgets = {
-        "announcement_notice": _FALLBACK_NOTICE_MAX,
-        "weather_alert_headlines": _FALLBACK_ALERTS_MAX,
-    }
-    for field, lines in urgent_categories:
-        budget = urgent_budgets.get(field, 100)
-        if field == "weather_alert_headlines":
-            parts.append(_bounded_active_alerts(
-                lines,
-                budget,
-                separator=" ",
-                surface="practice_fallback",
-                practice_id=practice.id,
-            ))
-        else:
-            parts.append(truncate_slack_text(
-                " ".join(lines),
-                budget,
-                field=field,
-                surface="practice_fallback",
-                practice_id=practice.id,
-            ))
-    tail_parts = [_STANDALONE_FALLBACK_ATTENDANCE]
-    supplemental = format_supplemental_reaction_fallback(
-        getattr(practice, "plan_reactions", None) or []
-    )
-    if supplemental:
-        tail_parts.append(supplemental)
-    tail_parts.append(_FALLBACK_RUNNING_LATE)
-    return _fallback_with_reserved_tail(
-        parts,
-        " ".join(tail_parts),
+    """Build the push-notification text for the hero message.
+
+    Only when, where and what, then send the member into Slack. The post
+    carries the workout, notes, conditions and alerts.
+    """
+    today = today or today_central()
+    when = f"{_fallback_day(practice.date, today)} {_fallback_time(practice.date)}"
+    location = _fallback_location(practice)
+    return _notification_text(
+        [when + (f" at {location}" if location else ""), _fallback_kind(practice)],
+        rsvp=None if _is_cancelled(practice) else _FALLBACK_RSVP,
         surface="practice_announcement",
         practice_id=practice.id,
     )
@@ -831,18 +744,14 @@ def _join_with_or(items):
     return f"{', '.join(items[:-1])}, or {items[-1]}"
 
 
-def _combined_mapping(practices, *, plain):
+def _combined_mapping(practices):
     same_day = _all_sessions_same_date(practices)
     active = [practice for practice in practices if not _is_cancelled(practice)]
     if not active:
         return None
     pairs = []
     for practice in active:
-        reaction = (
-            format_reaction_name_for_fallback(practice.slack_session_emoji)
-            if plain
-            else f":{practice.slack_session_emoji}:"
-        )
+        reaction = f":{practice.slack_session_emoji}:"
         when = (
             practice.date.strftime("%-I:%M %p")
             if same_day
@@ -852,12 +761,11 @@ def _combined_mapping(practices, *, plain):
     return _join_with_or(pairs)
 
 
-def _combined_attendance_sentence(practices, *, plain):
-    mapping = _combined_mapping(practices, plain=plain)
+def _combined_attendance_sentence(practices):
+    mapping = _combined_mapping(practices)
     if not mapping:
         return None
-    prefix = "RSVP with" if plain else "Bop"
-    return f"{prefix} {mapping} so we'll know you'll be there."
+    return f"Bop {mapping} so we'll know you'll be there."
 
 
 def _shared_plan_reactions(practices):
@@ -1079,7 +987,7 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
 
     ending_group = []
     attendance = (
-        _combined_attendance_sentence(ordered, plain=False) if active else None
+        _combined_attendance_sentence(ordered) if active else None
     )
     if attendance:
         ending_group.append(_rsvp_context_block(
@@ -1098,8 +1006,36 @@ def build_combined_lift_blocks(practices, *, announcement_notice=None):
     )
 
 
-def build_combined_fallback_text(practices, *, announcement_notice=None):
-    """Build complete notification text for every combined session."""
+def _combined_fallback_when(practices, today):
+    locations = {_fallback_location(practice) for practice in practices}
+    shared_location = locations.pop() if len(locations) == 1 else None
+
+    def at(practice):
+        location = _fallback_location(practice)
+        return f" at {location}" if location and shared_location is None else ""
+
+    if _all_sessions_same_date(practices):
+        meridiems = {practice.date.strftime("%p") for practice in practices}
+        compact = shared_location is not None and len(meridiems) == 1
+        times = [
+            practice.date.strftime("%-I:%M") if compact
+            else _fallback_time(practice.date) + at(practice)
+            for practice in practices
+        ]
+        when = f"{_fallback_day(practices[0].date, today)} {_join_with_or(times)}"
+        if compact:
+            when += f" {meridiems.pop()}"
+    else:
+        when = _join_with_or([
+            f"{_fallback_day(practice.date, today, first=index == 0)} "
+            f"{_fallback_time(practice.date)}{at(practice)}"
+            for index, practice in enumerate(practices)
+        ])
+    return when + (f" at {shared_location}" if shared_location else "")
+
+
+def build_combined_fallback_text(practices, *, announcement_notice=None, today=None):
+    """Build the push-notification text for a combined Strength root."""
     ordered = sorted(practices, key=lambda item: (item.date, item.id))
     if not ordered:
         return guard_fallback_text(
@@ -1108,140 +1044,13 @@ def build_combined_fallback_text(practices, *, announcement_notice=None):
         )
     if any(not item.slack_session_emoji for item in ordered):
         raise ValueError("Combined builders require persisted session reactions")
-    lines = [f"Strength practices · {_combined_date_label(ordered)}."]
-    if announcement_notice:
-        lines.append(truncate_slack_text(
-            announcement_notice,
-            _COMBINED_FALLBACK_NOTICE_MAX,
-            field="announcement_notice",
-            surface="combined_practice_fallback",
-            practice_id=ordered[0].id,
-        ))
-    for practice in ordered:
-        location = truncate_slack_text(
-            practice.location.name if practice.location else "TBD",
-            _COMBINED_FALLBACK_LOCATION_MAX,
-            field="location_name",
-            surface="combined_practice_fallback",
-            practice_id=practice.id,
-        )
-        if _is_cancelled(practice):
-            reason = truncate_slack_text(
-                practice.cancellation_reason or "Cancelled",
-                _COMBINED_FALLBACK_REASON_MAX,
-                field="cancellation_reason",
-                surface="combined_practice_fallback",
-                practice_id=practice.id,
-            )
-            status = f"CANCELLED: {reason}"
-        else:
-            status = "Active"
-        lines.append(
-            f"{practice.date.strftime('%A, %B %-d at %-I:%M %p')}; "
-            f"{status}; {location}."
-        )
-    representative = ordered[0]
-    same_workout, shared_workout = _same_normalized_text(
-        ordered,
-        lambda item: str(item.workout_description or "").strip()
-        or _WORKOUT_PLACEHOLDER,
-    )
-    if same_workout:
-        workout = truncate_slack_text(
-            shared_workout,
-            _COMBINED_FALLBACK_SHARED_WORKOUT_MAX,
-            field="workout_description",
-            surface="combined_practice_fallback",
-            practice_id=representative.id,
-        )
-        lines.append(f"Workout: {workout}")
-    else:
-        for practice in ordered:
-            workout = truncate_slack_text(
-                str(practice.workout_description or "").strip()
-                or _WORKOUT_PLACEHOLDER,
-                _COMBINED_FALLBACK_SESSION_WORKOUT_MAX,
-                field="workout_description",
-                surface="combined_practice_fallback",
-                practice_id=practice.id,
-            )
-            lines.append(
-                f"{practice.date.strftime('%A at %-I:%M %p')} workout: "
-                f"{workout}"
-            )
-    same_notes, shared_notes = _same_normalized_text(
-        ordered, lambda item: str(item.logistics_notes or "").strip()
-    )
-    if same_notes and shared_notes:
-        notes = truncate_slack_text(
-            shared_notes,
-            _COMBINED_FALLBACK_SHARED_NOTES_MAX,
-            field="logistics_notes",
-            surface="combined_practice_fallback",
-            practice_id=representative.id,
-        )
-        lines.append(f"Notes: {notes}")
-    elif not same_notes:
-        for practice in ordered:
-            notes = str(practice.logistics_notes or "").strip()
-            if not notes:
-                continue
-            notes = truncate_slack_text(
-                notes,
-                _COMBINED_FALLBACK_SESSION_NOTES_MAX,
-                field="logistics_notes",
-                surface="combined_practice_fallback",
-                practice_id=practice.id,
-            )
-            lines.append(
-                f"{practice.date.strftime('%A at %-I:%M %p')} notes: {notes}"
-            )
-    same_social, _shared_social = _same_value(ordered, _social_value)
-    social_rows = [representative] if same_social else ordered
-    for practice in social_rows:
-        if not practice.has_social:
-            continue
-        social = getattr(practice, "social_location", None)
-        social_name = str(getattr(social, "name", None) or "").strip()
-        social_limit = (
-            _COMBINED_FALLBACK_SHARED_SOCIAL_MAX
-            if same_social else _COMBINED_FALLBACK_SESSION_SOCIAL_MAX
-        )
-        if social_name:
-            social_name = truncate_slack_text(
-                social_name,
-                social_limit,
-                field="social_location_name",
-                surface="combined_practice_fallback",
-                practice_id=practice.id,
-            )
-            social_text = f"Social after at {social_name}."
-        else:
-            social_text = "Social after practice."
-        if same_social:
-            lines.append(social_text)
-        else:
-            lines.append(
-                f"{practice.date.strftime('%A at %-I:%M %p')} {social_text}"
-            )
-    attendance = _combined_attendance_sentence(ordered, plain=True)
-    if not attendance:
-        return guard_fallback_text(
-            plainify_fallback_fragment(" ".join(lines)),
-            surface="combined_practice_announcement",
-            practice_id=representative.id,
-        )
-
-    tail_parts = [attendance]
-    supplemental = format_supplemental_reaction_fallback(
-        _shared_plan_reactions(ordered)
-    )
-    if supplemental:
-        tail_parts.append(supplemental)
-    tail_parts.append(_FALLBACK_RUNNING_LATE)
-    return _fallback_with_reserved_tail(
-        lines,
-        " ".join(tail_parts),
+    today = today or today_central()
+    active = [practice for practice in ordered if not _is_cancelled(practice)]
+    shown = active or ordered
+    kinds = dict.fromkeys(filter(None, map(_fallback_kind, shown)))
+    return _notification_text(
+        [_combined_fallback_when(shown, today), " or ".join(kinds)],
+        rsvp=_COMBINED_FALLBACK_RSVP if active else None,
         surface="combined_practice_announcement",
-        practice_id=representative.id,
+        practice_id=ordered[0].id,
     )

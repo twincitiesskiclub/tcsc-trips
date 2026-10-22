@@ -307,15 +307,10 @@ def test_multiple_ordinary_alerts_share_one_section_without_copy_changes(
         if block.get("type") == "section"
         and "⚠️" in block.get("text", {}).get("text", "")
     ]
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
-
     assert len(alert_sections) == 1
     assert "⚠️ Heat Advisory\n⚠️ Air Quality Alert" in (
         alert_sections[0]["text"]["text"]
     )
-    assert "⚠️ Heat Advisory ⚠️ Air Quality Alert" in fallback
     assert "more active alerts" not in rendered_text(blocks)
 
 
@@ -697,185 +692,7 @@ def test_details_has_no_em_dash(practice_info, conditions):
     assert "—" not in blob and "–" not in blob
 
 
-def test_standalone_fallback_has_exact_plain_rsvp_tail(
-    practice_info, conditions
-):
-    practice_info.plan_reactions = [
-        {"emoji": "hatching_chick", "label": "new rollerskier"},
-        {
-            "emoji": "older_adult::skin-tone-4",
-            "label": "experienced rollerskier",
-        },
-        {"emoji": "athletic_shoe", "label": "runner"},
-    ]
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
-    assert fallback.endswith(
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Additional reactions: hatching chick for new rollerskier; "
-        "older adult, skin tone 4 for experienced rollerskier; "
-        "athletic shoe for runner. Running late? Reply in the thread."
-    )
-    assert "<!channel>" not in fallback
-    assert ":hatching_chick:" not in fallback
-
-
-def test_standalone_fallback_without_supplement_has_exact_plain_tail(
-    practice_info, conditions
-):
-    practice_info.plan_reactions = []
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
-    assert fallback.endswith(
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Running late? Reply in the thread."
-    )
-
-
-def test_standalone_fallback_plainifies_authored_slack_control_tokens(
-    practice_info, conditions
-):
-    authored = "support <!channel> :wave:"
-    practice_info.location.name = authored
-    practice_info.workout_description = authored
-    practice_info.logistics_notes = authored
-    practice_info.social_location.name = authored
-    practice_info.plan_reactions = [{
-        "emoji": "evergreen_tree",
-        "label": authored,
-    }]
-
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        conditions,
-        announcement_notice=authored,
-    )
-
-    assert "<!channel>" not in fallback
-    assert ":wave:" not in fallback
-    assert "support" in fallback
-    assert practice_info.plan_reactions[0]["label"] == authored
-    assert practice_info.workout_description == authored
-
-
-def test_standalone_fallback_plainification_is_total_for_long_colon_tokens(
-    practice_info, conditions
-):
-    token = ":" + ("a" * 81) + ":"
-    practice_info.workout_description = f"Workout {token}"
-
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        conditions,
-    )
-
-    assert token not in fallback
-    assert "a" * 81 in fallback
-    assert practice_info.workout_description == f"Workout {token}"
-
-
-def test_reserved_fallback_helper_never_truncates_required_tail():
-    tail = (
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Running late? Reply in the thread."
-    )
-    fallback = announcement_blocks._fallback_with_reserved_tail(
-        ["body " * 2_000],
-        tail,
-        surface="practice_announcement",
-        practice_id=42,
-    )
-    assert len(fallback) <= FALLBACK_TEXT_MAX
-    assert fallback.endswith(tail)
-
-
-def test_announcement_fallback_covers_hero_and_omits_routine_details(
-    practice_info, conditions
-):
-    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
-    alert = SimpleNamespace(headline="Heat Advisory", event="Heat Advisory")
-    conditions = replace(conditions, weather=_weather(alerts=[alert]))
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        conditions,
-        announcement_notice="📍 Location changed",
-    )
-    assert "Monday, July 13 at 6:00 PM at Theodore Wirth." in fallback
-    assert "Workout: 5 x 4min @ threshold, 2min easy between." in fallback
-    assert "📍 Location changed" in fallback
-    assert "Heat Advisory" in fallback
-    assert fallback.endswith(
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Additional reaction: evergreen tree for Endurance instead of intervals. "
-        "Running late? Reply in the thread."
-    )
-    assert "Parking" not in fallback
-    assert "Wind" not in fallback
-    assert "Trails" not in fallback
-
-
-def test_announcement_fallback_normal_copy_includes_root_only_member_content(
-    practice_info, empty_conditions
-):
-    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
-
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        empty_conditions,
-    )
-
-    assert fallback == (
-        "Status: Scheduled. "
-        "Monday, July 13 at 6:00 PM at Theodore Wirth. "
-        "Workout: 5 x 4min @ threshold, 2min easy between. "
-        "Notes: Meet at the flagpole. "
-        "Social after at Utepils Brewing. "
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Additional reaction: evergreen tree for Endurance instead of intervals. "
-        "Running late? Reply in the thread."
-    )
-
-
-def test_announcement_fallback_names_generic_social_when_destination_is_missing(
-    practice_info, empty_conditions
-):
-    practice_info.social_location = None
-
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        empty_conditions,
-    )
-
-    assert "Social after practice." in fallback
-
-
-def test_long_root_content_cannot_remove_social_rsvp_or_supplement(
-    practice_info, empty_conditions
-):
-    practice_info.workout_description = "Workout start " + ("w" * 2_500)
-    practice_info.logistics_notes = "Notes start " + ("n" * 2_500)
-    practice_info.social_location.name = "Social destination " + ("s" * 2_500)
-    practice_info.plan_reactions = [EVERGREEN_PLAN_REACTION]
-
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        empty_conditions,
-    )
-
-    assert "Workout start" in fallback
-    assert "Notes start" in fallback
-    assert "Social after at Social destination" in fallback
-    assert fallback.endswith(
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Additional reaction: evergreen tree for Endurance instead of intervals. "
-        "Running late? Reply in the thread."
-    )
-    assert len(fallback) <= FALLBACK_TEXT_MAX
-
-
-def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
+def test_many_long_alerts_stay_within_block_limits(
     practice_info, empty_conditions
 ):
     practice_info.workout_description = "w" * 2_500
@@ -888,11 +705,6 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
     ]
     conditions = replace(empty_conditions, weather=_weather(alerts=alerts))
 
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info,
-        conditions,
-        announcement_notice="m" * 2_500,
-    )
     blocks = build_practice_announcement_blocks(
         practice_info,
         conditions,
@@ -900,15 +712,6 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
     )
     text = rendered_text(blocks)
 
-    assert "Notes:" in fallback
-    assert "Social after at" in fallback
-    assert fallback.endswith(
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Additional reaction: evergreen tree for Endurance instead of intervals. "
-        "Running late? Reply in the thread."
-    )
-    assert "+980 more active alerts" in fallback
-    assert len(fallback) <= FALLBACK_TEXT_MAX
     assert len(blocks) <= BLOCKS_MAX
     assert "+980 more active alerts" in text
     for required in (
@@ -925,38 +728,14 @@ def test_many_long_alerts_cannot_exhaust_the_reserved_fallback_tail(
         assert required in text
 
 
-def test_announcement_fallback_includes_plain_practice_status(
-    practice_info, conditions
-):
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
-    assert "Status: Scheduled." in fallback
-    assert "Monday, July 13 at 6:00 PM at Theodore Wirth." in fallback
-
-
-def test_announcement_fallback_uses_missing_workout_placeholder(
-    practice_info, conditions
-):
-    practice_info.workout_description = None
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
-    assert "Workout: Workout details coming soon." in fallback
-
-
-def test_whitespace_only_workout_uses_placeholder_in_hero_and_fallback(
+def test_whitespace_only_workout_uses_placeholder_in_hero(
     practice_info, conditions
 ):
     practice_info.workout_description = " \n\t "
     hero = rendered_text(
         build_practice_announcement_blocks(practice_info, conditions)
     )
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
     assert "Workout details coming soon." in hero
-    assert "Workout: Workout details coming soon." in fallback
 
 
 def test_long_alerts_cannot_remove_later_hero_promotions(
@@ -982,26 +761,7 @@ def test_long_alerts_cannot_remove_later_hero_promotions(
     _assert_urgent_precedes_location_and_workout(blocks, "Headlamp required")
 
 
-def test_long_standalone_content_preserves_complete_required_tail(
-    practice_info, conditions
-):
-    practice_info.workout_description = "w" * 10_000
-    practice_info.logistics_notes = "n" * 10_000
-    practice_info.plan_reactions = [
-        {"emoji": "evergreen_tree", "label": "Endurance instead"}
-    ]
-    fallback = announcement_blocks.build_practice_fallback_text(
-        practice_info, conditions
-    )
-    assert fallback.endswith(
-        "RSVP with the white check mark reaction so we'll know you'll be there. "
-        "Additional reaction: evergreen tree for Endurance instead. "
-        "Running late? Reply in the thread."
-    )
-    assert len(fallback) <= FALLBACK_TEXT_MAX
-
-
-def test_configured_duration_variance_controls_fallback_headlamp(
+def test_configured_duration_variance_controls_headlamp(
     practice_info, conditions
 ):
     sunset = daylight_for(practice_info.date, 19, 30)
@@ -1019,11 +779,11 @@ def test_configured_duration_variance_controls_fallback_headlamp(
         daylight=sunset,
         duration_minutes=120,
     )
-    assert "Headlamp required" not in announcement_blocks.build_practice_fallback_text(
-        practice_info, short_conditions
+    assert "Headlamp required" not in rendered_text(
+        build_practice_announcement_blocks(practice_info, short_conditions)
     )
-    assert "Headlamp required" in announcement_blocks.build_practice_fallback_text(
-        practice_info, long_conditions
+    assert "Headlamp required" in rendered_text(
+        build_practice_announcement_blocks(practice_info, long_conditions)
     )
 
 
@@ -1114,7 +874,7 @@ def test_empty_details_fallback_contains_only_the_practice_date(
 
 
 def test_fallbacks_are_guarded(practice_info, empty_conditions):
-    practice_info.workout_description = "w" * 10_000
+    practice_info.location.name = "w" * 10_000
     announcement = announcement_blocks.build_practice_fallback_text(
         practice_info, empty_conditions
     )

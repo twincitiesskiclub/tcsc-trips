@@ -1294,7 +1294,7 @@ class TestPostPracticeAnnouncementWiring:
             call(channel="CTEST", timestamp="1111.0001", name="evergreen_tree"),
         ]
         posted = client.chat_postMessage.call_args.kwargs
-        assert "evergreen tree for Endurance" in posted["text"]
+        assert ":evergreen_tree:" in str(posted["blocks"])
         assert "Legacy reserved value" not in str(posted)
         assert practice_info.plan_reactions == practice.plan_reactions
 
@@ -1416,7 +1416,7 @@ class TestUpdatePracticeAnnouncementWiring:
             channel="CTEST", timestamp="1234.5678", name="evergreen_tree"
         )
         updated = client.chat_update.call_args.kwargs
-        assert "evergreen tree for Endurance" in updated["text"]
+        assert ":evergreen_tree:" in str(updated["blocks"])
         assert "Legacy reserved value" not in str(updated)
         assert practice_info.plan_reactions == practice.plan_reactions
 

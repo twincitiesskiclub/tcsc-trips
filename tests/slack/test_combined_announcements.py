@@ -17,7 +17,6 @@ from app.slack.client import (
     assign_combined_session_emojis,
     get_lead_confirmation_emoji_for_practice,
 )
-from app.slack.blocks.text import FALLBACK_TEXT_MAX
 
 
 @pytest.fixture
@@ -203,7 +202,7 @@ def test_cancelled_sibling_stays_visible_but_leaves_cross_day_mapping():
     assert ":seven: for" not in _combined_rsvp_text(blocks)
 
 
-def test_long_cancellation_reason_preserves_lead_and_every_fallback_session():
+def test_long_cancellation_reason_preserves_lead():
     cancelled = combined_practice(
         1,
         14,
@@ -224,21 +223,9 @@ def test_long_cancellation_reason_preserves_lead_and_every_fallback_session():
     ]
 
     text = rendered_text(build_combined_lift_blocks(practices))
-    fallback = build_combined_fallback_text(practices)
 
     assert "CANCELLED" in text
     assert "Coach <@UCOACH>" in text
-    for value in (
-        "Tuesday, July 14 at 6:15 PM",
-        "CANCELLED",
-        "Balance Fitness",
-        "Wednesday, July 15 at 7:15 PM",
-        "Active",
-        "Thursday, July 16 at 8:15 PM",
-        "seven for Wed at 7:15 PM",
-        "eight for Thu at 8:15 PM",
-    ):
-        assert value in fallback
 
 
 def test_one_displayed_session_keeps_combined_reaction_grammar():
@@ -388,45 +375,12 @@ def test_whitespace_only_shared_content_differences_stay_compact():
     )
 
     text = rendered_text(build_combined_lift_blocks([first, second]))
-    fallback = build_combined_fallback_text([first, second])
-
     assert text.count("Workout · Strength") == 1
     assert "3 x 8   strength circuit" in text
     assert text.count("Notes*") == 1
     assert "Bring   indoor shoes" in text
     assert text.count("Social after at") == 1
     assert "Social after at Cafe  A" in text
-    assert "Wednesday at 7:15 PM workout" not in fallback
-    assert "Workout: 3 x 8   strength circuit" in fallback
-
-
-def test_combined_fallback_uses_plain_active_mapping_and_complete_tail():
-    plan = [{"emoji": "hatching_chick", "label": "first strength support"}]
-    practices = [
-        combined_practice(1, 14, 18, "six", plan=plan),
-        combined_practice(2, 15, 19, "seven", plan=plan),
-    ]
-    fallback = build_combined_fallback_text(practices)
-    assert fallback.endswith(
-        "RSVP with six for Tue at 6:15 PM or seven for Wed at 7:15 PM "
-        "so we'll know you'll be there. Additional reaction: hatching chick "
-        "for first strength support. Running late? Reply in the thread."
-    )
-    assert "session :six:" not in fallback
-    assert "<!channel>" not in fallback
-
-
-def test_same_day_combined_fallback_uses_time_only_mapping():
-    practices = [
-        combined_practice(1, 14, 18, "six", minute=5),
-        combined_practice(2, 14, 19, "seven", minute=20),
-    ]
-    fallback = build_combined_fallback_text(practices)
-    assert fallback.endswith(
-        "RSVP with six for 6:05 PM or seven for 7:20 PM "
-        "so we'll know you'll be there. Running late? Reply in the thread."
-    )
-    assert "six for Tue" not in fallback
 
 
 def test_combined_fallback_plainifies_authored_slack_control_tokens():
@@ -466,56 +420,6 @@ def test_combined_fallback_plainifies_authored_slack_control_tokens():
     assert "support" in fallback
     assert active.plan_reactions[0]["label"] == authored
     assert cancelled.cancellation_reason == authored
-
-
-def test_combined_fallback_plainification_is_total_for_long_colon_tokens():
-    token = ":" + ("a" * 81) + ":"
-    practices = [
-        combined_practice(1, 14, 18, "six", workout=f"Workout {token}"),
-        combined_practice(2, 15, 19, "seven", workout=f"Workout {token}"),
-    ]
-
-    fallback = build_combined_fallback_text(practices)
-
-    assert token not in fallback
-    assert "a" * 81 in fallback
-    assert practices[0].workout_description == f"Workout {token}"
-
-
-def test_mixed_cancelled_fallback_maps_only_active_session():
-    practices = [
-        combined_practice(1, 14, 18, "six"),
-        combined_practice(
-            2,
-            15,
-            19,
-            "seven",
-            status=PracticeStatus.CANCELLED,
-            reason="Facility closed",
-        ),
-    ]
-    fallback = build_combined_fallback_text(practices)
-    assert "CANCELLED: Facility closed" in fallback
-    assert fallback.endswith(
-        "RSVP with six for Tue at 6:15 PM so we'll know you'll be there. "
-        "Running late? Reply in the thread."
-    )
-    assert "seven for" not in fallback
-
-
-def test_long_combined_content_preserves_complete_required_tail():
-    plan = [{"emoji": "evergreen_tree", "label": "endurance"}]
-    practices = [
-        combined_practice(1, 14, 18, "six", workout="w" * 10_000, plan=plan),
-        combined_practice(2, 15, 19, "seven", notes="n" * 10_000, plan=plan),
-    ]
-    fallback = build_combined_fallback_text(practices)
-    assert fallback.endswith(
-        "RSVP with six for Tue at 6:15 PM or seven for Wed at 7:15 PM "
-        "so we'll know you'll be there. Additional reaction: evergreen tree "
-        "for endurance. Running late? Reply in the thread."
-    )
-    assert len(fallback) <= FALLBACK_TEXT_MAX
 
 
 def test_different_plan_snapshots_hide_shared_plan_legend():
@@ -1430,7 +1334,7 @@ def test_malformed_plan_rows_do_not_block_combined_reaction_lifecycle(
     } == expected_removed
     rendered = client.chat_update.call_args.kwargs
     if any(status != PracticeStatus.CANCELLED for status in statuses):
-        assert "evergreen tree for Endurance" in rendered["text"]
+        assert ":evergreen_tree:" in str(rendered["blocks"])
     assert "Legacy reserved value" not in str(rendered)
     assert "reserved for attendance" in caplog.text
 
