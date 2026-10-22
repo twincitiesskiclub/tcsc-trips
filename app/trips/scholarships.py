@@ -4,14 +4,19 @@ from datetime import datetime
 
 from flask import current_app
 
-from app.models import db, Trip
+from app.constants import UserStatus
+from app.models import db, Season, Trip, User
 from app.slack.blocks.trips import (
     build_scholarship_offer_blocks, build_scholarship_revealed_blocks,
     scholarship_offer_fallback, scholarship_revealed_fallback,
 )
 from app.slack.client import get_slack_client
-from app.trips.models import TripRegistrationStatus, TripScholarship
+from app.slack.trips import base_url
+from app.trips.models import (
+    TripRegistration, TripRegistrationStatus, TripScholarship,
+)
 from app.trips.service import PENDING_HOLD_WINDOW
+from app.utils import format_datetime_central
 
 CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"  # no 0/O/1/I/L
 CODE_LENGTH = 6
@@ -51,9 +56,25 @@ MISMATCH_ERROR = "That code doesn't match this member."
 MINIMUM_CHARGE_CENTS = 50  # Stripe's smallest USD charge
 
 
+def normalize_code(raw_code):
+    """Canonical TCSC-XXXXXX from what a member typed, or "" if blank.
+
+    Members copy codes from Slack or type them on a phone, so spaces, a
+    missing or mangled dash, and a missing TCSC prefix are all accepted.
+    """
+    if not isinstance(raw_code, str):
+        return ""
+    chars = "".join(ch for ch in raw_code.upper() if ch.isascii() and ch.isalnum())
+    if len(chars) == 4 + CODE_LENGTH and chars.startswith("TCSC"):
+        chars = chars[4:]
+    if not chars:
+        return ""
+    return f"TCSC-{chars}" if len(chars) == CODE_LENGTH else chars
+
+
 def resolve_code(user, trip, raw_code):
     """Return (scholarship, None), (None, error), or (None, None) if blank."""
-    code = (raw_code or "").strip().upper() if isinstance(raw_code, str) else ""
+    code = normalize_code(raw_code)
     if not code:
         return None, None
     scholarship = TripScholarship.query.filter_by(code=code).first()
@@ -78,11 +99,10 @@ def _slack_uid(user):
 def open_trips(now=None):
     """Trips taking registrations right now, soonest close first."""
     now = now or datetime.utcnow()
-    trips = Trip.query.filter(
+    return Trip.query.filter(
         Trip.status == "active", Trip.series_id.isnot(None),
         Trip.signup_start <= now, Trip.signup_end >= now,
     ).order_by(Trip.signup_end).all()
-    return trips
 
 
 def send_scholarship_dm(scholarship):
@@ -113,7 +133,6 @@ def send_scholarship_dm(scholarship):
 
 def reveal(scholarship_id, slack_uid, now=None):
     """Blocks showing the code to its member, or None for anyone else."""
-    from app.slack.trips import base_url
     scholarship = db.session.get(TripScholarship, scholarship_id)
     if scholarship is None or _slack_uid(scholarship.user) != slack_uid:
         return None
@@ -149,11 +168,6 @@ def handle_reveal_click(body, action, client):
 
 def issue_scholarships(user_ids, amount_cents):
     """Create and DM one scholarship per member; one result dict per id."""
-    from sqlalchemy.exc import IntegrityError
-
-    from app.constants import UserStatus
-    from app.models import Season, User
-
     season = Season.get_current()
     if season is None:
         raise ValueError("No current season.")
@@ -170,20 +184,10 @@ def issue_scholarships(user_ids, amount_cents):
                 user_id=user.id, season_id=season.id).first():
             results.append(dict(result, status="already_has_one"))
             continue
-        scholarship = None
-        for _ in range(5):  # a code collision is the only expected failure
-            try:
-                with db.session.begin_nested():
-                    scholarship = TripScholarship(
-                        user_id=user.id, season_id=season.id,
-                        amount_cents=amount_cents, code=generate_code())
-                    db.session.add(scholarship)
-                break
-            except IntegrityError:
-                scholarship = None
-        if scholarship is None:
-            results.append(dict(result, status="send_failed"))
-            continue
+        scholarship = TripScholarship(
+            user_id=user.id, season_id=season.id,
+            amount_cents=amount_cents, code=generate_code())
+        db.session.add(scholarship)
         db.session.commit()
         if _slack_uid(user) is None:
             status = "no_slack"
@@ -196,9 +200,6 @@ def issue_scholarships(user_ids, amount_cents):
 
 
 def scholarship_rows(season):
-    from app.models import User
-    from app.utils import format_datetime_central
-
     def when(dt):
         return format_datetime_central(dt, "%b %-d, %-I:%M %p") if dt else ""
 
@@ -230,9 +231,6 @@ def link_registrations(registration_ids, dry_run=True):
     alone so the row keeps matching its Stripe hold; the $ comes back as a
     refund after capture.
     """
-    from app.models import Season
-    from app.trips.models import TripRegistration
-
     season = Season.get_current()
     lines = []
     for registration_id in registration_ids:

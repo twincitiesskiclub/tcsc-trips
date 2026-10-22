@@ -495,3 +495,19 @@ def test_retry_with_code_on_same_trip_is_allowed(db_session, current_season):
     assert second.id == first.id
     assert second.scholarship_id == scholarship.id
     assert second.amount_cents == 1000
+
+
+@pytest.mark.parametrize("typed", [
+    "tcsc abc234", "TCSC—ABC234", "tcscabc234", "abc234", " ABC234 ",
+])
+def test_code_accepts_loose_formats(db_session, current_season, typed):
+    from app.trips.models import TripScholarship
+    _, trip = _other_trip()
+    user = _member()
+    scholarship = TripScholarship(user_id=user.id, season_id=current_season.id,
+                                  code="TCSC-ABC234")
+    db.session.add(scholarship)
+    db.session.flush()
+    registration, _ = service.create_registration(
+        trip, _payload(scholarship_code=typed))
+    assert registration.scholarship_id == scholarship.id

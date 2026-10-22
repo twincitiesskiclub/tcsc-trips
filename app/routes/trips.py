@@ -109,7 +109,13 @@ def register_for_trip(slug):
                 "Could not retrieve previous trip intent %s", previous_intent_id, exc_info=True)
         else:
             if previous_intent.status in ('requires_capture', 'succeeded', 'processing'):
+                # The earlier hold stands, so the row must describe it, not
+                # this attempt's price and scholarship code.
+                metadata = previous_intent.metadata or {}
                 registration.payment_intent_id = previous_intent_id
+                registration.amount_cents = previous_intent.amount
+                registration.scholarship_id = (
+                    int(metadata.get('scholarship_id') or 0) or None)
                 _transition_trip_registration(previous_intent, TripRegistrationStatus.PENDING)
                 return json_error({'email': "You're already signed up for this trip."})
             try:

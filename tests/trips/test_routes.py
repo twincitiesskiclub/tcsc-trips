@@ -381,3 +381,61 @@ def test_register_without_code_has_no_scholarship_metadata(
     response = client.post("/test-trip-routes/register", json=_payload())
     assert response.status_code == 200
     assert "scholarship_id" not in create_intent.call_args.kwargs["metadata"]
+
+
+def _authorized_previous(registration_id, amount, scholarship_id=None):
+    metadata = {"payment_type": "trip", "registration_id": str(registration_id)}
+    if scholarship_id:
+        metadata["scholarship_id"] = str(scholarship_id)
+    return SimpleNamespace(id="pi_previous", client_secret="cs_prev",
+                           amount=amount, status="requires_capture",
+                           metadata=metadata)
+
+
+def _code_for(user, season, code="TCSC-ABC234"):
+    from app.trips.models import TripScholarship
+    scholarship = TripScholarship(user_id=user.id, season_id=season.id,
+                                  code=code)
+    db.session.add(scholarship)
+    db.session.commit()
+    return scholarship
+
+
+@patch("app.routes.payments.trip_slack")
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_recovered_hold_keeps_its_discount_when_retry_omits_code(
+        retrieve_intent, create_intent, trip_slack, client, public_trip,
+        current_season):
+    _, trip, user = public_trip
+    scholarship = _code_for(user, current_season)
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _authorized_previous(
+        registration.id, 50, scholarship.id)
+
+    response = client.post("/test-trip-routes/register", json=_payload())
+
+    assert response.status_code == 400
+    db.session.expire_all()
+    assert registration.amount_cents == 50
+    assert registration.scholarship_id == scholarship.id
+
+
+@patch("app.routes.payments.trip_slack")
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+@patch("app.routes.trips.stripe.PaymentIntent.retrieve")
+def test_recovered_full_price_hold_does_not_take_a_late_code(
+        retrieve_intent, create_intent, trip_slack, client, public_trip,
+        current_season):
+    _, trip, user = public_trip
+    _code_for(user, current_season)
+    registration = _pending_registration(public_trip)
+    retrieve_intent.return_value = _authorized_previous(registration.id, 10000)
+
+    response = client.post("/test-trip-routes/register",
+                           json=dict(_payload(), scholarship_code="TCSC-ABC234"))
+
+    assert response.status_code == 400
+    db.session.expire_all()
+    assert registration.amount_cents == 10000
+    assert registration.scholarship_id is None
