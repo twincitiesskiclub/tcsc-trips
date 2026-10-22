@@ -334,3 +334,164 @@ def test_disabled_carpool_followup_preserves_profile(db_session, key, field, pre
     db.session.commit()
     db.session.expire_all()
     assert getattr(user.trip_profile, field) == previous
+
+
+# --- scholarship codes ------------------------------------------------------
+
+def _scholarship(user, season):
+    from app.trips.models import TripScholarship
+    from app.trips.scholarships import generate_code
+    scholarship = TripScholarship(
+        user_id=user.id, season_id=season.id, code=generate_code())
+    db.session.add(scholarship)
+    db.session.flush()
+    return scholarship
+
+
+def _hold(trip, user, scholarship, status=TripRegistrationStatus.PENDING,
+          **overrides):
+    fields = dict(trip_id=trip.id, user_id=user.id, status=status,
+                  price_tier="low", amount_cents=trip.price_low,
+                  answers={}, scholarship_id=scholarship.id)
+    fields.update(overrides)
+    registration = TripRegistration(**fields)
+    db.session.add(registration)
+    db.session.flush()
+    return registration
+
+
+def _other_trip():
+    series = _series("test-trip-service")
+    return series, _edition(series, name="Hayward Training Trip",
+                            price_low=11000, price_high=13000)
+
+
+def test_code_discounts_low_tier(db_session, current_season):
+    _, trip = _other_trip()
+    scholarship = _scholarship(_member(), current_season)
+    registration, _ = service.create_registration(
+        trip, _payload(scholarship_code=scholarship.code))
+    assert registration.amount_cents == 1000
+    assert registration.scholarship_id == scholarship.id
+
+
+def test_code_discounts_high_tier(db_session, current_season):
+    _, trip = _other_trip()
+    scholarship = _scholarship(_member(), current_season)
+    registration, _ = service.create_registration(
+        trip, _payload(price_tier="high", scholarship_code=scholarship.code))
+    assert registration.amount_cents == 3000
+
+
+def test_discount_floors_at_50_cents(db_session, current_season):
+    series = _series()
+    trip = _edition(series, price_low=9000)
+    scholarship = _scholarship(_member(), current_season)
+    registration, _ = service.create_registration(
+        trip, _payload(scholarship_code=scholarship.code))
+    assert registration.amount_cents == 50
+
+
+def test_code_is_case_and_space_insensitive(db_session, current_season):
+    _, trip = _other_trip()
+    scholarship = _scholarship(_member(), current_season)
+    registration, _ = service.create_registration(
+        trip, _payload(scholarship_code=" " + scholarship.code.lower() + " "))
+    assert registration.scholarship_id == scholarship.id
+
+
+def test_no_code_charges_full_price(db_session, current_season):
+    _, trip = _other_trip()
+    _scholarship(_member(), current_season)
+    registration, _ = service.create_registration(
+        trip, _payload(scholarship_code=""))
+    assert registration.amount_cents == 11000
+    assert registration.scholarship_id is None
+
+
+def test_unknown_code_rejected(db_session, current_season):
+    _, trip = _other_trip()
+    _member()
+    with pytest.raises(service.TripRegistrationError) as exc:
+        service.create_registration(
+            trip, _payload(scholarship_code="TCSC-ZZZZZZ"))
+    assert exc.value.errors["scholarship_code"] == (
+        "That code doesn't match this member.")
+
+
+def test_other_members_code_rejected(db_session, current_season):
+    _, trip = _other_trip()
+    _member()
+    other = _member("trip-second@example.com")
+    scholarship = _scholarship(other, current_season)
+    with pytest.raises(service.TripRegistrationError) as exc:
+        service.create_registration(
+            trip, _payload(scholarship_code=scholarship.code))
+    assert exc.value.errors["scholarship_code"] == (
+        "That code doesn't match this member.")
+
+
+def test_code_held_on_other_trip_rejected(db_session, current_season):
+    series = _series()
+    trip_a = _edition(series, name="Houghton 50KUM")
+    trip_b = _edition(series, slug="test-trip-service-2028",
+                      name="Hayward Training Trip")
+    user = _member()
+    scholarship = _scholarship(user, current_season)
+    _hold(trip_a, user, scholarship)
+    with pytest.raises(service.TripRegistrationError) as exc:
+        service.create_registration(
+            trip_b, _payload(scholarship_code=scholarship.code))
+    assert exc.value.errors["scholarship_code"] == (
+        "This code is already in use on Houghton 50KUM.")
+
+
+def test_code_freed_after_cancel(db_session, current_season):
+    series = _series()
+    trip_a = _edition(series, name="Houghton 50KUM")
+    trip_b = _edition(series, slug="test-trip-service-2028",
+                      name="Hayward Training Trip")
+    user = _member()
+    scholarship = _scholarship(user, current_season)
+    _hold(trip_a, user, scholarship, status=TripRegistrationStatus.CANCELLED)
+    registration, _ = service.create_registration(
+        trip_b, _payload(scholarship_code=scholarship.code))
+    assert registration.scholarship_id == scholarship.id
+
+
+def test_stale_pending_payment_does_not_hold_code(db_session, current_season):
+    series = _series()
+    trip_a = _edition(series, name="Houghton 50KUM")
+    trip_b = _edition(series, slug="test-trip-service-2028",
+                      name="Hayward Training Trip")
+    user = _member()
+    scholarship = _scholarship(user, current_season)
+    _hold(trip_a, user, scholarship,
+          status=TripRegistrationStatus.PENDING_PAYMENT,
+          created_at=datetime.utcnow() - timedelta(hours=2))
+    registration, _ = service.create_registration(
+        trip_b, _payload(scholarship_code=scholarship.code))
+    assert registration.scholarship_id == scholarship.id
+
+
+def test_retry_without_code_clears_link(db_session, current_season):
+    _, trip = _other_trip()
+    scholarship = _scholarship(_member(), current_season)
+    first, _ = service.create_registration(
+        trip, _payload(scholarship_code=scholarship.code))
+    second, _ = service.create_registration(trip, _payload())
+    assert second.id == first.id
+    assert second.scholarship_id is None
+    assert second.amount_cents == 11000
+
+
+def test_retry_with_code_on_same_trip_is_allowed(db_session, current_season):
+    _, trip = _other_trip()
+    scholarship = _scholarship(_member(), current_season)
+    first, _ = service.create_registration(
+        trip, _payload(scholarship_code=scholarship.code))
+    second, _ = service.create_registration(
+        trip, _payload(scholarship_code=scholarship.code))
+    assert second.id == first.id
+    assert second.scholarship_id == scholarship.id
+    assert second.amount_cents == 1000

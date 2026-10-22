@@ -354,3 +354,30 @@ def test_no_enabled_questions_omits_survey_and_progress_step(client, public_trip
     assert 'id="trip-questions"' not in html
     assert 'href="#trip-questions"' not in html
     assert html.count('data-step-link') == 2
+
+
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+def test_register_with_code_sets_intent_amount_and_metadata(
+        create_intent, client, db_session, public_trip, current_season):
+    from app.trips.models import TripScholarship
+    _, trip, user = public_trip
+    scholarship = TripScholarship(user_id=user.id, season_id=current_season.id,
+                                  code="TCSC-ABC234")
+    db.session.add(scholarship)
+    db.session.commit()
+    create_intent.return_value = _intent(amount=50)
+    payload = dict(_payload(), scholarship_code="TCSC-ABC234")
+    response = client.post("/test-trip-routes/register", json=payload)
+    assert response.status_code == 200
+    kwargs = create_intent.call_args.kwargs
+    assert kwargs["amount"] == 50  # $100 trip, $100 off, Stripe minimum
+    assert kwargs["metadata"]["scholarship_id"] == str(scholarship.id)
+
+
+@patch("app.routes.trips.stripe.PaymentIntent.create")
+def test_register_without_code_has_no_scholarship_metadata(
+        create_intent, client, db_session, public_trip):
+    create_intent.return_value = _intent()
+    response = client.post("/test-trip-routes/register", json=_payload())
+    assert response.status_code == 200
+    assert "scholarship_id" not in create_intent.call_args.kwargs["metadata"]

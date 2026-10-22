@@ -37,3 +37,26 @@ def scholarship_state(scholarship, now=None):
     if registration.status == TripRegistrationStatus.CONFIRMED:
         return "used"
     return "held"
+
+
+MISMATCH_ERROR = "That code doesn't match this member."
+MINIMUM_CHARGE_CENTS = 50  # Stripe's smallest USD charge
+
+
+def resolve_code(user, trip, raw_code):
+    """Return (scholarship, None), (None, error), or (None, None) if blank."""
+    from app.trips.models import TripScholarship
+    code = (raw_code or "").strip().upper() if isinstance(raw_code, str) else ""
+    if not code:
+        return None, None
+    scholarship = TripScholarship.query.filter_by(code=code).first()
+    if scholarship is None or scholarship.user_id != user.id:
+        return None, MISMATCH_ERROR
+    holder = active_registration(scholarship)
+    if holder is not None and holder.trip_id != trip.id:
+        return None, f"This code is already in use on {holder.trip.name}."
+    return scholarship, None
+
+
+def discounted_amount(price_cents, scholarship):
+    return max(price_cents - scholarship.amount_cents, MINIMUM_CHARGE_CENTS)

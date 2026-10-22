@@ -257,6 +257,14 @@ def create_registration(trip, payload):
     else:
         errors["price_tier"] = "Choose a valid price option."
 
+    from app.trips.scholarships import discounted_amount, resolve_code
+    scholarship, code_error = resolve_code(
+        user, trip, payload.get("scholarship_code"))
+    if code_error:
+        errors["scholarship_code"] = code_error
+    elif scholarship and "price_tier" not in errors:
+        amount_cents = discounted_amount(amount_cents, scholarship)
+
     clean_profile, profile_errors = validate_profile(
         trip.custom_questions, payload.get("profile"))
     errors.update(profile_errors)
@@ -277,6 +285,7 @@ def create_registration(trip, payload):
     registration.answers = stored_answers
     registration.price_tier = price_tier
     registration.amount_cents = amount_cents
+    registration.scholarship_id = scholarship.id if scholarship else None
     registration.created_at = now
     registration.payment_intent_id = None
     db.session.add(registration)

@@ -321,3 +321,30 @@ test('a trip with no survey advances to payment and submits an empty profile', a
   assert.deepEqual(page.posts[0].profile, {});
   assert.deepEqual(page.posts[0].answers, {});
 });
+
+test('a scholarship code reaches the payload trimmed and the hold text drops the full price', async () => {
+  const page = await load();
+  await page.gate();
+  page.fill();
+  const code = page.document.getElementById('scholarship-code');
+  code.value = '  tcsc-7kq2m9 ';
+  code.dispatchEvent(new page.window.Event('input', {bubbles: true}));
+  assert.equal(page.document.getElementById('button-text').textContent, 'Place hold');
+  await page.submit();
+  assert.equal(page.posts[0].scholarship_code, 'tcsc-7kq2m9');
+  code.value = '';
+  code.dispatchEvent(new page.window.Event('input', {bubbles: true}));
+  assert.equal(page.document.getElementById('button-text').textContent, 'Place hold for $215.00');
+});
+
+test('a rejected scholarship code is shown at the code field', async () => {
+  const page = await load({serverError: {scholarship_code: "That code doesn't match this member."}});
+  await page.gate();
+  page.fill();
+  page.document.getElementById('scholarship-code').value = 'TCSC-ZZZZZZ';
+  await page.submit();
+  const code = page.document.getElementById('scholarship-code');
+  assert.equal(code.getAttribute('aria-invalid'), 'true');
+  assert.equal(page.document.getElementById('scholarship-code-error').textContent, "That code doesn't match this member.");
+  assert.equal(page.confirmations.length, 0);
+});

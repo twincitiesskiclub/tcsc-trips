@@ -1,4 +1,4 @@
-{% from 'trips/_form_ui.html' import logo_header, trip_heading, section_heading, required_hint, error_slot %}
+{% from 'trips/_form_ui.html' import logo_header, trip_heading, section_heading, required_hint, optional_hint, error_slot %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -83,6 +83,12 @@
           </div>
           {{ error_slot('price-tiers') }}
         </fieldset>
+        <div class="form-field">
+          <label class="form-field__label" for="scholarship-code">Scholarship code {{ optional_hint() }}</label>
+          <p id="scholarship-code-help" class="form-field__hint">Got a trip scholarship? Enter your code. We'll apply it when you submit.</p>
+          <input id="scholarship-code" name="scholarship_code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" class="form-input" aria-describedby="scholarship-code-help scholarship-code-error">
+          {{ error_slot('scholarship-code') }}
+        </div>
         <div class="notice notice--info">
           <strong>A hold now, a charge later</strong><br>
           Your card is authorized now and only charged when the roster is confirmed.
